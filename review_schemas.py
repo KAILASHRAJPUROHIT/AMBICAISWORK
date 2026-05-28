@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 class ReviewQueueItem(BaseModel):
     entity_type: str = Field(..., description="Type of the entity to be reviewed.")

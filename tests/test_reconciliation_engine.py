@@ -1,6 +1,18 @@
 from backend.reconciliation_engine import reconcile_transactions, ReconciliationDecision
 import pytest
 
+class Bill:
+    def __init__(self, utr_reference):
+        self.utr_reference = utr_reference
+
+class Payment:
+    def __init__(self, utr_reference):
+        self.utr_reference = utr_reference
+
+class BankAlert:
+    def __init__(self, utr_reference):
+        self.utr_reference = utr_reference
+
 def test_reconcile_transactions():
     bills = [Bill(utr_reference="12345")]
     payments = [Payment(utr_reference="12345")]
