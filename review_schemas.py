@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
 from datetime import datetime
+from typing import List
 
 class ReviewQueueItem(BaseModel):
     entity_type: str = Field(..., description="Type of the entity to be reviewed.")
@@ -10,12 +10,6 @@ class ReviewQueueItem(BaseModel):
     risk_flags: List[str] = Field(..., description="List of risk flags associated with the entity.")
     requires_owner_escalation: bool = Field(..., description="Flag indicating if owner escalation is required.")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="Timestamp when the item was created.")
-
-class ReconciliationDecision(BaseModel):
-    status: str
-    reason: str
-    risk_flags: List[str]
-    requires_human_review: bool
 
 class RoutingResult(BaseModel):
     queue_type: Optional[str] = None

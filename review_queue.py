@@ -1,58 +1,51 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List
 
-class ReviewQueueItem(BaseModel):
-    entity_type: str = Field(..., description="Type of the entity to be reviewed.")
-    entity_id: int = Field(..., description="ID of the entity to be reviewed.")
-    current_status: str = Field(..., description="Current status of the entity.")
-    proposed_status: str = Field(..., description="Proposed status for the entity.")
-    risk_flags: List[str] = Field(..., description="List of risk flags associated with the entity.")
-    requires_owner_escalation: bool = Field(..., description="Flag indicating if owner escalation is required.")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="Timestamp when the item was created.")
+class ReviewQueueItem:
+    def __init__(self, entity_type: str, entity_id: int, current_status: str, proposed_status: str, risk_flags: List[str], requires_owner_escalation: bool, created_at: datetime):
+        self.entity_type = entity_type
+        self.entity_id = entity_id
+        self.current_status = current_status
+        self.proposed_status = proposed_status
+        self.risk_flags = risk_flags
+        self.requires_owner_escalation = requires_owner_escalation
+        self.created_at = created_at
 
 def route_review(decision: dict) -> dict:
-    queue_type = None
-    assigned_role = None
+    queue_type = "default"
+    assigned_role = "accountant"
     escalation_required = False
     reason = ""
 
-    if decision["status"] == "Red":
-        queue_type = "HumanReview"
-        assigned_role = "Accountant"
+    if decision.get("current_status") == "Red":
         escalation_required = True
-        reason = "Red always requires human review."
-    elif decision["risk_flags"]:
-        if "Duplicate UTR" in decision["risk_flags"]:
-            queue_type = "OwnerEscalation"
-            assigned_role = "Owner"
-            escalation_required = True
-            reason = "Duplicate UTR requires owner escalation."
-        elif any(flag.startswith("Large amount mismatch") for flag in decision["risk_flags"]):
-            queue_type = "OwnerEscalation"
-            assigned_role = "Owner"
-            escalation_required = True
-            reason = "Large amount mismatch requires owner escalation."
-    elif decision["status"] == "Split Payment":
-        queue_type = "AccountantReview"
-        assigned_role = "Accountant"
-        escalation_required = False
-        reason = "Split payments require accountant review."
-    elif decision["status"] == "Yellow":
-        queue_type = "AccountantReview"
-        assigned_role = "Accountant"
-        escalation_required = False
-        reason = "Yellow requires accountant review."
-    elif decision["status"] == "Orange":
-        queue_type = "ApprovalWorkflow"
-        assigned_role = "Approver"
-        escalation_required = False
-        reason = "Orange requires approval workflow."
-    elif decision["status"] == "Blue":
-        queue_type = "PendingChequeClearance"
-        assigned_role = "Accountant"
-        escalation_required = False
-        reason = "Blue remains pending until cheque cleared."
+        reason = "Red status requires human review"
+
+    if "duplicate_utr" in decision.get("risk_flags", []):
+        escalation_required = True
+        reason = "Duplicate UTR requires owner escalation"
+
+    if "large_amount_mismatch" in decision.get("risk_flags", []):
+        escalation_required = True
+        reason = "Large amount mismatch requires owner escalation"
+
+    if "split_payment" in decision.get("risk_flags", []):
+        assigned_role = "accountant"
+        reason = "Split payments require accountant review"
+
+    if decision.get("current_status") == "Yellow":
+        assigned_role = "accountant"
+        reason = "Yellow status requires accountant review"
+
+    if decision.get("current_status") == "Orange":
+        queue_type = "approval"
+        assigned_role = "approver"
+        reason = "Orange status requires approval workflow"
+
+    if decision.get("current_status") == "Blue":
+        queue_type = "pending"
+        assigned_role = "none"
+        reason = "Blue remains pending until cheque cleared"
 
     return {
         "queue_type": queue_type,
