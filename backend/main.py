@@ -2,6 +2,9 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal, Base
 from models import User, Bill, Payment, BankAlert, SMSAlert, Cheque, AuditLog
+from schemas import ReconciliationDecision, ReviewQueueItem, RoutingResult
+from reconciliation_engine import reconcile_transactions
+from review_queue import route_review
 
 Base.metadata.create_all(bind=engine)
 
@@ -132,3 +135,30 @@ def status_colors():
         "Red": "#FF0000",
         "Green": "#008000"
     }
+
+@app.post("/review_queue/", response_model=ReviewQueueItem, status_code=status.HTTP_201_CREATED)
+def create_review_queue_item(item: ReviewQueueItem, db: Session = Depends(get_db)):
+    decision = reconcile_transactions(
+        bills=db.query(Bill).filter(Bill.id == item.entity_id).all(),
+        payments=db.query(Payment).filter(Payment.bill_id == item.entity_id).all(),
+        bank_alerts=db.query(BankAlert).filter(BankAlert.utr_reference == item.entity_id).all(),
+        sms_alerts=db.query(SMSAlert).filter(SMSAlert.utr_reference == item.entity_id).all(),
+        cheques=db.query(Cheque).filter(Cheque.bill_id == item.entity_id).all()
+    )
+    routing_result = route_review(decision.dict())
+    
+    new_item = ReviewQueueItem(
+        entity_type=item.entity_type,
+        entity_id=item.entity_id,
+        current_status=decision.status,
+        proposed_status=item.proposed_status,
+        risk_flags=decision.risk_flags,
+        requires_owner_escalation=routing_result["escalation_required"],
+        created_at=datetime.utcnow()
+    )
+    
+    db.add(new_item)
+    db.commit()
+    db.refresh(new_item)
+    
+    return new_item
