@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
-from .database import engine, SessionLocal, Base
-from .models import User, Bill, Payment, BankAlert, SMSAlert, Cheque, AuditLog
+from database import engine, SessionLocal, Base
+from models import User, Bill, Payment, BankAlert, SMSAlert, Cheque, AuditLog
 
 Base.metadata.create_all(bind=engine)
 
