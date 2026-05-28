@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal, Base
 from models import User, Bill, Payment, BankAlert, SMSAlert, Cheque, AuditLog
@@ -119,3 +119,16 @@ def read_audit_log(log_id: int, db: Session = Depends(get_db)):
     if db_audit_log is None:
         raise HTTPException(status_code=404, detail="Audit Log not found")
     return db_audit_log
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+@app.get("/status-colors")
+def status_colors():
+    return {
+        "Yellow": "#FFFF99",
+        "Orange": "#FFA500",
+        "Red": "#FF0000",
+        "Green": "#008000"
+    }
