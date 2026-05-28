@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import List, Dict
 
 class ReconciliationDecision(BaseModel):
     status: str = Field(..., description="The status of the reconciliation decision.")
