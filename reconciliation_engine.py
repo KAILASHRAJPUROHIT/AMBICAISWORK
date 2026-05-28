@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from models import Bill, BankAlert, Payment, Cheque
+from models import Bill, BankAlert, Payment, Cheque, SMSAlert
 
 class ReconciliationDecision(BaseModel):
     status: str
@@ -9,7 +9,7 @@ class ReconciliationDecision(BaseModel):
     risk_flags: List[str]
     requires_human_review: bool
 
-def reconcile_transactions(bills: List[Bill], bank_alerts: List[BankAlert], payments: List[Payment], cheques: List[Cheque]) -> ReconciliationDecision:
+def reconcile_transactions(bills: List[Bill], payments: List[Payment], bank_alerts: List[BankAlert], sms_alerts: List[SMSAlert], cheques: List[Cheque]) -> ReconciliationDecision:
     decisions = []
 
     for bill in bills:
