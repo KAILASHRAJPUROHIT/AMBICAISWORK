@@ -1,56 +1,67 @@
-from backend.review_queue import route_review
+from backend.review_queue import route_review, ReconciliationDecision
+import pytest
 
 def test_duplicate_utr():
-    decision = {
-        "current_status": "Yellow",
-        "risk_flags": ["duplicate_utr"]
-    }
-    result = route_review(decision)
-    assert result["queue_type"] == "default"
-    assert result["assigned_role"] == "accountant"
-    assert result["escalation_required"] is True
-    assert result["reason"] == "Duplicate UTR requires owner escalation"
+    decision = ReconciliationDecision(
+        status="Red",
+        reason="Duplicate UTR or Same amount multiple bills",
+        risk_flags=["Duplicate UTR"],
+        requires_human_review=True
+    )
+    result = route_review(decision.dict())
+    assert result["queue_type"] == "OwnerEscalation"
+    assert result["assigned_role"] == "Owner"
+    assert result["escalation_required"]
+    assert result["reason"] == "Duplicate UTR requires owner escalation."
 
 def test_bounced_cheque():
-    decision = {
-        "current_status": "Red",
-        "risk_flags": ["bounced_cheque"]
-    }
-    result = route_review(decision)
-    assert result["queue_type"] == "default"
-    assert result["assigned_role"] == "none"
-    assert result["escalation_required"] is True
-    assert result["reason"] == "Red status requires human review"
+    decision = ReconciliationDecision(
+        status="Red",
+        reason="Any mismatch",
+        risk_flags=["Bounced Cheque"],
+        requires_human_review=True
+    )
+    result = route_review(decision.dict())
+    assert result["queue_type"] == "HumanReview"
+    assert result["assigned_role"] == "Accountant"
+    assert result["escalation_required"]
+    assert result["reason"] == "Red always requires human review."
 
 def test_delayed_neft():
-    decision = {
-        "current_status": "Orange",
-        "risk_flags": ["delayed_neft"]
-    }
-    result = route_review(decision)
-    assert result["queue_type"] == "approval"
-    assert result["assigned_role"] == "approver"
-    assert result["escalation_required"] is False
-    assert result["reason"] == "Orange status requires approval workflow"
+    decision = ReconciliationDecision(
+        status="Orange",
+        reason="Delivery before payment",
+        risk_flags=["Delayed NEFT"],
+        requires_human_review=False
+    )
+    result = route_review(decision.dict())
+    assert result["queue_type"] == "ApprovalWorkflow"
+    assert result["assigned_role"] == "Approver"
+    assert not result["escalation_required"]
+    assert result["reason"] == "Orange requires approval workflow."
 
 def test_split_payment():
-    decision = {
-        "current_status": "Yellow",
-        "risk_flags": ["split_payment"]
-    }
-    result = route_review(decision)
-    assert result["queue_type"] == "default"
-    assert result["assigned_role"] == "accountant"
-    assert result["escalation_required"] is False
-    assert result["reason"] == "Split payments require accountant review"
+    decision = ReconciliationDecision(
+        status="Split Payment",
+        reason="Any mismatch",
+        risk_flags=["Split Payment"],
+        requires_human_review=True
+    )
+    result = route_review(decision.dict())
+    assert result["queue_type"] == "AccountantReview"
+    assert result["assigned_role"] == "Accountant"
+    assert not result["escalation_required"]
+    assert result["reason"] == "Split payments require accountant review."
 
 def test_yellow():
-    decision = {
-        "current_status": "Yellow",
-        "risk_flags": []
-    }
-    result = route_review(decision)
-    assert result["queue_type"] == "default"
-    assert result["assigned_role"] == "accountant"
-    assert result["escalation_required"] is False
-    assert result["reason"] == "Yellow status requires accountant review"
+    decision = ReconciliationDecision(
+        status="Yellow",
+        reason="Missing bank alert",
+        risk_flags=["Missing Bank Alert"],
+        requires_human_review=False
+    )
+    result = route_review(decision.dict())
+    assert result["queue_type"] == "AccountantReview"
+    assert result["assigned_role"] == "Accountant"
+    assert not result["escalation_required"]
+    assert result["reason"] == "Yellow requires accountant review."
