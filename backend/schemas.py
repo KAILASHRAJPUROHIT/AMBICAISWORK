@@ -58,3 +58,12 @@ class ManagedReviewItem(BaseModel):
     reason: str
     created_at: str
     resolved_at: Optional[str] = None
+
+class OwnerEscalationRecord(BaseModel):
+    escalation_id: str
+    review_id: str
+    escalation_reason: str
+    severity: str
+    owner_notified: bool
+    created_at: str
+    resolved_at: Optional[str] = None
