@@ -150,9 +150,9 @@
 
         .print-types {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 12px;
-            margin-bottom: 20px;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
         }
 
         .type-card {
@@ -191,9 +191,6 @@
             background: #fff;
             position: relative;
         }
-
-        .preview-auto { background: transparent; border-style: dashed; }
-        .preview-auto::after { content: '✨'; font-size: 20px; }
         
         .preview-pdf { background: #f0f0f0; }
         .preview-pdf::after { content: ''; width: 20px; height: 2px; background: #ccc; box-shadow: 0 6px 0 #ccc, 0 12px 0 #ccc, 0 18px 0 #ccc; position: absolute; top: 15px;}
@@ -221,56 +218,6 @@
             font-size: 11px;
             color: #999;
             line-height: 1.3;
-        }
-
-        /* Front/Back Checkbox */
-        .checkbox-container {
-            display: flex;
-            align-items: flex-start;
-            margin-bottom: 20px;
-            cursor: pointer;
-            user-select: none;
-            padding: 12px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 8px;
-            border: 1px solid rgba(255,255,255,0.1);
-            transition: all 0.2s;
-        }
-
-        .checkbox-container:hover { border-color: rgba(212, 175, 55, 0.4); }
-
-        .checkbox-container input {
-            position: absolute;
-            opacity: 0;
-            cursor: pointer;
-            height: 0;
-            width: 0;
-        }
-
-        .checkmark {
-            height: 20px;
-            width: 20px;
-            background-color: var(--navy-light);
-            border: 1px solid var(--gold);
-            border-radius: 4px;
-            margin-right: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-
-        .checkbox-container input:checked ~ .checkmark::after {
-            content: "✓";
-            color: var(--gold);
-            font-size: 14px;
-            font-weight: bold;
-        }
-
-        .check-label {
-            font-size: 13px;
-            color: var(--gold-light);
-            line-height: 1.4;
         }
 
         /* Select / Copies */
@@ -407,9 +354,12 @@
 
         /* Responsive Overrides */
         @media (max-width: 480px) {
-            .print-types { grid-template-columns: 1fr; }
             .card { padding: 20px 15px; border-radius: 12px; }
             .queue-number { font-size: 22px; }
+        }
+        @media (max-width: 360px) {
+            /* Fallback to stack if the screen is exceptionally narrow */
+            .print-types { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -442,40 +392,25 @@
             <span class="section-label">1. Select Print Format</span>
             <div class="print-types">
                 <label class="type-card">
-                    <input type="radio" name="print-type" value="auto" checked onchange="toggleCheckbox()">
-                    <div class="card-content">
-                        <div class="preview-box preview-auto"></div>
-                        <span class="type-title">Auto Detect</span>
-                        <span class="type-desc">Automatically formats based on file type</span>
-                    </div>
-                </label>
-                
-                <label class="type-card">
-                    <input type="radio" name="print-type" value="pdf" onchange="toggleCheckbox()">
+                    <input type="radio" name="print-type" value="pdf" checked>
                     <div class="card-content">
                         <div class="preview-box preview-pdf"></div>
-                        <span class="type-title">Full Page</span>
-                        <span class="type-desc">Prints original documents in A4 size</span>
+                        <span class="type-title">FULL PAGE</span>
+                        <span class="type-desc">Prints documents exactly as uploaded</span>
                     </div>
                 </label>
                 
                 <label class="type-card">
-                    <input type="radio" name="print-type" value="id_card" onchange="toggleCheckbox()">
+                    <input type="radio" name="print-type" value="id_card">
                     <div class="card-content">
                         <div class="preview-box preview-id">
                             <span></span><span></span><span></span><span></span><span></span><span></span>
                         </div>
-                        <span class="type-title">ID Cards</span>
-                        <span class="type-desc">Formats PAN & Aadhaar into card slots</span>
+                        <span class="type-title">ID CARDS</span>
+                        <span class="type-desc">Places PAN and Aadhaar in optimized card layouts</span>
                     </div>
                 </label>
             </div>
-
-            <label class="checkbox-container" id="front-back-container">
-                <input type="checkbox" id="front-back-check">
-                <span class="checkmark"></span>
-                <span class="check-label">My upload contains <strong>front and back</strong> images that need to be stacked inside a single card slot.</span>
-            </label>
 
             <div class="options-row">
                 <span class="section-label">2. Select Quantity</span>
@@ -539,23 +474,10 @@
         const formSection = document.getElementById('form-section');
         const progressSection = document.getElementById('progress-section');
         const successSection = document.getElementById('success-section');
-        
-        const frontBackContainer = document.getElementById('front-back-container');
 
         let selectedFiles = [];
 
         // UI Logic
-        function toggleCheckbox() {
-            const printType = document.querySelector('input[name="print-type"]:checked').value;
-            // Hide for Full Page PDF, show for ID Cards and Auto
-            if (printType === 'pdf') {
-                frontBackContainer.classList.add('hidden');
-                document.getElementById('front-back-check').checked = false;
-            } else {
-                frontBackContainer.classList.remove('hidden');
-            }
-        }
-
         function showError(msg) {
             errorMsg.textContent = msg;
             errorMsg.style.display = 'block';
@@ -623,11 +545,10 @@
             }
         }
 
-        // Form Submission & Mock Progress
+        // Form Submission
         btnSubmit.addEventListener('click', () => {
             if (selectedFiles.length === 0) return;
 
-            // Switch UI to Progress
             formSection.classList.add('hidden');
             progressSection.classList.remove('hidden');
             
@@ -642,7 +563,6 @@
             progressBar.style.width = '0%';
             progressStatus.textContent = "Encrypting and uploading documents...";
             
-            // Start fake progress while real upload happens
             const interval = setInterval(() => {
                 if (progress < 90) {
                     progress += Math.random() * 10;
@@ -658,9 +578,6 @@
             const printType = document.querySelector('input[name="print-type"]:checked').value;
             formData.append('print_mode', printType);
             formData.append('copies', document.getElementById('copies').value);
-            
-            const frontBack = document.getElementById('front-back-check').checked;
-            formData.append('front_back_pairing', frontBack ? 'true' : 'false');
 
             fetch('/upload', {
                 method: 'POST',
@@ -686,6 +603,15 @@
             });
         }
 
+        function generateQueueID() {
+            const date = new Date();
+            const yyyy = date.getFullYear();
+            const mm = String(date.getMonth() + 1).padStart(2, '0');
+            const dd = String(date.getDate()).padStart(2, '0');
+            const rnd = String(Math.floor(Math.random() * 999) + 1).padStart(3, '0');
+            return `AR-${yyyy}${mm}${dd}-${rnd}`;
+        }
+
         function showSuccess(queueId) {
             progressSection.classList.add('hidden');
             successSection.classList.remove('hidden');
@@ -699,16 +625,12 @@
             fileInput.value = '';
             updateFileList();
             
-            document.querySelector('input[name="print-type"][value="auto"]').checked = true;
+            document.querySelector('input[name="print-type"][value="pdf"]').checked = true;
             document.getElementById('copies').value = '1';
-            toggleCheckbox();
             
             successSection.classList.add('hidden');
             formSection.classList.remove('hidden');
         }
-
-        // Init
-        toggleCheckbox();
     </script>
 </body>
 </html>

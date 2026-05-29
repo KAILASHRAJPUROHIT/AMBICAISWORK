@@ -138,7 +138,6 @@ def get_pending_jobs():
             "id": job.id,
             "print_mode": job.print_mode,
             "copies": job.copies,
-            "front_back_pairing": job.front_back_pairing,
         }
         
         if len(paths) == 1 and paths[0].lower().endswith('.pdf'):
@@ -174,4 +173,4 @@ def update_job_status(job_id):
     return jsonify({"success": True, "status": job.status})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)debug=True).0.0', port=5000, debug=True)
