@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aradhana Jewellers | Secure Print</title>
+    <style>
+        :root {
+            --navy: #06142E;
+            --navy-light: #112244;
+            --gold: #D4AF37;
+            --gold-light: #F3E5AB;
+            --bg-color: #F7F5F0;
+            --text-dark: #333333;
+            --text-light: #FFFFFF;
+            --error: #E74C3C;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-dark);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px 15px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+            margin-top: 15px;
+        }
+
+        .header h1 {
+            color: var(--navy);
+            font-family: 'Georgia', serif;
+            font-size: 26px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 13px;
+            letter-spacing: 1px;
+        }
+
+        .card {
+            background-color: var(--navy);
+            border: 2px solid var(--gold);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 540px;
+            padding: 25px 20px;
+            box-shadow: 0 15px 35px rgba(6, 20, 46, 0.2);
+            color: var(--text-light);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .form-section, .progress-section, .success-section {
+            transition: opacity 0.3s ease;
+        }
+
+        .hidden { display: none !important; }
+
+        /* Dropzone */
+        .dropzone {
+            border: 2px dashed rgba(212, 175, 55, 0.5);
+            border-radius: 12px;
+            padding: 30px 15px;
+            text-align: center;
+            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .dropzone:hover, .dropzone.dragover {
+            border-color: var(--gold);
+            background: rgba(212, 175, 55, 0.1);
+        }
+
+        .dropzone-icon {
+            font-size: 36px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .dropzone-text {
+            font-size: 16px;
+            color: var(--gold-light);
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .dropzone-hint {
+            font-size: 12px;
+            color: #aaa;
+            line-height: 1.4;
+        }
+
+        .dropzone-hint strong {
+            color: var(--gold);
+        }
+
+        #file-input { display: none; }
+
+        .file-list {
+            list-style: none;
+            margin-bottom: 20px;
+            max-height: 100px;
+            overflow-y: auto;
+            font-size: 13px;
+            color: var(--gold-light);
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            padding: 5px 10px;
+        }
+
+        .file-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .file-list li:last-child { border-bottom: none; }
+        .file-list.empty { display: none; }
+
+        /* Print Type Selector (Grid) */
+        .section-label {
+            font-size: 12px;
+            color: var(--gold);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: block;
+        }
+
+        .print-types {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .type-card {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .type-card input { display: none; }
+
+        .card-content {
+            background-color: var(--navy-light);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            border-radius: 10px;
+            padding: 15px 10px;
+            text-align: center;
+            height: 100%;
+            transition: all 0.2s ease;
+        }
+
+        .type-card input:checked + .card-content {
+            background-color: rgba(212, 175, 55, 0.15);
+            border-color: var(--gold);
+            box-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
+        }
+
+        /* Visual Previews */
+        .preview-box {
+            width: 44px;
+            height: 62px;
+            margin: 0 auto 12px;
+            border: 2px solid var(--gold);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fff;
+            position: relative;
+        }
+
+        .preview-auto { background: transparent; border-style: dashed; }
+        .preview-auto::after { content: '✨'; font-size: 20px; }
+        
+        .preview-pdf { background: #f0f0f0; }
+        .preview-pdf::after { content: ''; width: 20px; height: 2px; background: #ccc; box-shadow: 0 6px 0 #ccc, 0 12px 0 #ccc, 0 18px 0 #ccc; position: absolute; top: 15px;}
+
+        .preview-id { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            grid-template-rows: 1fr 1fr 1fr; 
+            gap: 3px; 
+            padding: 4px; 
+            background: transparent;
+        }
+        .preview-id span { background: var(--gold-light); border-radius: 2px; }
+
+        .type-title {
+            display: block;
+            font-size: 14px;
+            font-weight: bold;
+            color: var(--text-light);
+            margin-bottom: 5px;
+        }
+
+        .type-desc {
+            display: block;
+            font-size: 11px;
+            color: #999;
+            line-height: 1.3;
+        }
+
+        /* Front/Back Checkbox */
+        .checkbox-container {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            cursor: pointer;
+            user-select: none;
+            padding: 12px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.2s;
+        }
+
+        .checkbox-container:hover { border-color: rgba(212, 175, 55, 0.4); }
+
+        .checkbox-container input {
+            position: absolute;
+            opacity: 0;
+            cursor: pointer;
+            height: 0;
+            width: 0;
+        }
+
+        .checkmark {
+            height: 20px;
+            width: 20px;
+            background-color: var(--navy-light);
+            border: 1px solid var(--gold);
+            border-radius: 4px;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .checkbox-container input:checked ~ .checkmark::after {
+            content: "✓";
+            color: var(--gold);
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .check-label {
+            font-size: 13px;
+            color: var(--gold-light);
+            line-height: 1.4;
+        }
+
+        /* Select / Copies */
+        .options-row {
+            margin-bottom: 20px;
+        }
+
+        .select-styled {
+            background-color: var(--navy-light);
+            color: white;
+            border: 1px solid rgba(212, 175, 55, 0.4);
+            padding: 14px 15px;
+            border-radius: 8px;
+            font-size: 15px;
+            width: 100%;
+            appearance: none;
+            outline: none;
+            cursor: pointer;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23D4AF37%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 15px top 50%;
+            background-size: 12px auto;
+        }
+        
+        .select-styled:focus { border-color: var(--gold); }
+
+        /* Security Notice */
+        .security-notice {
+            font-size: 12px;
+            color: #888;
+            text-align: center;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .security-notice span { color: var(--gold); }
+
+        /* Submit Button */
+        .btn-submit {
+            background: linear-gradient(135deg, #D4AF37 0%, #C5A059 100%);
+            color: var(--navy);
+            border: none;
+            border-radius: 8px;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(212, 175, 55, 0.3);
+        }
+
+        .btn-submit:active { transform: scale(0.98); }
+        .btn-submit:disabled {
+            background: #444;
+            color: #777;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* Error */
+        .error-msg {
+            color: var(--error);
+            font-size: 13px;
+            text-align: center;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        /* Progress Styles */
+        .progress-section { text-align: center; padding: 40px 0; }
+        .progress-bar-container {
+            width: 100%;
+            height: 8px;
+            background: var(--navy-light);
+            border-radius: 4px;
+            margin: 25px 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--gold);
+            transition: width 0.3s ease;
+        }
+        .progress-text { color: var(--gold-light); font-size: 15px; margin-top: 15px; }
+
+        /* Success Styles */
+        .success-section { text-align: center; padding: 20px 0; }
+        .success-icon { font-size: 50px; color: var(--gold); margin-bottom: 15px; }
+        .success-title { color: var(--gold-light); font-size: 22px; margin-bottom: 10px; }
+        
+        .queue-box {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            border-radius: 12px;
+            padding: 25px;
+            margin: 25px 0;
+        }
+
+        .queue-label {
+            font-size: 12px;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .queue-number {
+            font-size: 28px;
+            font-weight: bold;
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            letter-spacing: 2px;
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--gold);
+            border: 2px solid var(--gold);
+            border-radius: 8px;
+            padding: 14px 24px;
+            font-size: 15px;
+            cursor: pointer;
+            margin-top: 10px;
+            width: 100%;
+            transition: all 0.2s;
+        }
+        .btn-outline:hover { background: rgba(212, 175, 55, 0.1); }
+
+        /* Responsive Overrides */
+        @media (max-width: 480px) {
+            .print-types { grid-template-columns: 1fr; }
+            .card { padding: 20px 15px; border-radius: 12px; }
+            .queue-number { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Aradhana</h1>
+        <p>Premium Document Print Service</p>
+    </div>
+
+    <div class="card">
+        
+        <!-- FORM SECTION -->
+        <div id="form-section" class="form-section">
+            
+            <div class="dropzone" id="dropzone">
+                <span class="dropzone-icon">📄</span>
+                <div class="dropzone-text" id="dropzone-text">Tap to Select Files</div>
+                <div class="dropzone-hint">
+                    Maximum <strong>12 files</strong>.<br>
+                    Supported formats: <strong>JPG, PNG, PDF</strong>
+                </div>
+                <!-- Accepts explicitly standard types -->
+                <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf">
+            </div>
+
+            <ul id="file-list" class="file-list empty"></ul>
+            <div id="error-msg" class="error-msg"></div>
+
+            <span class="section-label">1. Select Print Format</span>
+            <div class="print-types">
+                <label class="type-card">
+                    <input type="radio" name="print-type" value="auto" checked onchange="toggleCheckbox()">
+                    <div class="card-content">
+                        <div class="preview-box preview-auto"></div>
+                        <span class="type-title">Auto Detect</span>
+                        <span class="type-desc">Automatically formats based on file type</span>
+                    </div>
+                </label>
+                
+                <label class="type-card">
+                    <input type="radio" name="print-type" value="pdf" onchange="toggleCheckbox()">
+                    <div class="card-content">
+                        <div class="preview-box preview-pdf"></div>
+                        <span class="type-title">Full Page</span>
+                        <span class="type-desc">Prints original documents in A4 size</span>
+                    </div>
+                </label>
+                
+                <label class="type-card">
+                    <input type="radio" name="print-type" value="id_card" onchange="toggleCheckbox()">
+                    <div class="card-content">
+                        <div class="preview-box preview-id">
+                            <span></span><span></span><span></span><span></span><span></span><span></span>
+                        </div>
+                        <span class="type-title">ID Cards</span>
+                        <span class="type-desc">Formats PAN & Aadhaar into card slots</span>
+                    </div>
+                </label>
+            </div>
+
+            <label class="checkbox-container" id="front-back-container">
+                <input type="checkbox" id="front-back-check">
+                <span class="checkmark"></span>
+                <span class="check-label">My upload contains <strong>front and back</strong> images that need to be stacked inside a single card slot.</span>
+            </label>
+
+            <div class="options-row">
+                <span class="section-label">2. Select Quantity</span>
+                <select id="copies" class="select-styled">
+                    <option value="1">1 Copy</option>
+                    <option value="2">2 Copies</option>
+                    <option value="3">3 Copies</option>
+                    <option value="4">4 Copies</option>
+                    <option value="5">5 Copies</option>
+                </select>
+            </div>
+
+            <div class="security-notice">
+                <span>🔒</span> Files are automatically deleted from servers after printing.
+            </div>
+
+            <button id="btn-submit" class="btn-submit" disabled>Print Securely</button>
+        </div>
+
+        <!-- PROGRESS SECTION -->
+        <div id="progress-section" class="progress-section hidden">
+            <span class="dropzone-icon" style="animation: pulse 1.5s infinite;">⏳</span>
+            <div class="progress-text" id="progress-status">Encrypting and uploading documents...</div>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <div class="dropzone-hint">Please do not close or minimize this window.</div>
+        </div>
+
+        <!-- SUCCESS SECTION -->
+        <div id="success-section" class="success-section hidden">
+            <div class="success-icon">✓</div>
+            <h2 class="success-title">Print Job Sent!</h2>
+            <p style="color: #aaa; margin-bottom: 5px; font-size: 14px;">Your documents have been processed.</p>
+            
+            <div class="queue-box">
+                <div class="queue-label">Your Secure Queue ID</div>
+                <!-- Flask Template Placeholder / JS Fallback -->
+                <div class="queue-number" id="queue-display">{{ queue_id | default('AR-YYYYMMDD-XXX') }}</div>
+            </div>
+            
+            <p style="color: var(--gold-light); font-size: 14px; margin-bottom: 25px;">Please show this ID at the counter to collect your prints.</p>
+
+            <button class="btn-outline" onclick="resetForm()">Print New Documents</button>
+        </div>
+
+    </div>
+
+    <script>
+        const MAX_FILES = 12;
+        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
+        const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.pdf'];
+
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('file-input');
+        const fileList = document.getElementById('file-list');
+        const btnSubmit = document.getElementById('btn-submit');
+        const errorMsg = document.getElementById('error-msg');
+        const dropzoneText = document.getElementById('dropzone-text');
+        
+        const formSection = document.getElementById('form-section');
+        const progressSection = document.getElementById('progress-section');
+        const successSection = document.getElementById('success-section');
+        
+        const frontBackContainer = document.getElementById('front-back-container');
+
+        let selectedFiles = [];
+
+        // UI Logic
+        function toggleCheckbox() {
+            const printType = document.querySelector('input[name="print-type"]:checked').value;
+            // Hide for Full Page PDF, show for ID Cards and Auto
+            if (printType === 'pdf') {
+                frontBackContainer.classList.add('hidden');
+                document.getElementById('front-back-check').checked = false;
+            } else {
+                frontBackContainer.classList.remove('hidden');
+            }
+        }
+
+        function showError(msg) {
+            errorMsg.textContent = msg;
+            errorMsg.style.display = 'block';
+            setTimeout(() => { errorMsg.style.display = 'none'; }, 4000);
+        }
+
+        // Drag and Drop
+        dropzone.addEventListener('click', () => fileInput.click());
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        function handleFiles(files) {
+            const arr = Array.from(files);
+            
+            // Validation: Count
+            if (selectedFiles.length + arr.length > MAX_FILES) {
+                showError(`You can only upload a maximum of ${MAX_FILES} files.`);
+                return;
+            }
+
+            // Validation: Type
+            let validFiles = [];
+            for (let f of arr) {
+                const ext = f.name.substring(f.name.lastIndexOf('.')).toLowerCase();
+                if (ALLOWED_TYPES.includes(f.type) || ALLOWED_EXTS.includes(ext)) {
+                    validFiles.push(f);
+                } else {
+                    showError(`Invalid file type: ${f.name}. Only JPG, PNG, and PDF are allowed.`);
+                }
+            }
+            
+            selectedFiles = [...selectedFiles, ...validFiles];
+            updateFileList();
+        }
+
+        function updateFileList() {
+            fileList.innerHTML = '';
+            
+            if (selectedFiles.length > 0) {
+                fileList.classList.remove('empty');
+                selectedFiles.forEach((file, index) => {
+                    const li = document.createElement('li');
+                    li.textContent = `${index + 1}. ${file.name}`;
+                    fileList.appendChild(li);
+                });
+                
+                btnSubmit.removeAttribute('disabled');
+                dropzoneText.textContent = `${selectedFiles.length} file(s) ready for print`;
+                dropzoneText.style.color = '#fff';
+            } else {
+                fileList.classList.add('empty');
+                btnSubmit.setAttribute('disabled', 'true');
+                dropzoneText.textContent = 'Tap to Select Files';
+                dropzoneText.style.color = 'var(--gold-light)';
+            }
+        }
+
+        // Form Submission & Mock Progress
+        btnSubmit.addEventListener('click', () => {
+            if (selectedFiles.length === 0) return;
+
+            // Switch UI to Progress
+            formSection.classList.add('hidden');
+            progressSection.classList.remove('hidden');
+            
+            simulateUpload();
+        });
+
+        function simulateUpload() {
+            let progress = 0;
+            const progressBar = document.getElementById('progress-bar');
+            const progressStatus = document.getElementById('progress-status');
+            
+            progressBar.style.width = '0%';
+            progressStatus.textContent = "Encrypting and uploading documents...";
+            
+            // Start fake progress while real upload happens
+            const interval = setInterval(() => {
+                if (progress < 90) {
+                    progress += Math.random() * 10;
+                    progressBar.style.width = `${progress}%`;
+                }
+            }, 250);
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files[]', file);
+            });
+            
+            const printType = document.querySelector('input[name="print-type"]:checked').value;
+            formData.append('print_mode', printType);
+            formData.append('copies', document.getElementById('copies').value);
+            
+            const frontBack = document.getElementById('front-back-check').checked;
+            formData.append('front_back_pairing', frontBack ? 'true' : 'false');
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(err => { throw new Error(err.error || 'Upload failed') });
+                }
+                return response.json();
+            })
+            .then(data => {
+                clearInterval(interval);
+                progressBar.style.width = '100%';
+                progressStatus.textContent = "Generating print layouts...";
+                setTimeout(() => showSuccess(data.queue_id), 800);
+            })
+            .catch(err => {
+                clearInterval(interval);
+                formSection.classList.remove('hidden');
+                progressSection.classList.add('hidden');
+                showError(err.message);
+            });
+        }
+
+        function showSuccess(queueId) {
+            progressSection.classList.add('hidden');
+            successSection.classList.remove('hidden');
+            
+            const queueDisplay = document.getElementById('queue-display');
+            queueDisplay.textContent = queueId || generateQueueID();
+        }
+
+        function resetForm() {
+            selectedFiles = [];
+            fileInput.value = '';
+            updateFileList();
+            
+            document.querySelector('input[name="print-type"][value="auto"]').checked = true;
+            document.getElementById('copies').value = '1';
+            toggleCheckbox();
+            
+            successSection.classList.add('hidden');
+            formSection.classList.remove('hidden');
+        }
+
+        // Init
+        toggleCheckbox();
+    </script>
+</body>
+</html>
