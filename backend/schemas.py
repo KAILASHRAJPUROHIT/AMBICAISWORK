@@ -38,3 +38,11 @@ class ParsedBankSMS(BaseModel):
     transaction_date: Optional[str] = None
     sender_bank: Optional[str] = None
     raw_message: str
+
+class NormalizedBankAlert(BaseModel):
+    amount: Optional[float] = None
+    utr_reference: Optional[str] = None
+    transaction_date: Optional[str] = None
+    sender_bank: Optional[str] = None
+    source_type: str
+    raw_content: str
