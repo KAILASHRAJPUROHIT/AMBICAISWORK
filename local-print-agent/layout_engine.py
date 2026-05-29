@@ -1,5 +1,4 @@
 import time
-import logging
 from pathlib import Path
 from PIL import Image, ImageOps
 from reportlab.lib.pagesizes import A4
@@ -8,30 +7,13 @@ from reportlab.pdfgen import canvas
 # Prevent Decompression Bomb DOS attacks
 Image.MAX_IMAGE_PIXELS = 50000000 # ~50 MP limit
 
-def classify_image(img_path):
-    # Future OCR classification stub
-    # ocr_keywords = ["invoice", "bill", "certificate", "application", "government form"]
-    # ocr_text = extract_text_with_ocr(img_path).lower()
-    # if any(kw in ocr_text for kw in ocr_keywords):
-    #     logging.info(f"AUTO-DETECT OCR: {Path(img_path).name} | classification: FULL_PAGE")
-    #     return "FULL_PAGE"
-
-    img = Image.open(img_path)
-    w, h = img.width, img.height
-    filename = Path(img_path).name
-    classification = "ID_CARD" # Default
-
-    if h > w:
-        ratio = h / w
-        if 1.25 <= ratio <= 1.60:
-            classification = "FULL_PAGE"
-    elif w > h:
-        ratio = w / h
-        if 1.45 <= ratio <= 1.75:
-            classification = "ID_CARD"
-
-    logging.info(f"AUTO-DETECT: {filename} | dimensions: {w}x{h} | classification: {classification}")
-    return classification
+def is_image(file_path):
+    try:
+        with Image.open(file_path) as img:
+            img.verify()
+        return True
+    except Exception:
+        return False
 
 def create_full_page_layout(image_paths, output_pdf, temp_dir):
     c = canvas.Canvas(str(output_pdf), pagesize=A4)
@@ -76,7 +58,7 @@ def prepare_image(path):
         img = img.rotate(90, expand=True)
     return img
 
-def create_id_layout(image_paths, output_pdf, temp_dir, pair_front_back=False):
+def create_id_layout(image_paths, output_pdf, temp_dir):
     c = canvas.Canvas(str(output_pdf), pagesize=A4)
     page_w, page_h = A4
     
@@ -93,34 +75,16 @@ def create_id_layout(image_paths, output_pdf, temp_dir, pair_front_back=False):
             y = page_h - margin_y - slot_h - row * (slot_h + gap_y)
             positions.append((x, y))
             
-    # Group images
-    items = []
-    if pair_front_back:
-        for i in range(0, len(image_paths), 2):
-            front = image_paths[i]
-            back = image_paths[i+1] if i+1 < len(image_paths) else None
-            items.append((front, back))
-    else:
-        for img in image_paths:
-            items.append((img, None))
-            
     # Draw items
-    for idx, (front_img, back_img) in enumerate(items):
+    for idx, img_path in enumerate(image_paths):
         if idx > 0 and idx % 6 == 0:
             c.showPage()
         
         x, y = positions[idx % 6]
         c.rect(x, y, slot_w, slot_h) # Border
         
-        if back_img:
-            # Split slot horizontally
-            half_h = slot_h / 2
-            # Front on top (higher Y), back on bottom (lower Y)
-            draw_fitted_image(c, front_img, x, y + half_h, slot_w, half_h, temp_dir)
-            draw_fitted_image(c, back_img, x, y, slot_w, half_h, temp_dir)
-        else:
-            # Full slot
-            draw_fitted_image(c, front_img, x, y, slot_w, slot_h, temp_dir)
+        # Full slot
+        draw_fitted_image(c, img_path, x, y, slot_w, slot_h, temp_dir)
             
     c.save()
 
