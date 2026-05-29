@@ -84,9 +84,14 @@ def process_job(job):
     logging.info(f"Processing job {job_id}")
 
     try:
-        # Mark status as printing locally
+        # Mark status as printing locally and on server
         job['status'] = 'printing'
         logging.info(f"Job {job_id} status marked as printing")
+        requests.patch(
+            f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
+            json={"status": "printing"},
+            timeout=10
+        ).raise_for_status()
 
         files = job.get("files", [])
         if not files:
@@ -136,8 +141,9 @@ def process_job(job):
 
         # Post success
         logging.info(f"Job {job_id} completed successfully. Notifying server.")
-        resp = requests.post(
-            f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/complete",
+        resp = requests.patch(
+            f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
+            json={"status": "completed"},
             timeout=10
         )
         resp.raise_for_status()
@@ -146,9 +152,9 @@ def process_job(job):
         error_msg = str(e)
         logging.error(f"Error processing job {job_id}: {error_msg}")
         try:
-            resp = requests.post(
-                f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/error",
-                json={"error_message": error_msg},
+            resp = requests.patch(
+                f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
+                json={"status": "failed", "error": error_msg},
                 timeout=10
             )
             resp.raise_for_status()
