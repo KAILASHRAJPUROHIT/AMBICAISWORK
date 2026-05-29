@@ -1,4 +1,5 @@
-from backend.reconciliation_engine import reconcile_transactions, ReconciliationDecision
+from backend.reconciliation_engine import reconcile_transactions
+from backend.schemas import ReconciliationDecision
 import pytest
 
 class Bill:

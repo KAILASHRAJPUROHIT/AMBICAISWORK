@@ -1,4 +1,5 @@
-from backend.review_queue import route_review, ReconciliationDecision
+from backend.review_queue import route_review
+from backend.schemas import ReconciliationDecision
 import pytest
 
 def test_duplicate_utr():

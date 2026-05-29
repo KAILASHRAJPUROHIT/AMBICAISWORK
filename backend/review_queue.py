@@ -17,35 +17,34 @@ def route_review(decision: dict) -> dict:
     escalation_required = False
     reason = ""
 
-    if decision.get("current_status") == "Red":
+    flags = decision.get("risk_flags", [])
+    status = decision.get("status")
+
+    if "Duplicate UTR" in flags:
+        queue_type = "OwnerEscalation"
+        assigned_role = "Owner"
         escalation_required = True
-        reason = "Red status requires human review"
-
-    if "duplicate_utr" in decision.get("risk_flags", []):
+        reason = "Duplicate UTR requires owner escalation."
+    elif status == "Red":
+        queue_type = "HumanReview"
+        assigned_role = "Accountant"
         escalation_required = True
-        reason = "Duplicate UTR requires owner escalation"
-
-    if "large_amount_mismatch" in decision.get("risk_flags", []):
-        escalation_required = True
-        reason = "Large amount mismatch requires owner escalation"
-
-    if "split_payment" in decision.get("risk_flags", []):
-        assigned_role = "accountant"
-        reason = "Split payments require accountant review"
-
-    if decision.get("current_status") == "Yellow":
-        assigned_role = "accountant"
-        reason = "Yellow status requires accountant review"
-
-    if decision.get("current_status") == "Orange":
-        queue_type = "approval"
-        assigned_role = "approver"
-        reason = "Orange status requires approval workflow"
-
-    if decision.get("current_status") == "Blue":
-        queue_type = "pending"
-        assigned_role = "none"
-        reason = "Blue remains pending until cheque cleared"
+        reason = "Red always requires human review."
+    elif status == "Orange":
+        queue_type = "ApprovalWorkflow"
+        assigned_role = "Approver"
+        escalation_required = False
+        reason = "Orange requires approval workflow."
+    elif "Split Payment" in flags:
+        queue_type = "AccountantReview"
+        assigned_role = "Accountant"
+        escalation_required = False
+        reason = "Split payments require accountant review."
+    elif status == "Yellow":
+        queue_type = "AccountantReview"
+        assigned_role = "Accountant"
+        escalation_required = False
+        reason = "Yellow requires accountant review."
 
     return {
         "queue_type": queue_type,

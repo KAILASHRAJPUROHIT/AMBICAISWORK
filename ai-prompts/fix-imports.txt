@@ -1,0 +1,10 @@
+Fix pytest import errors only.
+
+Requirements:
+- reconcile_transactions must exist in backend/reconciliation_engine.py
+- ReconciliationDecision must be imported from backend.schemas
+- tests/test_review_queue.py must import route_review from backend.review_queue
+- no database mutation
+- no delete endpoints
+- do not change business rules
+- follow AI_RULES.md

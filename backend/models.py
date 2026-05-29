@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Numeric, ForeignKey, Text
 from sqlalchemy.sql import func
-from database import Base
+from backend.database import Base
 
 class User(Base):
     __tablename__ = "users"
@@ -74,7 +74,8 @@ class AuditLog(Base):
     entity_type = Column(String, nullable=False)
     entity_id = Column(Integer, nullable=False)
     action = Column(String, nullable=False)
-    old_value = Column(Text, nullable=True)
-    new_value = Column(Text, nullable=True)
-    performed_by = Column(String, nullable=False)
+    old_status = Column(String, nullable=True)
+    new_status = Column(String, nullable=True)
+    actor = Column(String, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
+    metadata_json = Column(Text, nullable=True)
