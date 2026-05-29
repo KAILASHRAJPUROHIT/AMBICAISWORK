@@ -1,4 +1,5 @@
 import time
+import logging
 from pathlib import Path
 from PIL import Image, ImageOps
 from reportlab.lib.pagesizes import A4
@@ -6,6 +7,65 @@ from reportlab.pdfgen import canvas
 
 # Prevent Decompression Bomb DOS attacks
 Image.MAX_IMAGE_PIXELS = 50000000 # ~50 MP limit
+
+def classify_image(img_path):
+    # Future OCR classification stub
+    # ocr_keywords = ["invoice", "bill", "certificate", "application", "government form"]
+    # ocr_text = extract_text_with_ocr(img_path).lower()
+    # if any(kw in ocr_text for kw in ocr_keywords):
+    #     logging.info(f"AUTO-DETECT OCR: {Path(img_path).name} | classification: FULL_PAGE")
+    #     return "FULL_PAGE"
+
+    img = Image.open(img_path)
+    w, h = img.width, img.height
+    filename = Path(img_path).name
+    classification = "ID_CARD" # Default
+
+    if h > w:
+        ratio = h / w
+        if 1.25 <= ratio <= 1.60:
+            classification = "FULL_PAGE"
+    elif w > h:
+        ratio = w / h
+        if 1.45 <= ratio <= 1.75:
+            classification = "ID_CARD"
+
+    logging.info(f"AUTO-DETECT: {filename} | dimensions: {w}x{h} | classification: {classification}")
+    return classification
+
+def create_full_page_layout(image_paths, output_pdf, temp_dir):
+    c = canvas.Canvas(str(output_pdf), pagesize=A4)
+    page_w, page_h = A4
+    
+    for idx, img_path in enumerate(image_paths):
+        if idx > 0:
+            c.showPage()
+            
+        img = Image.open(img_path)
+        img = ImageOps.exif_transpose(img).convert("RGB")
+        
+        # Auto-rotate to fill the portrait A4 page
+        if img.width > img.height:
+            img = img.rotate(90, expand=True)
+            
+        ratio = img.width / img.height
+        page_ratio = page_w / page_h
+        
+        if ratio > page_ratio:
+            draw_w = page_w
+            draw_h = page_w / ratio
+        else:
+            draw_h = page_h
+            draw_w = page_h * ratio
+            
+        draw_x = (page_w - draw_w) / 2
+        draw_y = (page_h - draw_h) / 2
+        
+        tmp_path = Path(temp_dir) / f"full_{int(time.time()*1000)}.jpg"
+        img.save(tmp_path, "JPEG", quality=95)
+        c.drawImage(str(tmp_path), draw_x, draw_y, width=draw_w, height=draw_h)
+        
+    c.save()
 
 def prepare_image(path):
     img = Image.open(path)

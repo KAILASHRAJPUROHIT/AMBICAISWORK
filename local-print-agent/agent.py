@@ -114,7 +114,17 @@ def process_job(job):
                 local_images.append(img_path)
             
             pairing = job.get("front_back_pairing", False)
-            layout_engine.create_id_layout(local_images, final_pdf_path, TEMP_DIR, pair_front_back=pairing)
+            
+            if print_mode == 'auto':
+                classification = layout_engine.classify_image(local_images[0])
+                if classification == "FULL_PAGE":
+                    layout_engine.create_full_page_layout(local_images, final_pdf_path, TEMP_DIR)
+                else:
+                    layout_engine.create_id_layout(local_images, final_pdf_path, TEMP_DIR, pair_front_back=pairing)
+            elif print_mode == 'pdf' or print_mode == 'full_page_pdf':
+                layout_engine.create_full_page_layout(local_images, final_pdf_path, TEMP_DIR)
+            else:
+                layout_engine.create_id_layout(local_images, final_pdf_path, TEMP_DIR, pair_front_back=pairing)
         else:
             raise ValueError("No processable files found in payload.")
 
