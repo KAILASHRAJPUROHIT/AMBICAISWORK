@@ -67,3 +67,13 @@ class OwnerEscalationRecord(BaseModel):
     owner_notified: bool
     created_at: str
     resolved_at: Optional[str] = None
+
+class DailySummary(BaseModel):
+    generated_at: str
+    processed_count: int
+    open_reviews: int
+    escalated_reviews: int
+    resolved_reviews: int
+    high_risk_count: int
+    critical_risk_count: int
+    summary_notes: str
