@@ -40,6 +40,13 @@ def init_db():
     with app.app_context():
         db.create_all()
 
+        inspector = db.inspect(db.engine)
+        columns = [col["name"] for col in inspector.get_columns("print_jobs")]
+
+        with db.engine.connect() as conn:
+            if "error_message" not in columns:
+                conn.execute(db.text("ALTER TABLE print_jobs ADD COLUMN error_message TEXT"))
+                conn.commit()
 
 def allowed_file(filename):
     return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
