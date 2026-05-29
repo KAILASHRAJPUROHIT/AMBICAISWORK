@@ -1,7 +1,6 @@
-import os
 import json
+import os
 import random
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -9,168 +8,146 @@ from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
-# Configuration
-BASE_DIR = Path(__file__).resolve().parent
-UPLOADS_DIR = BASE_DIR / "uploads"
-UPLOADS_DIR.mkdir(exist_ok=True)
+app = Flask(__name__)
 
-app = Flask(__name__, template_folder='app/templates')
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{BASE_DIR}/jobs.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# Max 50MB total upload size
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024 
+BASE_DIR = Path(__file__).resolve().parent
+UPLOAD_DIR = BASE_DIR / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'jobs.db'}")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_MB", "50")) * 1024 * 1024
 
 db = SQLAlchemy(app)
 
-ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.pdf'}
-MAX_FILES = 12
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
+VALID_PRINT_MODES = {"pdf", "id_card"}
 
-# Database Model
+
 class PrintJob(db.Model):
-    __tablename__ = 'print_jobs'
+    __tablename__ = "print_jobs"
     id = db.Column(db.String(32), primary_key=True)
-    status = db.Column(db.String(20), default='pending') # pending, printing, completed, failed
-    print_mode = db.Column(db.String(20), default='auto')
-    copies = db.Column(db.Integer, default=1)
-    front_back_pairing = db.Column(db.Boolean, default=False)
-    file_paths = db.Column(db.Text) # JSON string of paths relative to UPLOADS_DIR
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    status = db.Column(db.String(32), default="pending", nullable=False)
+    print_mode = db.Column(db.String(32), default="pdf", nullable=False)
+    copies = db.Column(db.Integer, default=1, nullable=False)
+    file_paths = db.Column(db.Text, nullable=False, default="[]")
+    error_message = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+def init_db():
+    with app.app_context():
+        db.create_all()
+
+
+def allowed_file(filename):
+    return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
+
 
 def generate_queue_id():
-    now = datetime.now()
-    date_str = now.strftime('%Y%m%d')
-    rnd_str = f"{random.randint(1, 999):03d}"
-    return f"AR-{date_str}-{rnd_str}"
+    today = datetime.now().strftime("%Y%m%d")
+    for _ in range(1000):
+        job_id = f"AR-{today}-{random.randint(1, 999):03d}"
+        if not PrintJob.query.get(job_id):
+            return job_id
+    raise RuntimeError("Unable to generate queue ID. Try again.")
 
-def is_allowed_file(filename):
-    ext = os.path.splitext(filename)[1].lower()
-    return ext in ALLOWED_EXTENSIONS
 
-# Setup Database
-with app.app_context():
-    db.create_app() if hasattr(db, 'create_app') else db.create_all()
-
-@app.route('/', methods=['GET'])
+@app.route("/", methods=["GET"])
 def index():
-    return render_template('upload.html')
+    return render_template("upload.html")
 
-@app.route('/upload', methods=['POST'])
-def upload_files():
-    files = request.files.getlist('files[]')
-    
-    if not files or len(files) == 0:
-        return jsonify({"error": "No files uploaded"}), 400
-    
-    if len(files) > MAX_FILES:
-        return jsonify({"error": f"Maximum {MAX_FILES} files allowed."}), 400
-        
-    print_mode = request.form.get('print_mode', 'auto')
-    copies = int(request.form.get('copies', 1))
-    front_back_pairing = request.form.get('front_back_pairing', 'false').lower() == 'true'
-    
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    files = request.files.getlist("files[]") or request.files.getlist("files")
+    if not files:
+        return jsonify({"error": "No files selected."}), 400
+    if len(files) > 12:
+        return jsonify({"error": "Maximum 12 files allowed."}), 400
+
+    print_mode = request.form.get("print_mode", "pdf").strip()
+    if print_mode not in VALID_PRINT_MODES:
+        return jsonify({"error": "Invalid print mode."}), 400
+
+    try:
+        copies = int(request.form.get("copies", "1"))
+    except ValueError:
+        return jsonify({"error": "Invalid copies value."}), 400
+    if copies < 1 or copies > 5:
+        return jsonify({"error": "Copies must be between 1 and 5."}), 400
+
     job_id = generate_queue_id()
-    
-    # Create job directory
-    job_dir = UPLOADS_DIR / job_id
-    job_dir.mkdir(exist_ok=True)
-    
-    saved_paths = []
-    
-    for file in files:
-        if file.filename == '':
+    job_dir = UPLOAD_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    saved_files = []
+
+    for uploaded in files:
+        if not uploaded or not uploaded.filename:
             continue
-            
-        if not is_allowed_file(file.filename):
-            return jsonify({"error": f"File type not allowed: {file.filename}"}), 400
-            
-        filename = secure_filename(file.filename)
-        # Add timestamp to prevent overwriting files with the same name
-        timestamp = int(time.time() * 1000)
-        unique_filename = f"{timestamp}_{filename}"
-        
-        file_path = job_dir / unique_filename
-        file.save(str(file_path))
-        saved_paths.append(f"{job_id}/{unique_filename}")
-        
-    if not saved_paths:
-        return jsonify({"error": "No valid files were processed."}), 400
-        
-    # Save to database
-    new_job = PrintJob(
-        id=job_id,
-        print_mode=print_mode,
-        copies=copies,
-        front_back_pairing=front_back_pairing,
-        file_paths=json.dumps(saved_paths)
-    )
-    
-    db.session.add(new_job)
+        if not allowed_file(uploaded.filename):
+            return jsonify({"error": f"Unsupported file type: {uploaded.filename}"}), 400
+        safe_name = secure_filename(uploaded.filename) or f"file_{len(saved_files)+1}"
+        destination = job_dir / safe_name
+        if destination.exists():
+            destination = job_dir / f"{destination.stem}_{len(saved_files)+1}{destination.suffix}"
+        uploaded.save(destination)
+        saved_files.append(destination.name)
+
+    if not saved_files:
+        return jsonify({"error": "No valid files uploaded."}), 400
+
+    job = PrintJob(id=job_id, status="pending", print_mode=print_mode, copies=copies, file_paths=json.dumps(saved_files))
+    db.session.add(job)
     db.session.commit()
-    
-    return jsonify({"success": True, "queue_id": job_id}), 201
+    return jsonify({"success": True, "queue_id": job_id, "status": job.status, "file_count": len(saved_files)})
 
-@app.route('/media/<job_id>/<filename>', methods=['GET'])
-def serve_media(job_id, filename):
-    # Basic security check
-    job_dir = UPLOADS_DIR / secure_filename(job_id)
-    return send_from_directory(job_dir, secure_filename(filename))
 
-@app.route('/api/agent/jobs/pending', methods=['GET'])
+@app.route("/api/agent/jobs/pending", methods=["GET"])
 def get_pending_jobs():
-    # Note: Authentication logic would go here in production
-    
-    pending_jobs = PrintJob.query.filter_by(status='pending').all()
-    jobs_response = []
-    
-    base_url = request.host_url.rstrip('/')
-    
-    for job in pending_jobs:
-        paths = json.loads(job.file_paths) if job.file_paths else []
-        image_urls = [f"{base_url}/media/{path}" for path in paths]
-        
-        # We pass image_urls. If it's a PDF mode and exactly one file, maybe we pass it as pdf_url.
-        # But our local agent layout.py accepts image_urls for compilation.
-        # For simplicity and agent compatibility, we'll assign pdf_url if the only file is a PDF,
-        # otherwise provide image_urls.
-        
-        job_data = {
-            "id": job.id,
-            "print_mode": job.print_mode,
-            "copies": job.copies,
-        }
-        
-        if len(paths) == 1 and paths[0].lower().endswith('.pdf'):
-            job_data["pdf_url"] = image_urls[0]
-        else:
-            job_data["image_urls"] = image_urls
-            
-        jobs_response.append(job_data)
-        
-    return jsonify({"jobs": jobs_response})
+    jobs = PrintJob.query.filter_by(status="pending").order_by(PrintJob.created_at.asc()).limit(5).all()
+    response = []
+    for job in jobs:
+        filenames = json.loads(job.file_paths or "[]")
+        files = [{"filename": name, "url": request.url_root.rstrip("/") + f"/media/{job.id}/{name}"} for name in filenames]
+        response.append({"job_id": job.id, "status": job.status, "print_mode": job.print_mode, "copies": job.copies, "files": files, "created_at": job.created_at.isoformat()})
+    return jsonify(response)
 
-@app.route('/api/agent/jobs/<job_id>/status', methods=['PATCH'])
+
+@app.route("/api/agent/jobs/<job_id>/status", methods=["POST", "PATCH"])
 def update_job_status(job_id):
-    # Note: Authentication logic would go here in production
-    
-    job = PrintJob.query.filter_by(id=job_id).first()
-    if not job:
-        return jsonify({"error": "Job not found"}), 404
-        
-    data = request.json
-    if not data or 'status' not in data:
-        return jsonify({"error": "Missing status"}), 400
-        
-    new_status = data['status']
-    
-    job.status = new_status
-    if 'error' in data and data['error']:
-        # Could log this or store in a separate error column
-        print(f"Job {job_id} reported error: {data['error']}")
-        
+    job = PrintJob.query.get_or_404(job_id)
+    data = request.get_json(silent=True) or request.form
+    status = data.get("status")
+    if status not in {"pending", "printing", "completed", "failed"}:
+        return jsonify({"error": "Invalid status."}), 400
+    job.status = status
+    job.updated_at = datetime.utcnow()
+    error_message = data.get("error") or data.get("error_message")
+    if error_message:
+        job.error_message = str(error_message)[:2000]
     db.session.commit()
-    
-    return jsonify({"success": True, "status": job.status})
+    return jsonify({"success": True, "job_id": job.id, "status": job.status})
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)debug=True).0.0', port=5000, debug=True)
+
+@app.route("/media/<job_id>/<path:filename>", methods=["GET"])
+def media(job_id, filename):
+    return send_from_directory(UPLOAD_DIR / secure_filename(job_id), filename, as_attachment=True)
+
+
+@app.route("/admin", methods=["GET"])
+def admin():
+    jobs = PrintJob.query.order_by(PrintJob.created_at.desc()).limit(100).all()
+    rows = ""
+    for job in jobs:
+        file_count = len(json.loads(job.file_paths or "[]"))
+        rows += f"<tr><td>{job.id}</td><td>{job.status}</td><td>{job.print_mode}</td><td>{job.copies}</td><td>{file_count}</td><td>{job.created_at.strftime('%d-%m-%Y %H:%M')}</td></tr>"
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aradhana Print Admin</title><style>body{{font-family:Arial;background:#f7f5f0;padding:20px}}h1{{color:#06142E}}table{{width:100%;border-collapse:collapse;background:white}}th,td{{padding:10px;border-bottom:1px solid #ddd;font-size:14px}}th{{background:#06142E;color:#D4AF37;text-align:left}}</style><meta http-equiv="refresh" content="10"></head><body><h1>Aradhana Print Queue</h1><table><tr><th>Queue ID</th><th>Status</th><th>Mode</th><th>Copies</th><th>Files</th><th>Created</th></tr>{rows}</table></body></html>"""
+
+
+init_db()
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=True)
