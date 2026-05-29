@@ -17,32 +17,32 @@ This is the background daemon that runs on the Windows machine connected to the 
     ```
 
 2.  **Configure Environment**:
-    Edit the `.env` file to match your absolute paths and printer name:
+    Create or edit the `.env` file to match your absolute paths and printer name:
     ```env
     CLOUD_SERVER_URL=https://print.aradhana.com
+    AGENT_TOKEN=aradhana_secret_agent_token_2026
     PRINTER_NAME=HPF8EDFC0532A7(HP Laser MFP 330)
     SUMATRA_PATH=C:\Users\kaila\AppData\Local\SumatraPDF\SumatraPDF.exe
     ```
 
-## Running as a Hidden Background Service (Windows Task Scheduler)
+## Automated Background Setup (Windows Task Scheduler)
 
-To ensure this agent runs automatically when the PC turns on (without showing a black console window to the cashier), we will use `pythonw.exe`:
+We use native Windows Task Scheduler to ensure the print agent starts silently whenever the computer is turned on, running in the background before anyone even logs in. 
 
-1.  Open **Task Scheduler** (`taskschd.msc` from the Start Menu).
-2.  Click **Create Basic Task** on the right.
-3.  Name: `Aradhana Print Agent`
-4.  Trigger: **When the computer starts**
-5.  Action: **Start a program**
-6.  Program/script: Browse and select `pythonw.exe` (usually in `C:\Python3X\pythonw.exe` or your virtual environment).
-7.  Add arguments: `agent.py`
-8.  Start in: `C:\aradhana_qr_print_server_v3\local-print-agent` (Important! This ensures `.env` and `agent.log` save correctly).
-9.  Click **Finish**.
+*No manual setup is required. Use the provided batch scripts:*
 
-Now, the agent will poll every 5 seconds silently in the background.
+1. **Install & Start**: Right-click `install_autostart.bat` -> **Run as Administrator**.
+2. **Check Status**: Double-click `check_status.bat` to see if the agent is polling and view the latest logs.
+3. **Restart Agent**: Right-click `restart_agent.bat` -> **Run as Administrator** (Use this if you edited the `.env` file and need the agent to pick up the changes).
+4. **Uninstall**: Right-click `uninstall_autostart.bat` -> **Run as Administrator**.
 
 ## Troubleshooting
 
-If prints are not firing:
-1.  Check `logs/agent.log` for Python errors or timeouts.
-2.  Ensure `SumatraPDF` is installed in the exact directory specified in `.env`.
-3.  Ensure the `PRINTER_NAME` exactly matches the spelling in your Windows Control Panel (Printers & Scanners).
+If prints are not firing automatically, consult this list:
+
+*   **Printer Offline**: Check physical USB/Network cables. Ensure `PRINTER_NAME` in your `.env` exactly matches the spelling found in Windows *Printers & Scanners* settings.
+*   **`.env` Missing**: The agent will crash immediately if the `.env` file is missing. Ensure the file is created in the `local-print-agent` directory and then run `restart_agent.bat`.
+*   **Python Path Wrong**: If the installer fails, verify that Python is actually installed at `C:\Users\kaila\AppData\Local\Programs\Python\Python311\pythonw.exe`. If it is installed elsewhere, you must edit the `.bat` scripts to match your system.
+*   **Agent Not Polling**: Run `check_status.bat`. If `pythonw.exe` is not in the running processes list, it crashed. Check the recent log activity printed by the script or open `logs/agent.log` for the exact Python error.
+*   **Render Server Sleeping**: If your cloud backend is hosted on a free tier (like Render), it will go to sleep after 15 minutes of inactivity. The first upload of the morning might take ~50 seconds to wake the server up before the queue ID appears.
+*   **No Print After Upload**: If the upload succeeds but nothing prints, verify that your `AGENT_TOKEN` in the `.env` exactly matches the backend. Also, verify that your `SUMATRA_PATH` is correct and SumatraPDF is installed.
