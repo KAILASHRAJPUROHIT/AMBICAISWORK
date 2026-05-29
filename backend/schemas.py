@@ -46,3 +46,15 @@ class NormalizedBankAlert(BaseModel):
     sender_bank: Optional[str] = None
     source_type: str
     raw_content: str
+
+class ManagedReviewItem(BaseModel):
+    review_id: str
+    entity_type: str
+    entity_id: str
+    queue_type: str
+    assigned_role: str
+    escalation_required: bool
+    status: str
+    reason: str
+    created_at: str
+    resolved_at: Optional[str] = None
