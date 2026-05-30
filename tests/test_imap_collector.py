@@ -69,6 +69,25 @@ def test_convert_imap_message_to_raw_email():
     assert "5000.00" in raw_email.raw_body
     assert raw_email.label == "BANK_HDFC"
 
+def test_convert_imap_message_to_raw_email_with_mime_decoding():
+    # RFC 2047 encoded headers
+    # Subject: =?utf-8?B?QmFuayBBbGVydDogMTUwMC4wMCDigrk=?= -> Bank Alert: 1500.00 ₹
+    # From: =?utf-8?Q?S=C3=A9nder?= <sender@bank.com> -> Sénder <sender@bank.com>
+    raw_msg = (
+        b"From: =?utf-8?Q?S=C3=A9nder?= <sender@bank.com>\r\n"
+        b"Subject: =?utf-8?B?QmFuayBBbGVydDogMTUwMC4wMCDigrk=?=\r\n"
+        b"Message-ID: <msg-mime-123>\r\n"
+        b"Date: Mon, 27 Oct 2023 10:00:00 +0530\r\n"
+        b"\r\n"
+        b"Transaction confirmed."
+    )
+    
+    raw_email = convert_imap_message_to_raw_email(raw_msg, "BANK_SBI")
+    
+    assert raw_email.sender == "Sénder <sender@bank.com>"
+    assert raw_email.subject == "Bank Alert: 1500.00 ₹"
+    assert raw_email.message_id == "<msg-mime-123>"
+
 @patch("backend.imap_collector.fetch_labeled_emails")
 @patch("backend.imap_collector.convert_imap_message_to_raw_email")
 def test_collect_bank_emails_skips_duplicates(mock_convert, mock_fetch):

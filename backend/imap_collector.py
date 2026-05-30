@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional
 from backend.schemas import RawEmail
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+from email.header import decode_header, make_header
 
 def build_imap_config() -> Dict[str, str]:
     """
@@ -36,6 +37,18 @@ def connect_imap(config: Dict[str, str]) -> imaplib.IMAP4_SSL:
     except Exception as e:
         raise ConnectionError(f"Failed to connect to IMAP server: {str(e)}")
 
+def decode_mime_header(header_value: Optional[str]) -> str:
+    """
+    Decodes MIME-encoded headers safely.
+    Preserves original value if decoding fails.
+    """
+    if not header_value:
+        return ""
+    try:
+        return str(make_header(decode_header(header_value)))
+    except Exception:
+        return header_value
+
 def fetch_labeled_emails(mail: imaplib.IMAP4_SSL, label_name: str, limit: int = 50) -> List[bytes]:
     """
     Fetches raw emails for a specific Gmail label in READ-ONLY mode.
@@ -65,12 +78,13 @@ def fetch_labeled_emails(mail: imaplib.IMAP4_SSL, label_name: str, limit: int = 
 def convert_imap_message_to_raw_email(raw_msg: bytes, label: str) -> Optional[RawEmail]:
     """
     Converts raw IMAP message bytes to a RawEmail Pydantic model.
+    Decodes MIME headers safely.
     """
     msg = email.message_from_bytes(raw_msg)
     
     message_id = msg.get('Message-ID', '')
-    sender = msg.get('From', '')
-    subject = msg.get('Subject', '')
+    sender = decode_mime_header(msg.get('From', ''))
+    subject = decode_mime_header(msg.get('Subject', ''))
     date_str = msg.get('Date', '')
     
     try:
