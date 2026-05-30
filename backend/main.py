@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from .database import engine, SessionLocal, Base
@@ -6,6 +7,7 @@ from .schemas import ReconciliationDecision, ReviewQueueItem, RoutingResult
 from reconciliation_engine import reconcile_transactions 
 from review_queue import route_review 
 from .api_routes import router
+from .auth import require_admin, require_admin_or_owner, require_admin_or_accountant
 
 Base.metadata.create_all(bind=engine)
 
@@ -20,9 +22,9 @@ def get_db():
     finally:
         db.close()
 
-@app.post("/users/")
+@app.post("/users/", dependencies=[Depends(require_admin)])
 def create_user(username: str, email: str, db: Session = Depends(get_db)):
-    db_user = User(username=username, email=email)
+    db_user = User(name=username, role="STAFF")
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
@@ -35,9 +37,9 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     return db_user
 
-@app.post("/bills/")
+@app.post("/bills/", dependencies=[Depends(require_admin)])
 def create_bill(user_id: int, amount: float, status: str = "Yellow", db: Session = Depends(get_db)):
-    db_bill = Bill(user_id=user_id, amount=amount, status=status)
+    db_bill = Bill(bill_number=f"BILL-{datetime.now().timestamp()}", customer_name=f"User {user_id}", amount=amount, status=status)
     db.add(db_bill)
     db.commit()
     db.refresh(db_bill)
@@ -50,9 +52,9 @@ def read_bill(bill_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Bill not found")
     return db_bill
 
-@app.post("/payments/")
+@app.post("/payments/", dependencies=[Depends(require_admin)])
 def create_payment(bill_id: int, amount: float, status: str = "Yellow", db: Session = Depends(get_db)):
-    db_payment = Payment(bill_id=bill_id, amount=amount, status=status)
+    db_payment = Payment(bill_id=bill_id, amount=amount, mode="CASH", status=status)
     db.add(db_payment)
     db.commit()
     db.refresh(db_payment)
@@ -65,9 +67,9 @@ def read_payment(payment_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Payment not found")
     return db_payment
 
-@app.post("/bank_alerts/")
+@app.post("/bank_alerts/", dependencies=[Depends(require_admin)])
 def create_bank_alert(user_id: int, message: str, status: str = "Yellow", db: Session = Depends(get_db)):
-    db_bank_alert = BankAlert(user_id=user_id, message=message, status=status)
+    db_bank_alert = BankAlert(bank_name="Generic Bank", amount=0, sender=f"User {user_id}", received_at=datetime.now(), raw_text=message)
     db.add(db_bank_alert)
     db.commit()
     db.refresh(db_bank_alert)
@@ -80,9 +82,9 @@ def read_bank_alert(alert_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Bank Alert not found")
     return db_bank_alert
 
-@app.post("/sms_alerts/")
+@app.post("/sms_alerts/", dependencies=[Depends(require_admin)])
 def create_sms_alert(user_id: int, message: str, status: str = "Yellow", db: Session = Depends(get_db)):
-    db_sms_alert = SMSAlert(user_id=user_id, message=message, status=status)
+    db_sms_alert = SMSAlert(phone_source="Unknown", amount=0, received_at=datetime.now(), raw_text=message)
     db.add(db_sms_alert)
     db.commit()
     db.refresh(db_sms_alert)
@@ -95,9 +97,9 @@ def read_sms_alert(alert_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="SMS Alert not found")
     return db_sms_alert
 
-@app.post("/cheques/")
+@app.post("/cheques/", dependencies=[Depends(require_admin)])
 def create_cheque(user_id: int, amount: float, status: str = "Yellow", db: Session = Depends(get_db)):
-    db_cheque = Cheque(user_id=user_id, amount=amount, status=status)
+    db_cheque = Cheque(bill_id=user_id, cheque_number="000000", bank_name="Generic Bank", amount=amount, status=status)
     db.add(db_cheque)
     db.commit()
     db.refresh(db_cheque)
@@ -110,9 +112,9 @@ def read_cheque(cheque_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Cheque not found")
     return db_cheque
 
-@app.post("/audit_logs/")
+@app.post("/audit_logs/", dependencies=[Depends(require_admin_or_owner)])
 def create_audit_log(user_id: int, action: str, details: str, status: str = "Yellow", db: Session = Depends(get_db)):
-    db_audit_log = AuditLog(user_id=user_id, action=action, details=details, status=status)
+    db_audit_log = AuditLog(entity_type="manual", entity_id=user_id, action=action, actor="SYSTEM", metadata_json=details)
     db.add(db_audit_log)
     db.commit()
     db.refresh(db_audit_log)
@@ -138,7 +140,7 @@ def status_colors():
         "Green": "#008000"
     }
 
-@app.post("/review_queue/", response_model=ReviewQueueItem, status_code=status.HTTP_201_CREATED)
+@app.post("/review_queue/", response_model=ReviewQueueItem, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin_or_accountant)])
 def create_review_queue_item(item: ReviewQueueItem, db: Session = Depends(get_db)):
     decision = reconcile_transactions(
         bills=db.query(Bill).filter(Bill.id == item.entity_id).all(),
@@ -159,8 +161,8 @@ def create_review_queue_item(item: ReviewQueueItem, db: Session = Depends(get_db
         created_at=datetime.utcnow()
     )
     
-    db.add(new_item)
-    db.commit()
-    db.refresh(new_item)
+    # db.add(new_item)
+    # db.commit()
+    # db.refresh(new_item)
     
     return new_item

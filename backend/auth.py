@@ -1,3 +1,4 @@
+from fastapi import Header, HTTPException, status, Depends
 from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID, uuid4
@@ -66,3 +67,46 @@ def validate_session(session: AuthSession) -> bool:
     Validates if a session is still active and not expired.
     """
     return datetime.now() < session.expires_at
+
+
+def get_current_role(x_user_role: Optional[str] = Header(None)) -> UserRole:
+    """
+    Dependency to get the current role from X-User-Role header.
+    Defaults to ACCOUNTANT if no header is provided for backwards compatibility if needed, 
+    but for hardening we should probably require it or handle it.
+    The prompt says "Return 403 when role lacks permission."
+    """
+    if not x_user_role:
+        # If no role is provided, we can't authorize mutation.
+        # However, we might want a default or just fail.
+        # Let's fail for mutations.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="X-User-Role header missing"
+        )
+    
+    try:
+        return UserRole[x_user_role.upper()]
+    except KeyError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid role"
+        )
+
+
+def require_admin(role: UserRole = Depends(get_current_role)) -> UserRole:
+    if role != UserRole.ADMIN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return role
+
+
+def require_admin_or_owner(role: UserRole = Depends(get_current_role)) -> UserRole:
+    if role not in [UserRole.ADMIN, UserRole.OWNER]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin or Owner access required")
+    return role
+
+
+def require_admin_or_accountant(role: UserRole = Depends(get_current_role)) -> UserRole:
+    if role not in [UserRole.ADMIN, UserRole.ACCOUNTANT]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin or Accountant access required")
+    return role
