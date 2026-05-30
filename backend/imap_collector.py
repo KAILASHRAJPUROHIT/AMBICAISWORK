@@ -9,23 +9,32 @@ from email.utils import parsedate_to_datetime
 def build_imap_config() -> Dict[str, str]:
     """
     Builds IMAP configuration from environment variables.
+    Validates that required credentials exist.
     """
+    host = os.getenv("IMAP_HOST", "imap.gmail.com")
+    user = os.getenv("IMAP_USER")
+    password = os.getenv("IMAP_PASSWORD")
+
+    if not user or not password:
+        raise ValueError("IMAP credentials (IMAP_USER, IMAP_PASSWORD) missing in environment variables")
+
     return {
-        "host": os.getenv("IMAP_HOST", "imap.gmail.com"),
-        "user": os.getenv("IMAP_USER", ""),
-        "password": os.getenv("IMAP_PASSWORD", ""),
+        "host": host,
+        "user": user,
+        "password": password,
     }
 
 def connect_imap(config: Dict[str, str]) -> imaplib.IMAP4_SSL:
     """
     Connects to the IMAP server using the provided configuration.
+    Returns a connection object.
     """
-    if not config["user"] or not config["password"]:
-        raise ValueError("IMAP credentials missing in environment variables")
-    
-    mail = imaplib.IMAP4_SSL(config["host"])
-    mail.login(config["user"], config["password"])
-    return mail
+    try:
+        mail = imaplib.IMAP4_SSL(config["host"])
+        mail.login(config["user"], config["password"])
+        return mail
+    except Exception as e:
+        raise ConnectionError(f"Failed to connect to IMAP server: {str(e)}")
 
 def fetch_labeled_emails(mail: imaplib.IMAP4_SSL, label_name: str, limit: int = 50) -> List[bytes]:
     """

@@ -18,6 +18,12 @@ def test_build_imap_config():
     assert config["user"] == "user@test.com"
     assert config["password"] == "password123"
 
+@patch.dict(os.environ, {}, clear=True)
+def test_build_imap_config_missing_credentials():
+    with pytest.raises(ValueError) as exc_info:
+        build_imap_config()
+    assert "IMAP credentials" in str(exc_info.value)
+
 @patch("imaplib.IMAP4_SSL")
 def test_connect_imap(mock_imap):
     mock_instance = mock_imap.return_value
