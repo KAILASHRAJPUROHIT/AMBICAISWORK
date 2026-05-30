@@ -179,7 +179,7 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
 
-        /* Camera View */
+        /* Camera View & Overlays */
         .camera-wrapper {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -189,10 +189,35 @@
             flex-direction: column;
         }
 
-        #camera-video {
+        .camera-container {
+            position: relative;
             flex: 1;
+            overflow: hidden;
+        }
+
+        #camera-video {
             width: 100%;
+            height: 100%;
             object-fit: cover;
+        }
+
+        #detection-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+        }
+
+        .camera-guide {
+            position: absolute;
+            top: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 10;
+            white-space: nowrap;
         }
 
         .camera-controls {
@@ -202,6 +227,7 @@
             justify-content: space-around;
             align-items: center;
             padding: 0 20px;
+            z-index: 10;
         }
 
         .btn-shutter {
@@ -241,6 +267,7 @@
             background: #222;
             overflow: hidden;
             border-radius: 8px;
+            position: relative;
         }
 
         #crop-image { max-width: 100%; }
@@ -400,10 +427,14 @@
 
     <!-- CAMERA VIEW -->
     <div id="view-camera" class="camera-wrapper hidden">
-        <video id="camera-video" autoplay playsinline muted></video>
+        <div class="camera-container">
+            <video id="camera-video" autoplay playsinline muted></video>
+            <canvas id="detection-overlay"></canvas>
+            <div id="camera-guide" class="camera-guide">Align document within frame</div>
+        </div>
         <div class="camera-controls">
             <button class="btn-camera-cancel" onclick="stopCamera()">Cancel</button>
-            <button class="btn-shutter" onclick="capturePhoto()"></button>
+            <button id="shutter-btn" class="btn-shutter" onclick="captureManual()"></button>
             <div style="width: 50px"></div> <!-- Spacer -->
         </div>
     </div>
@@ -411,14 +442,15 @@
     <!-- CROP VIEW -->
     <div id="view-crop" class="card hidden">
         <div class="crop-wrapper">
-            <span class="section-label">Adjust Crop</span>
+            <span class="section-label" id="crop-label">Final Adjustment</span>
             <div class="crop-container">
                 <img id="crop-image" src="">
             </div>
             <div style="display: flex; gap: 10px;">
-                <button class="btn-master" style="background: #444; color: white;" onclick="cancelCrop()">Cancel</button>
+                <button class="btn-master" style="background: #444; color: white;" onclick="retakePhoto()">Retake</button>
                 <button class="btn-master" onclick="confirmCrop()">Add to Queue</button>
             </div>
+            <button id="btn-manual-crop" class="btn-master" style="background: transparent; border: 1px solid var(--gold); color: var(--gold-light); margin-top: 5px;" onclick="enableManualCrop()">Manual Crop</button>
         </div>
     </div>
 
@@ -453,6 +485,12 @@
     let cropper = null;
     let cameraStream = null;
     let cvLoaded = false;
+    let isDetecting = false;
+    let detectionFrameCount = 0;
+    let lastDetectionTime = 0;
+    let stableFrameCount = 0;
+    let bestPoints = null;
+    let autoCaptureActive = true;
 
     const views = {
         main: document.getElementById('view-main'),
@@ -539,53 +577,29 @@
 
     // Camera Logic
     async function startCamera() {
-        console.log('Button clicked: startCamera');
-        const debugInfo = document.getElementById('camera-debug');
-        debugInfo.textContent = "Requesting camera...";
-        debugInfo.classList.remove('hidden');
-
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            const msg = "navigator.mediaDevices.getUserMedia not supported. Page MUST be on HTTPS or localhost.";
-            console.error(msg);
-            debugInfo.textContent = msg;
-            alert(msg);
+            alert("Camera not supported on this browser.");
             return;
         }
 
-        const constraints = [
-            { video: { facingMode: { ideal: 'environment' } }, audio: false },
-            { video: true, audio: false }
-        ];
-
-        for (const constraint of constraints) {
-            try {
-                console.log('Calling getUserMedia with:', JSON.stringify(constraint));
-                cameraStream = await navigator.mediaDevices.getUserMedia(constraint);
-                console.log('Camera success!');
-                document.getElementById('camera-video').srcObject = cameraStream;
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+                audio: false
+            });
+            const video = document.getElementById('camera-video');
+            video.srcObject = cameraStream;
+            video.onloadedmetadata = () => {
                 showView('camera');
-                debugInfo.classList.add('hidden');
-                return;
-            } catch (err) {
-                console.warn(`getUserMedia failed for constraint:`, constraint, err.name, err.message);
-                
-                let friendlyMsg = "";
-                if (err.name === 'NotAllowedError') friendlyMsg = "Camera permission denied. Please allow camera access in browser settings.";
-                else if (err.name === 'NotFoundError') friendlyMsg = "No camera found on this device.";
-                else if (err.name === 'NotReadableError') friendlyMsg = "Camera is already in use by another app or tab.";
-                else if (err.name === 'SecurityError') friendlyMsg = "Security error: Camera requires HTTPS context.";
-                else friendlyMsg = `Camera error: ${err.name} ${err.message}`;
-
-                debugInfo.textContent = friendlyMsg;
-                // If it's the last constraint, show alert
-                if (constraint === constraints[constraints.length - 1]) {
-                    alert(friendlyMsg);
-                }
-            }
+                startDetectionLoop();
+            };
+        } catch (err) {
+            alert("Unable to access camera: " + err.message);
         }
     }
 
     function stopCamera() {
+        isDetecting = false;
         if (cameraStream) {
             cameraStream.getTracks().forEach(track => track.stop());
             cameraStream = null;
@@ -593,80 +607,83 @@
         showView('main');
     }
 
-    function capturePhoto() {
+    function startDetectionLoop() {
+        isDetecting = true;
+        stableFrameCount = 0;
+        bestPoints = null;
+        autoCaptureActive = true;
+        requestAnimationFrame(detectionLoop);
+    }
+
+    function detectionLoop(timestamp) {
+        if (!isDetecting) return;
+
         const video = document.getElementById('camera-video');
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
-        
-        stopCamera();
-        processCapturedImage(canvas);
-    }
+        const canvas = document.getElementById('detection-overlay');
+        const guide = document.getElementById('camera-guide');
 
-    // File Upload Fallback Logic
-    function triggerFileInput() {
-        document.getElementById('file-input').click();
-    }
-
-    function handleFileSelect(event) {
-        const files = event.target.files;
-        if (!files.length) return;
-
-        processFiles(Array.from(files));
-        event.target.value = ''; // Reset for same file re-selection
-    }
-
-    async function processFiles(files) {
-        for (const file of files) {
-            if (file.type === 'application/pdf') {
-                addToQueue(file, file.name, file.type);
-            } else if (file.type.startsWith('image/')) {
-                const bitmap = await createImageBitmap(file);
-                const canvas = document.createElement('canvas');
-                canvas.width = bitmap.width;
-                canvas.height = bitmap.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(bitmap, 0, 0);
-                processCapturedImage(canvas);
-                return; // Only process first image at a time for cropping UI flow
-            }
+        if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+            requestAnimationFrame(detectionLoop);
+            return;
         }
-    }
 
-    // Image Processing & Cropping
-    function processCapturedImage(canvas) {
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-        const cropImg = document.getElementById('crop-image');
-        cropImg.src = dataUrl;
+        // Limit to ~8 FPS for performance
+        if (timestamp - lastDetectionTime < 125) {
+            requestAnimationFrame(detectionLoop);
+            return;
+        }
+        lastDetectionTime = timestamp;
 
-        showView('crop');
+        // Sync overlay size
+        canvas.width = video.clientWidth;
+        canvas.height = video.clientHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        if (cropper) cropper.destroy();
+        if (!cvLoaded) {
+            guide.textContent = "Loading Smart Engine...";
+            requestAnimationFrame(detectionLoop);
+            return;
+        }
 
-        cropper = new Cropper(cropImg, {
-            viewMode: 1,
-            dragMode: 'move',
-            autoCropArea: 0.95,
-            restore: false,
-            guides: true,
-            center: true,
-            highlight: false,
-            cropBoxMovable: true,
-            cropBoxResizable: true,
-            toggleDragModeOnDblclick: false,
-            ready() {
-                if (cvLoaded) {
-                    tryAutoDetect(canvas);
+        const points = detectDocument(video);
+        
+        if (points) {
+            const isStable = checkStability(points);
+            const outlineColor = isStable ? '#27AE60' : '#D4AF37';
+            
+            drawOutline(ctx, points, outlineColor);
+            
+            if (isStable) {
+                stableFrameCount++;
+                guide.textContent = "Hold steady... " + ".".repeat(stableFrameCount);
+                if (stableFrameCount > 10 && autoCaptureActive) { // ~1.25s of stability
+                    triggerCapture(points);
+                    return;
                 }
+            } else {
+                stableFrameCount = 0;
+                guide.textContent = "Document detected";
             }
-        });
+        } else {
+            stableFrameCount = 0;
+            guide.textContent = "Align document within frame";
+        }
+
+        requestAnimationFrame(detectionLoop);
     }
 
-    function tryAutoDetect(sourceCanvas) {
+    function detectDocument(video) {
         try {
-            let src = cv.imread(sourceCanvas);
+            // Create a small temp canvas for OpenCV to avoid processing full resolution
+            const scale = 0.3;
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = video.videoWidth * scale;
+            tempCanvas.height = video.videoHeight * scale;
+            const tCtx = tempCanvas.getContext('2d');
+            tCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+            let src = cv.imread(tempCanvas);
             let gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
             cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
@@ -677,7 +694,7 @@
             cv.findContours(gray, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
             let maxArea = 0;
-            let bestContour = null;
+            let bestQuad = null;
 
             for (let i = 0; i < contours.size(); ++i) {
                 let cnt = contours.get(i);
@@ -688,57 +705,261 @@
 
                 if (approx.rows === 4 && area > maxArea) {
                     maxArea = area;
-                    bestContour = approx;
+                    bestQuad = approx;
                 }
             }
 
-            if (bestContour && maxArea > (sourceCanvas.width * sourceCanvas.height * 0.1)) {
-                let rect = cv.boundingRect(bestContour);
-                cropper.setData({
-                    x: rect.x,
-                    y: rect.y,
-                    width: rect.width,
-                    height: rect.height
-                });
+            // Must cover at least 25% of the frame
+            if (bestQuad && maxArea > (tempCanvas.width * tempCanvas.height * 0.20)) {
+                const results = [];
+                for (let i = 0; i < 4; i++) {
+                    results.push({
+                        x: (bestQuad.data32S[i * 2] / scale) * (video.clientWidth / video.videoWidth),
+                        y: (bestQuad.data32S[i * 2 + 1] / scale) * (video.clientHeight / video.videoHeight),
+                        rawX: bestQuad.data32S[i * 2] / scale,
+                        rawY: bestQuad.data32S[i * 2 + 1] / scale
+                    });
+                }
+                
+                src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+                return orderPoints(results);
             }
 
             src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
         } catch (e) {
-            console.error("Auto-detect failed:", e);
+            console.error(e);
+        }
+        return null;
+    }
+
+    function orderPoints(pts) {
+        // pts: [{x, y, rawX, rawY}, ...]
+        // 0: top-left, 1: top-right, 2: bottom-right, 3: bottom-left
+        const sorted = pts.sort((a, b) => a.y - b.y);
+        const top = sorted.slice(0, 2).sort((a, b) => a.x - b.x);
+        const bottom = sorted.slice(2, 4).sort((a, b) => a.x - b.x);
+        return [top[0], top[1], bottom[1], bottom[0]];
+    }
+
+    function checkStability(newPoints) {
+        if (!bestPoints) {
+            bestPoints = newPoints;
+            return false;
+        }
+        const threshold = 15;
+        let diff = 0;
+        for (let i = 0; i < 4; i++) {
+            diff += Math.abs(newPoints[i].x - bestPoints[i].x);
+            diff += Math.abs(newPoints[i].y - bestPoints[i].y);
+        }
+        bestPoints = newPoints;
+        return diff < threshold;
+    }
+
+    function drawOutline(ctx, pts, color) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.lineTo(pts[1].x, pts[1].y);
+        ctx.lineTo(pts[2].x, pts[2].y);
+        ctx.lineTo(pts[3].x, pts[3].y);
+        ctx.closePath();
+        ctx.stroke();
+
+        // Draw corners
+        ctx.fillStyle = color;
+        pts.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    function triggerCapture(pts) {
+        isDetecting = false;
+        if (navigator.vibrate) navigator.vibrate(100);
+        
+        const video = document.getElementById('camera-video');
+        const guide = document.getElementById('camera-guide');
+        guide.textContent = "CAPTURING...";
+
+        setTimeout(() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            // Re-detect on full res for final warp
+            const fullPoints = detectDocument(video); // Note: detectDocument will use clientWidth, need raw
+            // Since detectDocument returns scaled for UI, we use the rawX/rawY we stored
+            const rawPts = pts.map(p => ({ x: p.rawX, y: p.rawY }));
+            
+            const warped = warpDocument(canvas, rawPts);
+            showPreview(warped);
+        }, 100);
+    }
+
+    function captureManual() {
+        if (!isDetecting) return;
+        isDetecting = false;
+        if (navigator.vibrate) navigator.vibrate(50);
+        
+        const video = document.getElementById('camera-video');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        // Try to find points for manual warp, if not, show manual cropper
+        const pts = detectDocument(video);
+        if (pts) {
+            const rawPts = pts.map(p => ({ x: p.rawX, y: p.rawY }));
+            const warped = warpDocument(canvas, rawPts);
+            showPreview(warped);
+        } else {
+            showPreview(canvas);
         }
     }
 
-    function cancelCrop() {
+    function warpDocument(sourceCanvas, pts) {
+        try {
+            let src = cv.imread(sourceCanvas);
+            
+            // Target dimensions
+            const w1 = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+            const w2 = Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
+            const maxWidth = Math.max(w1, w2);
+
+            const h1 = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y);
+            const h2 = Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y);
+            const maxHeight = Math.max(h1, h2);
+
+            let dst = new cv.Mat();
+            let srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                pts[0].x, pts[0].y, pts[1].x, pts[1].y,
+                pts[2].x, pts[2].y, pts[3].x, pts[3].y
+            ]);
+            let dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                0, 0, maxWidth, 0,
+                maxWidth, maxHeight, 0, maxHeight
+            ]);
+
+            let M = cv.getPerspectiveTransform(srcPts, dstPts);
+            let dsize = new cv.Size(maxWidth, maxHeight);
+            cv.warpPerspective(src, dst, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+
+            const outCanvas = document.createElement('canvas');
+            cv.imshow(outCanvas, dst);
+
+            src.delete(); dst.delete(); M.delete(); srcPts.delete(); dstPts.delete();
+            return outCanvas;
+        } catch (e) {
+            console.error("Warp failed:", e);
+            return sourceCanvas;
+        }
+    }
+
+    function showPreview(canvas) {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        const cropImg = document.getElementById('crop-image');
+        cropImg.src = dataUrl;
+        
+        document.getElementById('crop-label').textContent = "Quality Check";
+        document.getElementById('btn-manual-crop').classList.remove('hidden');
+
+        showView('crop');
+        
         if (cropper) cropper.destroy();
-        showView('main');
+        cropper = null; // No cropper until "Manual Crop" is clicked
+    }
+
+    function enableManualCrop() {
+        const cropImg = document.getElementById('crop-image');
+        document.getElementById('crop-label').textContent = "Adjust Corners";
+        document.getElementById('btn-manual-crop').classList.add('hidden');
+
+        cropper = new Cropper(cropImg, {
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 0.98,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: false,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false
+        });
+    }
+
+    function retakePhoto() {
+        if (cropper) cropper.destroy();
+        cropper = null;
+        startCamera();
     }
 
     function confirmCrop() {
-        const canvas = cropper.getCroppedCanvas({
-            maxWidth: 2048,
-            maxHeight: 2048,
-            fillColor: '#fff',
-            imageSmoothingEnabled: true,
-            imageSmoothingQuality: 'high',
-        });
+        let finalCanvas;
+        if (cropper) {
+            finalCanvas = cropper.getCroppedCanvas({
+                maxWidth: 2048, maxHeight: 2048, fillColor: '#fff'
+            });
+        } else {
+            // Use current image as is
+            finalCanvas = document.createElement('canvas');
+            const img = document.getElementById('crop-image');
+            finalCanvas.width = img.naturalWidth;
+            finalCanvas.height = img.naturalHeight;
+            finalCanvas.getContext('2d').drawImage(img, 0, 0);
+        }
 
-        canvas.toBlob(blob => {
+        finalCanvas.toBlob(blob => {
             addToQueue(blob, `scan_${Date.now()}.jpg`, 'image/jpeg');
-            cancelCrop();
+            showView('main');
         }, 'image/jpeg', 0.9);
     }
 
-    // Final Submission
+    // File Upload Fallback
+    function triggerFileInput() {
+        document.getElementById('file-input').click();
+    }
+
+    function handleFileSelect(event) {
+        const files = Array.from(event.target.files);
+        if (!files.length) return;
+        
+        processFiles(files);
+        event.target.value = '';
+    }
+
+    async function processFiles(files) {
+        for (const file of files) {
+            if (file.type === 'application/pdf') {
+                addToQueue(file, file.name, file.type);
+            } else {
+                const bitmap = await createImageBitmap(file);
+                const canvas = document.createElement('canvas');
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                canvas.getContext('2d').drawImage(bitmap, 0, 0);
+                showPreview(canvas);
+                return; // One at a time for cropping flow
+            }
+        }
+    }
+
     function submitAll() {
         if (queue.length === 0) return;
 
         showView('progress');
-        const title = document.getElementById('progress-title');
-        const desc = document.getElementById('progress-desc');
-        
-        title.textContent = "Uploading...";
-        desc.textContent = `Preparing ${queue.length} documents for Aradhana Jewellers.`;
-
         const formData = new FormData();
         queue.forEach((item, index) => {
             formData.append('files[]', item.blob, item.name || `file_${index}.jpg`);
@@ -747,14 +968,8 @@
         formData.append('print_mode', document.querySelector('input[name="print-mode"]:checked').value);
         formData.append('copies', document.getElementById('copies-select').value);
 
-        fetch('/upload', {
-            method: 'POST',
-            body: formData
-        })
-        .then(res => {
-            if (!res.ok) return res.json().then(e => { throw new Error(e.error || 'Upload failed') });
-            return res.json();
-        })
+        fetch('/upload', { method: 'POST', body: formData })
+        .then(res => res.json())
         .then(data => {
             document.getElementById('display-queue-id').textContent = data.queue_id;
             showView('success');
