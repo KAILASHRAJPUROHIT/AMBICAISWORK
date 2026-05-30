@@ -33,8 +33,8 @@ def run_smoke_test():
         print("Connecting to IMAP server...")
         mail = connect_imap(config)
         
-        # 3. Fetch (Target label: BANK_SBI, Limit: 5)
-        label = "BANK_SBI"
+        # 3. Fetch (Target label from sys.argv, Limit: 5)
+        label = sys.argv[1] if len(sys.argv) > 1 else "BANK_SBI"
         print(f"Fetching latest 5 emails from label: {label} (Read-Only)...")
         raw_msgs = fetch_labeled_emails(mail, label, limit=5)
         
