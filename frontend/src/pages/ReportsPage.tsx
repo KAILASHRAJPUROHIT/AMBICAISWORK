@@ -16,18 +16,19 @@ const ReportsPage = () => {
         const liveReport = await getOwnerReport();
         
         // Map backend report to frontend ReportSummary
-        // The backend returns an OwnerReport object with daily_summary and escalations
         const summary = liveReport.daily_summary;
         const mappedReport: ReportSummary = {
           id: `R-LIVE-${summary.generated_at.split('T')[0]}`,
           title: `Daily Summary - ${summary.generated_at.split('T')[0]} (Live)`,
           date: summary.generated_at.split('T')[0],
           totalTransactions: summary.processed_count,
-          totalAmount: 0, // Backend daily summary doesn't have total amount yet
-          reconciliationRate: `${((summary.resolved_reviews / summary.processed_count) * 100).toFixed(1)}%`
+          totalAmount: 0,
+          reconciliationRate: summary.processed_count > 0 
+            ? `${((summary.resolved_reviews / summary.processed_count) * 100).toFixed(1)}%`
+            : '0%'
         };
 
-        if (mappedReport) setReports([mappedReport, ...mockReports]);
+        setReports([mappedReport, ...mockReports]);
         setError(null);
       } catch (err) {
         console.error('Failed to fetch reports:', err);

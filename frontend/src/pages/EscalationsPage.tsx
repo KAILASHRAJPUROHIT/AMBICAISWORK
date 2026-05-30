@@ -23,7 +23,7 @@ const EscalationsPage = () => {
           reason: e.escalation_reason
         }));
 
-        if (mappedEscalations.length > 0) setEscalations(mappedEscalations);
+        setEscalations(mappedEscalations);
         setError(null);
       } catch (err) {
         console.error('Failed to fetch escalations:', err);

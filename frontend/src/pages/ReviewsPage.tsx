@@ -23,7 +23,7 @@ const ReviewsPage = () => {
           status: r.status === 'OPEN' ? 'Pending' : 'Flagged'
         }));
 
-        if (mappedReviews.length > 0) setReviews(mappedReviews);
+        setReviews(mappedReviews);
         setError(null);
       } catch (err) {
         console.error('Failed to fetch reviews:', err);

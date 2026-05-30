@@ -3,10 +3,11 @@ import StatCard from '../components/StatCard';
 import ReviewTable from '../components/ReviewTable';
 import EscalationTable from '../components/EscalationTable';
 import { mockStats, mockReviews, mockEscalations } from '../mockApi';
-import { getOpenReviews, getOpenEscalations } from '../api/client';
-import type { ReviewItem, EscalationItem } from '../mockApi';
+import { getOpenReviews, getOpenEscalations, getOwnerReport } from '../api/client';
+import type { ReviewItem, EscalationItem, Stat } from '../mockApi';
 
 const DashboardPage = () => {
+  const [stats, setStats] = useState<Stat[]>(mockStats);
   const [reviews, setReviews] = useState<ReviewItem[]>(mockReviews);
   const [escalations, setEscalations] = useState<EscalationItem[]>(mockEscalations);
   const [loading, setLoading] = useState(true);
@@ -16,16 +17,26 @@ const DashboardPage = () => {
     async function fetchData() {
       try {
         setLoading(true);
-        const [liveReviews, liveEscalations] = await Promise.all([
+        const [liveReviews, liveEscalations, liveReport] = await Promise.all([
           getOpenReviews(),
-          getOpenEscalations()
+          getOpenEscalations(),
+          getOwnerReport()
         ]);
+
+        // Map backend report to stats
+        const summary = liveReport.daily_summary;
+        const mappedStats: Stat[] = [
+          { label: 'Total Processed', value: summary.processed_count, trend: 'neutral' },
+          { label: 'Open Reviews', value: summary.open_reviews, trend: 'down' },
+          { label: 'Escalations', value: summary.escalated_reviews, trend: 'up' },
+          { label: 'Resolved', value: summary.resolved_reviews, trend: 'up' },
+        ];
 
         // Map backend reviews to frontend ReviewItem
         const mappedReviews: ReviewItem[] = liveReviews.map((r: any) => ({
           id: r.review_id,
           date: r.created_at.split('T')[0],
-          amount: 0, // Backend summary doesn't have amount yet
+          amount: 0,
           source: r.entity_type,
           reason: r.reason,
           status: r.status === 'OPEN' ? 'Pending' : 'Flagged'
@@ -35,14 +46,15 @@ const DashboardPage = () => {
         const mappedEscalations: EscalationItem[] = liveEscalations.map((e: any) => ({
           id: e.escalation_id,
           date: e.created_at.split('T')[0],
-          amount: 0, // Backend summary doesn't have amount yet
+          amount: 0,
           source: 'System',
           urgency: e.severity === 'critical' ? 'High' : e.severity === 'high' ? 'Medium' : 'Low',
           reason: e.escalation_reason
         }));
 
-        if (mappedReviews.length > 0) setReviews(mappedReviews);
-        if (mappedEscalations.length > 0) setEscalations(mappedEscalations);
+        setStats(mappedStats);
+        setReviews(mappedReviews);
+        setEscalations(mappedEscalations);
         
         setError(null);
       } catch (err) {
@@ -64,7 +76,7 @@ const DashboardPage = () => {
       {error && <div className="error-message">{error}</div>}
 
       <div className="stats-grid">
-        {mockStats.map((stat, index) => (
+        {stats.map((stat, index) => (
           <StatCard key={index} {...stat} />
         ))}
       </div>
