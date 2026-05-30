@@ -1,57 +1,771 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Aradhana Jewellers | Secure Print</title>
-<style>
-:root{--navy:#06142E;--navy-light:#112244;--gold:#D4AF37;--gold-light:#F3E5AB;--bg-color:#F7F5F0;--text-light:#FFFFFF;--error:#E74C3C}
-*{box-sizing:border-box;margin:0;padding:0;font-family:'Helvetica Neue',Arial,sans-serif;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg-color);display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:20px 15px}
-.header{text-align:center;margin:15px 0 25px}.header h1{color:var(--navy);font-family:Georgia,serif;font-size:26px;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}.header p{color:#666;font-size:13px;letter-spacing:1px}
-.card{background:var(--navy);border:2px solid var(--gold);border-radius:16px;width:100%;max-width:540px;padding:25px 20px;box-shadow:0 15px 35px rgba(6,20,46,.2);color:white;overflow:hidden}.hidden{display:none!important}
-.dropzone{border:2px dashed rgba(212,175,55,.5);border-radius:12px;padding:30px 15px;text-align:center;margin-bottom:20px;background:rgba(255,255,255,.03);cursor:pointer}.dropzone:hover,.dropzone.dragover{border-color:var(--gold);background:rgba(212,175,55,.1)}
-.dropzone-icon{font-size:36px;margin-bottom:10px;display:block}.dropzone-text{font-size:16px;color:var(--gold-light);margin-bottom:8px;font-weight:500}.dropzone-hint{font-size:12px;color:#aaa;line-height:1.4}.dropzone-hint strong{color:var(--gold)}#file-input{display:none}
-.file-list{list-style:none;margin-bottom:20px;max-height:100px;overflow-y:auto;font-size:13px;color:var(--gold-light);background:rgba(0,0,0,.2);border-radius:8px;padding:5px 10px}.file-list li{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.file-list.empty{display:none}
-.section-label{font-size:12px;color:var(--gold);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;display:block}.print-types{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:25px}.type-card{cursor:pointer}.type-card input{display:none}
-.card-content{background:var(--navy-light);border:1px solid rgba(212,175,55,.3);border-radius:10px;padding:15px 10px;text-align:center;height:100%;transition:.2s}.type-card input:checked+.card-content{background:rgba(212,175,55,.15);border-color:var(--gold);box-shadow:0 0 10px rgba(212,175,55,.2)}
-.preview-box{width:44px;height:62px;margin:0 auto 12px;border:2px solid var(--gold);border-radius:4px;display:flex;align-items:center;justify-content:center;background:#fff;position:relative}.preview-pdf{background:#f0f0f0}.preview-pdf:after{content:'';width:20px;height:2px;background:#ccc;box-shadow:0 6px 0 #ccc,0 12px 0 #ccc,0 18px 0 #ccc;position:absolute;top:15px}.preview-id{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:3px;padding:4px;background:transparent}.preview-id span{background:var(--gold-light);border-radius:2px}
-.type-title{display:block;font-size:14px;font-weight:bold;color:white;margin-bottom:5px}.type-desc{display:block;font-size:11px;color:#999;line-height:1.3}.options-row{margin-bottom:20px}.select-styled{background:var(--navy-light);color:white;border:1px solid rgba(212,175,55,.4);padding:14px 15px;border-radius:8px;font-size:15px;width:100%;outline:none}.security-notice{font-size:12px;color:#888;text-align:center;margin-bottom:20px;display:flex;align-items:center;justify-content:center;gap:6px}.security-notice span{color:var(--gold)}
-.btn-submit{background:linear-gradient(135deg,#D4AF37 0%,#C5A059 100%);color:var(--navy);border:0;border-radius:8px;padding:16px;font-size:16px;font-weight:bold;width:100%;cursor:pointer;text-transform:uppercase;letter-spacing:1px;box-shadow:0 4px 15px rgba(212,175,55,.3)}.btn-submit:disabled{background:#444;color:#777;cursor:not-allowed;box-shadow:none}.error-msg{color:var(--error);font-size:13px;text-align:center;margin-bottom:15px;display:none}
-.progress-section,.success-section{text-align:center;padding:30px 0}.progress-bar-container{width:100%;height:8px;background:var(--navy-light);border-radius:4px;margin:25px 0;overflow:hidden}.progress-bar{height:100%;width:0%;background:var(--gold);transition:.3s}.progress-text{color:var(--gold-light);font-size:15px}.success-icon{font-size:50px;color:var(--gold);margin-bottom:15px}.success-title{color:var(--gold-light);font-size:22px;margin-bottom:10px}.queue-box{background:rgba(255,255,255,.05);border:1px solid rgba(212,175,55,.3);border-radius:12px;padding:25px;margin:25px 0}.queue-label{font-size:12px;color:#aaa;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}.queue-number{font-size:28px;font-weight:bold;color:white;font-family:'Courier New',monospace;letter-spacing:2px}.btn-outline{background:transparent;color:var(--gold);border:2px solid var(--gold);border-radius:8px;padding:14px 24px;font-size:15px;cursor:pointer;margin-top:10px;width:100%}
-@media(max-width:480px){.card{padding:20px 15px;border-radius:12px}.queue-number{font-size:22px}}@media(max-width:360px){.print-types{grid-template-columns:1fr}}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aradhana Jewellers | Smart Scan & Print</title>
+    <!-- Cropper.js CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <style>
+        :root {
+            --navy: #06142E;
+            --navy-light: #112244;
+            --gold: #D4AF37;
+            --gold-light: #F3E5AB;
+            --bg-color: #F7F5F0;
+            --text-light: #FFFFFF;
+            --error: #E74C3C;
+            --success: #27AE60;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        /* UI Containers */
+        .container {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .header {
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        .header h1 {
+            color: var(--navy);
+            font-family: Georgia, serif;
+            font-size: 24px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .card {
+            background: var(--navy);
+            border: 2px solid var(--gold);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(6, 20, 46, 0.2);
+            color: white;
+            position: relative;
+        }
+
+        .hidden { display: none !important; }
+
+        /* Debug UI */
+        .debug-info {
+            background: rgba(0,0,0,0.7);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+
+        /* Views */
+        #view-main, #view-camera, #view-crop, #view-loading { width: 100%; }
+
+        /* Main View Components */
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .btn-action {
+            background: var(--navy-light);
+            border: 1px solid var(--gold);
+            border-radius: 12px;
+            padding: 15px 10px;
+            color: var(--gold-light);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-action:active { background: rgba(212, 175, 55, 0.1); }
+        .btn-action i { font-size: 24px; }
+
+        /* Queue UI */
+        .queue-container {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            min-height: 100px;
+        }
+
+        .queue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 14px;
+            color: var(--gold);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .queue-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 10px;
+        }
+
+        .queue-item {
+            position: relative;
+            aspect-ratio: 3/4;
+            background: #fff;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--gold);
+        }
+
+        .queue-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .queue-item .pdf-icon {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: var(--navy);
+            background: #f0f0f0;
+        }
+
+        .btn-remove {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: var(--error);
+            color: white;
+            border: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        /* Camera View */
+        .camera-wrapper {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: black;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #camera-video {
+            flex: 1;
+            width: 100%;
+            object-fit: cover;
+        }
+
+        .camera-controls {
+            height: 120px;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0 20px;
+        }
+
+        .btn-shutter {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 5px solid white;
+            background: transparent;
+            position: relative;
+        }
+
+        .btn-shutter::after {
+            content: '';
+            position: absolute;
+            top: 5px; left: 5px; right: 5px; bottom: 5px;
+            background: white;
+            border-radius: 50%;
+        }
+
+        .btn-camera-cancel {
+            color: white;
+            background: transparent;
+            border: none;
+            font-size: 16px;
+        }
+
+        /* Crop View */
+        .crop-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .crop-container {
+            width: 100%;
+            aspect-ratio: 3/4;
+            background: #222;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+
+        #crop-image { max-width: 100%; }
+
+        /* Print Options */
+        .section-label {
+            font-size: 12px;
+            color: var(--gold);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: block;
+        }
+
+        .print-types {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .type-card input { display: none; }
+        .type-content {
+            background: var(--navy-light);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center;
+            transition: 0.2s;
+            cursor: pointer;
+        }
+        .type-card input:checked + .type-content {
+            border-color: var(--gold);
+            background: rgba(212, 175, 55, 0.15);
+        }
+
+        .btn-master {
+            background: linear-gradient(135deg, #D4AF37 0%, #C5A059 100%);
+            color: var(--navy);
+            border: 0;
+            border-radius: 12px;
+            padding: 18px;
+            font-size: 18px;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 5px 15px rgba(212,175,55,0.4);
+        }
+
+        .btn-master:disabled {
+            background: #444;
+            color: #777;
+            box-shadow: none;
+        }
+
+        /* Loading Overlay */
+        .loader-overlay {
+            text-align: center;
+            padding: 40px 0;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(212, 175, 55, 0.1);
+            border-top-color: var(--gold);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* OpenCV Loading */
+        #cv-loading-bar {
+            position: fixed;
+            bottom: 0; left: 0; width: 100%;
+            background: var(--gold);
+            height: 3px;
+            z-index: 2000;
+            transition: width 0.3s;
+        }
+    </style>
 </head>
 <body>
-<div class="header"><h1>Aradhana</h1><p>Secure Document Upload</p></div>
-<div class="card">
-<div id="form-section">
-<div class="dropzone" id="dropzone"><span class="dropzone-icon">📄</span><div class="dropzone-text" id="dropzone-text">Tap to Select Files</div><div class="dropzone-hint">Maximum <strong>12 files</strong>.<br>Supported formats: <strong>JPG, PNG, PDF</strong></div><input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"></div>
-<ul id="file-list" class="file-list empty"></ul><div id="error-msg" class="error-msg"></div>
-<span class="section-label">1. Select Print Format</span>
-<div class="print-types">
-<label class="type-card"><input type="radio" name="print-type" value="pdf" checked><div class="card-content"><div class="preview-box preview-pdf"></div><span class="type-title">FULL PAGE</span><span class="type-desc">Prints documents exactly as uploaded</span></div></label>
-<label class="type-card"><input type="radio" name="print-type" value="id_card"><div class="card-content"><div class="preview-box preview-id"><span></span><span></span><span></span><span></span><span></span><span></span></div><span class="type-title">ID CARDS</span><span class="type-desc">Places PAN and Aadhaar in optimized card layouts</span></div></label>
+
+<div id="cv-loading-bar" style="width: 0%"></div>
+
+<div class="header">
+    <h1>Aradhana</h1>
 </div>
-<div class="options-row"><span class="section-label">2. Select Quantity</span><select id="copies" class="select-styled"><option value="1">1 Copy</option><option value="2">2 Copies</option><option value="3">3 Copies</option><option value="4">4 Copies</option><option value="5">5 Copies</option></select></div>
-<div class="security-notice"><span>🔒</span> Files are automatically deleted from servers after printing.</div>
-<button id="btn-submit" class="btn-submit" disabled>SEND DOCUMENTS</button>
+
+<div class="container">
+    
+    <!-- MAIN VIEW -->
+    <div id="view-main" class="card">
+        <div id="camera-debug" class="debug-info hidden"></div>
+
+        <div class="action-buttons">
+            <div class="btn-action" onclick="startCamera()">
+                <span>📷</span>
+                <strong>Scan Document</strong>
+            </div>
+            <div class="btn-action" onclick="triggerFileInput()">
+                <span>📁</span>
+                <strong>Upload Files</strong>
+            </div>
+            <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.pdf" class="hidden" onchange="handleFileSelect(event)">
+        </div>
+
+        <div class="queue-container">
+            <div class="queue-header">
+                <span>Print Queue</span>
+                <span id="queue-count">0 Items</span>
+            </div>
+            <div id="queue-grid" class="queue-grid">
+                <!-- Items added here -->
+            </div>
+            <div id="queue-empty" style="text-align: center; color: #888; padding: 20px;">
+                No documents added yet.
+            </div>
+        </div>
+
+        <div class="options">
+            <span class="section-label">Print Mode</span>
+            <div class="print-types">
+                <label class="type-card">
+                    <input type="radio" name="print-mode" value="pdf" checked>
+                    <div class="type-content">
+                        <strong>Full Page</strong>
+                    </div>
+                </label>
+                <label class="type-card">
+                    <input type="radio" name="print-mode" value="id_card">
+                    <div class="type-content">
+                        <strong>ID Cards</strong>
+                    </div>
+                </label>
+            </div>
+
+            <span class="section-label">Copies</span>
+            <select id="copies-select" style="width:100%; padding: 12px; border-radius: 8px; margin-bottom: 20px; background: var(--navy-light); color: white; border: 1px solid var(--gold);">
+                <option value="1">1 Copy</option>
+                <option value="2">2 Copies</option>
+                <option value="3">3 Copies</option>
+                <option value="4">4 Copies</option>
+                <option value="5">5 Copies</option>
+            </select>
+        </div>
+
+        <button id="btn-submit-all" class="btn-master" onclick="submitAll()" disabled>
+            Send All For Printing
+        </button>
+    </div>
+
+    <!-- CAMERA VIEW -->
+    <div id="view-camera" class="camera-wrapper hidden">
+        <video id="camera-video" autoplay playsinline muted></video>
+        <div class="camera-controls">
+            <button class="btn-camera-cancel" onclick="stopCamera()">Cancel</button>
+            <button class="btn-shutter" onclick="capturePhoto()"></button>
+            <div style="width: 50px"></div> <!-- Spacer -->
+        </div>
+    </div>
+
+    <!-- CROP VIEW -->
+    <div id="view-crop" class="card hidden">
+        <div class="crop-wrapper">
+            <span class="section-label">Adjust Crop</span>
+            <div class="crop-container">
+                <img id="crop-image" src="">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-master" style="background: #444; color: white;" onclick="cancelCrop()">Cancel</button>
+                <button class="btn-master" onclick="confirmCrop()">Add to Queue</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOADING / PROGRESS VIEW -->
+    <div id="view-progress" class="card hidden">
+        <div class="loader-overlay">
+            <div class="spinner"></div>
+            <h3 id="progress-title">Processing...</h3>
+            <p id="progress-desc" style="color: #aaa; font-size: 14px; margin-top: 10px;">Please wait.</p>
+        </div>
+    </div>
+
+    <!-- SUCCESS VIEW -->
+    <div id="view-success" class="card hidden" style="text-align: center;">
+        <div style="font-size: 50px; color: var(--gold); margin-bottom: 15px;">✓</div>
+        <h2 style="color: var(--gold-light); margin-bottom: 10px;">Sent to Queue!</h2>
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid var(--gold); border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <div style="font-size: 12px; color: #aaa; text-transform: uppercase;">Queue ID</div>
+            <div id="display-queue-id" style="font-size: 24px; font-weight: bold; letter-spacing: 2px;">AR-XXXX</div>
+        </div>
+        <button class="btn-master" onclick="location.reload()">Done</button>
+    </div>
+
 </div>
-<div id="progress-section" class="progress-section hidden"><span class="dropzone-icon">⏳</span><div class="progress-text" id="progress-status">Uploading documents securely...</div><div class="progress-bar-container"><div class="progress-bar" id="progress-bar"></div></div><div class="dropzone-hint">Please do not close this window.</div></div>
-<div id="success-section" class="success-section hidden"><div class="success-icon">✓</div><h2 class="success-title">Documents Received!</h2><p style="color:#aaa;margin-bottom:5px;font-size:14px">Your documents have been securely sent to Aradhana Jewellers.</p><div class="queue-box"><div class="queue-label">Your Queue ID</div><div class="queue-number" id="queue-display">AR-YYYYMMDD-XXX</div></div><p style="color:var(--gold-light);font-size:14px;margin-bottom:25px">Please show this ID at the counter to collect your prints.</p><button class="btn-outline" onclick="resetForm()">Send More Documents</button></div>
-</div>
+
+<!-- Scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
 <script>
-const MAX_FILES=12,ALLOWED_TYPES=['image/jpeg','image/png','application/pdf'],ALLOWED_EXTS=['.jpg','.jpeg','.png','.pdf'];
-const dropzone=document.getElementById('dropzone'),fileInput=document.getElementById('file-input'),fileList=document.getElementById('file-list'),btnSubmit=document.getElementById('btn-submit'),errorMsg=document.getElementById('error-msg'),dropzoneText=document.getElementById('dropzone-text'),formSection=document.getElementById('form-section'),progressSection=document.getElementById('progress-section'),successSection=document.getElementById('success-section');
-let selectedFiles=[];
-function showError(msg){errorMsg.textContent=msg;errorMsg.style.display='block';setTimeout(()=>{errorMsg.style.display='none'},4000)}
-dropzone.addEventListener('click',()=>fileInput.click());dropzone.addEventListener('dragover',e=>{e.preventDefault();dropzone.classList.add('dragover')});dropzone.addEventListener('dragleave',()=>dropzone.classList.remove('dragover'));dropzone.addEventListener('drop',e=>{e.preventDefault();dropzone.classList.remove('dragover');handleFiles(e.dataTransfer.files)});fileInput.addEventListener('change',e=>handleFiles(e.target.files));
-function handleFiles(files){const arr=Array.from(files);if(selectedFiles.length+arr.length>MAX_FILES){showError(`You can only upload a maximum of ${MAX_FILES} files.`);return}let valid=[];for(let f of arr){const ext=f.name.substring(f.name.lastIndexOf('.')).toLowerCase();if(ALLOWED_TYPES.includes(f.type)||ALLOWED_EXTS.includes(ext)){valid.push(f)}else{showError(`Invalid file type: ${f.name}. Only JPG, PNG, and PDF are allowed.`)}}selectedFiles=[...selectedFiles,...valid];updateFileList()}
-function updateFileList(){fileList.innerHTML='';if(selectedFiles.length>0){fileList.classList.remove('empty');selectedFiles.forEach((file,index)=>{const li=document.createElement('li');li.textContent=`${index+1}. ${file.name}`;fileList.appendChild(li)});btnSubmit.removeAttribute('disabled');dropzoneText.textContent=`${selectedFiles.length} file(s) ready`;dropzoneText.style.color='#fff'}else{fileList.classList.add('empty');btnSubmit.setAttribute('disabled','true');dropzoneText.textContent='Tap to Select Files';dropzoneText.style.color='var(--gold-light)'}}
-btnSubmit.addEventListener('click',()=>{if(selectedFiles.length===0)return;formSection.classList.add('hidden');progressSection.classList.remove('hidden');uploadFiles()});
-function uploadFiles(){let progress=0;const progressBar=document.getElementById('progress-bar'),progressStatus=document.getElementById('progress-status');progressBar.style.width='0%';progressStatus.textContent='Uploading documents securely...';const interval=setInterval(()=>{if(progress<90){progress+=Math.random()*10;progressBar.style.width=`${progress}%`}},250);const formData=new FormData();selectedFiles.forEach(file=>formData.append('files[]',file));formData.append('print_mode',document.querySelector('input[name="print-type"]:checked').value);formData.append('copies',document.getElementById('copies').value);fetch('/upload',{method:'POST',body:formData}).then(response=>{if(!response.ok){return response.json().then(err=>{throw new Error(err.error||'Upload failed')})}return response.json()}).then(data=>{clearInterval(interval);progressBar.style.width='100%';progressStatus.textContent='Sending to print queue...';setTimeout(()=>showSuccess(data.queue_id),800)}).catch(err=>{clearInterval(interval);formSection.classList.remove('hidden');progressSection.classList.add('hidden');showError(err.message)})}
-function showSuccess(queueId){progressSection.classList.add('hidden');successSection.classList.remove('hidden');document.getElementById('queue-display').textContent=queueId||'AR-YYYYMMDD-XXX'}
-function resetForm(){selectedFiles=[];fileInput.value='';updateFileList();document.querySelector('input[name="print-type"][value="pdf"]').checked=true;document.getElementById('copies').value='1';successSection.classList.add('hidden');formSection.classList.remove('hidden')}
+    // Global State
+    let queue = [];
+    let cropper = null;
+    let cameraStream = null;
+    let cvLoaded = false;
+
+    const views = {
+        main: document.getElementById('view-main'),
+        camera: document.getElementById('view-camera'),
+        crop: document.getElementById('view-crop'),
+        progress: document.getElementById('view-progress'),
+        success: document.getElementById('view-success')
+    };
+
+    function showView(viewName) {
+        Object.keys(views).forEach(k => views[k].classList.add('hidden'));
+        views[viewName].classList.remove('hidden');
+    }
+
+    // OpenCV.js Loading
+    function onOpenCvReady() {
+        console.log('OpenCV.js is ready.');
+        cvLoaded = true;
+        document.getElementById('cv-loading-bar').style.width = '100%';
+        setTimeout(() => document.getElementById('cv-loading-bar').style.display = 'none', 500);
+    }
+
+    // Load OpenCV.js asynchronously
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
+    script.onload = onOpenCvReady;
+    document.body.appendChild(script);
+
+    // Queue Management
+    function addToQueue(blob, name, type) {
+        const id = Date.now();
+        const url = URL.createObjectURL(blob);
+        queue.push({ id, blob, name, type, url });
+        updateQueueUI();
+    }
+
+    function removeFromQueue(id) {
+        const idx = queue.findIndex(item => item.id === id);
+        if (idx !== -1) {
+            URL.revokeObjectURL(queue[idx].url);
+            queue.splice(idx, 1);
+        }
+        updateQueueUI();
+    }
+
+    function updateQueueUI() {
+        const grid = document.getElementById('queue-grid');
+        const emptyHint = document.getElementById('queue-empty');
+        const countLabel = document.getElementById('queue-count');
+        const submitBtn = document.getElementById('btn-submit-all');
+
+        grid.innerHTML = '';
+        if (queue.length === 0) {
+            emptyHint.classList.remove('hidden');
+            submitBtn.disabled = true;
+        } else {
+            emptyHint.classList.add('hidden');
+            submitBtn.disabled = false;
+            queue.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'queue-item';
+                
+                if (item.type === 'application/pdf') {
+                    div.innerHTML = `<div class="pdf-icon">PDF</div>`;
+                } else {
+                    div.innerHTML = `<img src="${item.url}">`;
+                }
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'btn-remove';
+                removeBtn.innerHTML = '×';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    removeFromQueue(item.id);
+                };
+                
+                div.appendChild(removeBtn);
+                grid.appendChild(div);
+            });
+        }
+        countLabel.textContent = `${queue.length} Item${queue.length === 1 ? '' : 's'}`;
+    }
+
+    // Camera Logic
+    async function startCamera() {
+        console.log('Button clicked: startCamera');
+        const debugInfo = document.getElementById('camera-debug');
+        debugInfo.textContent = "Requesting camera...";
+        debugInfo.classList.remove('hidden');
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            const msg = "navigator.mediaDevices.getUserMedia not supported. Page MUST be on HTTPS or localhost.";
+            console.error(msg);
+            debugInfo.textContent = msg;
+            alert(msg);
+            return;
+        }
+
+        const constraints = [
+            { video: { facingMode: { ideal: 'environment' } }, audio: false },
+            { video: true, audio: false }
+        ];
+
+        for (const constraint of constraints) {
+            try {
+                console.log('Calling getUserMedia with:', JSON.stringify(constraint));
+                cameraStream = await navigator.mediaDevices.getUserMedia(constraint);
+                console.log('Camera success!');
+                document.getElementById('camera-video').srcObject = cameraStream;
+                showView('camera');
+                debugInfo.classList.add('hidden');
+                return;
+            } catch (err) {
+                console.warn(`getUserMedia failed for constraint:`, constraint, err.name, err.message);
+                
+                let friendlyMsg = "";
+                if (err.name === 'NotAllowedError') friendlyMsg = "Camera permission denied. Please allow camera access in browser settings.";
+                else if (err.name === 'NotFoundError') friendlyMsg = "No camera found on this device.";
+                else if (err.name === 'NotReadableError') friendlyMsg = "Camera is already in use by another app or tab.";
+                else if (err.name === 'SecurityError') friendlyMsg = "Security error: Camera requires HTTPS context.";
+                else friendlyMsg = `Camera error: ${err.name} ${err.message}`;
+
+                debugInfo.textContent = friendlyMsg;
+                // If it's the last constraint, show alert
+                if (constraint === constraints[constraints.length - 1]) {
+                    alert(friendlyMsg);
+                }
+            }
+        }
+    }
+
+    function stopCamera() {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+        showView('main');
+    }
+
+    function capturePhoto() {
+        const video = document.getElementById('camera-video');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+        
+        stopCamera();
+        processCapturedImage(canvas);
+    }
+
+    // File Upload Fallback Logic
+    function triggerFileInput() {
+        document.getElementById('file-input').click();
+    }
+
+    function handleFileSelect(event) {
+        const files = event.target.files;
+        if (!files.length) return;
+
+        processFiles(Array.from(files));
+        event.target.value = ''; // Reset for same file re-selection
+    }
+
+    async function processFiles(files) {
+        for (const file of files) {
+            if (file.type === 'application/pdf') {
+                addToQueue(file, file.name, file.type);
+            } else if (file.type.startsWith('image/')) {
+                const bitmap = await createImageBitmap(file);
+                const canvas = document.createElement('canvas');
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(bitmap, 0, 0);
+                processCapturedImage(canvas);
+                return; // Only process first image at a time for cropping UI flow
+            }
+        }
+    }
+
+    // Image Processing & Cropping
+    function processCapturedImage(canvas) {
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        const cropImg = document.getElementById('crop-image');
+        cropImg.src = dataUrl;
+
+        showView('crop');
+
+        if (cropper) cropper.destroy();
+
+        cropper = new Cropper(cropImg, {
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 0.95,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: false,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false,
+            ready() {
+                if (cvLoaded) {
+                    tryAutoDetect(canvas);
+                }
+            }
+        });
+    }
+
+    function tryAutoDetect(sourceCanvas) {
+        try {
+            let src = cv.imread(sourceCanvas);
+            let gray = new cv.Mat();
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+            cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
+            cv.Canny(gray, gray, 75, 200);
+
+            let contours = new cv.MatVector();
+            let hierarchy = new cv.Mat();
+            cv.findContours(gray, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+            let maxArea = 0;
+            let bestContour = null;
+
+            for (let i = 0; i < contours.size(); ++i) {
+                let cnt = contours.get(i);
+                let area = cv.contourArea(cnt);
+                let peri = cv.arcLength(cnt, true);
+                let approx = new cv.Mat();
+                cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+
+                if (approx.rows === 4 && area > maxArea) {
+                    maxArea = area;
+                    bestContour = approx;
+                }
+            }
+
+            if (bestContour && maxArea > (sourceCanvas.width * sourceCanvas.height * 0.1)) {
+                let rect = cv.boundingRect(bestContour);
+                cropper.setData({
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height
+                });
+            }
+
+            src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+        } catch (e) {
+            console.error("Auto-detect failed:", e);
+        }
+    }
+
+    function cancelCrop() {
+        if (cropper) cropper.destroy();
+        showView('main');
+    }
+
+    function confirmCrop() {
+        const canvas = cropper.getCroppedCanvas({
+            maxWidth: 2048,
+            maxHeight: 2048,
+            fillColor: '#fff',
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high',
+        });
+
+        canvas.toBlob(blob => {
+            addToQueue(blob, `scan_${Date.now()}.jpg`, 'image/jpeg');
+            cancelCrop();
+        }, 'image/jpeg', 0.9);
+    }
+
+    // Final Submission
+    function submitAll() {
+        if (queue.length === 0) return;
+
+        showView('progress');
+        const title = document.getElementById('progress-title');
+        const desc = document.getElementById('progress-desc');
+        
+        title.textContent = "Uploading...";
+        desc.textContent = `Preparing ${queue.length} documents for Aradhana Jewellers.`;
+
+        const formData = new FormData();
+        queue.forEach((item, index) => {
+            formData.append('files[]', item.blob, item.name || `file_${index}.jpg`);
+        });
+
+        formData.append('print_mode', document.querySelector('input[name="print-mode"]:checked').value);
+        formData.append('copies', document.getElementById('copies-select').value);
+
+        fetch('/upload', {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => {
+            if (!res.ok) return res.json().then(e => { throw new Error(e.error || 'Upload failed') });
+            return res.json();
+        })
+        .then(data => {
+            document.getElementById('display-queue-id').textContent = data.queue_id;
+            showView('success');
+        })
+        .catch(err => {
+            alert("Error: " + err.message);
+            showView('main');
+        });
+    }
+
 </script>
+
 </body>
 </html>
