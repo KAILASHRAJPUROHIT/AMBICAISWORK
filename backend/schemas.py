@@ -93,3 +93,11 @@ class RoutingResult(BaseModel):
     assigned_role: str = Field(..., description="Role assigned to handle the review")
     escalation_required: bool = Field(..., description="Indicates if escalation is required")
     reason: str = Field(..., description="Reason for the routing decision")
+
+class RawEmail(BaseModel):
+    message_id: str
+    sender: str
+    subject: str
+    date: datetime
+    raw_body: str
+    label: str
