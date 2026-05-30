@@ -14,26 +14,25 @@ def extract_amount(text: str) -> Optional[float]:
 
 def extract_utr(text: str) -> Optional[str]:
     # Look for UTR, Ref No, Reference, etc.
-    match = re.search(r'(?:UTR(?: Number| No)?|Ref(?:erence)? No)[:\-\s]+([A-Za-z0-9]{8,22})', text, re.IGNORECASE)
+    # Ref: HDFCR520231027999
+    match = re.search(r'(?:UTR(?: Number| No)?|Ref(?:erence)?(?: No)?)[:\-\s]+([A-Za-z0-9]{8,22})', text, re.IGNORECASE)
     if match:
         return match.group(1)
     return None
 
 def extract_date(text: str) -> Optional[str]:
-    # Formats: DD/MM/YYYY, DD-MM-YYYY, DD MMM YYYY
-    match = re.search(r'(\d{2}[/-]\d{2}[/-]\d{4}|\d{1,2}\s+[A-Za-z]{3}\s+\d{4})', text)
+    # Formats: DD/MM/YYYY, DD-MM-YYYY, DD MMM YYYY, DD/MM/YY
+    match = re.search(r'(\d{2}[/-]\d{2}[/-]\d{2,4}|\d{1,2}\s+[A-Za-z]{3}\s+\d{4})', text)
     if match:
         return match.group(1)
     return None
 
 def extract_bank(subject: str, body: str) -> Optional[str]:
-    combined = (subject + " " + body).upper()
-    if "HDFC" in combined:
-        return "HDFC"
-    if "ICICI" in combined:
-        return "ICICI"
-    if "SBI" in combined or "STATE BANK OF INDIA" in combined:
-        return "SBI"
+    combined = (str(subject) + " " + str(body)).upper()
+    if "HDFC" in combined: return "HDFC"
+    if "ICICI" in combined: return "ICICI"
+    if "SBI" in combined: return "SBI"
+    if "STATE BANK" in combined: return "SBI"
     return None
 
 def parse_bank_email(subject: str, body: str) -> ParsedBankEmail:
