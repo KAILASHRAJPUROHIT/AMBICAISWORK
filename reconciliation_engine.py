@@ -1,7 +1,7 @@
 from typing import List, Dict, Optional
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from models import Bill, BankAlert, Payment, Cheque, SMSAlert
+from backend.models import Bill, BankAlert, Payment, Cheque, SMSAlert
 
 class ReconciliationDecision(BaseModel):
     status: str

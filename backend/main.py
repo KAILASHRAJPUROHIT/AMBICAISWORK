@@ -1,14 +1,16 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from database import engine, SessionLocal, Base
-from models import User, Bill, Payment, BankAlert, SMSAlert, Cheque, AuditLog
-from schemas import ReconciliationDecision, ReviewQueueItem, RoutingResult
-from reconciliation_engine import reconcile_transactions
-from review_queue import route_review
+from .database import engine, SessionLocal, Base
+from .models import User, Bill, Payment, BankAlert, SMSAlert, Cheque, AuditLog
+from .schemas import ReconciliationDecision, ReviewQueueItem, RoutingResult 
+from reconciliation_engine import reconcile_transactions 
+from review_queue import route_review 
+from .api_routes import router
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+app.include_router(router)
 
 # Dependency
 def get_db():
