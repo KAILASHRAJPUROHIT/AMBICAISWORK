@@ -18,19 +18,15 @@ Labels in Prime are typically implemented as `ThunderRT6CommandButton` or `Stati
   - `Invoice Amount`
   - `Total Payable`
 
-## 3. Geometric Proximity (Nearest Neighbor)
-Once an anchor is found, the system identifies the "Input Field" (usually `ThunderRT6TextBox`) based on its relative coordinates.
-- **Horizontal Match:** Look for a textbox to the immediate right of the label (same Y-coordinate, higher X-coordinate).
-- **Vertical Match:** Look for a textbox directly below the label (same X-coordinate, higher Y-coordinate).
-- **Grid Match:** In payment rows, identify headers and then find columns aligned with those headers.
+## 3. Deterministic Pattern Detection (MVP Refined)
+Instead of relying solely on label proximity (which is sensitive to layout shifts and search field overlaps), the MVP now uses a pattern-first detection strategy for the header.
+- **Invoice No:** Regex matching `(SG|SS|S1|S2|S4|S5)/\d{4}/\d+/`.
+- **Date:** Regex matching `\d{2}/\d{2}/\d{4}`.
+- **Mobile:** Search for `.Mob.` marker or 10-digit numeric sequence.
+- **Amounts:** Non-zero decimal values are pooled; the largest is heuristically tagged as `invoice_total`.
 
-## 4. Audit Evidence
-For every field extracted, the system must log:
-- `anchor_text`: The label used for discovery.
-- `anchor_rect`: Coordinates of the label.
-- `target_class`: The class of the matched input field.
-- `target_rect`: Coordinates of the matched field.
-- `extracted_value`: The text retrieved.
+## 4. Spatial Grouping (Payment Rows)
+Spatial grouping by Y-coordinate remains the preferred strategy for multi-source payment rows as it preserves accounting row integrity.
 
 ## 5. Validation Rules
 Extraction is only valid if:

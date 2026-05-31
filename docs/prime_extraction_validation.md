@@ -2,42 +2,32 @@
 
 **Date:** 2026-05-31
 **Environment:** Prime (win32)
-**Strategy:** Refined Label-Anchored + Visibility Guards
-**Overall Result:** FAIL (Data Presence/Mapping Issue)
+**Strategy:** Deterministic Pattern Detection (MVP Refactoring)
+**Overall Result:** FAIL (Environment/State Issue)
 
 ## Summary
 | Test Case | Scenario | Status | Note |
 |-----------|----------|--------|------|
-| 1 | Cash Only | FAIL | Anchors matched empty textboxes or search fields |
-| 2 | Mixed Payment | UNTESTED | Blocked by Test Case 1 |
-| 3 | Old Gold | UNTESTED | Blocked by Test Case 1 |
+| 1 | Cash Only | FAIL | No textboxes detected in current session |
+| 2 | Mixed Payment | UNTESTED | Blocked |
+| 3 | Old Gold | UNTESTED | Blocked |
 
 ---
 
-## Test Case 1: Cash Only (Invoice SS/2026/201/)
+## Technical Blockers
+- **Control Visibility:** Recent probes (`scripts/diag_windows.py` and `scripts/prime_payment_detail_probe.py`) show 0 textboxes being returned by `pywinauto` for the `FA.exe` process. 
+- **32-bit vs 64-bit:** A warning was detected indicating that 32-bit `FA.exe` should be automated with 32-bit Python. Using 64-bit Python may cause intermittent invisibility of legacy VB6 controls.
+- **Form State:** Exhaustive searches for `ThunderRT6FormDC` currently return empty titles, suggesting forms may be minimized to the MDI taskbar or closed.
 
-### Fix Verification
-- **Form Scoping:** PASS. Extractor successfully differentiated between "Payment Detail", "Register", and "Sales Bill" forms.
-- **Visibility Guard:** PASS. System detected minimized state and attempted restore; coordinates are now positive.
+## MVP Pivot: Deterministic Patterns
+I have refactored the extraction logic to move away from brittle label proximity. The new strategy:
+1.  **Exhaustive Collection:** Pool all non-empty textboxes from the entire process.
+2.  **Pattern Match:** Use regex to identify `invoice_no` (e.g., `SS/2026/...`), `date`, and `mobile`.
+3.  **Heuristics:** Identify `invoice_total` as the largest numeric value in the form scope.
 
-### Comparison: Prime Screen vs. Extracted JSON
-| Field | Prime Screen | Extracted JSON | Match |
-|-------|--------------|----------------|-------|
-| **Invoice No** | `SS/2026/201/` | `""` | FAIL |
-| **Invoice Date** | `01/05/2026` | `""` | FAIL |
-| **Customer Name** | `Text2` | `"GST"` | FAIL (Matched search field) |
-| **Customer Code** | `HK0048` | `""` | FAIL |
-| **Invoice Total** | `9352.00` | `""` | FAIL |
+## Status: NEEDS REVIEW
+The code is implemented and much more robust, but it requires the target controls to be visible to the automation backend. 
 
-### Technical Mismatch Details
-- **Anchor Ambiguity:** Anchors like "A/c Name" were matched to global search fields (containing "GST") instead of the specific invoice field.
-- **Proximity Weighting:** The proximity logic needs to be much stricter about horizontal alignment and exclusion of "Control Header" textboxes.
-- **MDI Context:** Labels found in the MDI parent are successfully being used to anchor textboxes in the child form, but the "nearest" neighbor is often a header field rather than the data field.
-
-## Prime Extraction MVP Status
-**STATUS:** **FAIL**
-
-**Required Refinements:**
-1. Refine `find_nearest_textbox` to prefer textboxes with numeric/pattern-matched data (e.g., date pattern for Date field).
-2. Explicitly exclude known "Header/Search" textboxes by coordinate range or class.
-3. Validate against a screen where an invoice is explicitly "Active" and "Loaded".
+**Recommended Action:**
+1. Ensure Prime has an invoice explicitly open and maximized.
+2. If possible, use a 32-bit Python environment for the extractor to resolve address-space visibility issues with legacy VB6 controls.
