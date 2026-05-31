@@ -25,7 +25,11 @@ class EvidenceEngine:
         
         with open(evidence_path, "r", encoding="utf-8") as f:
             evidence_data = json.load(f)
-            bank_txs = evidence_data.get("transactions", [])
+            # Handle list-only or dict-with-list formats
+            if isinstance(evidence_data, list):
+                bank_txs = evidence_data
+            else:
+                bank_txs = evidence_data.get("transactions", [])
 
         records = report_data.get("records", [])
         linked_count = 0
@@ -51,16 +55,26 @@ class EvidenceEngine:
             candidates = []
             for tx in bank_txs:
                 if abs(tx["amount"] - amount) < 0.01:
-                    tx_date = date.fromisoformat(tx["transaction_date"])
+                    # Parse bank date (could be 21/04/26 or 2026-04-21)
+                    tx_date_str = tx["transaction_date"]
+                    try:
+                        if "/" in tx_date_str:
+                             p = tx_date_str.split("/")
+                             # Assume YY if 2 digits
+                             yr = int(p[2])
+                             if yr < 100: yr += 2000
+                             tx_date = date(yr, int(p[1]), int(p[0]))
+                        else:
+                             tx_date = date.fromisoformat(tx_date_str)
+                    except:
+                        continue
+
                     # Rule: Notification must be on or after Prime entry
                     if tx_date >= inv_date:
                         candidates.append(tx)
 
             # Safety Rule: Multi-invoice same amount = Review
             if len(candidates) == 1:
-                # Check if this specific bank tx is already matched to another invoice
-                # (Simplified for MVP)
-                
                 # Check if multiple invoices have this same amount
                 other_matches = [r for r in records if abs(r.get("sale_amount", 0.0) - amount) < 0.01 and r != rec]
                 
@@ -69,11 +83,11 @@ class EvidenceEngine:
                     rec["validation_status"] = "YELLOW_REVIEW_WITH_BANK_EVIDENCE"
                     rec["bank_evidence"] = {
                         "timestamp": datetime.now().isoformat(),
-                        "bank_name": target_tx.get("bank_name", "UNKNOWN"),
+                        "bank_name": target_tx.get("label", target_tx.get("bank_name", "UNKNOWN")),
                         "amount": target_tx["amount"],
-                        "utr": target_tx.get("utr"),
+                        "utr": target_tx.get("utr") or target_tx.get("message_id"),
                         "transaction_date": target_tx["transaction_date"],
-                        "source_id": target_tx.get("transaction_id"),
+                        "source_id": target_tx.get("message_id") or target_tx.get("transaction_id"),
                         "confidence_reason": "Exact amount bank notification found after Prime entry"
                     }
                     linked_count += 1
@@ -82,7 +96,7 @@ class EvidenceEngine:
                     self.log_audit_event("BANK_EVIDENCE_LINKED", {
                         "invoice_no": rec.get("invoice_no"),
                         "amount": amount,
-                        "utr": target_tx.get("utr")
+                        "utr": rec["bank_evidence"]["utr"]
                     })
 
         if linked_count > 0:
