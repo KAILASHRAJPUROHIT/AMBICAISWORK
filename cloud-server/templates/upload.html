@@ -85,8 +85,9 @@
 
         .hidden { display: none !important; }
 
-        /* Debug UI */
+        /* Debug UI (Hidden in Production) */
         .debug-overlay {
+            display: {% if production_mode %}none{% else %}block{% endif %};
             position: absolute;
             top: 60px; left: 10px;
             background: rgba(0,0,0,0.85);
@@ -231,7 +232,7 @@
         .crop-container {
             width: 100%;
             height: auto;
-            max-height: 65vh;
+            max-height: 60vh;
             background: #000;
             overflow: hidden;
             border-radius: 12px;
@@ -245,7 +246,7 @@
 
         #crop-image { 
             width: 100%;
-            max-height: 65vh;
+            max-height: 60vh;
             object-fit: contain;
             display: block;
         }
@@ -437,6 +438,7 @@
 
 <script>
     // Global State
+    const PRODUCTION_MODE = {{ 'true' if production_mode else 'false' }};
     let queue = [];
     let cropper = null;
     let cameraStream = null;
@@ -447,6 +449,11 @@
     let currentPreviewCanvas = null;
     let currentAutoPts = null;
     let currentWarpedCanvas = null;
+
+    // Auto-capture State
+    let stabilityTimer = 0;
+    let autoCaptureCounter = 3;
+    let lastBestPoints = null;
 
     const views = {
         main: document.getElementById('view-main'),
@@ -529,6 +536,10 @@
     }
 
     function logDebug(msg, data = null) {
+        if (PRODUCTION_MODE) {
+            console.log(`[DEBUG] ${msg}`, data);
+            return;
+        }
         const overlay = document.getElementById('camera-debug-overlay');
         if (!overlay) return;
         if (msg === "CLEAR") { overlay.innerHTML = ''; return; }
@@ -554,6 +565,9 @@
                 canvas.height = video.videoHeight;
                 showView('camera');
                 isDetecting = true;
+                stabilityTimer = 0;
+                autoCaptureCounter = 3;
+                lastBestPoints = null;
                 requestAnimationFrame(detectionLoop);
             };
         } catch (err) { alert("Camera Error: " + err.message); }
@@ -570,34 +584,64 @@
         heartbeat++;
         const video = document.getElementById('camera-video');
         const canvas = document.getElementById('detection-overlay');
+        const guide = document.getElementById('camera-guide');
+
         if (!video.videoWidth || !cvLoaded) { requestAnimationFrame(detectionLoop); return; }
         if (timestamp - lastDetectionTime < 200) { requestAnimationFrame(detectionLoop); return; }
         lastDetectionTime = timestamp;
 
         const result = detectDocument(video);
-        if (heartbeat % 5 === 0) {
-            logDebug("CLEAR");
-            logDebug("Tick", heartbeat);
-            logDebug("Contours", result.contourCount);
-            if (result.bestRect) {
-                logDebug("Best Score", Math.round(result.bestRect.score));
-                logDebug("Area %", result.bestRect.areaPercent);
-                logDebug("Ratio", result.bestRect.ratio);
-                logDebug("Rectang", result.bestRect.rectangularity);
-                logDebug("Crop Size", result.bestRect.cropSize);
-                logDebug("Accepted", "YES");
-            } else {
-                logDebug("Accepted", "NO");
-                logDebug("Reason", result.rejectionReason);
-            }
-        }
+        const best = result.bestRect;
 
+        // Visuals & Auto-Capture Logic
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        result.rejectedContours.forEach(pts => drawShape(ctx, pts, 'rgba(255,255,255,0.2)', 1));
-        result.rects.forEach(r => { if (r !== result.bestRect) drawShape(ctx, r.points, 'rgba(212,175,55,0.4)', 2); });
-        if (result.bestRect) drawShape(ctx, result.bestRect.points, '#27AE60', 6);
+        
+        if (best) {
+            const stable = checkStability(best.points);
+            if (stable) {
+                stabilityTimer += 200;
+                if (stabilityTimer >= 800) {
+                    autoCaptureCounter = 3 - Math.floor((stabilityTimer - 800) / 800);
+                    if (autoCaptureCounter <= 0) {
+                        guide.textContent = "Capturing...";
+                        triggerAutoCapture(best.points);
+                        return;
+                    }
+                    guide.textContent = `Hold Still... Capturing in ${autoCaptureCounter}`;
+                } else {
+                    guide.textContent = "Hold Still";
+                }
+            } else {
+                stabilityTimer = 0;
+                autoCaptureCounter = 3;
+                guide.textContent = "Document found";
+            }
+            drawShape(ctx, best.points, '#27AE60', 6);
+        } else {
+            stabilityTimer = 0;
+            autoCaptureCounter = 3;
+            guide.textContent = "Align document within frame";
+        }
+
+        // Draw alternate candidates (Only in non-production)
+        if (!PRODUCTION_MODE) {
+            result.rects.forEach(r => { if (r !== best) drawShape(ctx, r.points, 'rgba(212,175,55,0.4)', 2); });
+        }
+
         requestAnimationFrame(detectionLoop);
+    }
+
+    function checkStability(newPoints) {
+        if (!lastBestPoints) { lastBestPoints = newPoints; return false; }
+        const threshold = 30; // pixels
+        let diff = 0;
+        for (let i = 0; i < 4; i++) {
+            diff += Math.abs(newPoints[i].x - lastBestPoints[i].x);
+            diff += Math.abs(newPoints[i].y - lastBestPoints[i].y);
+        }
+        lastBestPoints = newPoints;
+        return diff < threshold;
     }
 
     function drawShape(ctx, pts, color, width) {
@@ -608,7 +652,7 @@
         ctx.closePath(); ctx.stroke();
     }
 
-    // Detection Core
+    // Advanced Detection Core (Multi-pass)
     function detectDocument(source) {
         const results = { rects: [], bestRect: null, contourCount: 0, rejectionReason: "No doc found", rejectedContours: [] };
         try {
@@ -623,95 +667,109 @@
             let src = cv.imread(tempCanvas);
             let gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-            cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
-            cv.Canny(gray, gray, 50, 150);
-            let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
-            cv.dilate(gray, gray, kernel);
 
-            let contours = new cv.MatVector();
-            let hierarchy = new cv.Mat();
-            // RETR_CCOMP to identify top-level external contours vs nested holes
-            cv.findContours(gray, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+            const allCandidates = [];
 
-            results.contourCount = contours.size();
-            const frameArea = tempCanvas.width * tempCanvas.height;
-            const minArea = frameArea * 0.05;
-            const candidates = [];
+            // Pass 1: Standard
+            const pass1 = processPass(gray, 50, 150, tempCanvas.width, tempCanvas.height, scale);
+            allCandidates.push(...pass1.candidates);
+            results.contourCount += pass1.contourCount;
 
-            for (let i = 0; i < contours.size(); ++i) {
-                // Ignore nested contours (parent != -1)
-                const parent = hierarchy.intPtr(0, i)[3];
-                if (parent !== -1) continue;
+            // Pass 2: CLAHE for Low Contrast
+            let clahe = new cv.CLAHE(2.0, new cv.Size(8, 8));
+            let contrastGray = new cv.Mat();
+            clahe.apply(gray, contrastGray);
+            const pass2 = processPass(contrastGray, 30, 100, tempCanvas.width, tempCanvas.height, scale);
+            allCandidates.push(...pass2.candidates);
+            results.contourCount += pass2.contourCount;
+            contrastGray.delete(); clahe.delete();
 
-                let cnt = contours.get(i);
-                let area = cv.contourArea(cnt);
-                if (area < minArea / 2) continue;
+            // Pass 3: Adaptive Threshold
+            let thresh = new cv.Mat();
+            cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
+            const pass3 = processPass(thresh, 0, 0, tempCanvas.width, tempCanvas.height, scale, true);
+            allCandidates.push(...pass3.candidates);
+            results.contourCount += pass3.contourCount;
+            thresh.delete();
 
-                let hull = new cv.Mat();
-                cv.convexHull(cnt, hull);
-                let rect = cv.minAreaRect(hull);
-                const w = rect.size.width;
-                const h = rect.size.height;
-                if (w < 20 || h < 20) { hull.delete(); continue; }
-
-                const ratio = Math.max(w/h, h/w);
-                const rectArea = w * h;
-                const rectangularity = area / rectArea;
-
-                // Aadhaar/PAN Preference: 1.45 to 1.75
-                let score = (area / frameArea) * 100;
-                if (ratio >= 1.45 && ratio <= 1.75) score += 50;
-                if (rectangularity > 0.8) score += 20;
-
-                const orientation = (w > h) ? "landscape" : "portrait";
-                
-                // 5% Expansion (clamped to frame)
-                const dummyRect = {
-                    center: rect.center,
-                    size: { width: rect.size.width * 1.05, height: rect.size.height * 1.05 },
-                    angle: rect.angle
-                };
-                
-                let box = cv.RotatedRect.points(dummyRect);
-                const pts = [];
-                for (let j = 0; j < 4; j++) {
-                    pts.push({ 
-                        x: Math.max(0, Math.min(tempCanvas.width, box[j].x)) / scale, 
-                        y: Math.max(0, Math.min(tempCanvas.height, box[j].y)) / scale 
-                    });
-                }
-
-                const cand = { 
-                    points: orderPoints(pts), 
-                    area, 
-                    areaPercent: Math.round((area/frameArea)*100), 
-                    ratio: ratio.toFixed(2), 
-                    orientation, 
-                    score,
-                    rectangularity: rectangularity.toFixed(2),
-                    cropSize: `${Math.round(dummyRect.size.width/scale)}x${Math.round(dummyRect.size.height/scale)}`
-                };
-
-                if (area > minArea) {
-                    candidates.push(cand);
-                } else {
-                    results.rejectedContours.push(pts);
-                }
-                hull.delete();
-            }
-
-            if (candidates.length > 0) {
-                candidates.sort((a, b) => b.score - a.score);
-                results.bestRect = candidates[0];
-                results.rects = candidates;
+            if (allCandidates.length > 0) {
+                allCandidates.sort((a, b) => b.score - a.score);
+                results.bestRect = allCandidates[0];
+                results.rects = allCandidates;
                 results.rejectionReason = "None";
-            } else if (results.contourCount > 0) {
-                results.rejectionReason = "Only internal/tiny shapes";
             }
 
-            src.delete(); gray.delete(); contours.delete(); hierarchy.delete(); kernel.delete();
+            src.delete(); gray.delete();
         } catch (e) { console.error(e); }
         return results;
+    }
+
+    function processPass(gray, low, high, tw, th, scale, isThreshold = false) {
+        let edges = new cv.Mat();
+        if (isThreshold) {
+            edges = gray.clone();
+        } else {
+            cv.GaussianBlur(gray, edges, new cv.Size(5, 5), 0);
+            cv.Canny(edges, edges, low, high);
+        }
+        
+        let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+        cv.dilate(edges, edges, kernel);
+
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(edges, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+
+        const candidates = [];
+        const frameArea = tw * th;
+        const minArea = frameArea * 0.05;
+
+        for (let i = 0; i < contours.size(); ++i) {
+            const parent = hierarchy.intPtr(0, i)[3];
+            if (parent !== -1) continue;
+
+            let cnt = contours.get(i);
+            let area = cv.contourArea(cnt);
+            if (area < minArea / 2) continue;
+
+            let hull = new cv.Mat();
+            cv.convexHull(cnt, hull);
+            let rect = cv.minAreaRect(hull);
+            const w = rect.size.width;
+            const h = rect.size.height;
+            if (w < 20 || h < 20) { hull.delete(); continue; }
+
+            const ratio = Math.max(w/h, h/w);
+            const rectArea = w * h;
+            const rectangularity = area / rectArea;
+
+            let score = (area / frameArea) * 100;
+            if (ratio >= 1.45 && ratio <= 1.75) score += 50;
+            if (rectangularity > 0.8) score += 20;
+
+            const dummyRect = {
+                center: rect.center,
+                size: { width: rect.size.width * 1.05, height: rect.size.height * 1.05 },
+                angle: rect.angle
+            };
+            
+            let box = cv.RotatedRect.points(dummyRect);
+            const pts = [];
+            for (let j = 0; j < 4; j++) {
+                pts.push({ 
+                    x: Math.max(0, Math.min(tw, box[j].x)) / scale, 
+                    y: Math.max(0, Math.min(th, box[j].y)) / scale 
+                });
+            }
+
+            candidates.push({ 
+                points: orderPoints(pts), 
+                area, ratio: ratio.toFixed(2), score, rectangularity: rectangularity.toFixed(2)
+            });
+            hull.delete();
+        }
+        edges.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
+        return { candidates, contourCount: contours.size() };
     }
 
     function orderPoints(pts) {
@@ -727,6 +785,16 @@
         canvas.getContext('2d').drawImage(video, 0, 0);
         const res = detectDocument(video);
         processFinalImage(canvas, res.bestRect ? res.bestRect.points : null);
+    }
+
+    function triggerAutoCapture(pts) {
+        if (!isDetecting) return;
+        const video = document.getElementById('camera-video');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        if (navigator.vibrate) navigator.vibrate(100);
+        processFinalImage(canvas, pts);
     }
 
     async function processFinalImage(sourceCanvas, pts) {

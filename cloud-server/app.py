@@ -63,7 +63,8 @@ def generate_queue_id():
 
 @app.route("/", methods=["GET"])
 def index():
-    return render_template("upload.html")
+    production_mode = os.environ.get("PRODUCTION_MODE", "false").lower() == "true"
+    return render_template("upload.html", production_mode=production_mode)
 
 
 @app.route("/upload", methods=["POST"])
