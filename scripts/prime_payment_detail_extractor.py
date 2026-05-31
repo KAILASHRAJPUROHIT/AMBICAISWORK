@@ -58,55 +58,83 @@ def extract_payment_details():
         # 1. Extract all textboxes and group by row (Y-coordinate proximity)
         tbs = payment_form.descendants(class_name="ThunderRT6TextBox")
         
+        # Capture row-wise grouped data
         rows = {}
         for tb in tbs:
             rect = tb.rectangle()
-            # Group by rounding Y-coordinate
-            y_key = round(rect.top / 10) * 10
+            # Use top coordinate as primary key, rounding to handle slight variations
+            y_key = round(rect.top / 5) * 5
             if y_key not in rows:
                 rows[y_key] = []
             rows[y_key].append(tb)
 
         payment_rows = []
         for y in sorted(rows.keys()):
+            # Sort controls in row from left to right
             row_ctrls = sorted(rows[y], key=lambda c: c.rectangle().left)
             row_data = [c.window_text().strip() for c in row_ctrls]
             
             if any(row_data):
                 amount = 0.0
                 mode = "UNKNOWN"
+                reference = ""
+                narration = ""
                 
-                for val in row_data:
+                # Heuristic: Amount is usually the first non-zero numeric at the end of the row
+                # Or sometimes at a specific index. In VB6 grids, last fields are often totals.
+                for val in reversed(row_data):
                     try:
                         clean_val = val.replace(",", "")
-                        if "." in clean_val and float(clean_val) != 0:
-                            amount = float(clean_val)
-                            break
+                        if "." in clean_val:
+                            amt = float(clean_val)
+                            if amt > 0:
+                                amount = amt
+                                break
                     except ValueError:
                         pass
                 
+                # Mode heuristic: scan all fields for keywords
+                # Priority order matches GEMINI.md
+                row_str = " ".join(row_data).upper()
+                if "ADV" in row_str: mode = "ADVANCE"
+                elif "BAL" in row_str: mode = "BALANCE"
+                elif "CASH" in row_str: mode = "CASH"
+                elif "CARD" in row_str: mode = "CARD"
+                elif "UPI" in row_str: mode = "UPI"
+                elif "IMPS" in row_str: mode = "IMPS"
+                elif "NEFT" in row_str: mode = "NEFT"
+                elif "RTGS" in row_str or "CHQ" in row_str or "CHEQUE" in row_str: mode = "RTGS_OR_CHEQUE"
+                elif "PURC" in row_str or "OLD" in row_str: mode = "OLD_GOLD_EXCHANGE"
+
+                # Capture Reference (usually alpha-numeric field with slashes or length > 5)
                 for val in row_data:
-                    v_up = val.upper()
-                    if any(k in v_up for k in ["CASH", "BANK", "UPI", "CARD", "ADV", "NEFT", "IMPS", "RTGS", "CHQ", "OLD"]):
-                        mode = v_up
-                        break
-                
+                    if "/" in val or (len(val) > 5 and any(char.isdigit() for char in val)):
+                        if val != str(amount) and val != mode:
+                            reference = val
+                            break
+
                 if amount > 0 or mode != "UNKNOWN":
                     payment_rows.append({
                         "payment_type": "COLLECTION",
                         "payment_mode": mode,
                         "amount": amount,
+                        "reference": reference,
                         "row_y": y,
                         "raw_data": row_data
                     })
 
-        with open(JSON_OUT, "w", encoding="utf-8") as f:
+        output_path = os.path.join(EXPORT_BASE, "JSON", "payment_detail_full_dump.json")
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump({
                 "timestamp": datetime.now().isoformat(),
                 "form_title": payment_form.window_text(),
                 "payment_rows": payment_rows
             }, f, indent=4)
         
+        # Also maintain compatibility with previous JSON name if needed
+        with open(JSON_OUT, "w", encoding="utf-8") as f:
+             json.dump({"payment_rows": payment_rows}, f, indent=4)
+
         logger.info(f"Extracted {len(payment_rows)} payment rows.")
         return payment_rows
 
