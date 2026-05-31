@@ -35,27 +35,43 @@
             padding: 10px;
         }
 
-        /* UI Containers */
-        .container {
-            width: 100%;
-            max-width: 500px;
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .btn-action {
+            background: var(--navy-light);
+            border: 2px solid var(--gold);
+            border-radius: 16px;
+            padding: 20px 10px;
+            color: var(--gold-light);
             display: flex;
             flex-direction: column;
-            gap: 15px;
-        }
-
-        .header {
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-height: 100px;
             text-align: center;
-            margin: 10px 0;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
-        .header h1 {
-            color: var(--navy);
-            font-family: Georgia, serif;
-            font-size: 24px;
-            letter-spacing: 2px;
-            text-transform: uppercase;
+        .btn-action:active {
+            transform: scale(0.95);
+            background: rgba(212, 175, 55, 0.1);
         }
+
+        .btn-action span { font-size: 32px; }
+        .btn-action strong { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+
+        .header { text-align: center; margin: 10px 0; }
+        .header h1 { color: var(--navy); font-family: Georgia, serif; font-size: 24px; letter-spacing: 2px; text-transform: uppercase; }
+
+        .container { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; }
 
         .card {
             background: var(--navy);
@@ -87,14 +103,7 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
 
-        .debug-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            border-bottom: 1px solid rgba(0, 255, 0, 0.1);
-            padding: 2px 0;
-        }
-
+        .debug-row { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid rgba(0, 255, 0, 0.1); padding: 2px 0; }
         .debug-val { color: #fff; font-weight: bold; }
         .debug-reject { color: #ff4d4d; }
 
@@ -120,11 +129,7 @@
             font-weight: bold;
         }
 
-        .queue-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-            gap: 12px;
-        }
+        .queue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; }
 
         .queue-item {
             position: relative;
@@ -134,17 +139,9 @@
             overflow: hidden;
             border: 2px solid var(--gold);
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            transition: transform 0.2s;
-            cursor: grab;
         }
 
-        .queue-item:active { cursor: grabbing; transform: scale(0.95); }
-
-        .queue-item img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
+        .queue-item img { width: 100%; height: 100%; object-fit: contain; }
 
         .queue-item .pdf-icon {
             height: 100%;
@@ -152,27 +149,20 @@
             align-items: center;
             justify-content: center;
             font-size: 24px;
-            color: var(--navy);
-            background: #f0f0f0;
+            color: var(--gold);
         }
 
         .btn-remove {
             position: absolute;
-            top: 2px;
-            right: 2px;
+            top: 2px; right: 2px;
             background: var(--error);
             color: white;
             border: none;
-            width: 20px;
-            height: 20px;
+            width: 20px; height: 20px;
             border-radius: 50%;
-            font-size: 14px;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            font-size: 14px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 5;
         }
 
         /* Camera View & Overlays */
@@ -181,22 +171,12 @@
             top: 0; left: 0; width: 100%; height: 100%;
             background: black;
             z-index: 1000;
-            display: flex;
-            flex-direction: column;
+            display: flex; flex-direction: column;
         }
 
-        .camera-container {
-            position: relative;
-            flex: 1;
-            overflow: hidden;
-        }
+        .camera-container { position: relative; flex: 1; overflow: hidden; }
 
-        #camera-video {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            background: #000;
-        }
+        #camera-video { width: 100%; height: 100%; object-fit: contain; background: #000; }
 
         #detection-overlay {
             position: absolute;
@@ -222,16 +202,13 @@
         .camera-controls {
             height: 120px;
             background: rgba(0,0,0,0.8);
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
+            display: flex; justify-content: space-around; align-items: center;
             padding: 0 20px;
             z-index: 10;
         }
 
         .btn-shutter {
-            width: 70px;
-            height: 70px;
+            width: 70px; height: 70px;
             border-radius: 50%;
             border: 5px solid white;
             background: transparent;
@@ -246,47 +223,37 @@
             border-radius: 50%;
         }
 
-        .btn-camera-cancel {
-            color: white;
-            background: transparent;
-            border: none;
-            font-size: 16px;
-        }
+        .btn-camera-cancel { color: white; background: transparent; border: none; font-size: 16px; }
 
         /* Crop View */
-        .crop-wrapper {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
+        .crop-wrapper { display: flex; flex-direction: column; gap: 15px; }
 
         .crop-container {
             width: 100%;
-            aspect-ratio: 3/4;
-            background: #222;
+            height: auto;
+            max-height: 65vh;
+            background: #000;
             overflow: hidden;
-            border-radius: 8px;
+            border-radius: 12px;
             position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(212, 175, 55, 0.4);
+            margin-bottom: 10px;
         }
 
-        #crop-image { max-width: 100%; }
-
-        /* Print Options */
-        .section-label {
-            font-size: 12px;
-            color: var(--gold);
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+        #crop-image { 
+            width: 100%;
+            max-height: 65vh;
+            object-fit: contain;
             display: block;
         }
 
-        .print-types {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
+        /* Print Options */
+        .section-label { font-size: 12px; color: var(--gold); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; display: block; }
+
+        .print-types { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
 
         .type-card input { display: none; }
         .type-content {
@@ -298,10 +265,7 @@
             transition: 0.2s;
             cursor: pointer;
         }
-        .type-card input:checked + .type-content {
-            border-color: var(--gold);
-            background: rgba(212, 175, 55, 0.15);
-        }
+        .type-card input:checked + .type-content { border-color: var(--gold); background: rgba(212, 175, 55, 0.15); }
 
         .btn-master {
             background: linear-gradient(135deg, #D4AF37 0%, #C5A059 100%);
@@ -318,34 +282,22 @@
             box-shadow: 0 5px 15px rgba(212,175,55,0.4);
         }
 
-        .btn-master:disabled {
-            background: #444;
-            color: #777;
-            box-shadow: none;
-        }
+        .btn-master:disabled { background: #444; color: #777; box-shadow: none; }
 
-        /* Loading Overlay */
-        .loader-overlay {
-            text-align: center;
-            padding: 40px 0;
-        }
-
+        .loader-overlay { text-align: center; padding: 40px 0; }
         .spinner {
-            width: 40px;
-            height: 40px;
+            width: 40px; height: 40px;
             border: 4px solid rgba(212, 175, 55, 0.1);
             border-top-color: var(--gold);
             border-radius: 50%;
             animation: spin 1s linear infinite;
             margin: 0 auto 15px;
         }
-
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* OpenCV Loading */
         #cv-loading-bar {
             position: fixed;
-            bottom: 0; left: 0; width: 100%;
+            bottom: 0; left: 0; width: 0%;
             background: var(--gold);
             height: 3px;
             z-index: 2000;
@@ -355,7 +307,7 @@
 </head>
 <body>
 
-<div id="cv-loading-bar" style="width: 0%"></div>
+<div id="cv-loading-bar"></div>
 
 <div class="header">
     <h1>Aradhana</h1>
@@ -374,7 +326,7 @@
                 <span>📁</span>
                 <strong>Upload Files</strong>
             </div>
-            <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.pdf" class="hidden" onchange="handleFileSelect(event)">
+            <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.webp,.pdf" class="hidden" onchange="handleFileSelect(event)">
         </div>
 
         <div class="queue-container">
@@ -382,9 +334,7 @@
                 <span>Print Queue</span>
                 <span id="queue-count">0 Items</span>
             </div>
-            <div id="queue-grid" class="queue-grid">
-                <!-- Items added here -->
-            </div>
+            <div id="queue-grid" class="queue-grid"></div>
             <div id="queue-empty" style="text-align: center; color: #888; padding: 20px;">
                 No documents added yet.
             </div>
@@ -395,15 +345,11 @@
             <div class="print-types">
                 <label class="type-card">
                     <input type="radio" name="print-mode" value="pdf">
-                    <div class="type-content">
-                        <strong>Full Page</strong>
-                    </div>
+                    <div class="type-content"><strong>Full Page</strong></div>
                 </label>
                 <label class="type-card">
                     <input type="radio" name="print-mode" value="id_card" checked>
-                    <div class="type-content">
-                        <strong>ID Cards</strong>
-                    </div>
+                    <div class="type-content"><strong>ID Cards</strong></div>
                 </label>
             </div>
 
@@ -422,6 +368,7 @@
         </button>
     </div>
 
+    <!-- CAMERA VIEW -->
     <div id="view-camera" class="camera-wrapper hidden">
         <div class="camera-container">
             <video id="camera-video" autoplay playsinline muted></video>
@@ -432,31 +379,34 @@
         <div class="camera-controls">
             <button class="btn-camera-cancel" onclick="stopCamera()">Cancel</button>
             <button id="shutter-btn" class="btn-shutter" onclick="captureManual()"></button>
-            <div style="width: 50px"></div> <!-- Spacer -->
+            <div style="width: 50px"></div>
         </div>
     </div>
 
     <!-- CROP VIEW -->
     <div id="view-crop" class="card hidden">
         <div class="crop-wrapper">
-            <span class="section-label" id="crop-label">Final Adjustment</span>
+            <span class="section-label" id="crop-label">Quality Check</span>
             <div class="crop-container">
                 <img id="crop-image" src="">
                 <canvas id="crop-canvas" class="hidden"></canvas>
             </div>
             
-            <div id="crop-actions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <button class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="useAutoCrop()">Auto Crop</button>
-                <button class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="enableManualCrop()">Manual Crop</button>
-                <button class="btn-master" style="background: var(--navy-light); color: var(--gold); grid-column: span 2;" onclick="useOriginal()">Use Original</button>
-            </div>
-
-            <div id="crop-confirm" class="hidden" style="display: flex; gap: 10px;">
-                <button class="btn-master" style="background: #444; color: white;" onclick="cancelCropAction()">Back</button>
-                <button class="btn-master" onclick="confirmCrop()">Add to Queue</button>
-            </div>
-
-            <div style="margin-top: 10px; display: flex; gap: 10px;">
+            <div class="action-stack" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- 1. ADD TO PRINT QUEUE (Primary) -->
+                <button id="btn-add-to-queue" class="btn-master" onclick="confirmCrop()">ADD TO PRINT QUEUE</button>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <!-- 2. Reset / Auto Crop Toggle -->
+                    <button id="btn-toggle-auto" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="useAutoCrop()">Auto Crop</button>
+                    <!-- 3. Manual Crop -->
+                    <button id="btn-manual-crop" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="enableManualCrop()">Manual Crop</button>
+                </div>
+                
+                <!-- 4. Use Original -->
+                <button id="btn-use-original" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="useOriginal()">Use Original</button>
+                
+                <!-- 5. Discard -->
                 <button class="btn-master" style="background: #444; color: white;" onclick="retakePhoto()">Discard</button>
             </div>
         </div>
@@ -481,10 +431,8 @@
         </div>
         <button class="btn-master" onclick="location.reload()">Done</button>
     </div>
-
 </div>
 
-<!-- Scripts -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 
 <script>
@@ -509,10 +457,8 @@
     };
 
     function showView(viewName) {
-        Object.keys(views).forEach(k => {
-            if (views[k]) views[k].classList.add('hidden');
-        });
-        if (views[viewName]) views[viewName].classList.remove('hidden');
+        Object.keys(views).forEach(k => views[k].classList.add('hidden'));
+        views[viewName].classList.remove('hidden');
     }
 
     // OpenCV.js Loading
@@ -571,31 +517,25 @@
                 const div = document.createElement('div');
                 div.className = 'queue-item';
                 div.innerHTML = item.type === 'application/pdf' ? `<div class="pdf-icon">PDF</div>` : `<img src="${item.url}">`;
-                
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'btn-remove';
                 removeBtn.innerHTML = '×';
                 removeBtn.onclick = (e) => { e.stopPropagation(); removeFromQueue(item.id); };
-                
                 div.appendChild(removeBtn);
                 grid.appendChild(div);
             });
         }
-        countLabel.textContent = `${queue.length} Items`;
+        countLabel.textContent = `${queue.length} Item${queue.length === 1 ? '' : 's'}`;
     }
 
-    // Debug System
     function logDebug(msg, data = null) {
         const overlay = document.getElementById('camera-debug-overlay');
         if (!overlay) return;
-
         if (msg === "CLEAR") { overlay.innerHTML = ''; return; }
-        
         const row = document.createElement('div');
         row.className = 'debug-row';
         row.innerHTML = `<span>${msg}</span><span class="debug-val">${data !== null ? data : ''}</span>`;
         overlay.appendChild(row);
-        
         if (overlay.children.length > 20) overlay.removeChild(overlay.firstChild);
     }
 
@@ -627,62 +567,45 @@
 
     function detectionLoop(timestamp) {
         if (!isDetecting) return;
-        
         heartbeat++;
         const video = document.getElementById('camera-video');
         const canvas = document.getElementById('detection-overlay');
-
         if (!video.videoWidth || !cvLoaded) { requestAnimationFrame(detectionLoop); return; }
         if (timestamp - lastDetectionTime < 200) { requestAnimationFrame(detectionLoop); return; }
         lastDetectionTime = timestamp;
 
         const result = detectDocument(video);
-        
-        // Update Debug Panel
         if (heartbeat % 5 === 0) {
             logDebug("CLEAR");
             logDebug("Tick", heartbeat);
-            logDebug("Video", `${video.videoWidth}x${video.videoHeight}`);
             logDebug("Contours", result.contourCount);
-            logDebug("Candidates", result.rects.length);
-            
             if (result.bestRect) {
-                const b = result.bestRect;
-                logDebug("Best Score", Math.round(b.score));
-                logDebug("Area %", b.areaPercent);
-                logDebug("Ratio", b.ratio);
-                logDebug("Orientation", b.orientation);
-                logDebug("Angle", b.angle);
+                logDebug("Best Score", Math.round(result.bestRect.score));
+                logDebug("Area %", result.bestRect.areaPercent);
+                logDebug("Ratio", result.bestRect.ratio);
+                logDebug("Rectang", result.bestRect.rectangularity);
+                logDebug("Crop Size", result.bestRect.cropSize);
                 logDebug("Accepted", "YES");
             } else {
-                logDebug("Accepted", `<span class="debug-reject">NO</span>`);
-                logDebug("Reason", `<span class="debug-reject">${result.rejectionReason}</span>`);
+                logDebug("Accepted", "NO");
+                logDebug("Reason", result.rejectionReason);
             }
         }
 
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Draw Visuals
         result.rejectedContours.forEach(pts => drawShape(ctx, pts, 'rgba(255,255,255,0.2)', 1));
-        result.rects.forEach(r => {
-            if (r !== result.bestRect) drawShape(ctx, r.points, 'rgba(212,175,55,0.4)', 2);
-        });
-
+        result.rects.forEach(r => { if (r !== result.bestRect) drawShape(ctx, r.points, 'rgba(212,175,55,0.4)', 2); });
         if (result.bestRect) drawShape(ctx, result.bestRect.points, '#27AE60', 6);
-
         requestAnimationFrame(detectionLoop);
     }
 
     function drawShape(ctx, pts, color, width) {
         if (pts.length < 2) return;
-        ctx.strokeStyle = color;
-        ctx.lineWidth = width;
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.strokeStyle = color; ctx.lineWidth = width;
+        ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-        ctx.closePath();
-        ctx.stroke();
+        ctx.closePath(); ctx.stroke();
     }
 
     // Detection Core
@@ -693,129 +616,137 @@
             const vh = source.videoHeight || source.height;
             const scale = 0.3;
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = vw * scale;
-            tempCanvas.height = vh * scale;
-            tempCanvas.getContext('2d').drawImage(source, 0, 0, tempCanvas.width, tempCanvas.height);
+            tempCanvas.width = vw * scale; tempCanvas.height = vh * scale;
+            const tCtx = tempCanvas.getContext('2d');
+            tCtx.drawImage(source, 0, 0, tempCanvas.width, tempCanvas.height);
 
             let src = cv.imread(tempCanvas);
             let gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
             cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
             cv.Canny(gray, gray, 50, 150);
-            
             let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
             cv.dilate(gray, gray, kernel);
 
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
-            cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+            // RETR_CCOMP to identify top-level external contours vs nested holes
+            cv.findContours(gray, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
 
             results.contourCount = contours.size();
-            const minArea = (tempCanvas.width * tempCanvas.height) * 0.05;
+            const frameArea = tempCanvas.width * tempCanvas.height;
+            const minArea = frameArea * 0.05;
+            const candidates = [];
 
             for (let i = 0; i < contours.size(); ++i) {
+                // Ignore nested contours (parent != -1)
+                const parent = hierarchy.intPtr(0, i)[3];
+                if (parent !== -1) continue;
+
                 let cnt = contours.get(i);
                 let area = cv.contourArea(cnt);
-                if (area < minArea / 5) continue;
+                if (area < minArea / 2) continue;
 
                 let hull = new cv.Mat();
                 cv.convexHull(cnt, hull);
                 let rect = cv.minAreaRect(hull);
-                let box = cv.RotatedRect.points(rect);
-                
-                const pts = [];
-                for (let j = 0; j < 4; j++) pts.push({ x: box[j].x / scale, y: box[j].y / scale });
-                const ordered = orderPoints(pts);
-
                 const w = rect.size.width;
                 const h = rect.size.height;
+                if (w < 20 || h < 20) { hull.delete(); continue; }
+
                 const ratio = Math.max(w/h, h/w);
-                const isLandscape = w > h;
+                const rectArea = w * h;
+                const rectangularity = area / rectArea;
 
-                // Production Scoring
-                let score = (area / (tempCanvas.width * tempCanvas.height)) * 100;
-                let orientation = isLandscape ? "landscape" : "portrait";
-                if (ratio > 0.85 && ratio < 1.15) orientation = "square-ish";
+                // Aadhaar/PAN Preference: 1.45 to 1.75
+                let score = (area / frameArea) * 100;
+                if (ratio >= 1.45 && ratio <= 1.75) score += 50;
+                if (rectangularity > 0.8) score += 20;
 
-                let isGoodRatio = false;
-                if (ratio >= 1.2 && ratio <= 2.4) { // Standard doc
-                    isGoodRatio = true;
-                    if (ratio >= 1.45 && ratio <= 1.75) score += 40; // ID Card Bonus
-                } else if (ratio >= 0.45 && ratio <= 0.85) {
-                    isGoodRatio = true;
-                } else if (ratio >= 0.85 && ratio < 1.15) {
-                    isGoodRatio = true;
+                const orientation = (w > h) ? "landscape" : "portrait";
+                
+                // 5% Expansion (clamped to frame)
+                const dummyRect = {
+                    center: rect.center,
+                    size: { width: rect.size.width * 1.05, height: rect.size.height * 1.05 },
+                    angle: rect.angle
+                };
+                
+                let box = cv.RotatedRect.points(dummyRect);
+                const pts = [];
+                for (let j = 0; j < 4; j++) {
+                    pts.push({ 
+                        x: Math.max(0, Math.min(tempCanvas.width, box[j].x)) / scale, 
+                        y: Math.max(0, Math.min(tempCanvas.height, box[j].y)) / scale 
+                    });
                 }
 
-                const candidate = { points: ordered, areaPercent: Math.round((area/(tempCanvas.width*tempCanvas.height))*100), ratio: ratio.toFixed(2), angle: rect.angle.toFixed(1), orientation, score };
+                const cand = { 
+                    points: orderPoints(pts), 
+                    area, 
+                    areaPercent: Math.round((area/frameArea)*100), 
+                    ratio: ratio.toFixed(2), 
+                    orientation, 
+                    score,
+                    rectangularity: rectangularity.toFixed(2),
+                    cropSize: `${Math.round(dummyRect.size.width/scale)}x${Math.round(dummyRect.size.height/scale)}`
+                };
 
-                if (isGoodRatio && area > minArea) {
-                    if (!results.bestRect || score > results.bestRect.score) {
-                        results.bestRect = candidate;
-                        results.rejectionReason = "None";
-                    }
-                    results.rects.push(candidate);
+                if (area > minArea) {
+                    candidates.push(cand);
                 } else {
                     results.rejectedContours.push(pts);
-                    if (area <= minArea) results.rejectionReason = "Area too small";
-                    else if (!isGoodRatio) results.rejectionReason = "Ratio invalid";
                 }
                 hull.delete();
             }
+
+            if (candidates.length > 0) {
+                candidates.sort((a, b) => b.score - a.score);
+                results.bestRect = candidates[0];
+                results.rects = candidates;
+                results.rejectionReason = "None";
+            } else if (results.contourCount > 0) {
+                results.rejectionReason = "Only internal/tiny shapes";
+            }
+
             src.delete(); gray.delete(); contours.delete(); hierarchy.delete(); kernel.delete();
         } catch (e) { console.error(e); }
         return results;
     }
 
     function orderPoints(pts) {
-        const sum = pts.map(p => p.x + p.y);
-        const diff = pts.map(p => p.y - p.x);
-        return [
-            pts[sum.indexOf(Math.min(...sum))],
-            pts[diff.indexOf(Math.min(...diff))],
-            pts[sum.indexOf(Math.max(...sum))],
-            pts[diff.indexOf(Math.max(...diff))]
-        ];
+        const sum = pts.map(p => p.x + p.y); const diff = pts.map(p => p.y - p.x);
+        return [pts[sum.indexOf(Math.min(...sum))], pts[diff.indexOf(Math.min(...diff))], pts[sum.indexOf(Math.max(...sum))], pts[diff.indexOf(Math.max(...diff))]];
     }
 
-    // Capture & Refinement
     function captureManual() {
         if (!isDetecting) return;
         const video = document.getElementById('camera-video');
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth; canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
-
         const res = detectDocument(video);
         processFinalImage(canvas, res.bestRect ? res.bestRect.points : null);
     }
 
     async function processFinalImage(sourceCanvas, pts) {
         stopCamera();
-        currentPreviewCanvas = sourceCanvas;
-        currentAutoPts = pts;
-
+        currentPreviewCanvas = sourceCanvas; currentAutoPts = pts;
         let finalCanvas = sourceCanvas;
         if (pts) {
             const warped = warpDocument(sourceCanvas, pts);
-            finalCanvas = refineDocument(warped); // Production Refinement Pass
+            finalCanvas = refineDocument(warped);
         }
-
         currentWarpedCanvas = finalCanvas;
         updateCropPreview(finalCanvas);
-        
-        // UI State
-        const autoBtn = document.querySelector('button[onclick="useAutoCrop()"], button[onclick="useOriginal()"]');
+        const autoBtn = document.getElementById('btn-toggle-auto');
         if (pts) {
-            autoBtn.textContent = "Reset to Original";
-            autoBtn.onclick = useOriginal;
+            autoBtn.textContent = "Reset to Original"; autoBtn.onclick = useOriginal;
             document.getElementById('crop-label').textContent = "Auto Processed";
         } else {
-            autoBtn.textContent = "Auto Crop";
-            autoBtn.onclick = useAutoCrop;
+            autoBtn.textContent = "Auto Crop"; autoBtn.onclick = useAutoCrop;
             document.getElementById('crop-label').textContent = "No doc detected";
         }
-
         showView('crop');
     }
 
@@ -827,52 +758,36 @@
         const h1 = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y);
         const h2 = Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y);
         const maxHeight = Math.max(h1, h2);
-
         let dst = new cv.Mat();
         let sP = cv.matFromArray(4, 1, cv.CV_32FC2, [pts[0].x, pts[0].y, pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y]);
         let dP = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, maxWidth, 0, maxWidth, maxHeight, 0, maxHeight]);
         let M = cv.getPerspectiveTransform(sP, dP);
         cv.warpPerspective(mat, dst, M, new cv.Size(maxWidth, maxHeight), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
-        
-        const out = document.createElement('canvas');
-        cv.imshow(out, dst);
+        const out = document.createElement('canvas'); cv.imshow(out, dst);
         mat.delete(); dst.delete(); M.delete(); sP.delete(); dP.delete();
         return out;
     }
 
     function refineDocument(canvas) {
-        // Refinement Pass: Remove black borders after warp
         try {
-            let src = cv.imread(canvas);
-            let gray = new cv.Mat();
+            let src = cv.imread(canvas); let gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
             cv.threshold(gray, gray, 50, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
-            
-            let contours = new cv.MatVector();
-            let hierarchy = new cv.Mat();
+            let contours = new cv.MatVector(); let hierarchy = new cv.Mat();
             cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-            
             let maxArea = 0, bestRect = null;
             for(let i=0; i<contours.size(); i++) {
                 let rect = cv.boundingRect(contours.get(i));
                 let area = rect.width * rect.height;
                 if(area > maxArea) { maxArea = area; bestRect = rect; }
             }
-
             if(bestRect && maxArea > (canvas.width * canvas.height * 0.5)) {
-                // Add 2% safety padding
-                const padW = Math.round(bestRect.width * 0.02);
-                const padH = Math.round(bestRect.height * 0.02);
-                let x = Math.max(0, bestRect.x - padW);
-                let y = Math.max(0, bestRect.y - padH);
-                let w = Math.min(canvas.width - x, bestRect.width + padW*2);
-                let h = Math.min(canvas.height - y, bestRect.height + padH*2);
-
+                const padW = Math.round(bestRect.width * 0.02), padH = Math.round(bestRect.height * 0.02);
+                let x = Math.max(0, bestRect.x - padW), y = Math.max(0, bestRect.y - padH);
+                let w = Math.min(canvas.width - x, bestRect.width + padW*2), h = Math.min(canvas.height - y, bestRect.height + padH*2);
                 let roi = src.roi(new cv.Rect(x, y, w, h));
-                const out = document.createElement('canvas');
-                cv.imshow(out, roi);
-                roi.delete(); src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
-                return out;
+                const out = document.createElement('canvas'); cv.imshow(out, roi);
+                roi.delete(); src.delete(); gray.delete(); contours.delete(); hierarchy.delete(); return out;
             }
             src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
         } catch(e) {}
@@ -896,30 +811,25 @@
             const warped = warpDocument(currentPreviewCanvas, currentAutoPts);
             currentWarpedCanvas = refineDocument(warped);
             updateCropPreview(currentWarpedCanvas);
-            const btn = document.querySelector('button[onclick="useAutoCrop()"], button[onclick="useOriginal()"]');
+            const btn = document.getElementById('btn-toggle-auto');
             btn.textContent = "Reset to Original"; btn.onclick = useOriginal;
+            document.getElementById('crop-label').textContent = "Auto Processed";
         }
     }
 
     function useOriginal() {
-        updateCropPreview(currentPreviewCanvas);
-        currentWarpedCanvas = null;
-        const btn = document.querySelector('button[onclick="useOriginal()"], button[onclick="useAutoCrop()"]');
+        updateCropPreview(currentPreviewCanvas); currentWarpedCanvas = null;
+        const btn = document.getElementById('btn-toggle-auto');
         btn.textContent = "Auto Crop"; btn.onclick = useAutoCrop;
+        document.getElementById('crop-label').textContent = "Original Image";
+        if (cropper) { cropper.destroy(); cropper = null; }
     }
 
     function enableManualCrop() {
         if (currentWarpedCanvas) useOriginal();
+        document.getElementById('crop-label').textContent = "Adjust Corners";
         const cropImg = document.getElementById('crop-image');
-        document.getElementById('crop-actions').classList.add('hidden');
-        document.getElementById('crop-confirm').classList.remove('hidden');
         cropper = new Cropper(cropImg, { viewMode: 1, dragMode: 'move', autoCropArea: 0.98, restore: false, guides: true, center: true, highlight: false, cropBoxMovable: true, cropBoxResizable: true });
-    }
-
-    function cancelCropAction() {
-        if (cropper) { cropper.destroy(); cropper = null; }
-        document.getElementById('crop-actions').classList.remove('hidden');
-        document.getElementById('crop-confirm').classList.add('hidden');
     }
 
     function confirmCrop() {
@@ -932,7 +842,6 @@
 
     function retakePhoto() { showView('main'); }
 
-    // Upload Handler
     async function processFiles(files) {
         for (const file of files) {
             if (file.type === 'application/pdf') { addToQueue(file, file.name, file.type); }
@@ -961,7 +870,6 @@
         queue.forEach((item, i) => fd.append('files[]', item.blob, item.name || `doc_${i}.jpg`));
         fd.append('print_mode', document.querySelector('input[name="print-mode"]:checked').value);
         fd.append('copies', document.getElementById('copies-select').value);
-
         fetch('/upload', { method: 'POST', body: fd })
         .then(r => r.json()).then(data => {
             document.getElementById('display-queue-id').textContent = data.queue_id;
