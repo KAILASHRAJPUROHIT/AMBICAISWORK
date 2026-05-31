@@ -711,20 +711,15 @@
         const canvas = document.getElementById('detection-overlay');
         const guide = document.getElementById('camera-guide');
 
-        // Check dependencies
         const cvReady = typeof cv !== 'undefined' && cv.Mat;
         const videoReady = video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0;
 
         if (!videoReady || !cvReady) {
-            if (heartbeat % 10 === 0) {
-                logDebug(`Waiting: Video=${videoReady}, CV=${cvReady}`);
-                if (!cvReady) guide.textContent = "OpenCV loading...";
-            }
+            if (heartbeat % 10 === 0) logDebug(`Waiting... CV=${cvReady}`);
             requestAnimationFrame(detectionLoop);
             return;
         }
 
-        // Limit to 200ms as per requirement
         if (timestamp - lastDetectionTime < 200) {
             requestAnimationFrame(detectionLoop);
             return;
@@ -736,29 +731,29 @@
 
         const result = detectDocument(video);
         
-        // Debug Update
         if (heartbeat % 5 === 0) {
-            logDebug(`Tick: ${heartbeat} | Cnt: ${result.contourCount} | Quads: ${result.quads.length} | Best: ${Math.round(result.maxArea)}`);
+            const best = result.bestRect;
+            const debugText = best 
+                ? `${best.orientation} | ratio: ${best.ratio} | angle: ${best.angle}`
+                : "No valid rect";
+            logDebug(`Tick: ${heartbeat} | ${debugText}`);
         }
 
-        // Draw All Contours (Lightly)
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        result.contours.forEach(pts => drawShape(ctx, pts));
-
-        // Draw All Quads (Gold Thin)
+        // Draw Alternatives (Yellow Thin)
         ctx.lineWidth = 2;
-        ctx.strokeStyle = 'rgba(212, 175, 55, 0.5)';
-        result.quads.forEach(pts => drawShape(ctx, pts));
+        ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
+        result.rects.forEach(rect => {
+            if (rect !== result.bestRect) drawShape(ctx, rect.points);
+        });
 
-        if (result.bestQuad) {
-            // Draw Best Quad (Gold Bold)
+        if (result.bestRect) {
+            // Draw Best (Green Bold)
             ctx.lineWidth = 5;
-            ctx.strokeStyle = '#D4AF37';
-            drawShape(ctx, result.bestQuad);
-            guide.textContent = "Document found";
+            ctx.strokeStyle = '#27AE60';
+            drawShape(ctx, result.bestRect.points);
+            guide.textContent = "Document aligned";
         } else {
-            guide.textContent = "No rectangle found";
+            guide.textContent = "Align document";
         }
 
         requestAnimationFrame(detectionLoop);
@@ -775,9 +770,8 @@
 
     function detectDocument(video) {
         const results = {
-            contours: [],
-            quads: [],
-            bestQuad: null,
+            rects: [],
+            bestRect: null,
             maxArea: 0,
             contourCount: 0
         };
@@ -794,11 +788,14 @@
             let gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
             cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
-            cv.Canny(gray, gray, 75, 200);
+            cv.Canny(gray, gray, 50, 150);
+            
+            let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+            cv.dilate(gray, gray, kernel);
 
             let contours = new cv.MatVector();
             let hierarchy = new cv.Mat();
-            cv.findContours(gray, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+            cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
             results.contourCount = contours.size();
             const minArea = tempCanvas.width * tempCanvas.height * 0.05;
@@ -806,36 +803,57 @@
             for (let i = 0; i < contours.size(); ++i) {
                 let cnt = contours.get(i);
                 let area = cv.contourArea(cnt);
+                if (area < minArea / 2) continue;
+
+                let hull = new cv.Mat();
+                cv.convexHull(cnt, hull);
+                let rotatedRect = cv.minAreaRect(hull);
+                let boxPoints = cv.RotatedRect.points(rotatedRect);
                 
-                // Ignore tiny noise
-                if (area < 100) continue;
-
-                let peri = cv.arcLength(cnt, true);
-                let approx = new cv.Mat();
-                cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
-
                 const pts = [];
-                for (let j = 0; j < approx.rows; j++) {
-                    pts.push({
-                        x: approx.data32S[j * 2] / scale,
-                        y: approx.data32S[j * 2 + 1] / scale
-                    });
+                for (let j = 0; j < 4; j++) {
+                    pts.push({ x: boxPoints[j].x / scale, y: boxPoints[j].y / scale });
                 }
 
-                if (approx.rows === 4) {
-                    results.quads.push(pts);
-                    if (area > results.maxArea && area > minArea) {
-                        results.maxArea = area;
-                        results.bestQuad = orderPoints(pts);
-                    }
-                } else {
-                    // Only store reasonably large contours to avoid clutter
-                    if (area > minArea / 2) results.contours.push(pts);
+                // Aspect Ratio Logic
+                const w = rotatedRect.size.width;
+                const h = rotatedRect.size.height;
+                const ratio = w / h;
+                
+                let orientation = "unknown";
+                let isGoodRatio = false;
+
+                if (ratio >= 1.2 && ratio <= 2.4) {
+                    orientation = "landscape";
+                    isGoodRatio = true;
+                } else if (ratio >= 0.45 && ratio <= 0.85) {
+                    orientation = "portrait";
+                    isGoodRatio = true;
+                } else if (ratio > 0.85 && ratio < 1.2) {
+                    orientation = "square-ish";
+                    isGoodRatio = true;
                 }
-                approx.delete();
+
+                const rectArea = w * h;
+                const candidate = {
+                    points: orderPoints(pts), // Normalized corners
+                    area: rectArea,
+                    ratio: ratio.toFixed(2),
+                    angle: rotatedRect.angle.toFixed(1),
+                    orientation: orientation
+                };
+
+                results.rects.push(candidate);
+
+                if (isGoodRatio && rectArea > results.maxArea && rectArea > minArea) {
+                    results.maxArea = rectArea;
+                    results.bestRect = candidate;
+                }
+                
+                hull.delete();
             }
 
-            src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+            src.delete(); gray.delete(); contours.delete(); hierarchy.delete(); kernel.delete();
         } catch (e) {
             logDebug("OpenCV Error: " + e.message);
         }
@@ -843,12 +861,22 @@
     }
 
     function orderPoints(pts) {
-        // pts: [{x, y, rawX, rawY}, ...]
-        // 0: top-left, 1: top-right, 2: bottom-right, 3: bottom-left
-        const sorted = pts.sort((a, b) => a.y - b.y);
-        const top = sorted.slice(0, 2).sort((a, b) => a.x - b.x);
-        const bottom = sorted.slice(2, 4).sort((a, b) => a.x - b.x);
-        return [top[0], top[1], bottom[1], bottom[0]];
+        // pts: [{x, y}, ...]
+        // 0: TL, 1: TR, 2: BR, 3: BL
+        
+        // Sum and Diff method for robust ordering
+        // TL has min (x+y), BR has max (x+y)
+        // TR has min (y-x), BL has max (y-x)
+        
+        const sum = pts.map(p => p.x + p.y);
+        const diff = pts.map(p => p.y - p.x);
+        
+        return [
+            pts[sum.indexOf(Math.min(...sum))],
+            pts[diff.indexOf(Math.min(...diff))],
+            pts[sum.indexOf(Math.max(...sum))],
+            pts[diff.indexOf(Math.max(...diff))]
+        ];
     }
 
     function checkStability(newPoints) {
