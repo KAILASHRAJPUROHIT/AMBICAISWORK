@@ -1,42 +1,44 @@
 import React, { useState, useEffect } from 'react';
 
-interface RawControl {
-  index?: number;
-  value: string;
-  rect: string;
+interface RawRow {
+  [key: string]: any;
 }
 
 interface PaymentRow {
-  payment_type: string;
   payment_mode: string;
   amount: number;
-  raw_data?: string[];
 }
 
-interface Invoice {
-  timestamp: string;
-  form_title?: string;
-  fields: {
-    invoice_no: string | null;
-    invoice_date: string | null;
-    customer_name: string | null;
-    mobile: string | null;
-    invoice_total: number;
-  };
-  confidence: string;
+interface ImportedRecord {
+  invoice_no: string | null;
+  invoice_date: string | null;
+  customer_name: string | null;
+  mobile: string | null;
+  pan: string | null;
+  product_summary: string;
+  sale_amount: number;
+  taxable_amount: number;
+  cgst: number;
+  sgst: number;
+  cash_amount: number;
+  bank_amount: number;
+  card_amount: number;
+  advance_amount: number;
+  balance_amount: number;
+  bhisi_amount: number;
+  other_amount: number;
+  customer_purchase_amount: number;
+  payment_rows: PaymentRow[];
+  source_files: string[];
+  validation_status: string;
   unresolved_fields: string[];
-  raw_controls: RawControl[];
-  status: string;
+  raw_rows: RawRow[];
 }
 
 interface ExtractionData {
   timestamp: string;
-  extracted_count: number;
-  invoices: Array<{
-    invoice: Invoice;
-    payment_rows: PaymentRow[];
-    validation: any;
-  }>;
+  count: number;
+  records: ImportedRecord[];
 }
 
 const PrimeExtractionReviewPage: React.FC = () => {
@@ -47,7 +49,10 @@ const PrimeExtractionReviewPage: React.FC = () => {
 
   useEffect(() => {
     fetch('/api/prime/manual-report-import/latest')
-      .then(res => res.json())
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch manual report data');
+        return res.json();
+      })
       .then(setData)
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
@@ -57,19 +62,19 @@ const PrimeExtractionReviewPage: React.FC = () => {
     alert(`Invoice ${invoiceNo} marked as manually reviewed. Audit log updated.`);
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-600">Loading extraction data...</div>;
-  if (error) return <div className="p-8 text-center text-red-600">Error: {error}</div>;
-  if (!data || !data.records || data.records.length === 0) return <div className="p-8 text-center text-gray-600">No invoices extracted for review.</div>;
+  if (loading) return <div className="p-8 text-center text-gray-600 font-bold">Loading extraction data...</div>;
+  if (error) return <div className="p-8 text-center text-red-600 font-bold">Error: {error}</div>;
+  if (!data || !data.records || data.records.length === 0) return <div className="p-8 text-center text-gray-600 font-bold">No invoices extracted for review.</div>;
 
   // Calculate Header Metrics
-  const totalSales = data.records.reduce((sum, r) => sum + (r.sale_amount || 0), 0);
-  const totalCash = data.records.reduce((sum, r) => sum + (r.cash_amount || 0), 0);
-  const totalBank = data.records.reduce((sum, r) => sum + (r.bank_amount || 0), 0);
-  const totalCard = data.records.reduce((sum, r) => sum + (r.card_amount || 0), 0);
-  const reviewCount = data.records.filter(r => r.validation_status === 'NEEDS_REVIEW').length;
+  const totalSales = data.records.reduce((sum: number, r: ImportedRecord) => sum + (r.sale_amount || 0), 0);
+  const totalCash = data.records.reduce((sum: number, r: ImportedRecord) => sum + (r.cash_amount || 0), 0);
+  const totalBank = data.records.reduce((sum: number, r: ImportedRecord) => sum + (r.bank_amount || 0), 0);
+  const totalCard = data.records.reduce((sum: number, r: ImportedRecord) => sum + (r.card_amount || 0), 0);
+  const reviewCount = data.records.filter((r: ImportedRecord) => r.validation_status === 'NEEDS_REVIEW').length;
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
+    <div className="p-6 bg-gray-50 min-h-screen font-sans">
       <header className="mb-8">
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -77,10 +82,10 @@ const PrimeExtractionReviewPage: React.FC = () => {
             <p className="text-sm text-gray-500 italic">Latest manual report snapshot: {data.timestamp}</p>
           </div>
           <div className="flex gap-4">
-             <div className="bg-red-100 text-red-800 px-4 py-2 rounded-full text-xs font-black shadow-sm uppercase">
+             <div className="bg-red-100 text-red-800 px-4 py-2 rounded-full text-[10px] font-black shadow-sm uppercase tracking-tighter">
                Review Required: {reviewCount}
              </div>
-             <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-xs font-black shadow-sm uppercase">
+             <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-[10px] font-black shadow-sm uppercase tracking-tighter">
                Total Records: {data.records.length}
              </div>
           </div>
@@ -108,7 +113,7 @@ const PrimeExtractionReviewPage: React.FC = () => {
       </header>
 
       <div className="space-y-8">
-        {data.records.map((inv, idx) => {
+        {data.records.map((inv: ImportedRecord, idx: number) => {
           const statusColor = inv.validation_status === 'GREEN' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-yellow-100 text-yellow-800 border-yellow-200';
           
           return (
@@ -160,15 +165,15 @@ const PrimeExtractionReviewPage: React.FC = () => {
                       <tr className="border-b border-gray-50">
                         <th className="py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">Mode</th>
                         <th className="py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Amount</th>
-                        <th className="py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-8">Evidence Source</th>
+                        <th className="py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest pl-8">Evidence Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {inv.payment_rows?.map((pay, pIdx) => (
+                      {inv.payment_rows?.map((pay: PaymentRow, pIdx: number) => (
                         <tr key={pIdx} className="hover:bg-gray-50 transition-colors duration-150">
                           <td className="py-3 text-sm font-black text-gray-700">{pay.payment_mode}</td>
                           <td className="py-3 text-sm font-black text-gray-900 text-right">₹{pay.amount?.toLocaleString()}</td>
-                          <td className="py-3 text-xs text-gray-400 pl-8 font-mono">
+                          <td className="py-3 text-xs text-gray-400 pl-8 font-mono tracking-tighter">
                              {pay.payment_mode === 'CASH' ? 'IMMEDIATE_CASH' : 'PENDING_BANK_MATCH'}
                           </td>
                         </tr>
@@ -195,7 +200,7 @@ const PrimeExtractionReviewPage: React.FC = () => {
               </div>
 
               {expandedRaw === idx && (
-                <div className="p-6 bg-gray-900 text-green-400 font-mono text-[10px] max-h-[300px] overflow-y-auto">
+                <div className="p-6 bg-gray-900 text-green-400 font-mono text-[10px] max-h-[300px] overflow-y-auto rounded-xl">
                   <pre>{JSON.stringify(inv.raw_rows, null, 2)}</pre>
                 </div>
               )}
