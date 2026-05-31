@@ -706,7 +706,6 @@
         if (!isDetecting) return;
         
         heartbeat++;
-        if (heartbeat % 20 === 0) logDebug(`Heartbeat: ${heartbeat}`);
 
         const video = document.getElementById('camera-video');
         const canvas = document.getElementById('detection-overlay');
@@ -716,66 +715,74 @@
         const cvReady = typeof cv !== 'undefined' && cv.Mat;
         const videoReady = video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0;
 
-        if (!videoReady) {
-            if (heartbeat % 50 === 0) logDebug(`Waiting for video... readyState=${video.readyState}, size=${video.videoWidth}x${video.videoHeight}`);
+        if (!videoReady || !cvReady) {
+            if (heartbeat % 10 === 0) {
+                logDebug(`Waiting: Video=${videoReady}, CV=${cvReady}`);
+                if (!cvReady) guide.textContent = "OpenCV loading...";
+            }
             requestAnimationFrame(detectionLoop);
             return;
         }
 
-        if (!cvReady) {
-            if (heartbeat % 50 === 0) logDebug("Waiting for OpenCV...");
-            guide.textContent = "Smart detection loading...";
+        // Limit to 200ms as per requirement
+        if (timestamp - lastDetectionTime < 200) {
             requestAnimationFrame(detectionLoop);
             return;
         }
-
-        // Limit to ~150ms for performance and requirement
-        if (timestamp - lastDetectionTime < 150) {
-            requestAnimationFrame(detectionLoop);
-            return;
-        }
-        
-        if (lastDetectionTime === 0) logDebug("First detection tick");
         lastDetectionTime = timestamp;
 
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const points = detectDocument(video);
+        const result = detectDocument(video);
         
-        if (points) {
-            logDebug(`Rectangle detected! (${heartbeat})`);
-            const isStable = checkStability(points);
-            const outlineColor = isStable ? '#27AE60' : '#D4AF37';
-            
-            drawOutline(ctx, points, outlineColor);
-            
-            if (isStable) {
-                stableFrameCount++;
-                const stableMs = stableFrameCount * 150;
-                logDebug(`Stable: ${stableMs}ms`);
-                guide.textContent = "Hold steady...";
-                
-                if (stableMs > 1500 && autoCaptureActive) { 
-                    logDebug("Auto capturing...");
-                    triggerCapture(points);
-                    return;
-                }
-            } else {
-                stableFrameCount = 0;
-                guide.textContent = "Document detected";
-            }
+        // Debug Update
+        if (heartbeat % 5 === 0) {
+            logDebug(`Tick: ${heartbeat} | Cnt: ${result.contourCount} | Quads: ${result.quads.length} | Best: ${Math.round(result.maxArea)}`);
+        }
+
+        // Draw All Contours (Lightly)
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        result.contours.forEach(pts => drawShape(ctx, pts));
+
+        // Draw All Quads (Gold Thin)
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(212, 175, 55, 0.5)';
+        result.quads.forEach(pts => drawShape(ctx, pts));
+
+        if (result.bestQuad) {
+            // Draw Best Quad (Gold Bold)
+            ctx.lineWidth = 5;
+            ctx.strokeStyle = '#D4AF37';
+            drawShape(ctx, result.bestQuad);
+            guide.textContent = "Document found";
         } else {
-            stableFrameCount = 0;
-            guide.textContent = "Align document within frame";
+            guide.textContent = "No rectangle found";
         }
 
         requestAnimationFrame(detectionLoop);
     }
 
+    function drawShape(ctx, pts) {
+        if (pts.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath();
+        ctx.stroke();
+    }
+
     function detectDocument(video) {
+        const results = {
+            contours: [],
+            quads: [],
+            bestQuad: null,
+            maxArea: 0,
+            contourCount: 0
+        };
+
         try {
-            // Create a small temp canvas for OpenCV to avoid processing full resolution
             const scale = 0.3;
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = video.videoWidth * scale;
@@ -793,50 +800,46 @@
             let hierarchy = new cv.Mat();
             cv.findContours(gray, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
-            let maxArea = 0;
-            let bestQuad = null;
+            results.contourCount = contours.size();
+            const minArea = tempCanvas.width * tempCanvas.height * 0.05;
 
             for (let i = 0; i < contours.size(); ++i) {
                 let cnt = contours.get(i);
                 let area = cv.contourArea(cnt);
+                
+                // Ignore tiny noise
+                if (area < 100) continue;
+
                 let peri = cv.arcLength(cnt, true);
                 let approx = new cv.Mat();
                 cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
 
-                if (approx.rows === 4 && area > maxArea) {
-                    maxArea = area;
-                    bestQuad = approx;
-                }
-            }
-
-            // Must cover at least 20% of the frame
-            const minArea = tempCanvas.width * tempCanvas.height * 0.20;
-            
-            if (bestQuad && maxArea > minArea) {
-                const results = [];
-                for (let i = 0; i < 4; i++) {
-                    const rx = bestQuad.data32S[i * 2] / scale;
-                    const ry = bestQuad.data32S[i * 2 + 1] / scale;
-                    results.push({
-                        x: rx,
-                        y: ry,
-                        rawX: rx,
-                        rawY: ry
+                const pts = [];
+                for (let j = 0; j < approx.rows; j++) {
+                    pts.push({
+                        x: approx.data32S[j * 2] / scale,
+                        y: approx.data32S[j * 2 + 1] / scale
                     });
                 }
-                
-                src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
-                return orderPoints(results);
-            } else {
-                if (heartbeat % 100 === 0) logDebug(`No large enough quad found. Max area: ${Math.round(maxArea)}, Min required: ${Math.round(minArea)}`);
+
+                if (approx.rows === 4) {
+                    results.quads.push(pts);
+                    if (area > results.maxArea && area > minArea) {
+                        results.maxArea = area;
+                        results.bestQuad = orderPoints(pts);
+                    }
+                } else {
+                    // Only store reasonably large contours to avoid clutter
+                    if (area > minArea / 2) results.contours.push(pts);
+                }
+                approx.delete();
             }
 
             src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
         } catch (e) {
             logDebug("OpenCV Error: " + e.message);
-            console.error(e);
         }
-        return null;
+        return results;
     }
 
     function orderPoints(pts) {
