@@ -2,6 +2,8 @@ import os
 import json
 import logging
 import re
+import sys
+import struct
 from datetime import datetime
 from pywinauto import Desktop
 import psutil
@@ -22,8 +24,19 @@ RE_INVOICE_NO = re.compile(r".*(SG|SS|S1|S2|S4|S5)/\d{4}/\d+.*", re.IGNORECASE)
 RE_DATE = re.compile(r".*\d{2}/\d{2}/\d{4}.*")
 RE_MOBILE = re.compile(r"\d{10}")
 
+def validate_runtime():
+    """Ensures extraction is running on 32-bit Python."""
+    is_32bit = struct.calcsize("P") * 8 == 32
+    if not is_32bit:
+        msg = "FATAL ERROR: Prime extraction MUST run on 32-bit Python to access MDI child controls."
+        logger.critical(msg)
+        print(msg)
+        sys.exit(1)
+    logger.info("Runtime validation successful (32-bit).")
+
 def extract_invoice_header():
-    logger.info("Starting Exhaustive Pattern-Based Invoice Header Extraction")
+    logger.info("Starting Deterministic Pattern-Based Invoice Header Extraction (32-bit Optimized)")
+    validate_runtime()
     try:
         desktop = Desktop(backend="win32")
         pids = []
@@ -35,41 +48,56 @@ def extract_invoice_header():
             logger.error("FA.exe not found.")
             return {"status": "EXTRACTION_FAILED", "reason": "PRIME_NOT_RUNNING"}
 
-        # 3. Collect ALL non-empty textboxes process-wide
-        # NEW RULE: Check for minimum textbox threshold to ensure visibility
+        # 1. Identify active Sales Bill form
+        bill_form = None
+        for win in desktop.windows():
+            if win.process_id() in pids and win.class_name() == "ThunderRT6MDIForm":
+                # In 32-bit, child forms should be visible under MDIClient
+                for client in win.children():
+                    if client.class_name() == "MDIClient":
+                        for child in client.children():
+                            txt = child.window_text().strip()
+                            if "Sales Bill" in txt and "Payment Detail" not in txt:
+                                bill_form = child
+                                logger.info(f"Targeting active bill form: '{txt}' [Handle: {child.handle}]")
+                                break
+                    if bill_form: break
+            if bill_form: break
+
+        if not bill_form:
+            # Fallback to exhaustive search if MDI hierarchy traversal fails
+            logger.warning("Standard MDI traversal failed. Searching all process descendants...")
+            for win in desktop.windows():
+                if win.process_id() in pids:
+                    for child in win.descendants(class_name="ThunderRT6FormDC"):
+                        txt = child.window_text().strip()
+                        if "Sales Bill" in txt and "Payment Detail" not in txt:
+                            bill_form = child
+                            break
+                if bill_form: break
+
+        if not bill_form:
+             logger.error("No valid Sales Bill form detected.")
+             return {"status": "EXTRACTION_FAILED", "reason": "NO_VALID_FORM_FOUND"}
+
+        # 2. Collect ALL non-empty textboxes in the target form
         raw_controls = []
-        all_windows = desktop.windows()
-        for win in all_windows:
-            try:
-                if win.process_id() not in pids:
-                    continue
-                
-                tbs = win.descendants(class_name="ThunderRT6TextBox")
-                for i, tb in enumerate(tbs):
-                    val = tb.window_text().strip()
-                    if val:
-                        raw_controls.append({
-                            "value": val,
-                            "rect": str(tb.rectangle()),
-                            "parent": win.window_text()
-                        })
-            except Exception:
-                continue
+        tbs = bill_form.descendants(class_name="ThunderRT6TextBox")
+        for i, tb in enumerate(tbs):
+            val = tb.window_text().strip()
+            if val:
+                raw_controls.append({
+                    "value": val,
+                    "rect": str(tb.rectangle()),
+                    "index": i
+                })
 
-        logger.info(f"Collected {len(raw_controls)} non-empty textboxes process-wide.")
+        logger.info(f"Collected {len(raw_controls)} non-empty textboxes from '{bill_form.window_text()}'.")
 
-        if len(raw_controls) < 10:
-             logger.error(f"Too few textboxes detected ({len(raw_controls)}). Controls likely not visible.")
-             return {
-                 "status": "EXTRACTION_FAILED", 
-                 "reason": "FORM_TEXTBOXES_NOT_VISIBLE",
-                 "count": len(raw_controls),
-                 "timestamp": datetime.now().isoformat()
-             }
-
-        # 4. Pattern-Based Extraction from the pool
+        # 3. Pattern-Based Extraction
         invoice_data = {
             "timestamp": datetime.now().isoformat(),
+            "form_title": bill_form.window_text(),
             "fields": {
                 "invoice_no": None,
                 "invoice_date": None,
@@ -86,27 +114,20 @@ def extract_invoice_header():
         for ctrl in raw_controls:
             val = ctrl["value"]
             
-            # Invoice No
             if not invoice_data["fields"]["invoice_no"] and RE_INVOICE_NO.match(val):
                 invoice_data["fields"]["invoice_no"] = val
-                logger.info(f"Found Invoice No: {val}")
                 continue
             
-            # Date
             if not invoice_data["fields"]["invoice_date"] and RE_DATE.match(val):
                 invoice_data["fields"]["invoice_date"] = val
-                logger.info(f"Found Date: {val}")
                 continue
 
-            # Customer & Mobile (Mob. marker)
             if ".Mob." in val:
                 parts = val.split(".Mob.")
                 if len(parts) > 1:
                     invoice_data["fields"]["mobile"] = RE_MOBILE.search(parts[1]).group() if RE_MOBILE.search(parts[1]) else parts[1].strip()
                     invoice_data["fields"]["customer_name"] = parts[0].strip()
-                    logger.info(f"Found Customer/Mobile: {val}")
 
-            # Amounts
             try:
                 clean_val = val.replace(",", "")
                 if "." in clean_val:
@@ -117,11 +138,10 @@ def extract_invoice_header():
                 pass
 
         if amounts:
-            # Heuristic: the largest amount is usually the total
             invoice_data["fields"]["invoice_total"] = max(amounts)
             invoice_data["fields"]["amount_candidates"] = sorted(list(set(amounts)), reverse=True)
 
-        # 3. Validation
+        # 4. Validation
         missing = []
         for key in ["invoice_no", "invoice_date", "customer_name", "invoice_total"]:
             if not invoice_data["fields"][key]:
@@ -140,7 +160,7 @@ def extract_invoice_header():
         return invoice_data
 
     except Exception as e:
-        logger.exception("Error in Exhaustive Extractor")
+        logger.exception("Error in Invoice Header Extractor")
         return None
 
 if __name__ == "__main__":

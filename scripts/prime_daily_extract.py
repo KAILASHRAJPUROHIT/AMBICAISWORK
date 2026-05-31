@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+import sys
+import struct
 from datetime import datetime
 from pywinauto import Desktop
 from prime_invoice_extractor import extract_invoice_header
@@ -17,10 +19,18 @@ os.makedirs(os.path.dirname(LOG_OUT), exist_ok=True)
 logging.basicConfig(filename=LOG_OUT, level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+def validate_runtime():
+    """Ensures extraction is running on 32-bit Python."""
+    is_32bit = struct.calcsize("P") * 8 == 32
+    if not is_32bit:
+        msg = "FATAL ERROR: Prime extraction MUST run on 32-bit Python."
+        logger.critical(msg)
+        print(msg)
+        sys.exit(1)
+
 def run_daily_extract():
-    logger.info("Starting Daily Extract Orchestration")
-    
-    desktop = Desktop(backend="win32")
+    logger.info("Starting Daily Extract Orchestration (32-bit Optimized)")
+    validate_runtime()
     prime_window = None
     for win in desktop.windows():
         if "SHREE ARADHANA JEWELLERS" in win.window_text():

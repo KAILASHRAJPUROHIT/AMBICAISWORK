@@ -1,8 +1,11 @@
 import os
 import json
 import logging
+import sys
+import struct
 from datetime import datetime
 from pywinauto import Desktop
+import psutil
 
 # Configuration
 EXPORT_BASE = r"C:\Aradhana\PrimeExports"
@@ -15,8 +18,18 @@ os.makedirs(os.path.dirname(LOG_OUT), exist_ok=True)
 logging.basicConfig(filename=LOG_OUT, level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+def validate_runtime():
+    """Ensures extraction is running on 32-bit Python."""
+    is_32bit = struct.calcsize("P") * 8 == 32
+    if not is_32bit:
+        msg = "FATAL ERROR: Prime extraction MUST run on 32-bit Python to access MDI child controls."
+        logger.critical(msg)
+        print(msg)
+        sys.exit(1)
+
 def extract_payment_details():
-    logger.info("Starting Anchor-Based Payment Detail Extraction")
+    logger.info("Starting Anchor-Based Payment Detail Extraction (32-bit Optimized)")
+    validate_runtime()
     try:
         desktop = Desktop(backend="win32")
         prime_window = None
@@ -29,7 +42,7 @@ def extract_payment_details():
             logger.error("Prime window not found.")
             return None
 
-        # Find the Payment Detail sub-form
+        # Find the Payment Detail sub-form (likely MDI child or direct descendant in 32-bit)
         payment_form = None
         for child in prime_window.descendants(class_name="ThunderRT6FormDC"):
             if "Payment Detail" in child.window_text():
@@ -42,40 +55,27 @@ def extract_payment_details():
 
         logger.info(f"Found Payment Detail Form: {payment_form.window_text()}")
         
-        # 1. Identify Header Anchors
-        # In the grid, headers like "A/c Name", "Amount", "ChqNo." help define columns
-        header_texts = ["A/c Name", "Amount", "ChqNo.", "Due Date", "Drawn On", "Card Amt."]
-        headers = {}
-        for text in header_texts:
-            for ctrl in payment_form.descendants():
-                if text.lower() in ctrl.window_text().lower():
-                    headers[text] = ctrl.rectangle()
-                    break
-
-        # 2. Extract all textboxes and group by row (Y-coordinate proximity)
+        # 1. Extract all textboxes and group by row (Y-coordinate proximity)
         tbs = payment_form.descendants(class_name="ThunderRT6TextBox")
         
         rows = {}
         for tb in tbs:
             rect = tb.rectangle()
-            # Group by rounding Y-coordinate to nearest 5 or 10 pixels
+            # Group by rounding Y-coordinate
             y_key = round(rect.top / 10) * 10
             if y_key not in rows:
                 rows[y_key] = []
             rows[y_key].append(tb)
 
         payment_rows = []
-        # Sort rows by Y-coordinate
         for y in sorted(rows.keys()):
             row_ctrls = sorted(rows[y], key=lambda c: c.rectangle().left)
             row_data = [c.window_text().strip() for c in row_ctrls]
             
             if any(row_data):
-                # Identify amount and mode from the row
                 amount = 0.0
                 mode = "UNKNOWN"
                 
-                # Heuristic for MVP: amount is usually a non-zero decimal
                 for val in row_data:
                     try:
                         clean_val = val.replace(",", "")
@@ -85,7 +85,6 @@ def extract_payment_details():
                     except ValueError:
                         pass
                 
-                # Mode heuristic: look for keywords in the row data
                 for val in row_data:
                     v_up = val.upper()
                     if any(k in v_up for k in ["CASH", "BANK", "UPI", "CARD", "ADV", "NEFT", "IMPS", "RTGS", "CHQ", "OLD"]):
@@ -98,10 +97,7 @@ def extract_payment_details():
                         "payment_mode": mode,
                         "amount": amount,
                         "row_y": y,
-                        "raw_data": row_data,
-                        "audit_evidence": {
-                            "rects": [str(c.rectangle()) for c in row_ctrls]
-                        }
+                        "raw_data": row_data
                     })
 
         with open(JSON_OUT, "w", encoding="utf-8") as f:
@@ -111,11 +107,11 @@ def extract_payment_details():
                 "payment_rows": payment_rows
             }, f, indent=4)
         
-        logger.info(f"Extracted {len(payment_rows)} payment rows using Y-grouping anchor.")
+        logger.info(f"Extracted {len(payment_rows)} payment rows.")
         return payment_rows
 
     except Exception as e:
-        logger.exception("Error in Anchor-Based Payment Extractor")
+        logger.exception("Error in Payment Extractor")
         return None
 
 if __name__ == "__main__":

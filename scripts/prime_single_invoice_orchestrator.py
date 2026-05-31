@@ -8,11 +8,13 @@ from datetime import datetime
 EXPORT_BASE = r"C:\Aradhana\PrimeExports"
 FINAL_OUT = os.path.join(EXPORT_BASE, "JSON", "single_invoice_validated.json")
 SCRIPTS_DIR = "scripts"
+PYTHON_32 = r"C:\Aradhana\venv32\Scripts\python.exe"
 
 def run_script(script_name):
-    print(f"Executing {script_name}...")
+    print(f"Executing {script_name} using 32-bit Python...")
     try:
-        result = subprocess.run(["python", os.path.join(SCRIPTS_DIR, script_name)], capture_output=True, text=True)
+        # Explicitly use the 32-bit python interpreter
+        result = subprocess.run([PYTHON_32, os.path.join(SCRIPTS_DIR, script_name)], capture_output=True, text=True)
         if result.returncode != 0:
             print(f"Error running {script_name}: {result.stderr}")
         return result.stdout
