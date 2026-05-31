@@ -93,18 +93,31 @@ def convert_imap_message_to_raw_email(raw_msg: bytes, label: str) -> Optional[Ra
         date = datetime.utcnow()
 
     raw_body = ""
+    html_body = ""
     if msg.is_multipart():
         for part in msg.walk():
             content_type = part.get_content_type()
             content_disposition = str(part.get('Content-Disposition'))
-            if content_type == 'text/plain' and 'attachment' not in content_disposition:
-                payload = part.get_payload(decode=True)
-                if payload:
-                    raw_body += payload.decode(part.get_content_charset() or 'utf-8', errors='ignore')
+            if 'attachment' in content_disposition:
+                continue
+            
+            payload = part.get_payload(decode=True)
+            if not payload:
+                continue
+                
+            charset = part.get_content_charset() or 'utf-8'
+            if content_type == 'text/plain':
+                raw_body += payload.decode(charset, errors='ignore')
+            elif content_type == 'text/html':
+                html_body += payload.decode(charset, errors='ignore')
     else:
         payload = msg.get_payload(decode=True)
         if payload:
             raw_body = payload.decode(msg.get_content_charset() or 'utf-8', errors='ignore')
+
+    # Fallback to HTML if plain text is empty
+    if not raw_body.strip() and html_body:
+        raw_body = html_body
 
     if not message_id or not sender:
         return None
