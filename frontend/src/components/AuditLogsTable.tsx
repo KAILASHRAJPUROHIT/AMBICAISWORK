@@ -1,11 +1,11 @@
 import React from 'react';
-import type { AuditLogItem } from '../mockAuditLogsData';
-import '../Reconciliation.css'; // Import shared styles
+import type { AuditLogItem } from '../types';
+import '../Reconciliation.css'; 
 
 interface AuditLogsTableProps {
   logs: AuditLogItem[];
-  loading: boolean;
-  error: string | null;
+  loading?: boolean;
+  error?: string | null;
 }
 
 const AuditLogsTable: React.FC<AuditLogsTableProps> = ({ logs, loading, error }) => {
@@ -37,7 +37,7 @@ const AuditLogsTable: React.FC<AuditLogsTableProps> = ({ logs, loading, error })
     switch (result) {
       case 'Success': return 'status-verified';
       case 'Failure': return 'status-risk-mismatch';
-      case 'Info': return 'status-cheque-pending'; // Using blue for info, or could be status-archived (grey)
+      case 'Info': return 'status-cheque-pending'; 
       default: return '';
     }
   };

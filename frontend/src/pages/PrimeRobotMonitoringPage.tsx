@@ -1,46 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import PrimeRobotStatusCard from '../components/PrimeRobotStatusCard';
-import { mockPrimeRobotStatus, mockPrimeRobotStatusFailed } from '../mockPrimeRobotData';
-import type { PrimeRobotStatus } from '../mockPrimeRobotData';
-import '../Reconciliation.css'; // Import shared styles
+import '../Reconciliation.css'; 
 
 const PrimeRobotMonitoringPage: React.FC = () => {
-  const [robotStatus, setRobotStatus] = useState<PrimeRobotStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Simulate fetching data
-    const fetchData = async () => {
-      setLoading(true);
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Simulate success or failure
-      const isFailed = Math.random() > 0.5; // 50% chance to show a failed status
-      if (isFailed) {
-        setRobotStatus(mockPrimeRobotStatusFailed);
-        setError('Simulated error: Robot encountered an issue during last run.');
-      } else {
-        setRobotStatus(mockPrimeRobotStatus);
-        setError(null);
-      }
-      setLoading(false);
-    };
-
-    fetchData();
-    // Refresh status every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+    // Prime Robot automation is currently disabled in favor of manual reports.
+    setLoading(false);
   }, []);
 
   return (
-    <div className="prime-robot-monitoring-page">
-      <h1>Prime ERP Robot Monitoring</h1>
-      <p>Real-time status and activity of the Prime ERP data extraction robot.</p>
-      <div className="status-cards-container">
-        <PrimeRobotStatusCard status={robotStatus} loading={loading} error={error} />
-        {/* Potentially add more PrimeRobotStatusCard components for multiple robots or different aspects */}
+    <div className="p-8 bg-gray-50 min-h-screen">
+      <header className="mb-10">
+        <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Robot Monitoring</h1>
+        <p className="mt-2 text-lg text-gray-600 font-medium">Status of background Prime automation tasks.</p>
+      </header>
+      
+      <div className="bg-white p-20 text-center rounded-3xl border border-gray-100 shadow-sm">
+        <p className="text-orange-600 text-2xl font-black mb-2 tracking-tight uppercase">Robotic Extraction Paused</p>
+        <p className="text-gray-400 font-medium max-w-lg mx-auto">
+          The system is currently operating in <b>Manual Report Mode</b>. Automatic bill-by-bill extraction is inactive.
+          Please use the <i>Prime Extraction Review</i> section to monitor imported data.
+        </p>
       </div>
     </div>
   );

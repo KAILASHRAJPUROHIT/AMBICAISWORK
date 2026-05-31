@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -6,6 +7,15 @@ import json
 import os
 
 app = FastAPI(title="Aradhana Payment Auditor - Review API")
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, restrict this to the frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Models
 class ReviewAction(BaseModel):
@@ -102,24 +112,55 @@ async def get_latest_extraction():
 
 @app.get("/api/reconciliations", response_model=List[ReconciliationResult])
 async def get_reconciliations():
-    # In a real app, this would read from the DB or extraction JSONs
-    # Returning mock data for the skeleton
-    return [
-        {
-            "invoice_no": "SS/2026/196/",
-            "status": "RED",
-            "reason": "PAYMENT_TOTAL_MISMATCH",
-            "timestamp": datetime.now().isoformat(),
-            "details": {"total": 12357.0, "payments": 0.0}
-        },
-        {
-            "invoice_no": "SS/2026/201/",
-            "status": "GREEN",
-            "reason": "EXACT_VERIFIED_MATCH",
-            "timestamp": datetime.now().isoformat(),
-            "details": {"total": 9352.0, "payments": 9352.0}
+    if not os.path.exists(MANUAL_REPORT_PATH):
+        return []
+    
+    try:
+        with open(MANUAL_REPORT_PATH, "r", encoding="utf-8") as f:
+            content = f.read().replace("NaN", "null")
+            data = json.loads(content)
+        
+        records = data.get("records", [])
+        return [
+            {
+                "invoice_no": r.get("invoice_no") or "---",
+                "status": "GREEN" if r.get("validation_status") == "GREEN" else "RED",
+                "reason": r.get("unresolved_fields")[0] if r.get("unresolved_fields") else None,
+                "timestamp": data.get("timestamp"),
+                "details": {
+                    "customer": r.get("customer_name"),
+                    "total": r.get("sale_amount"),
+                    "payments": sum(p.get("amount", 0.0) for p in r.get("payment_rows", [])),
+                    "mode": r.get("payment_rows")[0].get("payment_mode") if r.get("payment_rows") else "MULTI"
+                }
+            } for r in records
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/reports/owner")
+async def get_owner_report():
+    if not os.path.exists(MANUAL_REPORT_PATH):
+         return {"daily_summary": {"generated_at": datetime.now().isoformat(), "processed_count": 0, "resolved_reviews": 0}}
+    
+    try:
+        with open(MANUAL_REPORT_PATH, "r", encoding="utf-8") as f:
+            content = f.read().replace("NaN", "null")
+            data = json.loads(content)
+        
+        records = data.get("records", [])
+        processed = len(records)
+        resolved = len([r for r in records if r.get("validation_status") == "GREEN"])
+        
+        return {
+            "daily_summary": {
+                "generated_at": data.get("timestamp"),
+                "processed_count": processed,
+                "resolved_reviews": resolved
+            }
         }
-    ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/review")
 async def review_invoice(action: ReviewAction):

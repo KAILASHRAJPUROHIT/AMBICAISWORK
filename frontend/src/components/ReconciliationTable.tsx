@@ -1,6 +1,6 @@
 import React from 'react';
-import type { ReconciliationItem } from '../mockReconciliationData';
-import '../Reconciliation.css'; // Will create this CSS file next
+import type { ReconciliationItem } from '../types';
+import '../Reconciliation.css'; 
 
 interface ReconciliationTableProps {
   items: ReconciliationItem[];

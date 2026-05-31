@@ -48,13 +48,16 @@ const PrimeExtractionReviewPage: React.FC = () => {
   const [expandedRaw, setExpandedRaw] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch('/api/prime/manual-report-import/latest')
+    fetch('http://127.0.0.1:8000/api/prime/manual-report-import/latest')
       .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch manual report data');
+        if (!res.ok) throw new Error('API Unavailable: Extraction data could not be loaded.');
         return res.json();
       })
       .then(setData)
-      .catch(err => setError(err.message))
+      .catch(err => {
+        console.error("Extraction fetch error:", err);
+        setError(err.message);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -62,9 +65,24 @@ const PrimeExtractionReviewPage: React.FC = () => {
     alert(`Invoice ${invoiceNo} marked as manually reviewed. Audit log updated.`);
   };
 
-  if (loading) return <div className="p-8 text-center text-gray-600 font-bold">Loading extraction data...</div>;
-  if (error) return <div className="p-8 text-center text-red-600 font-bold">Error: {error}</div>;
-  if (!data || !data.records || data.records.length === 0) return <div className="p-8 text-center text-gray-600 font-bold">No invoices extracted for review.</div>;
+  if (loading) return (
+    <div className="p-20 text-center text-gray-500 font-black text-2xl uppercase tracking-widest animate-pulse">
+      Retrieving Report Data...
+    </div>
+  );
+
+  if (error) return (
+    <div className="m-8 p-12 bg-red-50 border-2 border-red-200 rounded-3xl text-center">
+      <h2 className="text-2xl font-black text-red-600 mb-2">Extraction Data Offline</h2>
+      <p className="text-red-500 font-bold">{error}</p>
+    </div>
+  );
+
+  if (!data || !data.records || data.records.length === 0) return (
+    <div className="p-20 text-center bg-white rounded-3xl shadow-sm border border-gray-100 text-gray-400 font-bold text-xl">
+      No invoices found in latest manual report.
+    </div>
+  );
 
   // Calculate Header Metrics
   const totalSales = data.records.reduce((sum: number, r: ImportedRecord) => sum + (r.sale_amount || 0), 0);

@@ -17,17 +17,42 @@ interface DashboardStats {
 const DashboardPage: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/prime/dashboard/stats')
-      .then(res => res.json())
+    fetch('http://127.0.0.1:8000/api/prime/dashboard/stats')
+      .then(res => {
+        if (!res.ok) throw new Error('API Unavailable: Dashboard stats could not be loaded.');
+        return res.json();
+      })
       .then(setStats)
-      .catch(err => console.error("Stats fetch error:", err))
+      .catch(err => {
+        console.error("Stats fetch error:", err);
+        setError(err.message);
+      })
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="p-12 text-center text-gray-500 font-bold text-xl">Loading live dashboard metrics...</div>;
-  if (!stats) return <div className="p-12 text-center text-red-500 font-bold text-xl">Failed to load dashboard data. Ensure backend is running and reports are imported.</div>;
+  if (loading) return (
+    <div className="p-12 text-center text-gray-500 font-bold text-xl uppercase animate-pulse">
+      Connecting to Backend...
+    </div>
+  );
+
+  if (error) return (
+    <div className="m-8 p-8 bg-red-50 border-2 border-red-200 rounded-3xl text-center">
+      <h2 className="text-2xl font-black text-red-600 mb-2">Live Data Offline</h2>
+      <p className="text-red-500 font-bold">{error}</p>
+      <button 
+        onClick={() => window.location.reload()}
+        className="mt-6 bg-red-600 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest hover:bg-red-700 transition-colors"
+      >
+        Retry Connection
+      </button>
+    </div>
+  );
+
+  if (!stats) return null;
 
   const summaryCards = [
     { label: "Total Bills Today", value: stats.totalBillsToday },
