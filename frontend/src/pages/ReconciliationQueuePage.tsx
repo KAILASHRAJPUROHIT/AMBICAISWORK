@@ -25,8 +25,8 @@ const ReconciliationQueuePage: React.FC = () => {
           bankAmount: r.details?.payments || 0.0,
           difference: (r.details?.total || 0.0) - (r.details?.payments || 0.0),
           paymentMode: r.details?.mode || 'BANK',
-          matchConfidence: r.status === 'GREEN' ? 'High' : 'Low',
-          status: r.status === 'GREEN' ? 'Verified' : 'Risk / Mismatch'
+          matchConfidence: r.status === 'GREEN' ? 'High' : (r.status === 'YELLOW' ? 'Medium' : 'Low'),
+          status: r.status === 'GREEN' ? 'Verified' : (r.status === 'YELLOW' ? 'Advance Pending' : (r.status === 'ORANGE' ? 'Ambiguous Match' : (r.status === 'BLUE' ? 'Realizing Cheque' : 'Risk / Mismatch')))
         }));
         setItems(transformed);
       })

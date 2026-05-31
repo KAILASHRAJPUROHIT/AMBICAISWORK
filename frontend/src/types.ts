@@ -7,7 +7,7 @@ export interface ReconciliationItem {
   difference: number;
   paymentMode: string;
   matchConfidence: 'High' | 'Medium' | 'Low';
-  status: 'Verified' | 'Pending' | 'Delivered Before Payment' | 'Risk / Mismatch' | 'Cheque Pending' | 'Archived';
+  status: 'Verified' | 'Pending' | 'Delivered Before Payment' | 'Risk / Mismatch' | 'Cheque Pending' | 'Archived' | 'Advance Pending' | 'Ambiguous Match' | 'Realizing Cheque';
 }
 
 export interface AuditLogItem {

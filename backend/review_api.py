@@ -128,7 +128,7 @@ async def get_reconciliations():
         return [
             {
                 "invoice_no": r.get("invoice_no") or "---",
-                "status": "GREEN" if r.get("validation_status") == "GREEN" else "RED",
+                "status": "GREEN" if r.get("validation_status") == "GREEN" else ("YELLOW" if r.get("validation_status") == "YELLOW" else ("ORANGE" if r.get("validation_status") == "ORANGE" else ("BLUE" if r.get("validation_status") == "BLUE" else "RED"))),
                 "reason": r.get("unresolved_fields")[0] if r.get("unresolved_fields") else None,
                 "timestamp": data.get("timestamp"),
                 "details": {
