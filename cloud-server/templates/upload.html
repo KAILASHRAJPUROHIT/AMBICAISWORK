@@ -423,13 +423,13 @@
             <span class="section-label">Print Mode</span>
             <div class="print-types">
                 <label class="type-card">
-                    <input type="radio" name="print-mode" value="pdf" checked>
+                    <input type="radio" name="print-mode" value="pdf">
                     <div class="type-content">
                         <strong>Full Page</strong>
                     </div>
                 </label>
                 <label class="type-card">
-                    <input type="radio" name="print-mode" value="id_card">
+                    <input type="radio" name="print-mode" value="id_card" checked>
                     <div class="type-content">
                         <strong>ID Cards</strong>
                     </div>
@@ -472,12 +472,23 @@
             <span class="section-label" id="crop-label">Final Adjustment</span>
             <div class="crop-container">
                 <img id="crop-image" src="">
+                <canvas id="crop-canvas" class="hidden"></canvas>
             </div>
-            <div style="display: flex; gap: 10px;">
-                <button class="btn-master" style="background: #444; color: white;" onclick="retakePhoto()">Retake</button>
+            
+            <div id="crop-actions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <button class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="useAutoCrop()">Auto Crop</button>
+                <button class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="enableManualCrop()">Manual Crop</button>
+                <button class="btn-master" style="background: var(--navy-light); color: var(--gold); grid-column: span 2;" onclick="useOriginal()">Use Original</button>
+            </div>
+
+            <div id="crop-confirm" class="hidden" style="display: flex; gap: 10px;">
+                <button class="btn-master" style="background: #444; color: white;" onclick="cancelCropAction()">Back</button>
                 <button class="btn-master" onclick="confirmCrop()">Add to Queue</button>
             </div>
-            <button id="btn-manual-crop" class="btn-master" style="background: transparent; border: 1px solid var(--gold); color: var(--gold-light); margin-top: 5px;" onclick="enableManualCrop()">Manual Crop</button>
+
+            <div style="margin-top: 10px; display: flex; gap: 10px;">
+                <button class="btn-master" style="background: #444; color: white;" onclick="retakePhoto()">Discard</button>
+            </div>
         </div>
     </div>
 
@@ -733,10 +744,13 @@
         
         if (heartbeat % 5 === 0) {
             const best = result.bestRect;
-            const debugText = best 
-                ? `${best.orientation} | ratio: ${best.ratio} | angle: ${best.angle}`
-                : "No valid rect";
-            logDebug(`Tick: ${heartbeat} | ${debugText}`);
+            if (best) {
+                logDebug(`Cands: ${result.rects.length} | Score: ${Math.round(best.score)} | Area: ${best.areaPercent}% | Ratio: ${best.ratio}`);
+                logDebug(`Orientation: ${best.orientation} | Angle: ${best.angle}`);
+                logDebug(`Accepted: YES`);
+            } else {
+                logDebug(`Cands: ${result.rects.length} | Accepted: NO | Reason: ${result.rejectionReason}`);
+            }
         }
 
         // Draw Alternatives (Yellow Thin)
@@ -751,7 +765,7 @@
             ctx.lineWidth = 5;
             ctx.strokeStyle = '#27AE60';
             drawShape(ctx, result.bestRect.points);
-            guide.textContent = "Document aligned";
+            guide.textContent = "Document found";
         } else {
             guide.textContent = "Align document";
         }
@@ -768,21 +782,24 @@
         ctx.stroke();
     }
 
-    function detectDocument(video) {
+    function detectDocument(videoOrImg) {
         const results = {
             rects: [],
             bestRect: null,
             maxArea: 0,
-            contourCount: 0
+            contourCount: 0,
+            rejectionReason: "no contour",
+            videoWidth: videoOrImg.videoWidth || videoOrImg.naturalWidth || videoOrImg.width,
+            videoHeight: videoOrImg.videoHeight || videoOrImg.naturalHeight || videoOrImg.height
         };
 
         try {
             const scale = 0.3;
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = video.videoWidth * scale;
-            tempCanvas.height = video.videoHeight * scale;
+            tempCanvas.width = results.videoWidth * scale;
+            tempCanvas.height = results.videoHeight * scale;
             const tCtx = tempCanvas.getContext('2d');
-            tCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+            tCtx.drawImage(videoOrImg, 0, 0, tempCanvas.width, tempCanvas.height);
 
             let src = cv.imread(tempCanvas);
             let gray = new cv.Mat();
@@ -815,39 +832,53 @@
                     pts.push({ x: boxPoints[j].x / scale, y: boxPoints[j].y / scale });
                 }
 
-                // Aspect Ratio Logic
                 const w = rotatedRect.size.width;
                 const h = rotatedRect.size.height;
                 const ratio = w / h;
                 
                 let orientation = "unknown";
                 let isGoodRatio = false;
+                let score = 0;
 
+                // Aadhaar/PAN Optimization: 1.45 to 1.75
                 if (ratio >= 1.2 && ratio <= 2.4) {
                     orientation = "landscape";
                     isGoodRatio = true;
+                    if (ratio >= 1.45 && ratio <= 1.75) score += 50; // Bonus for ID card ratio
                 } else if (ratio >= 0.45 && ratio <= 0.85) {
                     orientation = "portrait";
                     isGoodRatio = true;
+                    const invRatio = 1/ratio;
+                    if (invRatio >= 1.45 && invRatio <= 1.75) score += 50;
                 } else if (ratio > 0.85 && ratio < 1.2) {
                     orientation = "square-ish";
                     isGoodRatio = true;
                 }
 
                 const rectArea = w * h;
+                score += (rectArea / (tempCanvas.width * tempCanvas.height)) * 100;
+
                 const candidate = {
-                    points: orderPoints(pts), // Normalized corners
+                    points: orderPoints(pts),
                     area: rectArea,
+                    areaPercent: Math.round((rectArea / (tempCanvas.width * tempCanvas.height)) * 100),
                     ratio: ratio.toFixed(2),
                     angle: rotatedRect.angle.toFixed(1),
-                    orientation: orientation
+                    orientation: orientation,
+                    score: score
                 };
 
                 results.rects.push(candidate);
 
-                if (isGoodRatio && rectArea > results.maxArea && rectArea > minArea) {
-                    results.maxArea = rectArea;
-                    results.bestRect = candidate;
+                if (isGoodRatio && rectArea > minArea) {
+                    if (!results.bestRect || candidate.score > results.bestRect.score) {
+                        results.maxArea = rectArea;
+                        results.bestRect = candidate;
+                        results.rejectionReason = "none";
+                    }
+                } else {
+                    if (rectArea <= minArea) results.rejectionReason = "area too small";
+                    else if (!isGoodRatio) results.rejectionReason = "ratio invalid";
                 }
                 
                 hull.delete();
@@ -856,6 +887,7 @@
             src.delete(); gray.delete(); contours.delete(); hierarchy.delete(); kernel.delete();
         } catch (e) {
             logDebug("OpenCV Error: " + e.message);
+            results.rejectionReason = "engine error";
         }
         return results;
     }
@@ -919,24 +951,19 @@
         if (navigator.vibrate) navigator.vibrate(100);
         
         const video = document.getElementById('camera-video');
-        const guide = document.getElementById('camera-guide');
-        guide.textContent = "CAPTURING...";
-
-        setTimeout(() => {
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0);
-            
-            // Re-detect on full res for final warp
-            const fullPoints = detectDocument(video); // Note: detectDocument will use clientWidth, need raw
-            // Since detectDocument returns scaled for UI, we use the rawX/rawY we stored
-            const rawPts = pts.map(p => ({ x: p.rawX, y: p.rawY }));
-            
-            const warped = warpDocument(canvas, rawPts);
-            showPreview(warped);
-        }, 100);
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+        
+        // pts are normalized and scaled to UI, we need to map them back to video resolution
+        const rawPts = pts.map(p => ({
+            x: (p.x * video.videoWidth) / video.clientWidth,
+            y: (p.y * video.videoHeight) / video.clientHeight
+        }));
+        
+        showPreview(canvas, rawPts);
     }
 
     function captureManual() {
@@ -951,15 +978,116 @@
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0);
 
-        // Try to find points for manual warp, if not, show manual cropper
-        const pts = detectDocument(video);
-        if (pts) {
-            const rawPts = pts.map(p => ({ x: p.rawX, y: p.rawY }));
-            const warped = warpDocument(canvas, rawPts);
-            showPreview(warped);
+        const result = detectDocument(video);
+        if (result.bestRect) {
+            const rawPts = result.bestRect.points.map(p => ({
+                x: (p.x * video.videoWidth) / video.clientWidth,
+                y: (p.y * video.videoHeight) / video.clientHeight
+            }));
+            showPreview(canvas, rawPts);
         } else {
-            showPreview(canvas);
+            showPreview(canvas, null);
         }
+    }
+
+    let currentPreviewCanvas = null;
+    let currentAutoPts = null;
+
+    function showPreview(canvas, autoPts) {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+
+        currentPreviewCanvas = canvas;
+        currentAutoPts = autoPts;
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        const cropImg = document.getElementById('crop-image');
+        cropImg.src = dataUrl;
+        
+        document.getElementById('crop-label').textContent = "Quality Check";
+        
+        document.getElementById('crop-actions').classList.remove('hidden');
+        document.getElementById('crop-confirm').classList.add('hidden');
+        document.getElementById('crop-canvas').classList.add('hidden');
+        document.getElementById('crop-image').classList.remove('hidden');
+
+        showView('crop');
+        
+        if (cropper) cropper.destroy();
+        cropper = null;
+    }
+
+    function useAutoCrop() {
+        if (!currentAutoPts) {
+            // Try detection again if it wasn't passed (for file uploads)
+            const result = detectDocument(currentPreviewCanvas);
+            if (result.bestRect) {
+                currentAutoPts = result.bestRect.points;
+            } else {
+                alert("Auto-detection failed. Please use Manual Crop.");
+                return;
+            }
+        }
+
+        const warpedCanvas = warpDocument(currentPreviewCanvas, currentAutoPts);
+        const cropCanvas = document.getElementById('crop-canvas');
+        cropCanvas.width = warpedCanvas.width;
+        cropCanvas.height = warpedCanvas.height;
+        cropCanvas.getContext('2d').drawImage(warpedCanvas, 0, 0);
+        
+        document.getElementById('crop-image').classList.add('hidden');
+        cropCanvas.classList.remove('hidden');
+        
+        document.getElementById('crop-actions').classList.add('hidden');
+        document.getElementById('crop-confirm').classList.remove('hidden');
+        document.getElementById('crop-label').textContent = "Auto Cropped Result";
+    }
+
+    function useOriginal() {
+        const cropCanvas = document.getElementById('crop-canvas');
+        cropCanvas.width = currentPreviewCanvas.width;
+        cropCanvas.height = currentPreviewCanvas.height;
+        cropCanvas.getContext('2d').drawImage(currentPreviewCanvas, 0, 0);
+
+        document.getElementById('crop-image').classList.add('hidden');
+        cropCanvas.classList.remove('hidden');
+        
+        document.getElementById('crop-actions').classList.add('hidden');
+        document.getElementById('crop-confirm').classList.remove('hidden');
+        document.getElementById('crop-label').textContent = "Original Image";
+    }
+
+    function enableManualCrop() {
+        document.getElementById('crop-label').textContent = "Adjust Corners";
+        document.getElementById('crop-actions').classList.add('hidden');
+        document.getElementById('crop-confirm').classList.remove('hidden');
+
+        const cropImg = document.getElementById('crop-image');
+        cropper = new Cropper(cropImg, {
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 0.98,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: false,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false
+        });
+    }
+
+    function cancelCropAction() {
+        if (cropper) cropper.destroy();
+        cropper = null;
+        
+        document.getElementById('crop-image').classList.remove('hidden');
+        document.getElementById('crop-canvas').classList.add('hidden');
+        document.getElementById('crop-actions').classList.remove('hidden');
+        document.getElementById('crop-confirm').classList.add('hidden');
+        document.getElementById('crop-label').textContent = "Quality Check";
     }
 
     function warpDocument(sourceCanvas, pts) {
@@ -1000,48 +1128,10 @@
         }
     }
 
-    function showPreview(canvas) {
-        if (cameraStream) {
-            cameraStream.getTracks().forEach(track => track.stop());
-            cameraStream = null;
-        }
-
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-        const cropImg = document.getElementById('crop-image');
-        cropImg.src = dataUrl;
-        
-        document.getElementById('crop-label').textContent = "Quality Check";
-        document.getElementById('btn-manual-crop').classList.remove('hidden');
-
-        showView('crop');
-        
-        if (cropper) cropper.destroy();
-        cropper = null; // No cropper until "Manual Crop" is clicked
-    }
-
-    function enableManualCrop() {
-        const cropImg = document.getElementById('crop-image');
-        document.getElementById('crop-label').textContent = "Adjust Corners";
-        document.getElementById('btn-manual-crop').classList.add('hidden');
-
-        cropper = new Cropper(cropImg, {
-            viewMode: 1,
-            dragMode: 'move',
-            autoCropArea: 0.98,
-            restore: false,
-            guides: true,
-            center: true,
-            highlight: false,
-            cropBoxMovable: true,
-            cropBoxResizable: true,
-            toggleDragModeOnDblclick: false
-        });
-    }
-
     function retakePhoto() {
         if (cropper) cropper.destroy();
         cropper = null;
-        startCamera();
+        showView('main');
     }
 
     function confirmCrop() {
@@ -1051,16 +1141,11 @@
                 maxWidth: 2048, maxHeight: 2048, fillColor: '#fff'
             });
         } else {
-            // Use current image as is
-            finalCanvas = document.createElement('canvas');
-            const img = document.getElementById('crop-image');
-            finalCanvas.width = img.naturalWidth;
-            finalCanvas.height = img.naturalHeight;
-            finalCanvas.getContext('2d').drawImage(img, 0, 0);
+            finalCanvas = document.getElementById('crop-canvas');
         }
 
         finalCanvas.toBlob(blob => {
-            addToQueue(blob, `scan_${Date.now()}.jpg`, 'image/jpeg');
+            addToQueue(blob, `document_${Date.now()}.jpg`, 'image/jpeg');
             showView('main');
         }, 'image/jpeg', 0.9);
     }
@@ -1088,7 +1173,10 @@
                 canvas.width = bitmap.width;
                 canvas.height = bitmap.height;
                 canvas.getContext('2d').drawImage(bitmap, 0, 0);
-                showPreview(canvas);
+                
+                // For uploads, we try detection on the canvas
+                const result = detectDocument(canvas);
+                showPreview(canvas, result.bestRect ? result.bestRect.points : null);
                 return; // One at a time for cropping flow
             }
         }
