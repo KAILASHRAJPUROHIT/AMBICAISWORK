@@ -70,84 +70,80 @@
         .hidden { display: none !important; }
 
         /* Debug UI */
-        .debug-info {
-            background: rgba(0,0,0,0.7);
+        .debug-overlay {
+            position: absolute;
+            top: 60px; left: 10px;
+            background: rgba(0,0,0,0.85);
             color: #0f0;
-            font-family: monospace;
-            font-size: 11px;
-            padding: 8px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            word-break: break-all;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 110;
+            pointer-events: none;
+            max-width: 250px;
+            line-height: 1.4;
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
 
-        /* Views */
-        #view-main, #view-camera, #view-crop, #view-loading { width: 100%; }
-
-        /* Main View Components */
-        .action-buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-
-        .btn-action {
-            background: var(--navy-light);
-            border: 1px solid var(--gold);
-            border-radius: 12px;
-            padding: 15px 10px;
-            color: var(--gold-light);
+        .debug-row {
             display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            transition: 0.2s;
+            justify-content: space-between;
+            gap: 10px;
+            border-bottom: 1px solid rgba(0, 255, 0, 0.1);
+            padding: 2px 0;
         }
 
-        .btn-action:active { background: rgba(212, 175, 55, 0.1); }
-        .btn-action i { font-size: 24px; }
+        .debug-val { color: #fff; font-weight: bold; }
+        .debug-reject { color: #ff4d4d; }
 
         /* Queue UI */
         .queue-container {
-            background: rgba(0, 0, 0, 0.2);
+            background: rgba(0, 0, 0, 0.3);
             border-radius: 12px;
             padding: 15px;
             margin-bottom: 20px;
-            min-height: 100px;
+            min-height: 120px;
+            border: 1px solid rgba(212, 175, 55, 0.2);
         }
 
         .queue-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 12px;
-            font-size: 14px;
+            margin-bottom: 15px;
+            font-size: 12px;
             color: var(--gold);
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
+            font-weight: bold;
         }
 
         .queue-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-            gap: 10px;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 12px;
         }
 
         .queue-item {
             position: relative;
             aspect-ratio: 3/4;
-            background: #fff;
-            border-radius: 6px;
+            background: #111;
+            border-radius: 8px;
             overflow: hidden;
-            border: 1px solid var(--gold);
+            border: 2px solid var(--gold);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: transform 0.2s;
+            cursor: grab;
         }
+
+        .queue-item:active { cursor: grabbing; transform: scale(0.95); }
 
         .queue-item img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
         }
 
         .queue-item .pdf-icon {
@@ -208,33 +204,6 @@
             object-fit: contain;
             z-index: 100;
             pointer-events: none;
-        }
-
-        .debug-overlay {
-            position: absolute;
-            top: 60px; left: 10px;
-            background: rgba(0,0,0,0.7);
-            color: #0f0;
-            font-family: monospace;
-            font-size: 10px;
-            padding: 8px;
-            border-radius: 4px;
-            z-index: 110;
-            pointer-events: none;
-            max-width: 80%;
-            line-height: 1.4;
-        }
-
-        .test-btn {
-            position: absolute;
-            bottom: 140px; right: 10px;
-            background: rgba(212, 175, 55, 0.7);
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-            z-index: 120;
         }
 
         .camera-guide {
@@ -396,8 +365,6 @@
     
     <!-- MAIN VIEW -->
     <div id="view-main" class="card">
-        <div id="camera-debug" class="debug-info hidden"></div>
-
         <div class="action-buttons">
             <div class="btn-action" onclick="startCamera()">
                 <span>📷</span>
@@ -460,7 +427,6 @@
             <video id="camera-video" autoplay playsinline muted></video>
             <canvas id="detection-overlay"></canvas>
             <div id="camera-debug-overlay" class="debug-overlay"></div>
-            <button class="test-btn" onclick="testOverlay()">Test Overlay</button>
             <div id="camera-guide" class="camera-guide">Align document within frame</div>
         </div>
         <div class="camera-controls">
@@ -528,13 +494,11 @@
     let cameraStream = null;
     let cvLoaded = false;
     let isDetecting = false;
-    let detectionFrameCount = 0;
     let lastDetectionTime = 0;
-    let stableFrameCount = 0;
-    let bestPoints = null;
-    let autoCaptureActive = true;
-
     let heartbeat = 0;
+    let currentPreviewCanvas = null;
+    let currentAutoPts = null;
+    let currentWarpedCanvas = null;
 
     const views = {
         main: document.getElementById('view-main'),
@@ -545,37 +509,31 @@
     };
 
     function showView(viewName) {
-        Object.keys(views).forEach(k => views[k].classList.add('hidden'));
-        views[viewName].classList.remove('hidden');
+        Object.keys(views).forEach(k => {
+            if (views[k]) views[k].classList.add('hidden');
+        });
+        if (views[viewName]) views[viewName].classList.remove('hidden');
     }
 
     // OpenCV.js Loading
     function onOpenCvReady() {
-        logDebug("OpenCV script loaded. Checking runtime...");
         if (typeof cv !== 'undefined') {
             cv['onRuntimeInitialized'] = () => {
-                logDebug("OpenCV Runtime Ready");
                 cvLoaded = true;
+                logDebug("OpenCV Engine Ready");
                 document.getElementById('cv-loading-bar').style.width = '100%';
                 setTimeout(() => document.getElementById('cv-loading-bar').style.display = 'none', 500);
             };
-            // In case it's already initialized
             if (cv.Mat) {
-                logDebug("OpenCV already initialized");
                 cvLoaded = true;
-                document.getElementById('cv-loading-bar').style.width = '100%';
                 document.getElementById('cv-loading-bar').style.display = 'none';
             }
-        } else {
-            logDebug("OpenCV failed to load: cv is undefined");
         }
     }
 
-    // Load OpenCV.js asynchronously
     const script = document.createElement('script');
     script.async = true;
     script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
-    script.onerror = () => logDebug("CRITICAL: OpenCV script failed to load");
     script.onload = onOpenCvReady;
     document.body.appendChild(script);
 
@@ -612,179 +570,114 @@
             queue.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'queue-item';
-                
-                if (item.type === 'application/pdf') {
-                    div.innerHTML = `<div class="pdf-icon">PDF</div>`;
-                } else {
-                    div.innerHTML = `<img src="${item.url}">`;
-                }
+                div.innerHTML = item.type === 'application/pdf' ? `<div class="pdf-icon">PDF</div>` : `<img src="${item.url}">`;
                 
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'btn-remove';
                 removeBtn.innerHTML = '×';
-                removeBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    removeFromQueue(item.id);
-                };
+                removeBtn.onclick = (e) => { e.stopPropagation(); removeFromQueue(item.id); };
                 
                 div.appendChild(removeBtn);
                 grid.appendChild(div);
             });
         }
-        countLabel.textContent = `${queue.length} Item${queue.length === 1 ? '' : 's'}`;
+        countLabel.textContent = `${queue.length} Items`;
+    }
+
+    // Debug System
+    function logDebug(msg, data = null) {
+        const overlay = document.getElementById('camera-debug-overlay');
+        if (!overlay) return;
+
+        if (msg === "CLEAR") { overlay.innerHTML = ''; return; }
+        
+        const row = document.createElement('div');
+        row.className = 'debug-row';
+        row.innerHTML = `<span>${msg}</span><span class="debug-val">${data !== null ? data : ''}</span>`;
+        overlay.appendChild(row);
+        
+        if (overlay.children.length > 20) overlay.removeChild(overlay.firstChild);
     }
 
     // Camera Logic
-    function logDebug(msg) {
-        const overlay = document.getElementById('camera-debug-overlay');
-        if (overlay) {
-            const lines = overlay.innerHTML.split('<br>').slice(-5);
-            lines.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-            overlay.innerHTML = lines.join('<br>');
-        }
-        console.log(msg);
-    }
-
-    function testOverlay() {
-        const canvas = document.getElementById('detection-overlay');
-        const ctx = canvas.getContext('2d');
-        ctx.strokeStyle = 'gold';
-        ctx.lineWidth = 10;
-        ctx.strokeRect(canvas.width * 0.1, canvas.height * 0.1, canvas.width * 0.8, canvas.height * 0.8);
-        logDebug("Test rectangle drawn");
-    }
-
     async function startCamera() {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert("Camera not supported on this browser.");
-            return;
-        }
-
         try {
-            logDebug("Requesting camera...");
             cameraStream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
                 audio: false
             });
             const video = document.getElementById('camera-video');
             const canvas = document.getElementById('detection-overlay');
-            
             video.srcObject = cameraStream;
-            
-            const onMetadata = () => {
-                logDebug(`Video metadata: ${video.videoWidth}x${video.videoHeight}`);
+            video.onloadedmetadata = () => {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 showView('camera');
-                startDetectionLoop();
+                isDetecting = true;
+                requestAnimationFrame(detectionLoop);
             };
-
-            if (video.videoWidth > 0) {
-                onMetadata();
-            } else {
-                video.onloadedmetadata = onMetadata;
-            }
-            
-            // Fallback for some browsers
-            setTimeout(() => {
-                if (isDetecting === false && video.srcObject) {
-                    logDebug("Forcing metadata fallback...");
-                    onMetadata();
-                }
-            }, 2000);
-
-        } catch (err) {
-            logDebug("Camera error: " + err.message);
-            alert("Unable to access camera: " + err.message);
-        }
+        } catch (err) { alert("Camera Error: " + err.message); }
     }
 
     function stopCamera() {
         isDetecting = false;
-        if (cameraStream) {
-            cameraStream.getTracks().forEach(track => track.stop());
-            cameraStream = null;
-        }
+        if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
         showView('main');
-    }
-
-    function startDetectionLoop() {
-        isDetecting = true;
-        stableFrameCount = 0;
-        bestPoints = null;
-        autoCaptureActive = true;
-        logDebug("Detection loop requested");
-        requestAnimationFrame(detectionLoop);
     }
 
     function detectionLoop(timestamp) {
         if (!isDetecting) return;
         
         heartbeat++;
-
         const video = document.getElementById('camera-video');
         const canvas = document.getElementById('detection-overlay');
-        const guide = document.getElementById('camera-guide');
 
-        const cvReady = typeof cv !== 'undefined' && cv.Mat;
-        const videoReady = video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0;
-
-        if (!videoReady || !cvReady) {
-            if (heartbeat % 10 === 0) logDebug(`Waiting... CV=${cvReady}`);
-            requestAnimationFrame(detectionLoop);
-            return;
-        }
-
-        if (timestamp - lastDetectionTime < 200) {
-            requestAnimationFrame(detectionLoop);
-            return;
-        }
+        if (!video.videoWidth || !cvLoaded) { requestAnimationFrame(detectionLoop); return; }
+        if (timestamp - lastDetectionTime < 200) { requestAnimationFrame(detectionLoop); return; }
         lastDetectionTime = timestamp;
+
+        const result = detectDocument(video);
+        
+        // Update Debug Panel
+        if (heartbeat % 5 === 0) {
+            logDebug("CLEAR");
+            logDebug("Tick", heartbeat);
+            logDebug("Video", `${video.videoWidth}x${video.videoHeight}`);
+            logDebug("Contours", result.contourCount);
+            logDebug("Candidates", result.rects.length);
+            
+            if (result.bestRect) {
+                const b = result.bestRect;
+                logDebug("Best Score", Math.round(b.score));
+                logDebug("Area %", b.areaPercent);
+                logDebug("Ratio", b.ratio);
+                logDebug("Orientation", b.orientation);
+                logDebug("Angle", b.angle);
+                logDebug("Accepted", "YES");
+            } else {
+                logDebug("Accepted", `<span class="debug-reject">NO</span>`);
+                logDebug("Reason", `<span class="debug-reject">${result.rejectionReason}</span>`);
+            }
+        }
 
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const result = detectDocument(video);
-        
-        if (heartbeat % 5 === 0) {
-            const best = result.bestRect;
-            const vw = video.videoWidth;
-            const vh = video.videoHeight;
-            const cw = video.clientWidth;
-            const ch = video.clientHeight;
-            
-            logDebug(`Video: ${vw}x${vh} | Disp: ${cw}x${ch}`);
-            if (best) {
-                logDebug(`Best Area: ${best.areaPercent}% | Ratio: ${best.ratio}`);
-                logDebug(`Orient: ${best.orientation} | Angle: ${best.angle}`);
-                logDebug(`Accepted: YES`);
-            } else {
-                logDebug(`Accepted: NO | Reason: ${result.rejectionReason}`);
-            }
-        }
-
-        // Draw Alternatives (Yellow Thin)
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = 'rgba(255, 215, 0, 0.4)';
-        result.rects.forEach(rect => {
-            if (rect !== result.bestRect) drawShape(ctx, rect.points);
+        // Draw Visuals
+        result.rejectedContours.forEach(pts => drawShape(ctx, pts, 'rgba(255,255,255,0.2)', 1));
+        result.rects.forEach(r => {
+            if (r !== result.bestRect) drawShape(ctx, r.points, 'rgba(212,175,55,0.4)', 2);
         });
 
-        if (result.bestRect) {
-            // Draw Best (Green Bold)
-            ctx.lineWidth = 5;
-            ctx.strokeStyle = '#27AE60';
-            drawShape(ctx, result.bestRect.points);
-            guide.textContent = "Document found";
-        } else {
-            guide.textContent = "Align document";
-        }
+        if (result.bestRect) drawShape(ctx, result.bestRect.points, '#27AE60', 6);
 
         requestAnimationFrame(detectionLoop);
     }
 
-    function drawShape(ctx, pts) {
+    function drawShape(ctx, pts, color, width) {
         if (pts.length < 2) return;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
         ctx.beginPath();
         ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
@@ -792,24 +685,17 @@
         ctx.stroke();
     }
 
-    function detectDocument(videoOrImg) {
-        const results = {
-            rects: [],
-            bestRect: null,
-            maxArea: 0,
-            contourCount: 0,
-            rejectionReason: "no contour",
-            videoWidth: videoOrImg.videoWidth || videoOrImg.naturalWidth || videoOrImg.width,
-            videoHeight: videoOrImg.videoHeight || videoOrImg.naturalHeight || videoOrImg.height
-        };
-
+    // Detection Core
+    function detectDocument(source) {
+        const results = { rects: [], bestRect: null, contourCount: 0, rejectionReason: "No doc found", rejectedContours: [] };
         try {
+            const vw = source.videoWidth || source.width;
+            const vh = source.videoHeight || source.height;
             const scale = 0.3;
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = results.videoWidth * scale;
-            tempCanvas.height = results.videoHeight * scale;
-            const tCtx = tempCanvas.getContext('2d');
-            tCtx.drawImage(videoOrImg, 0, 0, tempCanvas.width, tempCanvas.height);
+            tempCanvas.width = vw * scale;
+            tempCanvas.height = vh * scale;
+            tempCanvas.getContext('2d').drawImage(source, 0, 0, tempCanvas.width, tempCanvas.height);
 
             let src = cv.imread(tempCanvas);
             let gray = new cv.Mat();
@@ -825,94 +711,65 @@
             cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
             results.contourCount = contours.size();
-            const minArea = tempCanvas.width * tempCanvas.height * 0.05;
+            const minArea = (tempCanvas.width * tempCanvas.height) * 0.05;
 
             for (let i = 0; i < contours.size(); ++i) {
                 let cnt = contours.get(i);
                 let area = cv.contourArea(cnt);
-                if (area < minArea / 2) continue;
+                if (area < minArea / 5) continue;
 
                 let hull = new cv.Mat();
                 cv.convexHull(cnt, hull);
-                let rotatedRect = cv.minAreaRect(hull);
-                let boxPoints = cv.RotatedRect.points(rotatedRect);
+                let rect = cv.minAreaRect(hull);
+                let box = cv.RotatedRect.points(rect);
                 
                 const pts = [];
-                for (let j = 0; j < 4; j++) {
-                    pts.push({ x: boxPoints[j].x / scale, y: boxPoints[j].y / scale });
-                }
+                for (let j = 0; j < 4; j++) pts.push({ x: box[j].x / scale, y: box[j].y / scale });
+                const ordered = orderPoints(pts);
 
-                const w = rotatedRect.size.width;
-                const h = rotatedRect.size.height;
-                const ratio = w / h;
-                
-                let orientation = "unknown";
+                const w = rect.size.width;
+                const h = rect.size.height;
+                const ratio = Math.max(w/h, h/w);
+                const isLandscape = w > h;
+
+                // Production Scoring
+                let score = (area / (tempCanvas.width * tempCanvas.height)) * 100;
+                let orientation = isLandscape ? "landscape" : "portrait";
+                if (ratio > 0.85 && ratio < 1.15) orientation = "square-ish";
+
                 let isGoodRatio = false;
-                let score = 0;
-
-                // Aadhaar/PAN Optimization: 1.45 to 1.75
-                if (ratio >= 1.2 && ratio <= 2.4) {
-                    orientation = "landscape";
+                if (ratio >= 1.2 && ratio <= 2.4) { // Standard doc
                     isGoodRatio = true;
-                    if (ratio >= 1.45 && ratio <= 1.75) score += 50; // Bonus for ID card ratio
+                    if (ratio >= 1.45 && ratio <= 1.75) score += 40; // ID Card Bonus
                 } else if (ratio >= 0.45 && ratio <= 0.85) {
-                    orientation = "portrait";
                     isGoodRatio = true;
-                    const invRatio = 1/ratio;
-                    if (invRatio >= 1.45 && invRatio <= 1.75) score += 50;
-                } else if (ratio > 0.85 && ratio < 1.2) {
-                    orientation = "square-ish";
+                } else if (ratio >= 0.85 && ratio < 1.15) {
                     isGoodRatio = true;
                 }
 
-                const rectArea = w * h;
-                score += (rectArea / (tempCanvas.width * tempCanvas.height)) * 100;
+                const candidate = { points: ordered, areaPercent: Math.round((area/(tempCanvas.width*tempCanvas.height))*100), ratio: ratio.toFixed(2), angle: rect.angle.toFixed(1), orientation, score };
 
-                const candidate = {
-                    points: orderPoints(pts),
-                    area: rectArea,
-                    areaPercent: Math.round((rectArea / (tempCanvas.width * tempCanvas.height)) * 100),
-                    ratio: ratio.toFixed(2),
-                    angle: rotatedRect.angle.toFixed(1),
-                    orientation: orientation,
-                    score: score
-                };
-
-                results.rects.push(candidate);
-
-                if (isGoodRatio && rectArea > minArea) {
-                    if (!results.bestRect || candidate.score > results.bestRect.score) {
-                        results.maxArea = rectArea;
+                if (isGoodRatio && area > minArea) {
+                    if (!results.bestRect || score > results.bestRect.score) {
                         results.bestRect = candidate;
-                        results.rejectionReason = "none";
+                        results.rejectionReason = "None";
                     }
+                    results.rects.push(candidate);
                 } else {
-                    if (rectArea <= minArea) results.rejectionReason = "area too small";
-                    else if (!isGoodRatio) results.rejectionReason = "ratio invalid";
+                    results.rejectedContours.push(pts);
+                    if (area <= minArea) results.rejectionReason = "Area too small";
+                    else if (!isGoodRatio) results.rejectionReason = "Ratio invalid";
                 }
-                
                 hull.delete();
             }
-
             src.delete(); gray.delete(); contours.delete(); hierarchy.delete(); kernel.delete();
-        } catch (e) {
-            logDebug("OpenCV Error: " + e.message);
-            results.rejectionReason = "engine error";
-        }
+        } catch (e) { console.error(e); }
         return results;
     }
 
     function orderPoints(pts) {
-        // pts: [{x, y}, ...]
-        // 0: TL, 1: TR, 2: BR, 3: BL
-        
-        // Sum and Diff method for robust ordering
-        // TL has min (x+y), BR has max (x+y)
-        // TR has min (y-x), BL has max (y-x)
-        
         const sum = pts.map(p => p.x + p.y);
         const diff = pts.map(p => p.y - p.x);
-        
         return [
             pts[sum.indexOf(Math.min(...sum))],
             pts[diff.indexOf(Math.min(...diff))],
@@ -921,310 +778,197 @@
         ];
     }
 
-    function checkStability(newPoints) {
-        if (!bestPoints) {
-            bestPoints = newPoints;
-            return false;
-        }
-        const threshold = 15;
-        let diff = 0;
-        for (let i = 0; i < 4; i++) {
-            diff += Math.abs(newPoints[i].x - bestPoints[i].x);
-            diff += Math.abs(newPoints[i].y - bestPoints[i].y);
-        }
-        bestPoints = newPoints;
-        return diff < threshold;
-    }
-
-    function drawOutline(ctx, pts, color) {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(pts[0].x, pts[0].y);
-        ctx.lineTo(pts[1].x, pts[1].y);
-        ctx.lineTo(pts[2].x, pts[2].y);
-        ctx.lineTo(pts[3].x, pts[3].y);
-        ctx.closePath();
-        ctx.stroke();
-
-        // Draw corners
-        ctx.fillStyle = color;
-        pts.forEach(p => {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-            ctx.fill();
-        });
-    }
-
-    function triggerCapture(pts) {
-        isDetecting = false;
-        if (navigator.vibrate) navigator.vibrate(100);
-        
-        const video = document.getElementById('camera-video');
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
-        
-        // pts are already in natural resolution from detectDocument
-        showPreview(canvas, pts);
-    }
-
+    // Capture & Refinement
     function captureManual() {
         if (!isDetecting) return;
-        isDetecting = false;
-        if (navigator.vibrate) navigator.vibrate(50);
-        
         const video = document.getElementById('camera-video');
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
 
-        const result = detectDocument(video);
-        showPreview(canvas, result.bestRect ? result.bestRect.points : null);
+        const res = detectDocument(video);
+        processFinalImage(canvas, res.bestRect ? res.bestRect.points : null);
     }
 
-    let currentPreviewCanvas = null;
-    let currentAutoPts = null;
-    let currentWarpedCanvas = null;
+    async function processFinalImage(sourceCanvas, pts) {
+        stopCamera();
+        currentPreviewCanvas = sourceCanvas;
+        currentAutoPts = pts;
 
-    function showPreview(canvas, autoPts) {
-        if (cameraStream) {
-            cameraStream.getTracks().forEach(track => track.stop());
-            cameraStream = null;
+        let finalCanvas = sourceCanvas;
+        if (pts) {
+            const warped = warpDocument(sourceCanvas, pts);
+            finalCanvas = refineDocument(warped); // Production Refinement Pass
         }
 
-        currentPreviewCanvas = canvas;
-        currentAutoPts = autoPts;
-        currentWarpedCanvas = null;
-
-        if (autoPts) {
-            currentWarpedCanvas = warpDocument(canvas, autoPts);
-        }
-
-        updateCropPreview(currentWarpedCanvas || canvas);
+        currentWarpedCanvas = finalCanvas;
+        updateCropPreview(finalCanvas);
         
-        document.getElementById('crop-actions').classList.remove('hidden');
-        document.getElementById('crop-confirm').classList.add('hidden');
-        
-        // Update the Auto Crop button to act as a toggle if we already cropped
-        const autoBtn = document.querySelector('button[onclick="useAutoCrop()"]');
-        if (currentWarpedCanvas) {
+        // UI State
+        const autoBtn = document.querySelector('button[onclick="useAutoCrop()"], button[onclick="useOriginal()"]');
+        if (pts) {
             autoBtn.textContent = "Reset to Original";
             autoBtn.onclick = useOriginal;
-            document.getElementById('crop-label').textContent = "Auto Cropped";
+            document.getElementById('crop-label').textContent = "Auto Processed";
         } else {
             autoBtn.textContent = "Auto Crop";
             autoBtn.onclick = useAutoCrop;
-            document.getElementById('crop-label').textContent = "Quality Check";
+            document.getElementById('crop-label').textContent = "No doc detected";
         }
 
         showView('crop');
-        if (cropper) cropper.destroy();
-        cropper = null;
+    }
+
+    function warpDocument(src, pts) {
+        let mat = cv.imread(src);
+        const w1 = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        const w2 = Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
+        const maxWidth = Math.max(w1, w2);
+        const h1 = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y);
+        const h2 = Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y);
+        const maxHeight = Math.max(h1, h2);
+
+        let dst = new cv.Mat();
+        let sP = cv.matFromArray(4, 1, cv.CV_32FC2, [pts[0].x, pts[0].y, pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y]);
+        let dP = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, maxWidth, 0, maxWidth, maxHeight, 0, maxHeight]);
+        let M = cv.getPerspectiveTransform(sP, dP);
+        cv.warpPerspective(mat, dst, M, new cv.Size(maxWidth, maxHeight), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+        
+        const out = document.createElement('canvas');
+        cv.imshow(out, dst);
+        mat.delete(); dst.delete(); M.delete(); sP.delete(); dP.delete();
+        return out;
+    }
+
+    function refineDocument(canvas) {
+        // Refinement Pass: Remove black borders after warp
+        try {
+            let src = cv.imread(canvas);
+            let gray = new cv.Mat();
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+            cv.threshold(gray, gray, 50, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
+            
+            let contours = new cv.MatVector();
+            let hierarchy = new cv.Mat();
+            cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+            
+            let maxArea = 0, bestRect = null;
+            for(let i=0; i<contours.size(); i++) {
+                let rect = cv.boundingRect(contours.get(i));
+                let area = rect.width * rect.height;
+                if(area > maxArea) { maxArea = area; bestRect = rect; }
+            }
+
+            if(bestRect && maxArea > (canvas.width * canvas.height * 0.5)) {
+                // Add 2% safety padding
+                const padW = Math.round(bestRect.width * 0.02);
+                const padH = Math.round(bestRect.height * 0.02);
+                let x = Math.max(0, bestRect.x - padW);
+                let y = Math.max(0, bestRect.y - padH);
+                let w = Math.min(canvas.width - x, bestRect.width + padW*2);
+                let h = Math.min(canvas.height - y, bestRect.height + padH*2);
+
+                let roi = src.roi(new cv.Rect(x, y, w, h));
+                const out = document.createElement('canvas');
+                cv.imshow(out, roi);
+                roi.delete(); src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+                return out;
+            }
+            src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+        } catch(e) {}
+        return canvas;
     }
 
     function updateCropPreview(canvas) {
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
         const cropImg = document.getElementById('crop-image');
-        cropImg.src = dataUrl;
-        
-        // Keep a copy in crop-canvas for final submission
+        cropImg.src = canvas.toDataURL('image/jpeg', 0.9);
         const cc = document.getElementById('crop-canvas');
-        cc.width = canvas.width;
-        cc.height = canvas.height;
+        cc.width = canvas.width; cc.height = canvas.height;
         cc.getContext('2d').drawImage(canvas, 0, 0);
     }
 
     function useAutoCrop() {
         if (!currentAutoPts) {
-            const result = detectDocument(currentPreviewCanvas);
-            if (result.bestRect) currentAutoPts = result.bestRect.points;
+            const res = detectDocument(currentPreviewCanvas);
+            if (res.bestRect) currentAutoPts = res.bestRect.points;
         }
-
         if (currentAutoPts) {
-            currentWarpedCanvas = warpDocument(currentPreviewCanvas, currentAutoPts);
+            const warped = warpDocument(currentPreviewCanvas, currentAutoPts);
+            currentWarpedCanvas = refineDocument(warped);
             updateCropPreview(currentWarpedCanvas);
-            
-            const autoBtn = document.querySelector('button[onclick="useAutoCrop()"], button[onclick="useOriginal()"]');
-            autoBtn.textContent = "Reset to Original";
-            autoBtn.onclick = useOriginal;
-            document.getElementById('crop-label').textContent = "Auto Cropped";
-        } else {
-            alert("No document detected in this image.");
+            const btn = document.querySelector('button[onclick="useAutoCrop()"], button[onclick="useOriginal()"]');
+            btn.textContent = "Reset to Original"; btn.onclick = useOriginal;
         }
     }
 
     function useOriginal() {
         updateCropPreview(currentPreviewCanvas);
-        
-        const autoBtn = document.querySelector('button[onclick="useOriginal()"], button[onclick="useAutoCrop()"]');
-        autoBtn.textContent = "Auto Crop";
-        autoBtn.onclick = useAutoCrop;
-        document.getElementById('crop-label').textContent = "Original Image";
-        
-        if (cropper) {
-            cropper.destroy();
-            cropper = null;
-            document.getElementById('crop-actions').classList.remove('hidden');
-            document.getElementById('crop-confirm').classList.add('hidden');
-        }
+        currentWarpedCanvas = null;
+        const btn = document.querySelector('button[onclick="useOriginal()"], button[onclick="useAutoCrop()"]');
+        btn.textContent = "Auto Crop"; btn.onclick = useAutoCrop;
     }
 
     function enableManualCrop() {
-        // Reset to original before starting manual crop to ensure we have the full field
         if (currentWarpedCanvas) useOriginal();
-
-        document.getElementById('crop-label').textContent = "Adjust Corners";
+        const cropImg = document.getElementById('crop-image');
         document.getElementById('crop-actions').classList.add('hidden');
         document.getElementById('crop-confirm').classList.remove('hidden');
-
-        const cropImg = document.getElementById('crop-image');
-        cropper = new Cropper(cropImg, {
-            viewMode: 1, dragMode: 'move', autoCropArea: 0.98,
-            restore: false, guides: true, center: true, highlight: false,
-            cropBoxMovable: true, cropBoxResizable: true, toggleDragModeOnDblclick: false
-        });
+        cropper = new Cropper(cropImg, { viewMode: 1, dragMode: 'move', autoCropArea: 0.98, restore: false, guides: true, center: true, highlight: false, cropBoxMovable: true, cropBoxResizable: true });
     }
 
     function cancelCropAction() {
-        if (cropper) {
-            cropper.destroy();
-            cropper = null;
-        }
-        
-        // Return to the appropriate state
-        if (currentWarpedCanvas) {
-            updateCropPreview(currentWarpedCanvas);
-            document.getElementById('crop-label').textContent = "Auto Cropped";
-        } else {
-            updateCropPreview(currentPreviewCanvas);
-            document.getElementById('crop-label').textContent = "Quality Check";
-        }
-
+        if (cropper) { cropper.destroy(); cropper = null; }
         document.getElementById('crop-actions').classList.remove('hidden');
         document.getElementById('crop-confirm').classList.add('hidden');
     }
 
-    function warpDocument(sourceCanvas, pts) {
-        try {
-            let src = cv.imread(sourceCanvas);
-            
-            // Target dimensions
-            const w1 = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
-            const w2 = Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
-            const maxWidth = Math.max(w1, w2);
-
-            const h1 = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y);
-            const h2 = Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y);
-            const maxHeight = Math.max(h1, h2);
-
-            let dst = new cv.Mat();
-            let srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-                pts[0].x, pts[0].y, pts[1].x, pts[1].y,
-                pts[2].x, pts[2].y, pts[3].x, pts[3].y
-            ]);
-            let dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
-                0, 0, maxWidth, 0,
-                maxWidth, maxHeight, 0, maxHeight
-            ]);
-
-            let M = cv.getPerspectiveTransform(srcPts, dstPts);
-            let dsize = new cv.Size(maxWidth, maxHeight);
-            cv.warpPerspective(src, dst, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
-
-            const outCanvas = document.createElement('canvas');
-            cv.imshow(outCanvas, dst);
-
-            src.delete(); dst.delete(); M.delete(); srcPts.delete(); dstPts.delete();
-            return outCanvas;
-        } catch (e) {
-            console.error("Warp failed:", e);
-            return sourceCanvas;
-        }
-    }
-
-    function retakePhoto() {
-        if (cropper) cropper.destroy();
-        cropper = null;
-        showView('main');
-    }
-
     function confirmCrop() {
-        let finalCanvas;
-        if (cropper) {
-            finalCanvas = cropper.getCroppedCanvas({
-                maxWidth: 2048, maxHeight: 2048, fillColor: '#fff'
-            });
-        } else {
-            finalCanvas = document.getElementById('crop-canvas');
-        }
-
+        let finalCanvas = cropper ? cropper.getCroppedCanvas({ maxWidth: 2048, maxHeight: 2048 }) : document.getElementById('crop-canvas');
         finalCanvas.toBlob(blob => {
-            addToQueue(blob, `document_${Date.now()}.jpg`, 'image/jpeg');
+            addToQueue(blob, `scan_${Date.now()}.jpg`, 'image/jpeg');
             showView('main');
         }, 'image/jpeg', 0.9);
     }
 
-    // File Upload Fallback
-    function triggerFileInput() {
-        document.getElementById('file-input').click();
-    }
+    function retakePhoto() { showView('main'); }
 
-    function handleFileSelect(event) {
-        const files = Array.from(event.target.files);
-        if (!files.length) return;
-        
-        processFiles(files);
-        event.target.value = '';
-    }
-
+    // Upload Handler
     async function processFiles(files) {
         for (const file of files) {
-            if (file.type === 'application/pdf') {
-                addToQueue(file, file.name, file.type);
-            } else {
-                const bitmap = await createImageBitmap(file);
-                const canvas = document.createElement('canvas');
-                canvas.width = bitmap.width;
-                canvas.height = bitmap.height;
-                canvas.getContext('2d').drawImage(bitmap, 0, 0);
-                
-                // For uploads, we try detection on the canvas
-                const result = detectDocument(canvas);
-                showPreview(canvas, result.bestRect ? result.bestRect.points : null);
-                return; // One at a time for cropping flow
+            if (file.type === 'application/pdf') { addToQueue(file, file.name, file.type); }
+            else {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width; canvas.height = img.height;
+                    canvas.getContext('2d').drawImage(img, 0, 0);
+                    const res = detectDocument(canvas);
+                    processFinalImage(canvas, res.bestRect ? res.bestRect.points : null);
+                };
+                img.src = URL.createObjectURL(file);
+                return;
             }
         }
     }
 
+    function triggerFileInput() { document.getElementById('file-input').click(); }
+    function handleFileSelect(e) { const files = Array.from(e.target.files); if (files.length) processFiles(files); e.target.value = ''; }
+
     function submitAll() {
-        if (queue.length === 0) return;
-
+        if (!queue.length) return;
         showView('progress');
-        const formData = new FormData();
-        queue.forEach((item, index) => {
-            formData.append('files[]', item.blob, item.name || `file_${index}.jpg`);
-        });
+        const fd = new FormData();
+        queue.forEach((item, i) => fd.append('files[]', item.blob, item.name || `doc_${i}.jpg`));
+        fd.append('print_mode', document.querySelector('input[name="print-mode"]:checked').value);
+        fd.append('copies', document.getElementById('copies-select').value);
 
-        formData.append('print_mode', document.querySelector('input[name="print-mode"]:checked').value);
-        formData.append('copies', document.getElementById('copies-select').value);
-
-        fetch('/upload', { method: 'POST', body: formData })
-        .then(res => res.json())
-        .then(data => {
+        fetch('/upload', { method: 'POST', body: fd })
+        .then(r => r.json()).then(data => {
             document.getElementById('display-queue-id').textContent = data.queue_id;
             showView('success');
-        })
-        .catch(err => {
-            alert("Error: " + err.message);
-            showView('main');
-        });
+            queue = []; updateQueueUI();
+        }).catch(err => { alert("Error: " + err.message); showView('main'); });
     }
-
 </script>
 
 </body>
