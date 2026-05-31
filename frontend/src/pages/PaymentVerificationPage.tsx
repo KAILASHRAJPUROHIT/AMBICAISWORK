@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 
 interface Reconciliation {
-  invoice_no: str;
-  status: str;
-  reason?: str;
-  timestamp: str;
+  invoice_no: string;
+  status: string;
+  reason?: string;
+  timestamp: string;
   details: any;
 }
 

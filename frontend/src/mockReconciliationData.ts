@@ -1,12 +1,11 @@
 export interface ReconciliationItem {
   id: string;
-  date: string;
+  billNo: string; // Changed from date to billNo for column mapping
   customer: string;
-  billNo: string;
   invoiceAmount: number;
   bankAmount: number;
   difference: number;
-  source: string;
+  paymentMode: string; // New field, replaces 'source'
   matchConfidence: string;
   status: 'Verified' | 'Pending' | 'Delivered Before Payment' | 'Risk / Mismatch' | 'Cheque Pending' | 'Archived';
 }
@@ -14,37 +13,34 @@ export interface ReconciliationItem {
 export const mockReconciliationData: ReconciliationItem[] = [
   {
     id: 'rec-001',
-    date: '2023-01-15',
-    customer: 'Alpha Corp',
     billNo: 'INV-2023-001',
+    customer: 'Customer A', // Generic name
     invoiceAmount: 12500.00,
     bankAmount: 12500.00,
     difference: 0.00,
-    source: 'Prime ERP',
+    paymentMode: 'Bank Transfer',
     matchConfidence: 'High',
     status: 'Verified',
   },
   {
     id: 'rec-002',
-    date: '2023-01-16',
-    customer: 'Beta Ltd',
     billNo: 'INV-2023-002',
+    customer: 'Customer B', // Generic name
     invoiceAmount: 8000.00,
     bankAmount: 7500.00,
     difference: 500.00,
-    source: 'Bank Statement',
+    paymentMode: 'Cash',
     matchConfidence: 'Medium',
     status: 'Risk / Mismatch',
   },
   {
     id: 'rec-003',
-    date: '2023-01-17',
-    customer: 'Gamma Inc',
     billNo: 'INV-2023-003',
+    customer: 'Customer C', // Generic name
     invoiceAmount: 5000.00,
     bankAmount: 0.00,
     difference: 5000.00,
-    source: 'Email',
+    paymentMode: 'Cheque',
     matchConfidence: 'Low',
     status: 'Pending',
   },

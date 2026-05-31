@@ -1,20 +1,15 @@
+import React from 'react';
+
 interface StatCardProps {
   label: string;
   value: string | number;
-  change?: string;
-  trend?: 'up' | 'down' | 'neutral';
 }
 
-const StatCard = ({ label, value, change, trend }: StatCardProps) => {
+const StatCard: React.FC<StatCardProps> = ({ label, value }) => {
   return (
-    <div className="stat-card">
-      <div className="stat-label">{label}</div>
-      <div className="stat-value">{value}</div>
-      {change && (
-        <div className={`stat-change ${trend}`}>
-          {change} {trend === 'up' ? '↑' : trend === 'down' ? '↓' : ''}
-        </div>
-      )}
+    <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-start space-y-4 hover:shadow-md transition-shadow duration-300">
+      <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">{label}</div>
+      <div className="text-4xl font-black text-gray-900">{value}</div>
     </div>
   );
 };

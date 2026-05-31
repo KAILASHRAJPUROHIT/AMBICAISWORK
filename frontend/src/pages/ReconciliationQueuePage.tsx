@@ -17,17 +17,23 @@ const ReconciliationQueuePage = () => {
   };
 
   return (
-    <div className="reconciliation-queue-page">
-      <h1>Reconciliation Queue</h1>
-      <p>Manage and review all reconciliation items.</p>
+    <div className="p-8 bg-gray-50 min-h-screen">
+      <header className="mb-10">
+        <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Reconciliation Queue</h1>
+        <p className="mt-2 text-lg text-gray-600">Manage and review all pending and verified reconciliation items.</p>
+      </header>
       
-      {loading && <div className="loading-indicator">Loading reconciliation data...</div>}
+      {loading && <div className="p-12 text-center text-blue-600 font-bold">Loading reconciliation data...</div>}
       {!loading && mockReconciliationData.length === 0 && (
-        <div className="empty-state">No reconciliation items to display.</div>
+        <div className="p-12 text-center bg-white rounded-2xl shadow-sm border border-gray-100 text-gray-500">
+          No reconciliation items to display.
+        </div>
       )}
 
       {!loading && mockReconciliationData.length > 0 && (
-        <ReconciliationTable items={mockReconciliationData} onRowClick={handleRowClick} />
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <ReconciliationTable items={mockReconciliationData} onRowClick={handleRowClick} />
+        </div>
       )}
 
       {selectedItem && (
