@@ -34,10 +34,59 @@ async def get_latest_manual_import():
     
     try:
         with open(MANUAL_REPORT_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            content = f.read()
+            # Fix NaN values in JSON (common from pandas export)
+            content = content.replace("NaN", "null")
+            data = json.loads(content)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error reading manual import file: {e}")
+
+@app.get("/api/prime/dashboard/stats")
+async def get_dashboard_stats():
+    if not os.path.exists(MANUAL_REPORT_PATH):
+        # Fallback to defaults if no report
+        return {
+            "totalBillsToday": 0,
+            "verified": 0,
+            "pendingReview": 0,
+            "totalCollection": 0.0,
+            "cashCollection": 0.0,
+            "bankCollection": 0.0,
+            "cardCollection": 0.0,
+            "advanceCollection": 0.0,
+            "matchAccuracy": 0.0
+        }
+
+    try:
+        with open(MANUAL_REPORT_PATH, "r", encoding="utf-8") as f:
+            content = f.read().replace("NaN", "null")
+            data = json.loads(content)
+        
+        records = data.get("records", [])
+        total_bills = len([r for r in records if r.get("invoice_no")])
+        pending = len([r for r in records if r.get("validation_status") == "NEEDS_REVIEW"])
+        verified = len([r for r in records if r.get("validation_status") == "GREEN"])
+        
+        total_sale = sum(r.get("sale_amount", 0.0) for r in records)
+        cash = sum(r.get("cash_amount", 0.0) for r in records)
+        bank = sum(r.get("bank_amount", 0.0) for r in records)
+        card = sum(r.get("card_amount", 0.0) for r in records)
+        adv = sum(r.get("advance_amount", 0.0) for r in records)
+
+        return {
+            "totalBillsToday": total_bills,
+            "verified": verified,
+            "pendingReview": pending,
+            "totalCollection": total_sale,
+            "cashCollection": cash,
+            "bankCollection": bank,
+            "cardCollection": card,
+            "advanceCollection": adv,
+            "matchAccuracy": round((verified / total_bills * 100), 2) if total_bills > 0 else 0.0
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Dashboard stats error: {e}")
 
 @app.get("/api/prime/extractions/latest")
 async def get_latest_extraction():
