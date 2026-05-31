@@ -27,7 +27,7 @@ const AuditLogsPage: React.FC = () => {
           Zero audit events recorded in current session.
         </div>
       ) : (
-        <AuditLogsTable logs={logs} loading={loading} error={error} />
+        <AuditLogsTable logs={logs} loading={loading} />
       )}
     </div>
   );
