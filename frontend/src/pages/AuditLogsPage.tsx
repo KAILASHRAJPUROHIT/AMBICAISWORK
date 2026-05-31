@@ -5,7 +5,6 @@ import '../Reconciliation.css';
 const AuditLogsPage: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // In a real run, this would fetch from /api/audit-logs

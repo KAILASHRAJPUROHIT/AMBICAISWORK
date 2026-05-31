@@ -2,11 +2,8 @@ import React, { useState, useEffect } from 'react';
 import '../Reconciliation.css'; 
 
 const PrimeRobotMonitoringPage: React.FC = () => {
-  const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     // Prime Robot automation is currently disabled in favor of manual reports.
-    setLoading(false);
   }, []);
 
   return (
