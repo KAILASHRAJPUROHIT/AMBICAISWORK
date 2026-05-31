@@ -33,6 +33,7 @@ interface ImportedRecord {
   validation_status: string;
   unresolved_fields: string[];
   raw_rows: RawRow[];
+  source_report: string;
 }
 
 interface ExtractionData {

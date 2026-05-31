@@ -48,7 +48,6 @@ class PrimeReportImporter:
         if "CUST NAME" in cols and "MOB NO" in cols and "PURC AMT" in cols:
             return "TOTAL_CUSTOMER_REPORT"
         
-        # Also check first few rows for keywords if columns are generic
         sample_text = ""
         if not df.empty:
             sample_text = " ".join(df.iloc[:5].astype(str).values.flatten()).upper()
@@ -67,30 +66,23 @@ class PrimeReportImporter:
         try:
             if isinstance(val, datetime):
                 return val.strftime("%d/%m/%Y")
-            # Try to parse strings like '2026-05-31 00:00:00'
             return pd.to_datetime(val).strftime("%d/%m/%Y")
         except: return str(val)
 
     def try_parse_as_text(self, path: str) -> Optional[pd.DataFrame]:
-        """
-        Attempts to read a file as text and parse it.
-        Supports: CSV, TSV (Tab), and multiple-space delimited.
-        """
         try:
             with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                 lines = [f.readline() for _ in range(100)]
             
             content = "".join(lines)
             
-            # Detect delimiter
             if '\t' in content:
                 delim = '\t'
             elif ',' in content:
                 delim = ','
             else:
-                delim = r'\s{2,}' # Regex for 2 or more spaces
+                delim = r'\s{2,}'
             
-            # Find the header row
             header_row_idx = -1
             keywords = ["VCH NO", "BOOK NAME", "CUST NAME", "SALE AMT", "MOB NO"]
             for i, line in enumerate(lines):
@@ -101,7 +93,6 @@ class PrimeReportImporter:
             if header_row_idx == -1:
                 return None
 
-            # Read the file
             df = pd.read_csv(path, sep=delim, skiprows=header_row_idx, engine='python', on_bad_lines='skip')
             return df
         except Exception as e:
@@ -117,38 +108,21 @@ class PrimeReportImporter:
             print("NO_MANUAL_REPORT_FILES_FOUND")
             return
 
+        # Priority: Process Payment Mode Report FIRST to establish reconciliation base
+        file_data = []
         for file in files:
             path = os.path.join(INPUT_DIR, file)
-            self.log_debug(f"\nFILE: {file}")
-            self.log_debug(f"EXTENSION: {os.path.splitext(file)[1]}")
-            
-            # Log first 20 lines for diagnosis
-            try:
-                with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-                    first_20 = [f.readline().strip() for _ in range(20)]
-                self.log_debug("FIRST 20 LINES:")
-                for line in first_20:
-                    self.log_debug(f"  {line}")
-            except Exception as e:
-                self.log_debug(f"Could not read lines for debug: {e}")
-
             df = None
-            # Attempt Excel first for xls/xlsx
             if file.endswith(('.xls', '.xlsx')):
                 try:
                     df = pd.read_excel(path)
-                    self.log_debug("Parsed successfully with Excel engine.")
-                except Exception as e:
-                    self.log_debug(f"Excel engine failed: {e}. Attempting text fallback...")
+                except: pass
             
-            # Fallback to text parser if excel failed or it's a csv/txt
             if df is None:
                 df = self.try_parse_as_text(path)
-                if df is not None:
-                    self.log_debug("Parsed successfully with Text fallback.")
 
             if df is not None:
-                # Find real headers if first row was garbage
+                # Find real headers
                 keywords = ["VCH NO", "BOOK NAME", "CUST NAME", "SALE AMT", "MOB NO", "DATE"]
                 header_row = -1
                 for i, row in df.iterrows():
@@ -162,37 +136,24 @@ class PrimeReportImporter:
                     df = df.iloc[header_row + 1:].copy()
                     df.columns = new_cols
                 
-                # Cleanup column names
                 df.columns = [str(c).strip() for c in df.columns]
-                
-                self.log_debug(f"DETECTED HEADERS: {list(df.columns)}")
-                report_type = self.detect_report_type(df)
-                self.log_debug(f"REPORT TYPE: {report_type}")
-                self.log_debug(f"ROW COUNT: {len(df)}")
-                
-                if report_type == "GST_REGISTER":
-                    self._process_gst_register(df, file)
-                elif report_type == "PAYMENT_MODE_REPORT":
-                    self._process_payment_mode(df, file)
-                elif report_type == "TOTAL_CUSTOMER_REPORT":
-                    self._process_total_customer(df, file)
-                else:
-                    logger.warning(f"Unknown report format in {file}")
-                    self.failures.append({
-                        "filename": file,
-                        "reason": "UNKNOWN_REPORT_TYPE",
-                        "headers": list(df.columns),
-                        "sample_rows": df.iloc[:5].to_dict(orient='records')
-                    })
-            else:
-                self.log_debug("COULD NOT PARSE FILE AS EXCEL OR TEXT.")
-                self.failures.append({
-                    "filename": file,
-                    "reason": "PARSE_ERROR",
-                    "sample_lines": first_20 if 'first_20' in locals() else []
-                })
+                rtype = self.detect_report_type(df)
+                file_data.append((file, df, rtype))
 
-        # Finalize and Save
+        # Sort so Payment Mode is processed first
+        file_data.sort(key=lambda x: 0 if x[2] == "PAYMENT_MODE_REPORT" else 1)
+
+        for file, df, rtype in file_data:
+            self.log_debug(f"Processing {file} as {rtype}")
+            if rtype == "GST_REGISTER":
+                self._process_gst_register(df, file)
+            elif rtype == "PAYMENT_MODE_REPORT":
+                self._process_payment_mode(df, file)
+            elif rtype == "TOTAL_CUSTOMER_REPORT":
+                self._process_total_customer(df, file)
+            else:
+                self.failures.append({"filename": file, "reason": "UNKNOWN_REPORT_TYPE"})
+
         self._finalize_and_save()
 
     def _get_join_key(self, row: pd.Series) -> str:
@@ -200,13 +161,12 @@ class PrimeReportImporter:
         if vch and vch != 'nan' and vch != '':
             return vch
         
-        # Fallback key: Date + Name + Amount
         name = str(row.get('Cust Name', row.get('A/c Name', ''))).strip()
         amt = str(row.get('Sale Amt', ''))
         date = self.normalize_date(row.get('Date'))
         return f"{date}_{name}_{amt}"
 
-    def _init_record(self, key):
+    def _init_record(self, key, source_report):
         if key not in self.raw_records:
             self.raw_records[key] = {
                 "invoice_no": None,
@@ -231,15 +191,18 @@ class PrimeReportImporter:
                 "source_files": [],
                 "validation_status": "PENDING",
                 "unresolved_fields": [],
-                "raw_rows": []
+                "raw_rows": [],
+                "source_report": source_report # PRIMARY source
             }
 
     def _process_gst_register(self, df, filename):
         for _, row in df.iterrows():
             key = self._get_join_key(row)
-            self._init_record(key)
-            rec = self.raw_records[key]
+            # GST Register ONLY enriches existing or creates its own (non-recon)
+            if key not in self.raw_records:
+                self._init_record(key, "GST_REGISTER")
             
+            rec = self.raw_records[key]
             if not rec["invoice_no"]: rec["invoice_no"] = str(row.get('Vch No', ''))
             rec["invoice_date"] = self.normalize_date(row.get('Date'))
             rec["customer_name"] = str(row.get('A/c Name'))
@@ -250,12 +213,15 @@ class PrimeReportImporter:
     def _process_payment_mode(self, df, filename):
         for _, row in df.iterrows():
             key = self._get_join_key(row)
-            self._init_record(key)
-            rec = self.raw_records[key]
+            # Payment Mode is the MASTER for reconciliation
+            if key not in self.raw_records:
+                self._init_record(key, "PAYMENT_MODE")
+            else:
+                self.raw_records[key]["source_report"] = "PAYMENT_MODE"
             
+            rec = self.raw_records[key]
             if not rec["invoice_no"]: rec["invoice_no"] = str(row.get('Vch No', ''))
             
-            # Clean numeric values
             def to_float(val):
                 if pd.isna(val) or val == '': return 0.0
                 try: return float(str(val).replace(",", ""))
@@ -270,7 +236,6 @@ class PrimeReportImporter:
             rec["bhisi_amount"] = to_float(row.get('Bhisi Amt', 0))
             rec["other_amount"] = to_float(row.get('Other Amt', 0))
             
-            # Map to payment rows
             modes = {
                 "CASH": rec["cash_amount"],
                 "BANK_UNCLASSIFIED": rec["bank_amount"],
@@ -280,7 +245,6 @@ class PrimeReportImporter:
                 "BHISI": rec["bhisi_amount"],
                 "OTHER": rec["other_amount"]
             }
-            # Avoid duplicate rows if processed multiple times
             rec["payment_rows"] = []
             for mode, amt in modes.items():
                 if amt > 0:
@@ -291,21 +255,21 @@ class PrimeReportImporter:
 
     def _process_total_customer(self, df, filename):
         for _, row in df.iterrows():
-            # Fallback key
+            # Match by Name + Amount
             name = str(row.get('Cust Name')).strip()
             amt = str(row.get('Sale Amt', ''))
             key_base = f"{name}_{amt}"
             
-            # Try to find matching record by partial key if Vch No was missing
             match_key = None
-            for existing_key in self.raw_records.keys():
-                if key_base in existing_key:
-                    match_key = existing_key
+            for k in self.raw_records.keys():
+                if key_base in k:
+                    match_key = k
                     break
             
+            # Customer Report NEVER creates recon entries
             if not match_key:
-                match_key = key_base
-                self._init_record(match_key)
+                match_key = f"CUST_{key_base}"
+                self._init_record(match_key, "CUSTOMER_MASTER")
             
             rec = self.raw_records[match_key]
             rec["customer_name"] = name
@@ -320,7 +284,6 @@ class PrimeReportImporter:
             purc_amt = to_float(row.get('Purc Amt', 0))
             if purc_amt > 0:
                 rec["customer_purchase_amount"] = purc_amt
-                # Check if already added
                 if not any(p["payment_mode"] == "OLD_GOLD_EXCHANGE" for p in rec["payment_rows"]):
                     rec["payment_rows"].append({"payment_mode": "OLD_GOLD_EXCHANGE", "amount": purc_amt})
             
@@ -330,13 +293,14 @@ class PrimeReportImporter:
     def _finalize_and_save(self):
         final_list = []
         for key, rec in self.raw_records.items():
+            # Enforce removal of blank/invalid vouchers
+            if not rec["invoice_no"] or rec["invoice_no"] in ['nan', '---', '']:
+                continue
+
             pay_sum = sum(p["amount"] for p in rec["payment_rows"])
             if rec["sale_amount"] > 0 and abs(pay_sum - rec["sale_amount"]) > 0.01:
                 rec["validation_status"] = "NEEDS_REVIEW"
                 rec["unresolved_fields"].append("PAYMENT_TOTAL_MISMATCH")
-            elif not rec["invoice_no"] or rec["invoice_no"] == 'nan':
-                rec["validation_status"] = "NEEDS_REVIEW"
-                rec["unresolved_fields"].append("MISSING_INVOICE_NO")
             else:
                 rec["validation_status"] = "GREEN"
             
@@ -349,14 +313,7 @@ class PrimeReportImporter:
                 "records": final_list
             }, f, indent=4)
         
-        with open(FAILURES_OUT, "w", encoding="utf-8") as f:
-            json.dump({
-                "timestamp": datetime.now().isoformat(),
-                "count": len(self.failures),
-                "failures": self.failures
-            }, f, indent=4)
-        
-        print(f"Import complete. Processed {len(final_list)} records. Failures: {len(self.failures)}")
+        print(f"Import complete. Processed {len(final_list)} valid records.")
 
 if __name__ == "__main__":
     importer = PrimeReportImporter()

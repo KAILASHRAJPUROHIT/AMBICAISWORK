@@ -55,7 +55,6 @@ async def get_latest_manual_import():
 @app.get("/api/prime/dashboard/stats")
 async def get_dashboard_stats():
     if not os.path.exists(MANUAL_REPORT_PATH):
-        # Fallback to defaults if no report
         return {
             "totalBillsToday": 0,
             "verified": 0,
@@ -73,8 +72,11 @@ async def get_dashboard_stats():
             content = f.read().replace("NaN", "null")
             data = json.loads(content)
         
-        records = data.get("records", [])
-        total_bills = len([r for r in records if r.get("invoice_no")])
+        # CRITICAL FIX: Only use records from PAYMENT_MODE report for reconciliation metrics
+        all_records = data.get("records", [])
+        records = [r for r in all_records if r.get("source_report") == "PAYMENT_MODE"]
+        
+        total_bills = len(records)
         pending = len([r for r in records if r.get("validation_status") == "NEEDS_REVIEW"])
         verified = len([r for r in records if r.get("validation_status") == "GREEN"])
         
@@ -120,7 +122,9 @@ async def get_reconciliations():
             content = f.read().replace("NaN", "null")
             data = json.loads(content)
         
-        records = data.get("records", [])
+        # CRITICAL FIX: Only return PAYMENT_MODE records for reconciliation queue
+        records = [r for r in data.get("records", []) if r.get("source_report") == "PAYMENT_MODE"]
+        
         return [
             {
                 "invoice_no": r.get("invoice_no") or "---",
