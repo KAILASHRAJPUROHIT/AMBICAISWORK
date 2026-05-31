@@ -3,7 +3,8 @@ import json
 import logging
 import sys
 import struct
-from datetime import datetime
+import psutil
+from datetime import datetime, timedelta
 from pywinauto import Desktop
 from prime_invoice_extractor import extract_invoice_header
 from prime_payment_detail_extractor import extract_payment_details
@@ -29,102 +30,99 @@ def validate_runtime():
         sys.exit(1)
 
 def run_daily_extract():
-    logger.info("Starting Daily Extract Orchestration (32-bit Optimized)")
+    logger.info("Starting Bulk Daily Extract (Yesterday's Invoices)")
     validate_runtime()
-    desktop = Desktop(backend="win32")
-    prime_window = None
-    for win in desktop.windows():
-        if "SHREE ARADHANA JEWELLERS" in win.window_text():
-            prime_window = win
-            break
     
-    if not prime_window:
-        logger.error("Prime window not found.")
+    desktop = Desktop(backend="win32")
+    
+    # Get all windows for FA.exe
+    process_pids = [p.info['pid'] for p in psutil.process_iter(['pid', 'name']) if p.info['name'] and p.info['name'].lower() == "fa.exe"]
+    if not process_pids:
+        logger.error("FA.exe process not found.")
+        return
+    
+    # 1. Identify active Sales Bill form or GST Register
+    register_form = None
+    for win in desktop.windows():
+        if win.process_id() in process_pids:
+            title = win.window_text()
+            if "Register" in title:
+                register_form = win
+                break
+            # Also check descendants if the title isn't on the top window
+            for child in win.descendants(class_name="ThunderRT6FormDC"):
+                if "Register" in child.window_text():
+                    register_form = child
+                    break
+            if register_form: break
+    
+    if not register_form:
+        logger.error("GST Register form not found.")
         return
 
-    # Check for GST Register
-    register_form = None
-    for child in prime_window.descendants(class_name="ThunderRT6FormDC"):
-        if "Register" in child.window_text():
-            register_form = child
-            break
+    logger.info(f"Targeting Form: {register_form.window_text()} [Handle: {register_form.handle}]")
 
     extracted_invoices = []
+    failed_invoices = []
+    
+    # Yesterday filter
+    yesterday_str = (datetime.now() - timedelta(days=1)).strftime("%d/%m/%Y")
+    logger.info(f"Filtering for date: {yesterday_str}")
 
     if register_form:
-        logger.info(f"GST Register detected: {register_form.window_text()}")
+        logger.info(f"GST Register detected. Probing grid...")
         tbs = register_form.descendants(class_name="ThunderRT6TextBox")
         raw_values = [tb.window_text().strip() for tb in tbs]
         
-        # Grid heuristic: iterate through textboxes in strides
-        # Based on log analysis, stride is approximately 40-50 per row
+        # Grid stride heuristic
         stride = 50 
         for i in range(0, len(raw_values), stride):
             row = raw_values[i:i+stride]
-            if len(row) > 25 and "/2026/" in str(row):
-                # Attempt to map row to invoice structure
-                inv = {
-                    "invoice_no": row[25] if len(row) > 25 else "UNKNOWN",
-                    "invoice_date": row[10] if len(row) > 10 else "UNKNOWN",
-                    "customer_code": row[6] if len(row) > 6 else "UNKNOWN",
-                    "invoice_total": 0.0,
-                    "payment_rows": [],
-                    "payment_status": "YELLOW", # Needs verification
-                    "reason": "GRID_EXTRACT"
-                }
-                try:
-                    inv["invoice_total"] = float(row[29].replace(",", ""))
-                except (ValueError, IndexError):
-                    pass
-                extracted_invoices.append(inv)
-    else:
-        # 1. Extract Single Invoice Header
-        invoice_data = extract_invoice_header()
-        if invoice_data:
-            # 2. Extract Payment Details
-            payment_rows = extract_payment_details()
-            if payment_rows is None:
-                payment_rows = []
+            if len(row) > 25:
+                row_date = row[10]
+                if row_date == yesterday_str:
+                    inv = {
+                        "invoice_no": row[25],
+                        "invoice_date": row_date,
+                        "customer_name": row[4], # A/c Name
+                        "invoice_total": 0.0,
+                        "payment_status": "NEEDS_REVIEW",
+                        "extraction_source": "GRID"
+                    }
+                    try:
+                        inv["invoice_total"] = float(row[29].replace(",", ""))
+                        extracted_invoices.append(inv)
+                    except Exception as e:
+                        logger.error(f"Row extraction failure: {e}")
+                        failed_invoices.append({"row": row, "error": str(e)})
 
-            # 3. Consolidation & Validation
-            total_payments = sum(p["amount"] for p in payment_rows)
-            invoice_total = invoice_data.get("invoice_total", 0.0)
-            
-            payment_status = "GREEN"
-            reason = None
-            
-            if abs(invoice_total - total_payments) > 0.01:
-                payment_status = "RED"
-                reason = "PAYMENT_TOTAL_MISMATCH"
-                logger.warning(f"Validation Mismatch: Invoice={invoice_total}, Payments={total_payments}")
-
-            extracted_invoices.append({
-                "invoice": invoice_data,
-                "payment_rows": payment_rows,
-                "validation": {
-                    "payment_status": payment_status,
-                    "reason": reason,
-                    "total_payments": total_payments,
-                    "invoice_total": invoice_total
-                }
-            })
-
-    # 4. Save
-    output_data = {
+    # Metrics
+    metrics = {
         "timestamp": datetime.now().isoformat(),
-        "extracted_count": len(extracted_invoices),
+        "date_filtered": yesterday_str,
+        "visible_rows": len(extracted_invoices) + len(failed_invoices),
+        "extracted": len(extracted_invoices),
+        "failed": len(failed_invoices)
+    }
+
+    # Save
+    output_data = {
+        "metrics": metrics,
         "invoices": extracted_invoices
     }
 
     with open(JSON_OUT, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=4)
+        
+    with open(os.path.join(EXPORT_BASE, "JSON", "daily_invoice_extract_failed.json"), "w", encoding="utf-8") as f:
+        json.dump(failed_invoices, f, indent=4)
     
-    logger.info(f"Daily extract complete. Extracted {len(extracted_invoices)} invoices.")
+    logger.info(f"Bulk extract complete. {metrics['extracted']} successful.")
     return output_data
 
 if __name__ == "__main__":
     result = run_daily_extract()
     if result:
-        print(f"Success: Daily extract complete. Extracted {result['extracted_count']} invoices.")
+        print(f"Success: Daily extract complete. Extracted {result['metrics']['extracted']} invoices.")
     else:
         print("Daily extract failed.")

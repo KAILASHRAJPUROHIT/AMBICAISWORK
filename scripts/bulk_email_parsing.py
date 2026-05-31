@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from datetime import datetime
-from backend.email_ingestion.icici_template_parser import ICICITemplateParser
+from backend.email_ingestion.universal_template_parser import UniversalTemplateParser
 
 # Configuration
 IMPORT_BASE = r"C:\Aradhana\BankImports"
@@ -12,11 +12,12 @@ FAILURES_OUT = os.path.join(IMPORT_BASE, "bank_email_parse_failures.json")
 NON_FIN_OUT = os.path.join(IMPORT_BASE, "bank_email_non_financial.json")
 LOG_OUT = os.path.join(IMPORT_BASE, "bank_email_parsing.log")
 
-logging.basicConfig(filename=LOG_OUT, level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+# Setup Logger
 logger = logging.getLogger(__name__)
+logging.basicConfig(filename=LOG_OUT, level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
 def parse_all_emails():
-    logger.info("Starting Bank Email Parsing Phase")
+    logger.info("Starting Universal Bank Email Parsing Phase")
     
     if not os.path.exists(RAW_EMAILS):
         print("Raw emails file not found.")
@@ -26,7 +27,7 @@ def parse_all_emails():
         raw_data = json.load(f)
     
     emails = raw_data.get("emails", [])
-    parser = ICICITemplateParser()
+    parser = UniversalTemplateParser()
     
     parsed_payments = []
     non_financial = []
@@ -34,20 +35,15 @@ def parse_all_emails():
     
     for entry in emails:
         try:
-            # For now, we use ICICITemplateParser as the base since we have it. 
-            # In a full system, we'd have a factory for different banks.
-            res = parser.parse(entry["subject"], entry["raw_body"])
+            res = parser.parse(entry["subject"], entry["raw_body"], label=entry.get("label", "UNKNOWN"))
             res["message_id"] = entry["message_id"]
             res["received_at"] = entry["received_at"]
             res["label"] = entry["label"]
             
             # Classification
-            if res.get("is_transaction"):
-                if res.get("status") == "GREEN":
-                    parsed_payments.append(res)
-                else:
-                    failures.append(res) # Needs review
-            elif res.get("status") in ["NON_FINANCIAL_ALERT", "SECURITY_ALERT"]:
+            if res.get("status") == "PARSED":
+                parsed_payments.append(res)
+            elif res.get("status") == "NON_FINANCIAL":
                 non_financial.append(res)
             else:
                 failures.append(res)
