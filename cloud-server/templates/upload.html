@@ -204,7 +204,33 @@
         #detection-overlay {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 100;
             pointer-events: none;
+        }
+
+        .debug-overlay {
+            position: absolute;
+            top: 60px; left: 10px;
+            background: rgba(0,0,0,0.5);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 5px;
+            border-radius: 4px;
+            z-index: 110;
+            pointer-events: none;
+        }
+
+        .test-btn {
+            position: absolute;
+            bottom: 140px; right: 10px;
+            background: rgba(212, 175, 55, 0.7);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 120;
         }
 
         .camera-guide {
@@ -425,11 +451,12 @@
         </button>
     </div>
 
-    <!-- CAMERA VIEW -->
     <div id="view-camera" class="camera-wrapper hidden">
         <div class="camera-container">
             <video id="camera-video" autoplay playsinline muted></video>
             <canvas id="detection-overlay"></canvas>
+            <div id="camera-debug-overlay" class="debug-overlay"></div>
+            <button class="test-btn" onclick="testOverlay()">Test Overlay</button>
             <div id="camera-guide" class="camera-guide">Align document within frame</div>
         </div>
         <div class="camera-controls">
@@ -576,6 +603,25 @@
     }
 
     // Camera Logic
+    function logDebug(msg) {
+        const overlay = document.getElementById('camera-debug-overlay');
+        if (overlay) {
+            const lines = overlay.innerHTML.split('<br>').slice(-5);
+            lines.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+            overlay.innerHTML = lines.join('<br>');
+        }
+        console.log(msg);
+    }
+
+    function testOverlay() {
+        const canvas = document.getElementById('detection-overlay');
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = 'gold';
+        ctx.lineWidth = 10;
+        ctx.strokeRect(canvas.width * 0.1, canvas.height * 0.1, canvas.width * 0.8, canvas.height * 0.8);
+        logDebug("Test rectangle drawn");
+    }
+
     async function startCamera() {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             alert("Camera not supported on this browser.");
@@ -583,17 +629,24 @@
         }
 
         try {
+            logDebug("Requesting camera...");
             cameraStream = await navigator.mediaDevices.getUserMedia({
                 video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
                 audio: false
             });
             const video = document.getElementById('camera-video');
+            const canvas = document.getElementById('detection-overlay');
+            
             video.srcObject = cameraStream;
             video.onloadedmetadata = () => {
+                logDebug(`Camera started: ${video.videoWidth}x${video.videoHeight}`);
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
                 showView('camera');
                 startDetectionLoop();
             };
         } catch (err) {
+            logDebug("Camera error: " + err.message);
             alert("Unable to access camera: " + err.message);
         }
     }
@@ -612,6 +665,7 @@
         stableFrameCount = 0;
         bestPoints = null;
         autoCaptureActive = true;
+        logDebug("Detection loop requested");
         requestAnimationFrame(detectionLoop);
     }
 
@@ -622,33 +676,38 @@
         const canvas = document.getElementById('detection-overlay');
         const guide = document.getElementById('camera-guide');
 
-        if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+        // Check dependencies
+        const cvReady = typeof cv !== 'undefined' && cv.Mat;
+        const videoReady = video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0;
+
+        if (!videoReady) {
             requestAnimationFrame(detectionLoop);
             return;
         }
 
-        // Limit to ~8 FPS for performance
-        if (timestamp - lastDetectionTime < 125) {
+        if (!cvReady) {
+            guide.textContent = "Smart detection loading...";
+            logDebug("OpenCV not ready yet");
             requestAnimationFrame(detectionLoop);
             return;
         }
+
+        // Limit to ~150ms for performance and requirement
+        if (timestamp - lastDetectionTime < 150) {
+            requestAnimationFrame(detectionLoop);
+            return;
+        }
+        
+        if (lastDetectionTime === 0) logDebug("Detection loop started");
         lastDetectionTime = timestamp;
 
-        // Sync overlay size
-        canvas.width = video.clientWidth;
-        canvas.height = video.clientHeight;
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        if (!cvLoaded) {
-            guide.textContent = "Loading Smart Engine...";
-            requestAnimationFrame(detectionLoop);
-            return;
-        }
 
         const points = detectDocument(video);
         
         if (points) {
+            logDebug("Rectangle detected");
             const isStable = checkStability(points);
             const outlineColor = isStable ? '#27AE60' : '#D4AF37';
             
@@ -656,8 +715,12 @@
             
             if (isStable) {
                 stableFrameCount++;
-                guide.textContent = "Hold steady... " + ".".repeat(stableFrameCount);
-                if (stableFrameCount > 10 && autoCaptureActive) { // ~1.25s of stability
+                const stableMs = stableFrameCount * 150;
+                logDebug(`Stable: ${stableMs}ms`);
+                guide.textContent = "Hold steady...";
+                
+                if (stableMs > 1500 && autoCaptureActive) { 
+                    logDebug("Auto capturing...");
                     triggerCapture(points);
                     return;
                 }
@@ -713,11 +776,13 @@
             if (bestQuad && maxArea > (tempCanvas.width * tempCanvas.height * 0.20)) {
                 const results = [];
                 for (let i = 0; i < 4; i++) {
+                    const rx = bestQuad.data32S[i * 2] / scale;
+                    const ry = bestQuad.data32S[i * 2 + 1] / scale;
                     results.push({
-                        x: (bestQuad.data32S[i * 2] / scale) * (video.clientWidth / video.videoWidth),
-                        y: (bestQuad.data32S[i * 2 + 1] / scale) * (video.clientHeight / video.videoHeight),
-                        rawX: bestQuad.data32S[i * 2] / scale,
-                        rawY: bestQuad.data32S[i * 2 + 1] / scale
+                        x: rx,
+                        y: ry,
+                        rawX: rx,
+                        rawY: ry
                     });
                 }
                 
