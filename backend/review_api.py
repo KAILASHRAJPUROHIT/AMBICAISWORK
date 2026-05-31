@@ -24,7 +24,20 @@ class ReconciliationResult(BaseModel):
 # Mock Storage Paths
 AUDIT_LOG_DIR = "C:/Aradhana/AuditLogs"
 EXTRACTION_PATH = "C:/Aradhana/PrimeExports/JSON/daily_extract.json"
+MANUAL_REPORT_PATH = "C:/Aradhana/PrimeExports/JSON/prime_report_import.json"
 os.makedirs(AUDIT_LOG_DIR, exist_ok=True)
+
+@app.get("/api/prime/manual-report-import/latest")
+async def get_latest_manual_import():
+    if not os.path.exists(MANUAL_REPORT_PATH):
+        raise HTTPException(status_code=404, detail="Latest manual report import file not found.")
+    
+    try:
+        with open(MANUAL_REPORT_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading manual import file: {e}")
 
 @app.get("/api/prime/extractions/latest")
 async def get_latest_extraction():

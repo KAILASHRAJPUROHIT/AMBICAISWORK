@@ -46,9 +46,9 @@ const PrimeExtractionReviewPage: React.FC = () => {
   const [expandedRaw, setExpandedRaw] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch('/api/prime/extractions/latest')
+    fetch('/api/prime/manual-report-import/latest')
       .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch extraction data');
+        if (!res.ok) throw new Error('Failed to fetch manual report data');
         return res.json();
       })
       .then(setData)
