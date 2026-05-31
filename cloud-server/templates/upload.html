@@ -519,6 +519,8 @@
     let bestPoints = null;
     let autoCaptureActive = true;
 
+    let heartbeat = 0;
+
     const views = {
         main: document.getElementById('view-main'),
         camera: document.getElementById('view-camera'),
@@ -534,16 +536,31 @@
 
     // OpenCV.js Loading
     function onOpenCvReady() {
-        console.log('OpenCV.js is ready.');
-        cvLoaded = true;
-        document.getElementById('cv-loading-bar').style.width = '100%';
-        setTimeout(() => document.getElementById('cv-loading-bar').style.display = 'none', 500);
+        logDebug("OpenCV script loaded. Checking runtime...");
+        if (typeof cv !== 'undefined') {
+            cv['onRuntimeInitialized'] = () => {
+                logDebug("OpenCV Runtime Ready");
+                cvLoaded = true;
+                document.getElementById('cv-loading-bar').style.width = '100%';
+                setTimeout(() => document.getElementById('cv-loading-bar').style.display = 'none', 500);
+            };
+            // In case it's already initialized
+            if (cv.Mat) {
+                logDebug("OpenCV already initialized");
+                cvLoaded = true;
+                document.getElementById('cv-loading-bar').style.width = '100%';
+                document.getElementById('cv-loading-bar').style.display = 'none';
+            }
+        } else {
+            logDebug("OpenCV failed to load: cv is undefined");
+        }
     }
 
     // Load OpenCV.js asynchronously
     const script = document.createElement('script');
     script.async = true;
     script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
+    script.onerror = () => logDebug("CRITICAL: OpenCV script failed to load");
     script.onload = onOpenCvReady;
     document.body.appendChild(script);
 
@@ -638,13 +655,29 @@
             const canvas = document.getElementById('detection-overlay');
             
             video.srcObject = cameraStream;
-            video.onloadedmetadata = () => {
-                logDebug(`Camera started: ${video.videoWidth}x${video.videoHeight}`);
+            
+            const onMetadata = () => {
+                logDebug(`Video metadata: ${video.videoWidth}x${video.videoHeight}`);
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 showView('camera');
                 startDetectionLoop();
             };
+
+            if (video.videoWidth > 0) {
+                onMetadata();
+            } else {
+                video.onloadedmetadata = onMetadata;
+            }
+            
+            // Fallback for some browsers
+            setTimeout(() => {
+                if (isDetecting === false && video.srcObject) {
+                    logDebug("Forcing metadata fallback...");
+                    onMetadata();
+                }
+            }, 2000);
+
         } catch (err) {
             logDebug("Camera error: " + err.message);
             alert("Unable to access camera: " + err.message);
@@ -671,6 +704,9 @@
 
     function detectionLoop(timestamp) {
         if (!isDetecting) return;
+        
+        heartbeat++;
+        if (heartbeat % 20 === 0) logDebug(`Heartbeat: ${heartbeat}`);
 
         const video = document.getElementById('camera-video');
         const canvas = document.getElementById('detection-overlay');
@@ -681,13 +717,14 @@
         const videoReady = video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0;
 
         if (!videoReady) {
+            if (heartbeat % 50 === 0) logDebug(`Waiting for video... readyState=${video.readyState}, size=${video.videoWidth}x${video.videoHeight}`);
             requestAnimationFrame(detectionLoop);
             return;
         }
 
         if (!cvReady) {
+            if (heartbeat % 50 === 0) logDebug("Waiting for OpenCV...");
             guide.textContent = "Smart detection loading...";
-            logDebug("OpenCV not ready yet");
             requestAnimationFrame(detectionLoop);
             return;
         }
@@ -698,7 +735,7 @@
             return;
         }
         
-        if (lastDetectionTime === 0) logDebug("Detection loop started");
+        if (lastDetectionTime === 0) logDebug("First detection tick");
         lastDetectionTime = timestamp;
 
         const ctx = canvas.getContext('2d');
@@ -707,7 +744,7 @@
         const points = detectDocument(video);
         
         if (points) {
-            logDebug("Rectangle detected");
+            logDebug(`Rectangle detected! (${heartbeat})`);
             const isStable = checkStability(points);
             const outlineColor = isStable ? '#27AE60' : '#D4AF37';
             
@@ -772,8 +809,10 @@
                 }
             }
 
-            // Must cover at least 25% of the frame
-            if (bestQuad && maxArea > (tempCanvas.width * tempCanvas.height * 0.20)) {
+            // Must cover at least 20% of the frame
+            const minArea = tempCanvas.width * tempCanvas.height * 0.20;
+            
+            if (bestQuad && maxArea > minArea) {
                 const results = [];
                 for (let i = 0; i < 4; i++) {
                     const rx = bestQuad.data32S[i * 2] / scale;
@@ -788,10 +827,13 @@
                 
                 src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
                 return orderPoints(results);
+            } else {
+                if (heartbeat % 100 === 0) logDebug(`No large enough quad found. Max area: ${Math.round(maxArea)}, Min required: ${Math.round(minArea)}`);
             }
 
             src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
         } catch (e) {
+            logDebug("OpenCV Error: " + e.message);
             console.error(e);
         }
         return null;
