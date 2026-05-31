@@ -35,7 +35,8 @@ def extract_invoice_header():
             logger.error("FA.exe not found.")
             return {"status": "EXTRACTION_FAILED", "reason": "PRIME_NOT_RUNNING"}
 
-        # 1. Collect all non-empty textboxes in the entire process
+        # 3. Collect ALL non-empty textboxes process-wide
+        # NEW RULE: Check for minimum textbox threshold to ensure visibility
         raw_controls = []
         all_windows = desktop.windows()
         for win in all_windows:
@@ -43,7 +44,6 @@ def extract_invoice_header():
                 if win.process_id() not in pids:
                     continue
                 
-                # Probing all descendants for textboxes
                 tbs = win.descendants(class_name="ThunderRT6TextBox")
                 for i, tb in enumerate(tbs):
                     val = tb.window_text().strip()
@@ -58,7 +58,16 @@ def extract_invoice_header():
 
         logger.info(f"Collected {len(raw_controls)} non-empty textboxes process-wide.")
 
-        # 2. Pattern-Based Extraction from the pool
+        if len(raw_controls) < 10:
+             logger.error(f"Too few textboxes detected ({len(raw_controls)}). Controls likely not visible.")
+             return {
+                 "status": "EXTRACTION_FAILED", 
+                 "reason": "FORM_TEXTBOXES_NOT_VISIBLE",
+                 "count": len(raw_controls),
+                 "timestamp": datetime.now().isoformat()
+             }
+
+        # 4. Pattern-Based Extraction from the pool
         invoice_data = {
             "timestamp": datetime.now().isoformat(),
             "fields": {
