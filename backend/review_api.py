@@ -77,8 +77,13 @@ async def get_dashboard_stats():
         records = [r for r in all_records if r.get("source_report") == "PAYMENT_MODE"]
         
         total_bills = len(records)
-        pending = len([r for r in records if r.get("validation_status") == "NEEDS_REVIEW"])
+        pending = len([r for r in records if r.get("validation_status") in ["NEEDS_REVIEW", "YELLOW", "ORANGE", "BLUE", "YELLOW_REVIEW_WITH_BANK_EVIDENCE"]])
         verified = len([r for r in records if r.get("validation_status") == "GREEN"])
+        
+        # New counters for Dashboard
+        bank_evidence_found = len([r for r in records if r.get("validation_status") == "YELLOW_REVIEW_WITH_BANK_EVIDENCE"])
+        ambiguous_matches = len([r for r in records if r.get("validation_status") == "ORANGE"])
+        cheque_overdue = 0 # Placeholder for SLA logic integration
         
         total_sale = sum(r.get("sale_amount", 0.0) for r in records)
         cash = sum(r.get("cash_amount", 0.0) for r in records)
@@ -90,6 +95,8 @@ async def get_dashboard_stats():
             "totalBillsToday": total_bills,
             "verified": verified,
             "pendingReview": pending,
+            "bankEvidenceFound": bank_evidence_found,
+            "ambiguousMatches": ambiguous_matches,
             "totalCollection": total_sale,
             "cashCollection": cash,
             "bankCollection": bank,

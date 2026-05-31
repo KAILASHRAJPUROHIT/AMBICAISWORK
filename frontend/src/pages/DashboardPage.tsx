@@ -6,6 +6,8 @@ interface DashboardStats {
   totalBillsToday: number;
   verified: number;
   pendingReview: number;
+  bankEvidenceFound: number;
+  ambiguousMatches: number;
   totalCollection: number;
   cashCollection: number;
   bankCollection: number;
@@ -57,6 +59,8 @@ const DashboardPage: React.FC = () => {
   const summaryCards = [
     { label: "Total Bills Today", value: stats.totalBillsToday },
     { label: "Verified", value: stats.verified },
+    { label: "Bank Evidence Found", value: stats.bankEvidenceFound },
+    { label: "Ambiguous Matches", value: stats.ambiguousMatches },
     { label: "Pending Review", value: stats.pendingReview },
     { label: "Collection Accuracy", value: `${stats.matchAccuracy}%` },
   ];
