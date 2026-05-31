@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 class PrimeReportImporter:
     def __init__(self):
         self.raw_records = {} # Join Key -> Normalized Record
+        # 6. Ensure folder exists
+        os.makedirs(INPUT_DIR, exist_ok=True)
 
     def detect_report_type(self, df: pd.DataFrame) -> str:
         cols = " ".join([str(c) for c in df.columns]).upper()
@@ -42,7 +44,14 @@ class PrimeReportImporter:
         except: return str(val)
 
     def import_all(self):
+        # 4 & 5. Startup logging
+        print(f"SEARCH_FOLDER={INPUT_DIR}")
+        
+        # 2 & 3. Scan logic (non-recursive, specific extensions)
         files = [f for f in os.listdir(INPUT_DIR) if f.endswith(('.xls', '.xlsx', '.csv'))]
+        
+        print(f"FILES_FOUND={len(files)}")
+        
         if not files:
             print("NO_MANUAL_REPORT_FILES_FOUND")
             return
