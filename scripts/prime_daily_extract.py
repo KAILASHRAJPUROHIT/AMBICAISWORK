@@ -31,6 +31,7 @@ def validate_runtime():
 def run_daily_extract():
     logger.info("Starting Daily Extract Orchestration (32-bit Optimized)")
     validate_runtime()
+    desktop = Desktop(backend="win32")
     prime_window = None
     for win in desktop.windows():
         if "SHREE ARADHANA JEWELLERS" in win.window_text():
