@@ -23,7 +23,20 @@ class ReconciliationResult(BaseModel):
 
 # Mock Storage Paths
 AUDIT_LOG_DIR = "C:/Aradhana/AuditLogs"
+EXTRACTION_PATH = "C:/Aradhana/PrimeExports/JSON/daily_extract.json"
 os.makedirs(AUDIT_LOG_DIR, exist_ok=True)
+
+@app.get("/api/prime/extractions/latest")
+async def get_latest_extraction():
+    if not os.path.exists(EXTRACTION_PATH):
+        raise HTTPException(status_code=404, detail="Latest extraction file not found.")
+    
+    try:
+        with open(EXTRACTION_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading extraction file: {e}")
 
 @app.get("/api/reconciliations", response_model=List[ReconciliationResult])
 async def get_reconciliations():
