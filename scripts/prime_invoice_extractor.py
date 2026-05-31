@@ -15,29 +15,36 @@ os.makedirs(os.path.dirname(LOG_OUT), exist_ok=True)
 logging.basicConfig(filename=LOG_OUT, level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-def find_nearest_textbox(parent, anchor_text):
+def find_nearest_textbox_in_form(target_form, anchor_text, prime_window):
     """
-    Finds the ThunderRT6TextBox closest to a label control with anchor_text.
-    Labels in Prime are often ThunderRT6CommandButton or Static.
+    Finds the ThunderRT6TextBox within target_form closest to an anchor label 
+    that might be anywhere in the process windows.
     """
-    # 1. Find the anchor (label)
+    # 1. Search for anchor in all process windows
     anchors = []
-    # Search all descendants for the text
-    for ctrl in parent.descendants():
-        if anchor_text.lower() in ctrl.window_text().lower():
-            anchors.append(ctrl)
+    process_pids = [prime_window.process_id()]
+    desktop = Desktop(backend="win32")
+    
+    for win in desktop.windows():
+        try:
+            if win.process_id() not in process_pids:
+                continue
+            for ctrl in win.descendants():
+                if anchor_text.lower() in ctrl.window_text().lower():
+                    anchors.append(ctrl)
+        except Exception:
+            continue
     
     if not anchors:
-        logger.warning(f"Anchor '{anchor_text}' not found.")
+        logger.warning(f"Anchor '{anchor_text}' not found anywhere in process.")
         return None
 
-    # Use the first match (usually labels are unique enough in a form scope)
+    # Use the first match
     anchor = anchors[0]
     anchor_rect = anchor.rectangle()
-    logger.info(f"Anchor '{anchor_text}' found at {anchor_rect}")
 
-    # 2. Find all candidates (textboxes)
-    candidates = parent.descendants(class_name="ThunderRT6TextBox")
+    # 2. Search for textboxes ONLY in the target form
+    candidates = target_form.descendants(class_name="ThunderRT6TextBox")
     
     best_match = None
     min_dist = float('inf')
@@ -45,22 +52,22 @@ def find_nearest_textbox(parent, anchor_text):
     for cand in candidates:
         cand_rect = cand.rectangle()
         
-        # Heuristic: Check if the candidate is to the right or below the anchor
-        # Horizontal distance (tb.left - anchor.right)
-        # Vertical distance (tb.top - anchor.top)
-        
-        dx = max(0, cand_rect.left - anchor_rect.right)
+        # RULE 1: Vertical alignment (mostly)
         dy = abs(cand_rect.top - anchor_rect.top)
+        if dy > 50: # Slightly more lenient for MDI offsets
+            continue
+            
+        # RULE 2: Horizontal alignment (mostly right)
+        dx = cand_rect.left - anchor_rect.right
         
-        # Total distance - weighting horizontal proximity as VB6 labels are mostly on the left
-        dist = (dx**2 + (dy * 2)**2)**0.5 
+        # We allow small negative dx (overlap) but prefer positive
+        dist = abs(dx) + (dy * 5)
         
         if dist < min_dist:
             min_dist = dist
             best_match = cand
 
     if best_match:
-        logger.info(f"Matched '{anchor_text}' to textbox at {best_match.rectangle()} with distance {min_dist:.2f}")
         return {
             "value": best_match.window_text().strip(),
             "rect": str(best_match.rectangle()),
@@ -72,34 +79,50 @@ def find_nearest_textbox(parent, anchor_text):
     return None
 
 def extract_invoice_header():
-    logger.info("Starting Anchor-Based Invoice Header Extraction")
+    logger.info("Starting Refined Anchor-Based Invoice Header Extraction")
     try:
         desktop = Desktop(backend="win32")
         prime_window = None
         for win in desktop.windows():
-            if "SHREE ARADHANA JEWELLERS" in win.window_text():
+            title = win.window_text().upper()
+            if "SHREE ARADHANA" in title or "FA" == title or "JEWELLERS" in title:
+                if "VSCODE" in title or "PYTHON" in title or "CMD.EXE" in title:
+                    continue
                 prime_window = win
                 break
         
         if not prime_window:
             logger.error("Prime window not found.")
-            return None
+            return {"status": "EXTRACTION_FAILED", "reason": "PRIME_WINDOW_NOT_FOUND"}
 
         # 1. Identify active form
+        # For MDI, just find the first visible Sales Bill form
         bill_form = None
-        for child in prime_window.descendants(class_name="ThunderRT6FormDC"):
-            txt = child.window_text()
-            if "Bill" in txt and "Payment Detail" not in txt:
-                bill_form = child
-                break
-        
+        for win in desktop.windows():
+            try:
+                if win.process_id() != prime_window.process_id(): continue
+                for f in win.descendants(class_name="ThunderRT6FormDC"):
+                    txt = f.window_text().strip()
+                    if "Sales Bill" in txt and "Payment Detail" not in txt:
+                        bill_form = f
+                        break
+                if bill_form: break
+            except Exception: continue
+            
         if not bill_form:
-            logger.warning("No specific bill form detected, falling back to MDI.")
-            bill_form = prime_window
+            logger.error("No valid Sales Bill form found.")
+            return {"status": "EXTRACTION_FAILED", "reason": "NO_VALID_FORM_FOUND"}
 
-        logger.info(f"Targeting Form: {bill_form.window_text()}")
+        logger.info(f"Targeting Form: {bill_form.window_text()} [Handle: {bill_form.handle}]")
 
-        # 2. Define anchors
+        # 2. Visibility Guard
+        if prime_window.is_minimized():
+            prime_window.restore()
+            prime_window.set_focus()
+            import time
+            time.sleep(1)
+
+        # 3. Define anchors
         anchors = {
             "invoice_no": "Vch.No.",
             "invoice_date": "Date >",
@@ -120,7 +143,7 @@ def extract_invoice_header():
 
         extracted_count = 0
         for key, label in anchors.items():
-            result = find_nearest_textbox(bill_form, label)
+            result = find_nearest_textbox_in_form(bill_form, label, prime_window)
             if result:
                 invoice_data["fields"][key] = result["value"]
                 invoice_data["audit_evidence"].append(result)
@@ -128,13 +151,15 @@ def extract_invoice_header():
             else:
                 invoice_data["fields"][key] = None
 
-        # 3. Validation
+        # 4. Validation
         status = "GREEN"
+        reason = None
         if not invoice_data["fields"].get("invoice_no") or not invoice_data["fields"].get("customer_name"):
             status = "EXTRACTION_FAILED"
-            logger.error("Mandatory fields missing.")
+            reason = "MANDATORY_FIELDS_MISSING"
 
         invoice_data["status"] = status
+        invoice_data["reason"] = reason
 
         with open(JSON_OUT, "w", encoding="utf-8") as f:
             json.dump(invoice_data, f, indent=4)
@@ -143,12 +168,18 @@ def extract_invoice_header():
         return invoice_data
 
     except Exception as e:
-        logger.exception("Error in Anchor-Based Extractor")
+        logger.exception("Error in Refined Anchor-Based Extractor")
+        return None
+
+    except Exception as e:
+        logger.exception("Error in Refined Anchor-Based Extractor")
         return None
 
 if __name__ == "__main__":
     data = extract_invoice_header()
-    if data:
+    if data and data.get("status") == "GREEN":
         print(f"Success: Extracted invoice {data['fields'].get('invoice_no')} using anchor strategy.")
+    elif data:
+        print(f"Extraction Failed: {data.get('reason')}")
     else:
         print("Failed to extract invoice.")
