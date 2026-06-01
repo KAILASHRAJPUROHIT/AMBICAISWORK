@@ -34,20 +34,4 @@ export const mockAuditLogs: AuditLogItem[] = [
     result: 'Failure',
     details: 'Failed to update item "rec-002": Mismatch too high.',
   },
-  {
-    id: 'log-004',
-    timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString(), // 1 hour ago
-    actor: 'AdminUser',
-    action: 'Update Prime Robot Config',
-    result: 'Success',
-    details: 'Prime Robot configuration updated by AdminUser.',
-  },
-  {
-    id: 'log-005',
-    timestamp: new Date(Date.now() - 90 * 60 * 1000).toISOString(), // 1.5 hours ago
-    actor: 'System',
-    action: 'Prime Robot Start',
-    result: 'Info',
-    details: 'Prime ERP Extraction Robot initiated.',
-  },
 ];
