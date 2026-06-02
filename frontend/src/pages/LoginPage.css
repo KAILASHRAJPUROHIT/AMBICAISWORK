@@ -83,33 +83,32 @@
 .password-input-wrapper {
     position: relative;
     width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-wrapper input {
+    padding-right: 4rem !important; /* Make room for the button */
 }
 
 .password-toggle-btn {
     position: absolute;
     right: 0.5rem;
-    top: 50%;
-    transform: translateY(-50%);
     background: transparent !important;
     border: none !important;
-    color: #000 !important;
+    color: #888 !important;
     font-size: 10px !important;
     font-weight: 900 !important;
     text-transform: uppercase !important;
-    padding: 0.5rem 1rem !important;
+    padding: 0.5rem 0.8rem !important;
     width: auto !important;
     cursor: pointer;
     z-index: 10;
+    transition: color 0.2s ease;
 }
 
 .password-toggle-btn:hover {
-    background: #f0f0f0 !important;
-    border-radius: 0.5rem;
-}
-
-/* Ensure password input has padding for the toggle button */
-.password-input-wrapper input {
-    padding-right: 4.5rem !important;
+    color: #000 !important;
 }
 
 .captcha-group {

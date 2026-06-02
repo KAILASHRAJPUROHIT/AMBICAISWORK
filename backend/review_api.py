@@ -828,15 +828,10 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     PUBLIC_ENDPOINTS = [
-        "/api/auth/login",
-        "/api/auth/verify",
-        "/api/auth/forgot-password",
-        "/api/auth/reset-password",
-        "/api/dashboard/live", 
-        "/api/system/mode",
+        "/api/auth/",
         "/api/version",
         "/api/reports/payment-bifurcation",
-        "/api/debug/live-feed",
+        "/api/debug/",
         "/debug/",
         "/status-colors",
         "/health"

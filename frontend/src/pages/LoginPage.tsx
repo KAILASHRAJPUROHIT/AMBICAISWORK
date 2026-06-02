@@ -13,6 +13,9 @@ const LoginPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
+    // Diagnostic Info
+    const [diag, setDiag] = useState({ url: '', reachable: 'Checking...', status: 0, response: '' });
+
     // Captcha
     const [captcha, setCaptcha] = useState({ a: 0, b: 0, result: '' });
     
@@ -22,8 +25,18 @@ const LoginPage: React.FC = () => {
         setCaptcha({ a, b, result: '' });
     };
 
+    const updateDiag = (status: number, text: string) => {
+        setDiag(prev => ({ ...prev, status, response: text.slice(0, 100) }));
+    };
+
     useEffect(() => {
         refreshCaptcha();
+        const apiBase = window.location.origin;
+        setDiag(prev => ({ ...prev, url: `${apiBase}/api/auth/login` }));
+        
+        fetch(`${apiBase}/health`)
+            .then(res => setDiag(prev => ({ ...prev, reachable: res.ok ? 'YES' : `NO (${res.status})` })))
+            .catch(() => setDiag(prev => ({ ...prev, reachable: 'NO (NETWORK ERROR)' })));
     }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -37,14 +50,22 @@ const LoginPage: React.FC = () => {
             return;
         }
 
-        console.log("employee_id submitted:", employeeId);
+        console.log("LOGIN REQUEST: employee_id submitted:", employeeId);
         setLoading(true);
         try {
-            await login(employeeId, password);
+            const res = await login(employeeId, password);
+            updateDiag(200, JSON.stringify(res));
+            console.log("LOGIN SUCCESS:", res);
             setSuccess("OTP sent to your registered email.");
             setStep('OTP');
         } catch (err: any) {
-            setError(err.message);
+            console.error("LOGIN ERROR:", err);
+            const msg = err.message || '';
+            if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Server returned 0')) {
+                 setError('SERVER OFFLINE OR LOGIN SERVICE UNAVAILABLE. Please restart Aradhana Auditor Server.');
+            } else {
+                 setError(msg);
+            }
             refreshCaptcha();
         } finally {
             setLoading(false);
@@ -206,6 +227,25 @@ const LoginPage: React.FC = () => {
                     </form>
                 )}
                 
+                {/* Diagnostic Panel */}
+                <div className="mt-8 p-4 bg-gray-900 rounded-xl font-mono text-[8px] text-gray-400">
+                    <p className="text-gray-500 font-bold mb-1 uppercase tracking-widest">Login Diagnostics</p>
+                    <div className="flex justify-between">
+                        <span>API ENDPOINT:</span>
+                        <span className="text-blue-400">{diag.url}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span>REACHABLE:</span>
+                        <span className={diag.reachable === 'YES' ? 'text-green-400' : 'text-red-400'}>{diag.reachable}</span>
+                    </div>
+                    {diag.status > 0 && (
+                        <div className="flex justify-between">
+                            <span>LAST STATUS:</span>
+                            <span className="text-orange-400">{diag.status}</span>
+                        </div>
+                    )}
+                </div>
+
                 <div className="login-footer">
                     <p>Physical LAN Connection Required</p>
                     <div className="lan-indicator online"></div>

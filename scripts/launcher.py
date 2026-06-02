@@ -33,10 +33,17 @@ BACKEND_LOG_FILE = os.path.join(LOG_DIR, "backend.log")
 
 def redirect_streams():
     """Redirect stdout and stderr to files if they are None (windowed mode)."""
-    if sys.stdout is None:
-        sys.stdout = open(os.path.join(LOG_DIR, "launcher_stdout.log"), "a", encoding="utf-8", buffering=1)
-    if sys.stderr is None:
-        sys.stderr = open(os.path.join(LOG_DIR, "launcher_stderr.log"), "a", encoding="utf-8", buffering=1)
+    try:
+        if sys.stdout is None:
+            sys.stdout = open(os.path.join(LOG_DIR, "launcher_stdout.log"), "a", encoding="utf-8", buffering=1)
+        if sys.stderr is None:
+            sys.stderr = open(os.path.join(LOG_DIR, "launcher_stderr.log"), "a", encoding="utf-8", buffering=1)
+    except Exception:
+        # Fallback to devnull if we can't open log files
+        import os
+        devnull = open(os.devnull, 'w')
+        if sys.stdout is None: sys.stdout = devnull
+        if sys.stderr is None: sys.stderr = devnull
 
 logging.basicConfig(
     level=logging.INFO,
@@ -237,13 +244,15 @@ def run_backend_internal():
     redirect_streams()
     
     # Manually configure logging for the backend process
+    # StreamHandler requires a stream with .write(). If sys.stdout is devnull, it works.
+    handlers = [logging.FileHandler(BACKEND_LOG_FILE)]
+    if sys.stdout and hasattr(sys.stdout, 'write'):
+        handlers.append(logging.StreamHandler(sys.stdout))
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(BACKEND_LOG_FILE),
-            logging.StreamHandler(sys.stdout)
-        ]
+        handlers=handlers
     )
     
     sys.path.insert(0, os.getcwd())
