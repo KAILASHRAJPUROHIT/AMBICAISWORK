@@ -2,16 +2,32 @@ import { useEffect, useState } from 'react';
 import ReportSummaryCard from '../components/ReportSummaryCard';
 import { getOwnerReport } from '../api/client';
 
+interface PaymentBifurcation {
+  mode: string;
+  total: number;
+  verified: number;
+  unverified: number;
+  count: number;
+}
+
 const ReportsPage = () => {
   const [reports, setReports] = useState<any[]>([]);
+  const [bifurcation, setBifurcation] = useState<PaymentBifurcation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const API_BASE = window.location.origin;
+
+  const money = (v: number) => `₹${Number(v).toLocaleString('en-IN')}`;
 
   useEffect(() => {
     async function fetchData() {
       try {
         setLoading(true);
-        const liveReport = await getOwnerReport();
+        const [liveReport, bifData] = await Promise.all([
+          getOwnerReport(),
+          fetch(`${API_BASE}/api/reports/payment-bifurcation`).then(res => res.json())
+        ]);
         
         const summary = liveReport.daily_summary;
         if (summary.processed_count > 0) {
@@ -20,15 +36,14 @@ const ReportsPage = () => {
               title: `Daily Summary - ${summary.generated_at.split('T')[0]}`,
               date: summary.generated_at.split('T')[0],
               totalTransactions: summary.processed_count,
-              totalAmount: 0, // Could be enhanced to show total sale
+              totalAmount: bifData.reduce((acc: number, curr: any) => acc + curr.total, 0),
               reconciliationRate: summary.processed_count > 0 
                 ? `${((summary.resolved_reviews / summary.processed_count) * 100).toFixed(1)}%`
                 : '0%'
             };
             setReports([mappedReport]);
-        } else {
-            setReports([]);
         }
+        setBifurcation(bifData);
         setError(null);
       } catch (err: any) {
         console.error('Failed to fetch reports:', err);
@@ -50,24 +65,56 @@ const ReportsPage = () => {
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      <header className="mb-10">
-        <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Audit Reports</h1>
-        <p className="mt-2 text-lg text-gray-600 font-medium">Daily generated summaries from Prime and Bank data.</p>
+      <header className="mb-10 flex justify-between items-end">
+        <div>
+          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight">Audit Reports</h1>
+          <p className="mt-2 text-lg text-gray-600 font-medium">Payment-wise bifurcation and operational summaries.</p>
+        </div>
+        <div className="flex space-x-4">
+           <button className="px-6 py-2 bg-white border border-gray-200 rounded-xl font-bold text-xs uppercase hover:bg-gray-50 transition-colors">Export PDF</button>
+           <button className="px-6 py-2 bg-white border border-gray-200 rounded-xl font-bold text-xs uppercase hover:bg-gray-50 transition-colors">Export Excel</button>
+        </div>
       </header>
       
       {loading ? (
         <div className="p-20 text-center text-blue-600 font-black text-2xl animate-pulse uppercase">
           Generating Reports...
         </div>
-      ) : reports.length === 0 ? (
-        <div className="p-20 text-center bg-white rounded-3xl shadow-sm border border-gray-100 text-gray-400 font-bold text-xl">
-          No reports generated for current period.
-        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {reports.map((report) => (
-            <ReportSummaryCard key={report.id} report={report} />
-          ))}
+        <div className="space-y-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {reports.map((report) => (
+              <ReportSummaryCard key={report.id} report={report} />
+            ))}
+          </div>
+
+          <section>
+             <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Payment Mode Bifurcation</h2>
+             <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                   <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100">
+                         <th className="p-6 text-[10px] font-black text-gray-400 uppercase">Payment Mode</th>
+                         <th className="p-6 text-[10px] font-black text-gray-400 uppercase text-right">Invoice Count</th>
+                         <th className="p-6 text-[10px] font-black text-gray-400 uppercase text-right">Total Amount</th>
+                         <th className="p-6 text-[10px] font-black text-gray-400 uppercase text-right">Verified</th>
+                         <th className="p-6 text-[10px] font-black text-gray-400 uppercase text-right">Pending/Unverified</th>
+                      </tr>
+                   </thead>
+                   <tbody>
+                      {bifurcation.map((item) => (
+                         <tr key={item.mode} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                            <td className="p-6 font-black text-gray-900">{item.mode}</td>
+                            <td className="p-6 font-bold text-gray-500 text-right">{item.count}</td>
+                            <td className="p-6 font-black text-gray-900 text-right">{money(item.total)}</td>
+                            <td className="p-6 font-bold text-green-600 text-right">{money(item.verified)}</td>
+                            <td className="p-6 font-bold text-orange-600 text-right">{money(item.unverified)}</td>
+                         </tr>
+                      ))}
+                   </tbody>
+                </table>
+             </div>
+          </section>
         </div>
       )}
     </div>

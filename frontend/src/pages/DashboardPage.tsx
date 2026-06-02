@@ -101,6 +101,7 @@ const initialStats: DashboardStats = {
 
 const DashboardPage: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats>(initialStats);
+  const [appVersion, setAppVersion] = useState<string>("v1.2.0");
   const [ingestionStatus, setIngestionStatus] = useState<IngestionStatus | null>(null);
   const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null);
   const [smsStatus, setSMSStatus] = useState<SMSStatus | null>(null);
@@ -125,7 +126,8 @@ const DashboardPage: React.FC = () => {
         `${API_BASE}/api/admin/ingestion-status`,
         `${API_BASE}/api/admin/email-status`,
         `${API_BASE}/api/admin/sms-status`,
-        `${API_BASE}/api/live-payment-events`
+        `${API_BASE}/api/live-payment-events`,
+        `${API_BASE}/api/version`
       ];
 
       const responses = await Promise.all(endpoints.map(url => fetch(url).catch(() => null)));
@@ -136,6 +138,10 @@ const DashboardPage: React.FC = () => {
       if (responses[3] && responses[3].ok) setEmailStatus(await (responses[3] as Response).json());
       if (responses[4] && responses[4].ok) setSMSStatus(await (responses[4] as Response).json());
       if (responses[5] && responses[5].ok) setPaymentEvents(await (responses[5] as Response).json());
+      if (responses[6] && responses[6].ok) {
+         const vData = await (responses[6] as Response).json();
+         setAppVersion(vData.version);
+      }
 
       // Only show error if core stats or feed fail when NOT loading
       if ((!responses[0] || !responses[0].ok) && (!responses[1] || !responses[1].ok) && !loading) {
@@ -296,8 +302,11 @@ const DashboardPage: React.FC = () => {
 
       <header className="mb-12 flex justify-between items-end">
         <div>
-           <h1 className="text-4xl font-black text-gray-900 tracking-tight">Aradhana Auditor Live</h1>
-           <p className="mt-2 text-lg text-gray-600">Real-time Ingestion & Reconciliation Pipeline</p>
+           <div className="flex items-center space-x-3 mb-1">
+              <h1 className="text-4xl font-black text-gray-900 tracking-tight">Aradhana Auditor Live</h1>
+              <span className="bg-gray-200 text-gray-500 text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest">{appVersion}</span>
+           </div>
+           <p className="mt-2 text-lg text-gray-600 font-medium">Real-time Ingestion & Reconciliation Pipeline</p>
         </div>
         {ingestionStatus?.cuda_active && (
            <div className="bg-purple-100 text-purple-700 text-[10px] font-black px-4 py-2 rounded-xl flex items-center border border-purple-200">

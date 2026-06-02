@@ -21,12 +21,20 @@ class OwnerReport(BaseModel):
 def generate_owner_report(
     report_date: str,
     daily_summary: DailySummary,
-    escalations: List[OwnerEscalationRecord]
+    escalations: List[OwnerEscalationRecord],
+    bifurcation: List[dict] = None
 ) -> OwnerReport:
     """
     Generates an owner report based on daily summary and escalation records.
     """
     report_lines: List[str] = []
+    
+    if bifurcation:
+        report_lines.append("\nPAYMENT MODE BIFURCATION:")
+        for item in bifurcation:
+            if item["total"] > 0 or item["count"] > 0:
+                report_lines.append(f"  {item['mode']}: ₹{item['total']:,.2f} ({item['count']} items)")
+        report_lines.append("-" * 40)
 
     # Include critical escalations first
     critical_escalations = [
