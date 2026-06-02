@@ -56,16 +56,17 @@ def test_advance_failsafe():
 
 def test_ambiguity_failsafe():
     db = SessionLocal()
-    # 1. Create 2 bills with same amount
-    b1 = Bill(bill_number="HARDENING-AMB-01", amount=5000.0, status="Yellow", is_test_data=False, customer_name="CUST A")
-    b2 = Bill(bill_number="HARDENING-AMB-02", amount=5000.0, status="Yellow", is_test_data=False, customer_name="CUST B")
+    # 1. Create 2 bills with same unique amount
+    unique_amt = 5555.22
+    b1 = Bill(bill_number="HARDENING-AMB-01", amount=unique_amt, status="Yellow", is_test_data=False, customer_name="CUST A", invoice_date=datetime.now())
+    b2 = Bill(bill_number="HARDENING-AMB-02", amount=unique_amt, status="Yellow", is_test_data=False, customer_name="CUST B", invoice_date=datetime.now())
     db.add(b1); db.add(b2)
     db.commit()
     
-    # 2. Create an alert for 5000 without enough evidence to distinguish
+    # 2. Create an alert for unique_amt without enough evidence to distinguish
     alert = BankAlert(
-        bank_name="SBI", amount=5000.0, utr_reference="UTR-AMB-TEST", 
-        sender="UNKNOWN", received_at=datetime.now(), raw_text="Received ₹5000"
+        bank_name="SBI", amount=unique_amt, utr_reference="UTR-AMB-TEST", 
+        sender="UNKNOWN", received_at=datetime.now(), raw_text=f"Received ₹{unique_amt}"
     )
     db.add(alert); db.commit()
     

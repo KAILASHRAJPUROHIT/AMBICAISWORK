@@ -119,6 +119,7 @@ class Payment(Base):
     bank_name = Column(String, nullable=True)
     utr_reference = Column(String, nullable=True)
     cheque_number = Column(String, nullable=True)
+    payment_date = Column(DateTime, nullable=True)
     status = Column(String, default="Yellow")
     created_at = Column(DateTime, server_default=func.now())
 

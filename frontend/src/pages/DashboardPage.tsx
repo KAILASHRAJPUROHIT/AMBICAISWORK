@@ -64,6 +64,8 @@ interface LiveInvoice {
   remaining_amount: number;
   status: string;
   status_text: string;
+  is_historical_claim: boolean;
+  historical_payment_date: string | null;
   pdf_path: string | null;
   created_at: string;
 }
@@ -396,6 +398,11 @@ const DashboardPage: React.FC = () => {
                         <td className="p-4">
                            <div className="font-black text-gray-900 leading-none">{inv.bill_number}</div>
                            <div className="text-[9px] text-gray-400 font-bold mt-1 uppercase">Gen: {(inv as any).invoice_time || 'N/A'}</div>
+                           {inv.is_historical_claim && (
+                             <div className="mt-1 flex items-center text-[8px] font-black text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 uppercase tracking-tighter animate-pulse">
+                                ⚠ Historical Claim
+                             </div>
+                           )}
                         </td>
                         <td className="p-4 text-sm text-gray-600 truncate max-w-[100px] font-medium">{inv.customer_name}</td>
                         <td className="p-4 font-black text-gray-900 text-right">{money(inv.net_payable)}</td>

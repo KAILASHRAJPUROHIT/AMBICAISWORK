@@ -224,6 +224,15 @@ def parse_pdf(file_path):
                 if amt_match:
                     amt = float(amt_match.group(1).replace(",", ""))
                     mode = "UNKNOWN"
+                    pay_date = None
+                    
+                    # Try to extract date from line (e.g. UPI 01/06/2026)
+                    date_match = re.search(r"(\d{2}[-/]\d{2}[-/]\d{4})", line)
+                    if date_match:
+                        try:
+                            pay_date = datetime.strptime(date_match.group(1).replace("/", "-"), "%d-%m-%Y")
+                        except: pass
+
                     if "CASH" in line_upper: mode = "CASH"
                     elif any(x in line_upper for x in ["UPI", "RTGS", "IMPS", "NEFT", "BANK TRANSFER", "CHQ"]): mode = "BANK_TRANSFER"
                     elif "ADVANCE" in line_upper: 
@@ -238,7 +247,12 @@ def parse_pdf(file_path):
 
                     
                     if mode != "UNKNOWN":
-                        payments.append({"mode": mode, "amount": amt, "raw": line.strip()})
+                        payments.append({
+                            "mode": mode, 
+                            "amount": amt, 
+                            "date": pay_date,
+                            "raw": line.strip()
+                        })
         
         data["payments"] = payments
         data["customer_purchase_amount"] = cust_purc_total
@@ -387,6 +401,7 @@ def process_invoice(file_path):
                 bill_id=new_bill.id,
                 amount=p["amount"],
                 mode=p["mode"],
+                payment_date=p.get("date"),
                 bank_name=new_bill.bank_name,
                 utr_reference=new_bill.reference_no if p["mode"] == "BANK_TRANSFER" else None,
                 cheque_number=new_bill.reference_no if p["mode"] == "CHEQUE" else None,

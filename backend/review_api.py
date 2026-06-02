@@ -312,6 +312,13 @@ async def get_live_feed(db: Session = Depends(get_db)):
         if b.invoice_generated_at and b.ingested_at:
             delay_seconds = (b.ingested_at - b.invoice_generated_at).total_seconds()
 
+        # Historical Payment Check
+        historical_claim = db.query(PaymentModel).filter(
+            PaymentModel.bill_id == b.id,
+            PaymentModel.payment_date != None,
+            func.date(PaymentModel.payment_date) < func.date(b.invoice_date)
+        ).first()
+
         results.append({
             "id": b.id,
             "bill_number": b.bill_number,
@@ -329,6 +336,8 @@ async def get_live_feed(db: Session = Depends(get_db)):
             "remaining_amount": float(b.remaining_amount or 0),
             "status": b.status,
             "status_text": b.status_text,
+            "is_historical_claim": historical_claim is not None,
+            "historical_payment_date": historical_claim.payment_date.strftime("%Y-%m-%d") if historical_claim else None,
             "pdf_path": b.pdf_path,
             "created_at": b.created_at.isoformat()
         })

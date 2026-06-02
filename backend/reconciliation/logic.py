@@ -99,6 +99,17 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             ).first()
             if existing_cleared_payment and existing_cleared_payment.bill_id != best_bill.id:
                 is_duplicate_utr = True
+
+        # Rule: Historical Payment Claim Detection
+        is_historical_claim = False
+        historical_payment = db.query(Payment).filter(
+            Payment.bill_id == best_bill.id,
+            Payment.payment_date != None,
+            func.date(Payment.payment_date) < func.date(best_bill.invoice_date)
+        ).first()
+        if historical_payment:
+            is_historical_claim = True
+            logger.warning(f"HISTORICAL CLAIM DETECTED: Bill {best_bill.bill_number} references payment from {historical_payment.payment_date} (Invoice Date: {best_bill.invoice_date})")
         
         # Rule 1: Advance Verification Failsafe
         # Mandate: Advance is only a credit reference until evidence exists.
@@ -106,7 +117,7 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
         advance_unclassified = has_advance and (not best_bill.advance_source or best_bill.advance_source == "UNKNOWN")
         
         # Decision
-        if best_score >= 80 and not is_ambiguous and not is_duplicate_utr:
+        if best_score >= 80 and not is_ambiguous and not is_duplicate_utr and not is_historical_claim:
             # Check if this payment fully covers the remaining amount
             current_bank = float(best_bill.bank_received or 0.0)
             new_bank = current_bank + amount
@@ -171,7 +182,7 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
 
             log_audit(db, "Bill", best_bill.id, "AUTO_VERIFICATION" if best_bill.status == "Green" else "SAFE_MATCH", old_status, best_bill.status, f"Match score: {best_score}")
         else:
-            # FAILSAFE PATH: RED or BLUE
+            # FAILSAFE PATH: RED or BLUE or PURPLE
             old_status = best_bill.status
             reason = "AMBIGUOUS_AMOUNT_MATCH" if is_ambiguous else "LOW_CONFIDENCE_MATCH"
             if not utr: reason = "MISSING_UTR"
@@ -179,6 +190,12 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             if is_duplicate_utr:
                 best_bill.status = "Red"
                 reason = "DUPLICATE_UTR"
+            elif is_historical_claim:
+                best_bill.status = "Purple"
+                reason = "HISTORICAL_PAYMENT_VERIFICATION"
+                # Owner Escalation Rule: ₹50,000 threshold
+                if float(historical_payment.amount) >= 50000.0:
+                    reason += " [HIGH_VALUE_ESCALATION]"
             else:
                 best_bill.status = "Blue"
             
