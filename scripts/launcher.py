@@ -15,13 +15,21 @@ from pathlib import Path
 LOG_DIR = r"C:\Aradhana\PaymentAuditor\Logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "launcher.log")
+BACKEND_LOG_FILE = os.path.join(LOG_DIR, "backend.log")
+
+def redirect_streams():
+    """Redirect stdout and stderr to files if they are None (windowed mode)."""
+    if sys.stdout is None:
+        sys.stdout = open(os.path.join(LOG_DIR, "launcher_stdout.log"), "a", encoding="utf-8", buffering=1)
+    if sys.stderr is None:
+        sys.stderr = open(os.path.join(LOG_DIR, "launcher_stderr.log"), "a", encoding="utf-8", buffering=1)
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler(LOG_FILE),
-        logging.StreamHandler(sys.stdout)
+        logging.StreamHandler(sys.stdout if sys.stdout else sys.stderr)
     ]
 )
 logger = logging.getLogger("Launcher")
@@ -167,19 +175,56 @@ class AradhanaLauncher:
 
 def run_backend_internal():
     import uvicorn
+    import logging
+    
+    # Redirect streams if needed
+    redirect_streams()
+    
+    # Manually configure logging for the backend process
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(BACKEND_LOG_FILE),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    
     sys.path.insert(0, os.getcwd())
     from backend.review_api import app
     config = AradhanaLauncher().load_config()
+    
+    # Check for SSL
     cert_path = r"C:\Aradhana\SSL\cert.pem"
     key_path = r"C:\Aradhana\SSL\key.pem"
+    
+    # MANDATE: Disable uvicorn default logging in frozen windowed EXE
+    uvicorn_kwargs = {
+        "app": app,
+        "host": config["backend_host"],
+        "port": config["backend_port"],
+        "log_config": None, # Prevent uvicorn from configuring logging/isatty
+        "access_log": False
+    }
+    
     if os.path.exists(cert_path) and os.path.exists(key_path):
-        uvicorn.run(app, host=config["backend_host"], port=config["backend_port"], ssl_keyfile=key_path, ssl_certfile=cert_path)
-    else:
-        uvicorn.run(app, host=config["backend_host"], port=config["backend_port"])
+        uvicorn_kwargs["ssl_keyfile"] = key_path
+        uvicorn_kwargs["ssl_certfile"] = cert_path
+        
+    uvicorn.run(**uvicorn_kwargs)
 
 def run_self_test():
     print("=== Aradhana Payment Auditor Self-Test ===")
     try:
+        # Redirect streams for test context if in windowed mode
+        redirect_streams()
+        
+        if sys.stdout is None or sys.stderr is None:
+             raise RuntimeError("Standard streams are still None after redirection attempt")
+             
+        if not os.access(LOG_DIR, os.W_OK):
+             raise RuntimeError(f"Log directory not writable: {LOG_DIR}")
+
         # Standard Library Imports
         import imaplib
         print("OK: imaplib imported")
@@ -211,7 +256,9 @@ def run_self_test():
         import fastapi
         print(f"OK: FastAPI imported (version: {fastapi.__version__})")
         import uvicorn
-        print(f"OK: Uvicorn imported (version: {uvicorn.__version__})")
+        # Test uvicorn config initialization
+        uvicorn.Config("backend.review_api:app")
+        print(f"OK: Uvicorn imported and config validated")
         import sqlalchemy
         print(f"OK: SQLAlchemy imported (version: {sqlalchemy.__version__})")
         import watchdog
@@ -258,6 +305,8 @@ def run_self_test():
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
+    redirect_streams()
+    
     parser = argparse.ArgumentParser(description="Aradhana Payment Auditor Launcher")
     parser.add_argument("--install-startup", action="store_true", help="Install to Windows Startup")
     parser.add_argument("--remove-startup", action="store_true", help="Remove from Windows Startup")
