@@ -10,7 +10,8 @@ from email.header import decode_header
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
-from backend.models import BankAlert, Bill, AuditLog, Payment, Cheque
+from backend.models import BankAlert, Bill, AuditLog, Payment, Cheque, SMSAlert
+from backend.sms_parser import parse_bank_sms
 import json
 from dotenv import load_dotenv
 
@@ -35,6 +36,9 @@ def update_email_status(**kwargs):
                 email_status[key] = value
 
 def parse_email_event(subject, body):
+    if "[SMSForwarder]" in subject:
+        return "sms_forwarded"
+        
     content = (subject + " " + body).lower()
     
     event_type = "unknown"
@@ -99,7 +103,7 @@ def fetch_real_emails():
         if status == "OK" and messages[0]:
             msg_nums = messages[0].split()
             if msg_nums:
-                # Fetch in chunks of 200
+                # Fetch in chunks of 200 to prevent memory issues and timeouts
                 chunk_size = 200
                 for i in range(0, len(msg_nums), chunk_size):
                     chunk = msg_nums[i:i + chunk_size]
@@ -109,6 +113,7 @@ def fetch_real_emails():
                         if isinstance(response_part, tuple):
                             msg = email.message_from_bytes(response_part[1])
                             
+                            message_id = msg.get("Message-ID")
                             subject = get_decoded_header(msg.get("Subject"))
                             sender = get_decoded_header(msg.get("From"))
                             date_tuple = email.utils.parsedate_tz(msg.get("Date"))
@@ -138,6 +143,7 @@ def fetch_real_emails():
                                     pass
                             
                             emails.append({
+                                "message_id": message_id,
                                 "subject": subject,
                                 "sender": sender,
                                 "date": local_date,
@@ -166,6 +172,71 @@ def process_emails():
             body = email_data["body"]
             event_type = parse_email_event(email_data["subject"], body)
             
+            # --- Special Case: [SMSForwarder] ---
+            if event_type == "sms_forwarded":
+                parsed_sms = parse_bank_sms(body)
+                if parsed_sms.amount and parsed_sms.amount > 0:
+                    # Check for existing SMSAlert by message_id or UTR
+                    exists = db.query(SMSAlert).filter(SMSAlert.email_message_id == email_data["message_id"]).first()
+                    if not exists and parsed_sms.utr_reference:
+                        exists = db.query(SMSAlert).filter(SMSAlert.utr_reference == parsed_sms.utr_reference).first()
+                        
+                    if not exists:
+                        # Extract SMS Sender from Body if possible (From : ...)
+                        sms_sender = "UNKNOWN"
+                        sender_match = re.search(r"From\s*:\s*([A-Za-z0-9-]+)", body)
+                        if sender_match:
+                            sms_sender = sender_match.group(1)
+                            
+                        # Parse timestamp
+                        ts = email_data["date"]
+                        if parsed_sms.transaction_date:
+                            try:
+                                # Try different formats
+                                try:
+                                    ts = datetime.strptime(parsed_sms.transaction_date, "%Y-%m-%d %H:%M:%S")
+                                except:
+                                    try:
+                                        ts = datetime.strptime(parsed_sms.transaction_date, "%d-%m-%Y")
+                                    except:
+                                        pass
+                            except:
+                                pass
+
+                        new_sms = SMSAlert(
+                            sender=sms_sender,
+                            transaction_timestamp=ts,
+                            bank_name=parsed_sms.sender_bank or "ICICI",
+                            account_suffix=parsed_sms.account_suffix,
+                            credit_or_debit="CREDIT", 
+                            amount=parsed_sms.amount,
+                            utr_reference=parsed_sms.utr_reference,
+                            payer_name=parsed_sms.payer_name,
+                            raw_body=body,
+                            email_message_id=email_data["message_id"],
+                            parsed_confidence=1.0 if parsed_sms.confidence == "HIGH" else 0.5
+                        )
+                        db.add(new_sms)
+                        events_found += 1
+                        db.flush()
+                        
+                        # Create a BankAlert from this for central reconciliation
+                        alert = BankAlert(
+                            bank_name=new_sms.bank_name,
+                            amount=new_sms.amount,
+                            utr_reference=new_sms.utr_reference if new_sms.utr_reference else f"SMS_{email_data['message_id']}",
+                            sender=new_sms.sender,
+                            received_at=new_sms.transaction_timestamp,
+                            raw_text=f"SMS Forwarded via Email: {body}"
+                        )
+                        db.add(alert)
+                        db.flush()
+                        
+                        from backend.reconciliation.logic import verify_payment_event
+                        verify_payment_event(db, alert, source="SMS_FORWARDER")
+                continue
+
+            # --- Standard Bank Email Alerts ---
             # Extract amount
             amt_match = re.search(r"(?:INR|RS\.?)\s*([\d,]+\.\d{2})", body, re.IGNORECASE)
             amount = float(amt_match.group(1).replace(",", "")) if amt_match else 0.0

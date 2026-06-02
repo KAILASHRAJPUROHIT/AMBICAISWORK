@@ -22,6 +22,10 @@ os.makedirs(AUDIT_LOG_DIR, exist_ok=True)
 logging.basicConfig(filename=LOG_OUT, level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+from backend.database import SessionLocal
+from backend.models import BankAlert
+from backend.reconciliation_orchestrator_v2 import reconcile_bank_payments
+
 def run_ingestion_mvp():
     logger.info("Starting Bank Email Ingestion (Real IMAP)")
     
@@ -30,6 +34,7 @@ def run_ingestion_mvp():
     validator = EmailValidator()
     
     processed_transactions = []
+    db = SessionLocal()
     
     try:
         # 1. Connect to IMAP
@@ -56,6 +61,21 @@ def run_ingestion_mvp():
             # 5. Validate
             is_valid, errors = validator.validate(normalized)
             
+            # Check for existing
+            exists = db.query(BankAlert).filter(BankAlert.utr_reference == normalized.get("utr")).first()
+            if not exists and is_valid:
+                new_alert = BankAlert(
+                    bank_name="ICICI",
+                    amount=normalized.get("amount", 0.0),
+                    utr_reference=normalized.get("utr"),
+                    sender=normalized.get("sender_name", "Unknown"),
+                    received_at=email_obj.date,
+                    raw_text=raw_text
+                )
+                db.add(new_alert)
+                db.commit()
+                logger.info(f"Saved BankAlert to DB: {normalized.get('utr')}")
+
             result_entry = {
                 "data": normalized,
                 "is_valid": is_valid,
@@ -65,22 +85,27 @@ def run_ingestion_mvp():
             }
             
             # 6. Audit Log
-            log_filename = f"EMAIL_INGEST_{normalized['transaction_id']}_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+            log_filename = f"EMAIL_INGEST_{normalized.get('utr') or email_obj.message_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
             log_path = os.path.join(AUDIT_LOG_DIR, log_filename)
             with open(log_path, "w", encoding="utf-8") as f:
                 json.dump(result_entry, f, indent=4)
                 
             if is_valid:
                 processed_transactions.append(normalized)
-                logger.info(f"Successfully ingested: {normalized['transaction_id']}")
+                logger.info(f"Successfully processed: {normalized.get('utr') or email_obj.message_id}")
             else:
-                logger.warning(f"Ingestion partial/failed: {normalized['transaction_id']} - {errors}")
+                logger.warning(f"Ingestion partial/failed: {email_obj.message_id} - {errors}")
 
         mail.logout()
 
     except Exception as e:
         logger.exception(f"Critical error during IMAP ingestion: {e}")
         print(f"Error: {e}")
+    finally:
+        db.close()
+
+    # Trigger Reconciliation
+    reconcile_bank_payments()
 
     # 7. Output Latest Results
     with open(JSON_OUT, "w", encoding="utf-8") as f:

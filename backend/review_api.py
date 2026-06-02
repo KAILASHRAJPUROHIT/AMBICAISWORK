@@ -61,7 +61,9 @@ async def security_middleware(request: Request, call_next):
         "/api/email-sync-now",
         "/api/sms-sync-now",
         "/api/bank-events",
-        "/api/sms-events"
+        "/api/sms-events",
+        "/api/live-payment-events",
+        "/api/invoices/pdf/"
     ]
     
     # LAN Health Check
@@ -93,81 +95,10 @@ async def security_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
-class LoginRequest(BaseModel):
-    employee_id: str
-    password: str
-
-class OTPRequest(BaseModel):
-    employee_id: str
-    otp_code: str
-
-@app.post("/api/auth/login")
-async def login(req: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.employee_id == req.employee_id).first()
-    if not user:
-        log_event(db, req.employee_id, "FAILED_LOGIN")
-        raise HTTPException(status_code=401, detail="Invalid Employee ID")
-    
-    # Password check (mocked for now as per instructions to preserve existing)
-    # In a real app, use passlib.hash.bcrypt.verify(req.password, user.hashed_password)
-    
-    otp = create_otp(db, req.employee_id)
-    log_event(db, req.employee_id, "OTP_SENT")
-    
-    # MOCK EMAIL SEND
-    print(f"--- SECURITY ALERT: OTP for {req.employee_id} is {otp} ---")
-    
-    return {"status": "otp_required", "employee_id": req.employee_id}
-
-@app.post("/api/auth/verify-otp")
-async def verify_otp_route(req: OTPRequest, db: Session = Depends(get_db)):
-    if verify_otp(db, req.employee_id, req.otp_code):
-        token = create_user_session(db, req.employee_id)
-        log_event(db, req.employee_id, "LOGIN_SUCCESS")
-        
-        user = db.query(User).filter(User.employee_id == req.employee_id).first()
-        return {
-            "status": "success",
-            "token": token,
-            "user": {
-                "employee_id": user.employee_id,
-                "name": user.name,
-                "role": user.role
-            }
-        }
-    else:
-        log_event(db, req.employee_id, "OTP_FAILED")
-        raise HTTPException(status_code=401, detail="Invalid or expired OTP")
-
-@app.get("/api/admin/logs")
-async def get_admin_logs(db: Session = Depends(get_db)):
-    # Verify Admin role would be handled by middleware/dependency
-    logs = db.query(LoginLog).order_by(LoginLog.created_at.desc()).limit(100).all()
-    return logs
-
-@app.get("/api/admin/system-health")
-async def get_system_health():
-    from backend.lan_config import get_local_ip
-    return {
-        "local_ip": get_local_ip(),
-        "lan_status": "Approved" if "192.168.1." in get_local_ip() else "Check Subnet",
-        "https_active": True, # Backend will be served over HTTPS
-        "session_timeout": "3 minutes"
-    }
-
-# Enable CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Models for API
 class ReviewAction(BaseModel):
     invoice_no: str
-    status: str 
+    status: str
     comment: str
     accountant_id: str
 
@@ -178,14 +109,15 @@ async def get_share_status():
     return {
         "online": online,
         "path": watch_path,
-        "label": "Invoice Share Online" if online else "Invoice Share Offline",
+        "label": "Invoice PDF Share (PC2)",
         "status_color": "Green" if online else "Red"
     }
 
 @app.get("/api/invoices/live-feed")
 async def get_live_feed(db: Session = Depends(get_db)):
-    invoices = db.query(Bill).order_by(Bill.created_at.desc()).limit(50).all()
-    return invoices
+    # Returns last 50 invoices for dashboard
+    bills = db.query(Bill).order_by(Bill.created_at.desc()).limit(50).all()
+    return bills
 
 @app.get("/api/prime/dashboard/stats")
 async def get_dashboard_stats(db: Session = Depends(get_db)):
@@ -240,49 +172,6 @@ async def get_invoice_pdf(bill_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="PDF file missing on disk")
         
     return FileResponse(bill.pdf_path, media_type="application/pdf")
-
-@app.get("/api/reconciliations")
-async def get_reconciliations(db: Session = Depends(get_db)):
-    bills = db.query(Bill).filter(Bill.status != "Green").all()
-    return [
-        {
-            "invoice_no": b.bill_number,
-            "status": b.status,
-            "status_text": b.status_text,
-            "reason": "Pending manual review" if b.review_required else "Auto-verified",
-            "timestamp": b.created_at.isoformat(),
-            "details": {
-                "customer": b.customer_name,
-                "total": float(b.total_amount),
-                "mode": b.payment_mode,
-                "reference": b.reference_no
-            }
-        } for b in bills
-    ]
-
-@app.get("/api/reports/owner")
-async def get_owner_report():
-    if not os.path.exists(MANUAL_REPORT_PATH):
-         return {"daily_summary": {"generated_at": datetime.now().isoformat(), "processed_count": 0, "resolved_reviews": 0}}
-    
-    try:
-        with open(MANUAL_REPORT_PATH, "r", encoding="utf-8") as f:
-            content = f.read().replace("NaN", "null")
-            data = json.loads(content)
-        
-        records = data.get("records", [])
-        processed = len(records)
-        resolved = len([r for r in records if r.get("validation_status") == "GREEN"])
-        
-        return {
-            "daily_summary": {
-                "generated_at": data.get("timestamp"),
-                "processed_count": processed,
-                "resolved_reviews": resolved
-            }
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/review")
 async def review_invoice(action: ReviewAction):
@@ -345,24 +234,63 @@ async def get_bank_events(db: Session = Depends(get_db)):
 
 @app.get("/api/sms-events")
 async def get_sms_events(db: Session = Depends(get_db)):
-    events = db.query(SMSAlert).order_by(SMSAlert.received_at.desc()).limit(50).all()
+    events = db.query(SMSAlert).order_by(SMSAlert.transaction_timestamp.desc()).limit(50).all()
     return events
+
+@app.get("/api/live-payment-events")
+async def get_live_payment_events(db: Session = Depends(get_db)):
+    # Combine BankAlerts and SMSAlerts into a normalized view
+    # Limit to last 50
+    alerts = db.query(BankAlert).order_by(BankAlert.received_at.desc()).limit(50).all()
+    sms_alerts = db.query(SMSAlert).order_by(SMSAlert.transaction_timestamp.desc()).limit(50).all()
+    
+    combined = []
+    
+    for a in alerts:
+        combined.append({
+            "id": f"bank_{a.id}",
+            "source": "EMAIL",
+            "bank": a.bank_name,
+            "amount": float(a.amount),
+            "reference": a.utr_reference,
+            "timestamp": a.received_at.isoformat(),
+            "confidence": "HIGH" if a.utr_reference and not a.utr_reference.startswith("SYNC_") else "MEDIUM",
+            "raw": a.raw_text
+        })
+        
+    for s in sms_alerts:
+        combined.append({
+            "id": f"sms_{s.id}",
+            "source": "SMS",
+            "bank": s.bank_name,
+            "account": s.account_suffix,
+            "amount": float(s.amount),
+            "reference": s.utr_reference,
+            "timestamp": s.transaction_timestamp.isoformat(),
+            "confidence": "HIGH" if s.parsed_confidence >= 0.9 else "MEDIUM" if s.parsed_confidence >= 0.6 else "LOW",
+            "payer": s.payer_name,
+            "raw": s.raw_body
+        })
+        
+    # Sort by timestamp desc
+    combined.sort(key=lambda x: x["timestamp"], reverse=True)
+    
+    return combined[:50]
 
 if __name__ == "__main__":
     import uvicorn
-    import os
+    # Check for SSL
+    cert_path = r"C:\Aradhana\SSL\cert.pem"
+    key_path = r"C:\Aradhana\SSL\key.pem"
     
-    cert_file = "certs/cert.pem"
-    key_file = "certs/key.pem"
-    
-    if os.path.exists(cert_file) and os.path.exists(key_file):
+    if os.path.exists(cert_path) and os.path.exists(key_path):
         print(f"--- SSL Enabled: Starting Backend on HTTPS ---")
         uvicorn.run(
             "backend.review_api:app", 
             host="0.0.0.0", 
             port=8000, 
-            ssl_keyfile=key_file, 
-            ssl_certfile=cert_file,
+            ssl_keyfile=key_path, 
+            ssl_certfile=cert_path,
             reload=True
         )
     else:

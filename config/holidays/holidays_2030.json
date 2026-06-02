@@ -1,7 +1,7 @@
 {
     "year": 2030,
     "status": "ACTIVE",
-    "generated_at": "2026-05-31",
+    "generated_at": "2026-06-01",
     "holidays": {
         "2030-01-26": {
             "name": "Bank Holiday (Saturday)",
@@ -129,5 +129,5 @@
         "Verify Holi, Diwali, Eid, and other movable dates."
     ],
     "approved_by": "Kuldeep",
-    "approved_at": "2026-05-31"
+    "approved_at": "2026-06-01"
 }

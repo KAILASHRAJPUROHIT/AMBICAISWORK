@@ -59,15 +59,30 @@ interface LiveInvoice {
   created_at: string;
 }
 
+interface LivePaymentEvent {
+  id: string;
+  source: string;
+  bank: string;
+  account?: string;
+  amount: number;
+  reference: string;
+  timestamp: string;
+  confidence: string;
+  payer?: string;
+  raw: string;
+}
+
 const DashboardPage: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [ingestionStatus, setIngestionStatus] = useState<IngestionStatus | null>(null);
   const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null);
   const [smsStatus, setSMSStatus] = useState<SMSStatus | null>(null);
   const [liveFeed, setLiveFeed] = useState<LiveInvoice[]>([]);
+  const [paymentEvents, setPaymentEvents] = useState<LivePaymentEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState({ pdf: false, email: false, sms: false });
+  const [selectedEvent, setSelectedEvent] = useState<LivePaymentEvent | null>(null);
 
   const API_BASE = window.location.protocol === 'https:' ? 'https://127.0.0.1:8000' : 'http://127.0.0.1:8000';
 
@@ -78,7 +93,8 @@ const DashboardPage: React.FC = () => {
         `${API_BASE}/api/invoices/live-feed`,
         `${API_BASE}/api/admin/ingestion-status`,
         `${API_BASE}/api/admin/email-status`,
-        `${API_BASE}/api/admin/sms-status`
+        `${API_BASE}/api/admin/sms-status`,
+        `${API_BASE}/api/live-payment-events`
       ];
 
       const responses = await Promise.all(endpoints.map(url => fetch(url).catch(() => null)));
@@ -88,6 +104,7 @@ const DashboardPage: React.FC = () => {
       if (responses[2] && responses[2].ok) setIngestionStatus(await (responses[2] as Response).json());
       if (responses[3] && responses[3].ok) setEmailStatus(await (responses[3] as Response).json());
       if (responses[4] && responses[4].ok) setSMSStatus(await (responses[4] as Response).json());
+      if (responses[5] && responses[5].ok) setPaymentEvents(await (responses[5] as Response).json());
 
       // Only show error if core stats or feed fail when NOT loading
       if ((!responses[0] || !responses[0].ok) && (!responses[1] || !responses[1].ok) && !loading) {
@@ -336,6 +353,84 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-16">
+        <div className="lg:col-span-3">
+          <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Live Payment Events (SMS/Email)</h2>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-100">
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Source</th>
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Bank/Account</th>
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Amount</th>
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Reference</th>
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Timestamp</th>
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Confidence</th>
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paymentEvents.map((event) => (
+                  <tr key={event.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                    <td className="p-4 font-bold text-gray-900">[{event.source}]</td>
+                    <td className="p-4 text-sm text-gray-600">
+                      {event.bank} {event.account ? `(${event.account})` : ''}
+                    </td>
+                    <td className="p-4 font-black text-gray-900">₹{event.amount.toLocaleString()}</td>
+                    <td className="p-4 text-sm font-mono">{event.reference || 'N/A'}</td>
+                    <td className="p-4 text-xs text-gray-500">
+                      {new Date(event.timestamp).toLocaleTimeString()}
+                    </td>
+                    <td className="p-4">
+                      <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase ${
+                        event.confidence === 'HIGH' ? 'bg-green-100 text-green-700' : 
+                        event.confidence === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {event.confidence}
+                      </span>
+                    </td>
+                    <td className="p-4">
+                      <button 
+                        onClick={() => setSelectedEvent(event)}
+                        className="text-[10px] font-black text-blue-600 uppercase hover:underline"
+                      >
+                        Show Evidence
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {paymentEvents.length === 0 && (
+              <div className="p-12 text-center text-gray-400 italic">No payment events detected yet.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Evidence Modal */}
+      {selectedEvent && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-8 z-50">
+          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-xl font-black text-gray-900 uppercase">Payment Evidence</h3>
+                <p className="text-sm text-gray-500">{selectedEvent.bank} | {selectedEvent.timestamp}</p>
+              </div>
+              <button onClick={() => setSelectedEvent(null)} className="text-gray-400 hover:text-gray-900 font-bold">Close</button>
+            </div>
+            <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 font-mono text-xs whitespace-pre-wrap max-h-96 overflow-y-auto">
+              {selectedEvent.raw}
+            </div>
+            <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
+               <button onClick={() => setSelectedEvent(null)} className="bg-gray-900 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest hover:bg-black transition-colors">
+                  Got it
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

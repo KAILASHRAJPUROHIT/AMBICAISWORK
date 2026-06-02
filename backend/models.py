@@ -119,13 +119,15 @@ class SMSAlert(Base):
     id = Column(Integer, primary_key=True, index=True)
     sms_id = Column(String, unique=True, nullable=True)
     sender = Column(String, nullable=False)
-    received_at = Column(DateTime, nullable=False)
+    transaction_timestamp = Column(DateTime, nullable=False)
     bank_name = Column(String, nullable=True)
     account_suffix = Column(String, nullable=True)
     credit_or_debit = Column(String, nullable=True) # CREDIT, DEBIT
     amount = Column(Numeric(12, 2), nullable=False)
     utr_reference = Column(String, nullable=True)
+    payer_name = Column(String, nullable=True)
     raw_body = Column(Text, nullable=False)
+    email_message_id = Column(String, nullable=True)
     parsed_confidence = Column(Numeric(5, 2), default=0.0)
     created_at = Column(DateTime, server_default=func.now())
 

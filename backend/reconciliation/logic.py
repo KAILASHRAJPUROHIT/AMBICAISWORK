@@ -82,9 +82,15 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
     if best_bill:
         # FOOLPROOF RULES
         is_ambiguous = (candidates_count > 1 and best_score < 100)
-        has_conflicts = False # Placeholder for complex conflict check
         
-        if best_score >= 80 and not is_ambiguous:
+        # Check for duplicate UTR usage across the database
+        is_duplicate_utr = False
+        if utr:
+            existing_cleared_payment = db.query(Payment).filter(Payment.utr_reference == utr, Payment.status == "Green").first()
+            if existing_cleared_payment and existing_cleared_payment.bill_id != best_bill.id:
+                is_duplicate_utr = True
+        
+        if best_score >= 80 and not is_ambiguous and not is_duplicate_utr:
             # Check if this payment fully covers the remaining amount
             current_bank = float(best_bill.bank_received or 0.0)
             new_bank = current_bank + amount
@@ -104,9 +110,9 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
                 best_bill.review_required = 1
 
             # Update specific tracking fields
-            if source == "EMAIL":
+            if "EMAIL" in source:
                 best_bill.email_confirmed_amount = float(best_bill.email_confirmed_amount or 0.0) + amount
-            elif source == "SMS":
+            elif "SMS" in source:
                 best_bill.sms_confirmed_amount = float(best_bill.sms_confirmed_amount or 0.0) + amount
             
             best_bill.bank_received = new_bank
@@ -117,7 +123,6 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             # Find the first pending bank payment and mark it
             payment = db.query(Payment).filter(Payment.bill_id == best_bill.id, Payment.mode == "BANK_TRANSFER", Payment.status != "Green").first()
             if payment:
-                # If payment amount matches alert, mark Green
                 if abs(float(payment.amount) - amount) < 1.0:
                     payment.status = "Green"
                     payment.utr_reference = utr or payment.utr_reference
@@ -129,6 +134,7 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             best_bill.status = "Blue"
             reason = "Ambiguous Match" if is_ambiguous else "Low Confidence Match"
             if not utr: reason = "Missing UTR"
+            if is_duplicate_utr: reason = "Duplicate Reference Detected"
             
             best_bill.status_text = f"Review Required: {reason} (Score: {best_score})"
             best_bill.review_required = 1

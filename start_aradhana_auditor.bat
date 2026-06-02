@@ -28,22 +28,28 @@ if not exist "C:\Aradhana\PrimeExports\JSON\prime_report_import.json" (
 )
 
 :: 2. Launch Backend
-echo [2/3] Starting Backend API (Port 8000)...
-echo       NOTE: DO NOT USE backend.main:app for live dashboard.
-echo       Launching: backend.review_api:app
-start "Aradhana Backend" /min cmd /c "py -3.11 -m uvicorn backend.review_api:app --reload --host 127.0.0.1 --port 8000"
+echo [2/5] Starting Backend API (Port 8000)...
+start "Aradhana Backend" /min cmd /c "py -3.11 backend/review_api.py"
 
-:: 3. Launch Frontend
-echo [3/3] Starting Frontend UI (Port 5173)...
+:: 3. Launch PDF Ingestion
+echo [3/5] Starting PDF Ingestion Watcher (Z:\Aradhana\InvoicePDFs)...
+start "Aradhana PDF Watcher" /min cmd /c "py -3.11 backend/pdf_ingestion.py"
+
+:: 4. Launch SMS Ingestion
+echo [4/5] Starting SMS Ingestion Watcher (Polling Android Gateway)...
+start "Aradhana SMS Watcher" /min cmd /c "py -3.11 backend/sms_ingestion.py"
+
+:: 5. Launch Frontend
+echo [5/5] Starting Frontend UI (Port 5173)...
 cd frontend
 start "Aradhana Frontend" /min cmd /c "npm run dev"
 
-:: 4. Finalize
+:: 6. Finalize
 echo.
 echo Launch sequence complete. 
 echo ----------------------------------------------------
-echo Backend:  http://127.0.0.1:8000/docs
-echo Frontend: http://localhost:5173
+echo Backend (HTTPS): https://127.0.0.1:8000/docs
+echo Frontend:        http://localhost:5173
 echo ----------------------------------------------------
 echo.
 echo Opening browser in 5 seconds...

@@ -3,9 +3,11 @@ from typing import Set
 
 
 class UserRole(Enum):
-    ACCOUNTANT = "accountant"
-    OWNER = "owner"
     ADMIN = "admin"
+    OWNER = "owner"
+    ACCOUNTANT = "accountant"
+    STAFF = "staff"
+    VIEWER = "viewer"
 
 
 class Permission(Enum):
