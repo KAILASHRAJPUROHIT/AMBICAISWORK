@@ -180,6 +180,32 @@ def run_backend_internal():
 def run_self_test():
     print("=== Aradhana Payment Auditor Self-Test ===")
     try:
+        # Standard Library Imports
+        import imaplib
+        print("OK: imaplib imported")
+        import ssl
+        print("OK: ssl imported")
+        import socket
+        print("OK: socket imported")
+        import email
+        import email.message
+        import email.header
+        import email.utils
+        print("OK: email modules imported")
+        import sqlite3
+        print("OK: sqlite3 imported")
+        import pathlib
+        print("OK: pathlib imported")
+        import threading
+        print("OK: threading imported")
+        import multiprocessing
+        print("OK: multiprocessing imported")
+        import subprocess
+        print("OK: subprocess imported")
+        import signal
+        print("OK: signal imported")
+
+        # Third Party Imports
         import pydantic
         print(f"OK: Pydantic imported (version: {pydantic.__version__})")
         import fastapi
@@ -216,6 +242,8 @@ def run_self_test():
         # Verify backend imports
         from backend.pdf_ingestion import parse_pdf
         print("OK: Backend PDF ingestion module imported")
+        from backend.email_poller import process_emails
+        print("OK: Backend Email poller module imported")
         
         config = AradhanaLauncher().load_config()
         print(f"OK: Config loaded: {config.get('backend_host')}:{config.get('backend_port')}")
