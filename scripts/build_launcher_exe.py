@@ -81,10 +81,12 @@ def build():
         "--collect-all", "dotenv",
         "--collect-all", "pdfplumber",
         "--collect-all", "pdfminer",
+        "--collect-all", "pdfminer.six",
         "--collect-all", "PIL",
         "--collect-all", "pypdfium2",
         "--collect-all", "charset_normalizer",
         "--collect-all", "cryptography",
+        "--collect-all", "cffi",
     ]
     
     cmd.extend(data_args)
