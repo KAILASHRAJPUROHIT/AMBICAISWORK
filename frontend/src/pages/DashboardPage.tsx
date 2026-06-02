@@ -104,6 +104,10 @@ const DashboardPage: React.FC = () => {
 
   const API_BASE = window.location.origin;
 
+  // SAFE FORMATTERS
+  const money = (v?: number | null) => `₹${Number(v ?? 0).toLocaleString("en-IN")}`;
+  const num = (v?: number | null) => Number(v ?? 0).toLocaleString("en-IN");
+
   const fetchData = async () => {
     try {
       const endpoints = [
@@ -281,11 +285,11 @@ const DashboardPage: React.FC = () => {
       <section className="mb-16">
         <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Operational Metrics</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <StatCard label="Bills Dated Today" value={stats?.totalBillsToday || 0} />
-            <StatCard label="Imported Today" value={stats?.importedToday || 0} />
-            <StatCard label="Verified Cleared" value={stats?.verified || 0} />
-            <StatCard label="Pending Previous" value={stats?.pendingPreviousDays || 0} />
-            <StatCard label="Total Review" value={stats?.pendingReview || 0} />
+            <StatCard label="Bills Dated Today" value={num(stats?.totalBillsToday)} />
+            <StatCard label="Imported Today" value={num(stats?.importedToday)} />
+            <StatCard label="Verified Cleared" value={num(stats?.verified)} />
+            <StatCard label="Pending Previous" value={num(stats?.pendingPreviousDays)} />
+            <StatCard label="Total Review" value={num(stats?.pendingReview)} />
         </div>
       </section>
 
@@ -295,25 +299,25 @@ const DashboardPage: React.FC = () => {
           <div className="grid grid-cols-1 gap-4">
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                  <p className="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-tighter">Total Sale</p>
-                 <p className="text-xl font-black text-gray-900">₹{stats?.totalCollection.toLocaleString() || '0'}</p>
+                 <p className="text-xl font-black text-gray-900">{money(stats?.totalCollection)}</p>
               </div>
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm border-l-4 border-l-green-500">
                  <p className="text-[10px] font-black text-green-500 uppercase mb-2 tracking-tighter">Cash In Hand (After opening)</p>
-                 <p className="text-xl font-black text-gray-900">₹{stats?.cashCollection.toLocaleString() || '0'}</p>
+                 <p className="text-xl font-black text-gray-900">{money(stats?.cashCollection)}</p>
               </div>
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                  <p className="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-tighter">Bank Confirmed (Live)</p>
                  <div className="flex justify-between items-center">
-                    <p className="text-xl font-black text-gray-900">₹{stats?.bankCollection.toLocaleString() || '0'}</p>
+                    <p className="text-xl font-black text-gray-900">{money(stats?.bankCollection)}</p>
                     <div className="text-[9px] text-gray-400 font-bold space-y-1">
-                       <div>E: ₹{stats?.emailConfirmed.toLocaleString()}</div>
-                       <div>S: ₹{stats?.smsConfirmed.toLocaleString()}</div>
+                       <div>E: {money(stats?.emailConfirmed)}</div>
+                       <div>S: {money(stats?.smsConfirmed)}</div>
                     </div>
                  </div>
               </div>
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm border-l-4 border-l-blue-500">
                  <p className="text-[10px] font-black text-blue-500 uppercase mb-2 tracking-tighter">Cheques Pending</p>
-                 <p className="text-xl font-black text-gray-900">₹{stats?.chequeCollection.toLocaleString() || '0'}</p>
+                 <p className="text-xl font-black text-gray-900">{money(stats?.chequeCollection)}</p>
               </div>
           </div>
         </div>
@@ -351,7 +355,7 @@ const DashboardPage: React.FC = () => {
                     </td>
                     <td className="p-4 font-bold text-gray-900">{inv.bill_number}</td>
                     <td className="p-4 text-sm text-gray-600 truncate max-w-[150px]">{inv.customer_name}</td>
-                    <td className="p-4 font-black text-gray-900">₹{inv.total_amount.toLocaleString()}</td>
+                    <td className="p-4 font-black text-gray-900">{money(inv.total_amount)}</td>
                     <td className="p-4">
                       <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase ${
                         inv.status === 'Green' ? 'bg-green-100 text-green-700' : 
@@ -395,7 +399,7 @@ const DashboardPage: React.FC = () => {
                     <td className="p-4 text-sm text-gray-600">
                       {event.bank} {event.account ? `(${event.account})` : ''}
                     </td>
-                    <td className="p-4 font-black text-gray-900">₹{event.amount.toLocaleString()}</td>
+                    <td className="p-4 font-black text-gray-900">{money(event.amount)}</td>
                     <td className="p-4 text-sm font-mono">{event.reference || 'N/A'}</td>
                     <td className="p-4 text-xs text-gray-500">
                       {new Date(event.timestamp).toLocaleTimeString()}
