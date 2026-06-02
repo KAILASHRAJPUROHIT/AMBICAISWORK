@@ -52,12 +52,21 @@ def get_checkpoint(db: Session):
     return default_open
 
 def save_checkpoint(db: Session, last_ts: datetime):
+    now = datetime.now()
+    if last_ts > now:
+        logger.warning(f"FUTURE CHECKPOINT DETECTED: {last_ts}. System time: {now}. Clamping to current time.")
+        last_ts = now
+        
     setting = db.query(SystemSetting).filter(SystemSetting.key == "last_email_checkpoint").first()
     if not setting:
         setting = SystemSetting(key="last_email_checkpoint", value=last_ts.isoformat())
         db.add(setting)
     else:
-        current = datetime.fromisoformat(setting.value)
+        try:
+            current = datetime.fromisoformat(setting.value)
+        except:
+            current = datetime.min
+            
         if last_ts > current:
             setting.value = last_ts.isoformat()
     db.commit()

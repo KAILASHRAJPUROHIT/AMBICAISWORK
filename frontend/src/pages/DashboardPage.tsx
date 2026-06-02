@@ -98,12 +98,12 @@ const DashboardPage: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState({ pdf: false, email: false, sms: false });
   const [selectedEvent, setSelectedEvent] = useState<LivePaymentEvent | null>(null);
 
-  const API_BASE = window.location.protocol === 'https:' ? 'https://127.0.0.1:8000' : 'http://127.0.0.1:8000';
+  const API_BASE = window.location.origin;
 
   const fetchData = async () => {
     try {
       const endpoints = [
-        `${API_BASE}/api/prime/dashboard/stats`,
+        `${API_BASE}/api/dashboard/live`,
         `${API_BASE}/api/invoices/live-feed`,
         `${API_BASE}/api/admin/ingestion-status`,
         `${API_BASE}/api/admin/email-status`,

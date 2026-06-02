@@ -91,9 +91,8 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
     # 3. Decision Logic
     if best_bill:
         # FOOLPROOF RULES:
-        # 1. If multiple candidates have high scores, it's ambiguous.
-        high_score_count = sum(1 for b, s in scored_candidates if s >= 80)
-        is_ambiguous = (high_score_count > 1 and best_score < 100)
+        # 1. If multiple candidates exist for the same amount and no one is a clear winner (score < 100), it's ambiguous.
+        is_ambiguous = (len(matching_bills) > 1 and best_score < 100)
         
         # Check for duplicate UTR usage across the database
         is_duplicate_utr = False

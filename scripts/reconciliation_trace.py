@@ -1,141 +1,164 @@
-import os
 import sys
-import argparse
-import logging
-from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+import os
 
 # Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from sqlalchemy.orm import Session
 from backend.database import SessionLocal
-from backend.models import Bill, Payment, BankAlert, SMSAlert
+from backend.models import Bill, BankAlert, SMSAlert, Payment
+from datetime import datetime
+import json
 
-def trace_reconciliation(invoice_no=None, utr=None):
+def trace_reconciliation(identifier: str):
     db = SessionLocal()
-    try:
-        print(f"=== Reconciliation Trace: Invoice={invoice_no}, UTR={utr} ===")
-        
-        # 1. Identify Target Alert
-        alert = None
-        if utr:
-            alert = db.query(BankAlert).filter(BankAlert.utr_reference == utr).first()
+    from sqlalchemy import or_, and_
+    print(f"\n{'='*60}")
+    print(f"RECONCILIATION TRACE FOR: {identifier}")
+    print(f"{'='*60}\n")
+
+    # 1. Identify what we are looking for
+    bill = db.query(Bill).filter(Bill.bill_number == identifier).first()
+    alert = db.query(BankAlert).filter(BankAlert.utr_reference == identifier).first()
+    if not alert:
+        # Check SMS
+        sms = db.query(SMSAlert).filter(SMSAlert.utr_reference == identifier).first()
+        if sms:
+            alert = db.query(BankAlert).filter(BankAlert.utr_reference == identifier).first()
             if not alert:
-                print(f"Error: No BankAlert found with UTR {utr}")
-                return
-        
-        # 2. Identify Target Bill
-        bill = None
-        if invoice_no:
-            bill = db.query(Bill).filter(Bill.bill_number == invoice_no).first()
-            if not bill:
-                print(f"Error: No Bill found with Number {invoice_no}")
-                # We can still proceed if we have an alert
-        
-        if not alert and not bill:
-            print("Error: Need either an invoice number or a UTR reference.")
-            return
+                print(f"Found SMS alert {identifier} but no corresponding BankAlert yet.")
+                # We can mock a BankAlert from SMS for tracing if needed, 
+                # but verify_payment_event works on BankAlert.
 
-        if alert:
-            print(f"\n--- Analyzing Alert: ID={alert.id}, UTR={alert.utr_reference}, Amount={alert.amount} ---")
-            print(f"Bank: {alert.bank_name}, Received: {alert.received_at}")
-            
-            amount = float(alert.amount)
-            
-            # Re-run candidate finding logic
-            matching_bills = db.query(Bill).filter(
-                or_(
-                    and_(Bill.total_amount >= amount - 0.01, Bill.total_amount <= amount + 0.01),
-                    and_(Bill.remaining_amount >= amount - 0.01, Bill.remaining_amount <= amount + 0.01)
-                ),
-                Bill.status != "Green"
-            ).all()
-            
-            print(f"Found {len(matching_bills)} candidate bills by amount matching.")
-            for b in matching_bills:
-                print(f"  - {b.bill_number}: Total={b.total_amount}, Remaining={b.remaining_amount}, Status={b.status}")
-
-            if not matching_bills:
-                if utr:
-                    bill_by_utr = db.query(Bill).filter(Bill.reference_no == utr).first()
-                    if bill_by_utr:
-                        print(f"Found bill {bill_by_utr.bill_number} by UTR match.")
-                        matching_bills = [bill_by_utr]
-            
-            if not matching_bills:
-                print("REJECTION: No candidate bills found for this amount/reference.")
-                return
-
-            # Scoring Simulation
-            candidates_count = len(matching_bills)
-            for b in matching_bills:
-                score = 0
-                details = []
-                
-                # A. UTR Match (+100)
-                if utr and b.reference_no and utr == b.reference_no:
-                    score += 100
-                    details.append("UTR Match (+100)")
-                    
-                # B. Customer Name Match (+50)
-                if b.customer_name and b.customer_name.lower() != "unknown":
-                    name_tokens = [t for t in b.customer_name.lower().replace("(", " ").replace(")", " ").split() if len(t) > 2]
-                    raw_text = alert.raw_text.lower()
-                    matches = sum(1 for t in name_tokens if t in raw_text)
-                    if len(name_tokens) > 0 and (matches / len(name_tokens)) >= 0.5:
-                        score += 50
-                        details.append(f"Name Match ({matches}/{len(name_tokens)}) (+50)")
-                        
-                # C. Date Proximity (+30)
-                if b.invoice_date:
-                    days_diff = (alert.received_at.date() - b.invoice_date.date()).days
-                    if 0 <= days_diff <= 3:
-                        score += 30
-                        details.append(f"Date Diff {days_diff}d (+30)")
-                    elif -2 <= days_diff <= 7:
-                        score += 10
-                        details.append(f"Date Diff {days_diff}d (+10)")
-                
-                # D. Bank Name Match (+20)
-                if b.bank_name and alert.bank_name and b.bank_name.lower() == alert.bank_name.lower():
-                    score += 20
-                    details.append(f"Bank Match ({alert.bank_name}) (+20)")
-
-                print(f"Scoring {b.bill_number}: Total Score = {score}")
-                for d in details:
-                    print(f"  - {d}")
-                
-                is_ambiguous = (candidates_count > 1 and score < 100)
-                if score < 80:
-                    print(f"  - RESULT: Low Confidence ({score} < 80)")
-                elif is_ambiguous:
-                    print(f"  - RESULT: Ambiguous (multiple candidates, score < 100)")
-                else:
-                    print(f"  - RESULT: Strong Match!")
-
-        if bill:
-            print(f"\n--- Analyzing Bill: {bill.bill_number}, Status={bill.status} ---")
-            print(f"Total: {bill.total_amount}, Remaining: {bill.remaining_amount}")
-            print(f"Customer: {bill.customer_name}, Date: {bill.invoice_date}")
-            
-            # Find alerts matching this bill
-            amt = float(bill.remaining_amount)
-            matching_alerts = db.query(BankAlert).filter(
-                and_(BankAlert.amount >= amt - 0.01, BankAlert.amount <= amt + 0.01),
-                BankAlert.reconciled == False
-            ).all()
-            
-            print(f"Found {len(matching_alerts)} unreconciled alerts matching remaining amount.")
-            for a in matching_alerts:
-                print(f"  - Alert {a.id}: UTR={a.utr_reference}, Bank={a.bank_name}, Date={a.received_at}")
-
-    finally:
+    if not bill and not alert:
+        print(f"ERROR: Could not find Bill or BankAlert with identifier: {identifier}")
         db.close()
+        return
+
+    if bill:
+        print(f"TARGET BILL FOUND:")
+        print(f"  ID: {bill.id}")
+        print(f"  Bill No: {bill.bill_number}")
+        print(f"  Customer: {bill.customer_name}")
+        print(f"  Amount: {bill.total_amount}")
+        print(f"  Date: {bill.invoice_date}")
+        print(f"  Status: {bill.status} ({bill.status_text})")
+        print(f"  Ref in DB: {bill.reference_no}")
+        print(f"  Remaining: {bill.remaining_amount}")
+        print(f"  Bank Rcvd: {bill.bank_received}")
+        print("-" * 30)
+
+    if alert:
+        print(f"TARGET PAYMENT ALERT FOUND:")
+        print(f"  ID: {alert.id}")
+        print(f"  UTR: {alert.utr_reference}")
+        print(f"  Amount: {alert.amount}")
+        print(f"  Bank: {alert.bank_name}")
+        print(f"  Received: {alert.received_at}")
+        print(f"  Reconciled: {alert.reconciled}")
+        print("-" * 30)
+
+    # 2. Simulate matching for an alert
+    if alert:
+        print("\nSIMULATING MATCHING PROCESS FOR ALERT...")
+        amount = float(alert.amount)
+        utr = alert.utr_reference
+        received_at = alert.received_at
+
+        from sqlalchemy import or_, and_
+        matching_bills = db.query(Bill).filter(
+            or_(
+                and_(Bill.total_amount >= amount - 0.01, Bill.total_amount <= amount + 0.01),
+                and_(Bill.remaining_amount >= amount - 0.01, Bill.remaining_amount <= amount + 0.01)
+            )
+        ).all()
+
+        print(f"  Candidate bills with same amount (₹{amount}): {len(matching_bills)}")
+        
+        if not matching_bills and utr:
+            bill_by_utr = db.query(Bill).filter(Bill.reference_no == utr).first()
+            if bill_by_utr:
+                print(f"  No amount match, but found Bill by UTR: {bill_by_utr.bill_number}")
+                matching_bills = [bill_by_utr]
+
+        scored_candidates = []
+        for b in matching_bills:
+            score = 0
+            details = []
+            
+            # A. UTR Match (+100)
+            if utr and b.reference_no and utr == b.reference_no:
+                score += 100
+                details.append("UTR Match (+100)")
+            elif utr and b.reference_no:
+                details.append(f"UTR Mismatch (Alert: {utr}, Bill: {b.reference_no})")
+                
+            # B. Customer Name Match (+50)
+            if b.customer_name and b.customer_name.lower() != "unknown":
+                name_tokens = [t for t in b.customer_name.lower().replace("(", " ").replace(")", " ").split() if len(t) > 2]
+                raw_text = alert.raw_text.lower()
+                matches = sum(1 for t in name_tokens if t in raw_text)
+                if len(name_tokens) > 0 and (matches / len(name_tokens)) >= 0.5:
+                    score += 50
+                    details.append(f"Name Match (+50, {matches}/{len(name_tokens)} tokens)")
+                else:
+                    details.append(f"Name Match Fail ({matches}/{len(name_tokens)} tokens)")
+            
+            # C. Date Proximity (+30)
+            if b.invoice_date:
+                days_diff = (received_at.date() - b.invoice_date.date()).days
+                if 0 <= days_diff <= 3:
+                    score += 30
+                    details.append(f"Date Proximity (+30, {days_diff} days diff)")
+                elif -2 <= days_diff <= 7:
+                    score += 10
+                    details.append(f"Date Proximity (+10, {days_diff} days diff)")
+                else:
+                    details.append(f"Date Too Far ({days_diff} days diff)")
+
+            # D. Bank Name Match (+20)
+            if b.bank_name and alert.bank_name and b.bank_name.lower() == alert.bank_name.lower():
+                score += 20
+                details.append(f"Bank Match (+20, {alert.bank_name})")
+
+            scored_candidates.append({
+                "bill_no": b.bill_number,
+                "score": score,
+                "details": details
+            })
+
+        print("\nSCORING RESULTS:")
+        for res in scored_candidates:
+            print(f"  Bill {res['bill_no']}: Score {res['score']}")
+            for d in res['details']:
+                print(f"    - {d}")
+
+        if not scored_candidates:
+            print("  NO CANDIDATES EVALUATED.")
+    
+    # 3. If we searched for a bill, look for candidate alerts
+    if bill:
+        print("\nSEARCHING FOR CANDIDATE PAYMENTS FOR BILL...")
+        amount = float(bill.total_amount)
+        rem_amount = float(bill.remaining_amount or amount)
+        
+        candidate_alerts = db.query(BankAlert).filter(
+            or_(
+                and_(BankAlert.amount >= amount - 0.01, BankAlert.amount <= amount + 0.01),
+                and_(BankAlert.amount >= rem_amount - 0.01, BankAlert.amount <= rem_amount + 0.01)
+            )
+        ).all()
+        
+        print(f"  Candidate alerts with same amount: {len(candidate_alerts)}")
+        for a in candidate_alerts:
+            print(f"    - ID: {a.id}, Bank: {a.bank_name}, Amount: {a.amount}, UTR: {a.utr_reference}, Date: {a.received_at}")
+
+    db.close()
+    print(f"\n{'='*60}\n")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Trace Reconciliation logic")
-    parser.add_argument("--bill", help="Invoice Number")
-    parser.add_argument("--utr", help="Bank Reference / UTR")
+    if len(sys.argv) < 2:
+        print("Usage: python scripts/reconciliation_trace.py <invoice_no_or_utr>")
+        sys.exit(1)
     
-    args = parser.parse_args()
-    trace_reconciliation(invoice_no=args.bill, utr=args.utr)
+    trace_reconciliation(sys.argv[1])

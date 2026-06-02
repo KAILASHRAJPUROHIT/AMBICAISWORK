@@ -40,8 +40,9 @@ def test_duplicate_detection(db):
 
 def test_archive_job(db):
     # Create a bill with Green status
+    unique_no = f"TEST-ARCH-{datetime.now().timestamp()}"
     bill = Bill(
-        bill_number="TEST-ARCH-001",
+        bill_number=unique_no,
         total_amount=100.0,
         status="Green",
         pdf_path=os.path.join(WATCH_PATH, "test_arch.pdf")
