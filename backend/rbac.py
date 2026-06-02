@@ -18,17 +18,31 @@ class Permission(Enum):
     VIEW_REPORTS = "view_reports"
     GENERATE_REPORTS = "generate_reports"
     MANAGE_USERS = "manage_users"
+    VIEW_SECURITY_STATS = "view_security_stats"
+    EMERGENCY_CONTROLS = "emergency_controls"
+    ACCESS_MASTER_CONSOLE = "access_master_console"
+    VIEW_AUDIT_LOGS = "view_audit_logs"
 
 
 _ROLE_PERMISSIONS = {
     UserRole.ACCOUNTANT: {
         Permission.VIEW_REVIEWS,
         Permission.RESOLVE_REVIEWS,
+        Permission.VIEW_REPORTS,
+        Permission.VIEW_AUDIT_LOGS,
     },
     UserRole.OWNER: {
+        Permission.VIEW_REVIEWS,
+        Permission.RESOLVE_REVIEWS,
         Permission.VIEW_ESCALATIONS,
         Permission.RESOLVE_ESCALATIONS,
         Permission.VIEW_REPORTS,
+        Permission.GENERATE_REPORTS,
+        Permission.MANAGE_USERS,
+        Permission.VIEW_SECURITY_STATS,
+        Permission.EMERGENCY_CONTROLS,
+        Permission.ACCESS_MASTER_CONSOLE,
+        Permission.VIEW_AUDIT_LOGS,
     },
     UserRole.ADMIN: {
         Permission.VIEW_REVIEWS,
@@ -38,19 +52,27 @@ _ROLE_PERMISSIONS = {
         Permission.VIEW_REPORTS,
         Permission.GENERATE_REPORTS,
         Permission.MANAGE_USERS,
+        Permission.VIEW_SECURITY_STATS,
+        Permission.EMERGENCY_CONTROLS,
+        Permission.ACCESS_MASTER_CONSOLE,
+        Permission.VIEW_AUDIT_LOGS,
     },
 }
 
 
-def get_permissions(role: UserRole) -> Set[Permission]:
+def get_permissions(role_str: str) -> Set[Permission]:
     """
-    Returns the set of permissions for a given user role.
+    Returns the set of permissions for a given user role string.
     """
-    return _ROLE_PERMISSIONS.get(role, set())
+    try:
+        role = UserRole(role_str.lower())
+        return _ROLE_PERMISSIONS.get(role, set())
+    except ValueError:
+        return set()
 
 
-def has_permission(role: UserRole, permission: Permission) -> bool:
+def has_permission(role_str: str, permission: Permission) -> bool:
     """
-    Checks if a given role has a specific permission.
+    Checks if a given role string has a specific permission.
     """
-    return permission in get_permissions(role)
+    return permission in get_permissions(role_str)

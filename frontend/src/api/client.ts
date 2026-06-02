@@ -1,6 +1,6 @@
 const BASE_URL = window.location.origin;
 
-function getHeaders() {
+export function getHeaders() {
   const token = localStorage.getItem('session_token');
   return {
     'Content-Type': 'application/json',
@@ -16,11 +16,11 @@ export async function getHealth() {
   return response.json();
 }
 
-export async function login(employee_id: string) {
+export async function login(employee_id: string, password: string) {
   const response = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ employee_id })
+    body: JSON.stringify({ employee_id, password })
   });
   if (!response.ok) {
     const error = await response.json();

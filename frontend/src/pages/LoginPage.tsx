@@ -4,6 +4,7 @@ import './LoginPage.css';
 
 const LoginPage: React.FC = () => {
     const [employeeId, setEmployeeId] = useState('');
+    const [password, setPassword] = useState('');
     const [otp, setOtp] = useState('');
     const [step, setStep] = useState<'LOGIN' | 'OTP'>('LOGIN');
     const [loading, setLoading] = useState(false);
@@ -14,7 +15,7 @@ const LoginPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            await login(employeeId);
+            await login(employeeId, password);
             setStep('OTP');
         } catch (err: any) {
             setError(err.message);
@@ -62,8 +63,18 @@ const LoginPage: React.FC = () => {
                                 required
                             />
                         </div>
+                        <div className="form-group">
+                            <label>Password</label>
+                            <input 
+                                type="password" 
+                                value={password} 
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder="••••••••"
+                                required
+                            />
+                        </div>
                         <button type="submit" disabled={loading}>
-                            {loading ? 'Processing...' : 'Send OTP'}
+                            {loading ? 'Authenticating...' : 'Next: Verification'}
                         </button>
                     </form>
                 ) : (
@@ -81,7 +92,7 @@ const LoginPage: React.FC = () => {
                             <p className="otp-hint">OTP sent to your registered email.</p>
                         </div>
                         <button type="submit" disabled={loading}>
-                            {loading ? 'Verifying...' : 'Login Now'}
+                            {loading ? 'Verifying...' : 'Complete Login'}
                         </button>
                         <button type="button" className="btn-link" onClick={() => setStep('LOGIN')}>
                             Back to Login

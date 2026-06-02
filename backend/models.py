@@ -40,6 +40,7 @@ class OTP(Base):
     employee_id = Column(String, nullable=False)
     otp_code = Column(String, nullable=False)
     expires_at = Column(DateTime, nullable=False)
+    attempts = Column(Integer, default=0)
     is_verified = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
 

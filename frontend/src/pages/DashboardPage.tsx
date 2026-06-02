@@ -18,6 +18,7 @@ interface DashboardStats {
   smsConfirmed: number;
   emailConfirmed: number;
   chequeCollection: number;
+  pdfCountInShare: number;
   matchAccuracy: number;
 }
 
@@ -103,6 +104,7 @@ const initialStats: DashboardStats = {
   smsConfirmed: 0,
   emailConfirmed: 0,
   chequeCollection: 0,
+  pdfCountInShare: 0,
   matchAccuracy: 0
 };
 
@@ -385,7 +387,7 @@ const DashboardPage: React.FC = () => {
         <div className="lg:col-span-2">
           <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Live Pipeline Feed</h2>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            {sortedDates.map(date => (
+            {sortedDates.length > 0 ? sortedDates.map(date => (
               <div key={date}>
                 <div className="bg-black text-white px-4 py-2 text-[10px] font-black uppercase tracking-tighter">
                    {date}
@@ -450,9 +452,16 @@ const DashboardPage: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-            ))}
-            {liveFeed.length === 0 && (
-              <div className="p-12 text-center text-gray-400 italic">No invoices ingested yet. Waiting for PDFs...</div>
+            )) : (
+              <div className="p-12 text-center text-gray-400 italic">
+                {error === 'Session Expired. Please Login.' ? (
+                    <span className="text-red-500 font-bold">Authentication Required to View Feed</span>
+                ) : (stats?.pdfCountInShare || 0) > 0 || stats?.totalBillsToday ? (
+                    <span className="text-orange-500 font-bold uppercase tracking-widest text-xs animate-pulse">Feed Sync Error: Invoices exist but are not loading. Check Session.</span>
+                ) : (
+                    'No invoices ingested yet. Waiting for PDFs...'
+                )}
+              </div>
             )}
           </div>
         </div>

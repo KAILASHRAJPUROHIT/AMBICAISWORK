@@ -73,18 +73,21 @@ def get_db():
 async def debug_live_feed(db: Session = Depends(get_db)):
     from sqlalchemy import text
     try:
-        count = db.query(Bill).filter(Bill.is_test_data == False).count()
-        sample = db.query(Bill).filter(Bill.is_test_data == False).first()
+        total_count = db.query(Bill).count()
+        real_count = db.query(Bill).filter(Bill.is_test_data == False).count()
+        last_5 = db.query(Bill).order_by(Bill.ingested_at.desc()).limit(5).all()
         
         return {
-            "rows_found": count,
-            "query_used": "SELECT * FROM bills WHERE is_test_data = 0",
-            "sample_row": {
-                "id": sample.id,
-                "bill_number": sample.bill_number,
-                "customer_name": sample.customer_name,
-                "is_test_data": sample.is_test_data
-            } if sample else None,
+            "total_bills_in_db": total_count,
+            "real_bills_in_db": real_count,
+            "last_5_bills": [
+                {
+                    "id": b.id,
+                    "bill_no": b.bill_number,
+                    "is_test": b.is_test_data,
+                    "ingested_at": b.ingested_at.isoformat()
+                } for b in last_5
+            ],
             "database_path": DB_PATH
         }
     except Exception as e:
@@ -524,26 +527,143 @@ def status_colors():
 
 app.include_router(api_router)
 
-# Auth Models
-class LoginRequest(BaseModel):
-    employee_id: str
+# RBAC Dependencies
+async def require_role(roles: List[str], request: Request, db: Session = Depends(get_db)):
+    token = request.headers.get("X-Session-Token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
 
-class VerifyRequest(BaseModel):
-    employee_id: str
-    otp_code: str
+    employee_id = validate_session(db, token)
+    if not employee_id:
+        raise HTTPException(status_code=401, detail="Session expired")
 
-@app.post("/api/auth/login")
-async def login(request: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.employee_id == request.employee_id).first()
+    user = db.query(User).filter(User.employee_id == employee_id).first()
+    if not user or user.role.upper() not in [r.upper() for r in roles]:
+        raise HTTPException(status_code=403, detail="Access denied: Insufficient permissions")
+    return user
+
+async def require_owner(user: User = Depends(lambda r, d: require_role(["OWNER", "ADMIN"], r, d))):
+    return user
+
+# MASTER CONSOLE: User Administration
+@app.get("/api/admin/users")
+async def list_users(db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    users = db.query(User).all()
+    return [{
+        "id": u.id,
+        "employee_id": u.employee_id,
+        "name": u.name,
+        "email": u.email,
+        "role": u.role,
+        "is_active": u.is_active == 1
+    } for u in users]
+
+class UserCreate(BaseModel):
+    employee_id: str
+    name: str
+    email: str
+    role: str
+    password: str
+
+@app.post("/api/admin/users")
+async def create_user(request: UserCreate, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    from backend.auth_service import hash_password
+    existing = db.query(User).filter((User.employee_id == request.employee_id) | (User.email == request.email)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="User already exists")
+
+    new_user = User(
+        employee_id=request.employee_id,
+        name=request.name,
+        email=request.email,
+        role=request.role.upper(),
+        hashed_password=hash_password(request.password),
+        is_active=1
+    )
+    db.add(new_user)
+    db.commit()
+    from backend.reconciliation.logic import log_audit
+    log_audit(db, "User", new_user.id, "USER_CREATED", None, new_user.role, f"Created by {owner.employee_id}")
+    return {"status": "success"}
+
+@app.post("/api/admin/users/{employee_id}/toggle")
+async def toggle_user(employee_id: str, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    user = db.query(User).filter(User.employee_id == employee_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    otp = create_otp(db, request.employee_id)
-    if not otp:
-        raise HTTPException(status_code=500, detail="Failed to generate OTP")
+    if user.id == owner.id:
+        raise HTTPException(status_code=400, detail="Cannot disable yourself")
 
-    log_event(db, request.employee_id, "LOGIN_REQUEST")
-    return {"status": "success", "message": "OTP sent to your registered email"}
+    user.is_active = 0 if user.is_active == 1 else 1
+    db.commit()
+    from backend.reconciliation.logic import log_audit
+    log_audit(db, "User", user.id, "USER_TOGGLED", str(not user.is_active), str(user.is_active), f"Action by {owner.employee_id}")
+    return {"status": "success", "is_active": user.is_active == 1}
+
+# MASTER CONSOLE: Security Dashboard
+@app.get("/api/admin/security/stats")
+async def get_security_stats(db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    from backend.models import LoginLog, OTP, Session as SessionModel
+
+    failed_logins = db.query(LoginLog).filter(LoginLog.event_type == "PASSWORD_FAILED").count()
+    active_sessions = db.query(SessionModel).filter(SessionModel.expires_at > datetime.now()).count()
+    otp_stats = db.query(OTP).count()
+
+    # Recent logins
+    recent_logins = db.query(LoginLog).order_by(LoginLog.created_at.desc()).limit(10).all()
+
+    return {
+        "failed_login_count": failed_logins,
+        "active_session_count": active_sessions,
+        "otp_total_count": otp_stats,
+        "recent_events": [{
+            "employee_id": l.employee_id,
+            "event": l.event_type,
+            "ip": l.ip_address,
+            "time": l.created_at.isoformat()
+        } for l in recent_logins]
+    }
+
+# MASTER CONSOLE: Emergency Controls
+@app.get("/api/admin/system/mode")
+async def get_admin_mode(db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    from backend.models import SystemSetting
+    mode = db.query(SystemSetting).filter(SystemSetting.key == "system_mode").first()
+    return {"mode": mode.value if mode else "PRODUCTION"}
+
+@app.post("/api/admin/system/mode")
+async def set_admin_mode(mode: str, reason: str, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    from backend.models import SystemSetting
+    setting = db.query(SystemSetting).filter(SystemSetting.key == "system_mode").first()
+    if setting:
+        old_mode = setting.value
+        setting.value = mode.upper()
+        
+        # Log it
+        from backend.reconciliation.logic import log_audit
+        log_audit(db, "System", 0, "MODE_CHANGE", old_mode, setting.value, f"Reason: {reason}, By: {owner.employee_id}")
+        db.commit()
+    return {"status": "success", "new_mode": mode}
+
+@app.post("/api/admin/emergency/sync")
+async def force_sync(command: str, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    # Command: SCAN, POLL_EMAIL, POLL_SMS, RECONCILE
+    if command == "SCAN":
+        await trigger_scan()
+    elif command == "POLL_EMAIL":
+        await trigger_email_sync()
+    elif command == "POLL_SMS":
+        await trigger_sms_sync()
+    elif command == "RECONCILE":
+        from backend.reconciliation.logic import reconcile_unreconciled_alerts
+        reconcile_unreconciled_alerts(db)
+
+    from backend.reconciliation.logic import log_audit
+    log_audit(db, "System", 0, "FORCE_SYNC", None, command, f"Forced by {owner.employee_id}")
+    return {"status": "success", "command": command}
+
+# ... rest ...
 
 @app.post("/api/auth/verify")
 async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Request = None):
@@ -653,6 +773,26 @@ if os.path.exists(frontend_dist):
         index_path = os.path.join(frontend_dist, "index.html")
         if os.path.exists(index_path): return FileResponse(index_path)
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+# MASTER CONSOLE: Financial Health Dashboard
+@app.get("/api/admin/financial/health")
+async def get_financial_health(db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    from backend.models import Bill, Cheque
+    
+    pending_review = db.query(Bill).filter(Bill.review_required == 1, Bill.is_test_data == False).count()
+    cheques_pending = db.query(Cheque).filter(Cheque.status != "Green").count()
+    
+    # Calculate bank variance (simplified)
+    # Variance = (Total Invoiced Bank Amount) - (Total Confirmed Bank Amount)
+    total_invoiced_bank = float(db.query(func.sum(Bill.amount)).filter(Bill.payment_mode.like("%BANK%"), Bill.is_test_data == False).scalar() or 0.0)
+    total_confirmed_bank = float(db.query(func.sum(Bill.bank_received)).filter(Bill.is_test_data == False).scalar() or 0.0)
+    
+    return {
+        "pending_review_count": pending_review,
+        "cheques_pending_count": cheques_pending,
+        "bank_variance_amount": total_invoiced_bank - total_confirmed_bank,
+        "reconciliation_accuracy": round((total_confirmed_bank / total_invoiced_bank * 100), 2) if total_invoiced_bank > 0 else 100.0
+    }
 
 @app.on_event("startup")
 async def startup_event():

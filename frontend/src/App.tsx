@@ -6,6 +6,7 @@ import EscalationsPage from './pages/EscalationsPage';
 import ReportsPage from './pages/ReportsPage';
 import PrimeExtractionReviewPage from './pages/PrimeExtractionReviewPage';
 import AuditLogsPage from './pages/AuditLogsPage';
+import MasterConsolePage from './pages/MasterConsolePage';
 import LoginPage from './pages/LoginPage';
 import { getMe, logout } from './api/client';
 import './index.css';
@@ -21,7 +22,7 @@ const ProtectedRoute = ({ children, roles }: { children: React.ReactElement, rol
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    if (roles && !roles.includes(user.role)) {
+    if (roles && !roles.includes(user.role.toLowerCase())) {
         return <Navigate to="/" replace />;
     }
 
@@ -51,7 +52,7 @@ function App() {
   }, []);
 
   const handleLogout = async () => {
-    await logout();
+    try { await logout(); } catch(e) {}
     setUser(null);
     window.location.href = '/login';
   };
@@ -59,6 +60,8 @@ function App() {
   if (loading) {
     return <div className="h-screen flex items-center justify-center font-black text-2xl uppercase tracking-widest animate-pulse">Initializing Secure Environment...</div>;
   }
+
+  const role = user?.role?.toLowerCase() || '';
 
   return (
     <Router>
@@ -81,27 +84,34 @@ function App() {
                     <NavLink to="/" end className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
                       Dashboard
                     </NavLink>
-                    {['admin', 'accountant', 'owner'].includes(user?.role) && (
+                    
+                    {['admin', 'owner'].includes(role) && (
+                      <NavLink to="/master-console" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
+                        Master Console
+                      </NavLink>
+                    )}
+
+                    {['admin', 'accountant', 'owner'].includes(role) && (
                       <NavLink to="/reconciliation" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
                         Reconciliation
                       </NavLink>
                     )}
-                    {['admin', 'owner'].includes(user?.role) && (
+                    {['admin', 'owner'].includes(role) && (
                       <NavLink to="/escalations" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
                         Escalations
                       </NavLink>
                     )}
-                    {['admin', 'owner'].includes(user?.role) && (
+                    {['admin', 'owner', 'accountant'].includes(role) && (
                       <NavLink to="/reports" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
                         Reports
                       </NavLink>
                     )}
-                    {['admin', 'accountant', 'owner'].includes(user?.role) && (
+                    {['admin', 'accountant', 'owner'].includes(role) && (
                       <NavLink to="/prime-extraction-review" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
                         Extraction Review
                       </NavLink>
                     )}
-                    {['admin'].includes(user?.role) && (
+                    {['admin', 'owner', 'accountant'].includes(role) && (
                       <NavLink to="/audit-logs" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
                         Audit Logs
                       </NavLink>
@@ -112,7 +122,7 @@ function App() {
                      <div className="flex items-center space-x-4 mb-6">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500"></div>
                         <div>
-                           <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">Session User</div>
+                           <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">{user?.role || 'User'}</div>
                            <div className="text-sm font-black truncate max-w-[120px]">{user?.name || 'Unknown'}</div>
                         </div>
                      </div>
@@ -126,6 +136,9 @@ function App() {
                 <main className="flex-1 overflow-y-auto">
                   <Routes>
                     <Route path="/" element={<DashboardPage />} />
+                    <Route path="/master-console" element={
+                        <ProtectedRoute roles={['admin', 'owner']}><MasterConsolePage /></ProtectedRoute>
+                    } />
                     <Route path="/reconciliation" element={
                         <ProtectedRoute roles={['admin', 'accountant', 'owner']}><ReconciliationQueuePage /></ProtectedRoute>
                     } />
@@ -133,13 +146,13 @@ function App() {
                         <ProtectedRoute roles={['admin', 'owner']}><EscalationsPage /></ProtectedRoute>
                     } />
                     <Route path="/reports" element={
-                        <ProtectedRoute roles={['admin', 'owner']}><ReportsPage /></ProtectedRoute>
+                        <ProtectedRoute roles={['admin', 'owner', 'accountant']}><ReportsPage /></ProtectedRoute>
                     } />
                     <Route path="/prime-extraction-review" element={
                         <ProtectedRoute roles={['admin', 'accountant', 'owner']}><PrimeExtractionReviewPage /></ProtectedRoute>
                     } />
                     <Route path="/audit-logs" element={
-                        <ProtectedRoute roles={['admin']}><AuditLogsPage /></ProtectedRoute>
+                        <ProtectedRoute roles={['admin', 'owner', 'accountant']}><AuditLogsPage /></ProtectedRoute>
                     } />
                   </Routes>
                 </main>
