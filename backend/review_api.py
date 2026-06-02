@@ -39,12 +39,15 @@ if os.path.exists(frontend_dist):
 
 app.include_router(api_router)
 
+from backend.invoice_lifecycle import start_lifecycle_automation
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting Backend Services...")
     start_ingestion_thread()
     start_email_poller()
     start_sms_poller()
+    start_lifecycle_automation()
 
 # Configuration Constants
 MANUAL_REPORT_PATH = r"C:\Aradhana\PrimeExports\JSON\reconciliation_result.json"

@@ -17,7 +17,8 @@ import json
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("PDF_Ingestion")
 
-WATCH_PATH = r"Z:\Aradhana\InvoicePDFs"
+WATCH_PATH = r"C:\Aradhana\InvoicePDFs"
+from backend.invoice_lifecycle import handle_duplicate
 
 # OCR Settings
 OCR_ACCELERATION = os.getenv("OCR_ACCELERATION", "auto")
@@ -224,9 +225,12 @@ def process_invoice(file_path):
 
     db = SessionLocal()
     try:
-        existing = db.query(Bill).filter(Bill.pdf_hash == file_hash).first()
-        if existing:
+        # 1. SHA256 Hash check
+        existing_hash = db.query(Bill).filter(Bill.pdf_hash == file_hash).first()
+        if existing_hash:
+            logger.info(f"Duplicate hash detected for {os.path.basename(file_path)}")
             increment_status("skipped_duplicates")
+            handle_duplicate(file_path, db, reason="Duplicate PDF SHA256 hash")
             return
 
         invoice_data = parse_pdf(file_path)
@@ -240,10 +244,32 @@ def process_invoice(file_path):
             )
             return
 
-        duplicate = db.query(Bill).filter(Bill.bill_number == invoice_data["bill_number"]).first()
-        if duplicate:
-            logger.warning(f"Duplicate Skip: {invoice_data['bill_number']} (Number match)")
+        # 2. 5-point identity check
+        # - invoice number
+        # - invoice date
+        # - customer name
+        # - grand total
+        # - PDF SHA256 hash (already checked above)
+        
+        duplicate_bill = db.query(Bill).filter(
+            Bill.bill_number == invoice_data["bill_number"],
+            Bill.invoice_date == invoice_data["invoice_date"],
+            Bill.customer_name == invoice_data["customer_name"],
+            Bill.amount == invoice_data["total_amount"]
+        ).first()
+
+        if duplicate_bill:
+            logger.info(f"Duplicate 5-point match for {invoice_data['bill_number']}")
             increment_status("skipped_duplicates")
+            handle_duplicate(file_path, db, reason="5-point identity match (Number, Date, Customer, Total)")
+            return
+
+        # Check for just number match (could be a mistake or update)
+        duplicate_num = db.query(Bill).filter(Bill.bill_number == invoice_data["bill_number"]).first()
+        if duplicate_num:
+            logger.warning(f"Duplicate Number Skip: {invoice_data['bill_number']} (Partial identity match)")
+            increment_status("skipped_duplicates")
+            handle_duplicate(file_path, db, reason="Duplicate Invoice Number match")
             return
 
         modes = [p["mode"] for p in invoice_data["payments"]]
@@ -336,20 +362,6 @@ def process_invoice(file_path):
         logger.info(f"Invoice Inserted: {new_bill.bill_number} from {os.path.basename(file_path)}")
         increment_status("invoices_inserted")
         update_status(last_processed_time=datetime.now().isoformat())
-
-        # Archival logic: move yesterday's files to OLD
-        import shutil
-        if new_bill.invoice_date and new_bill.invoice_date.date() < datetime.now().date():
-            old_dir = os.path.join(os.path.dirname(WATCH_PATH), "OLD")
-            os.makedirs(old_dir, exist_ok=True)
-            dest_path = os.path.join(old_dir, os.path.basename(file_path))
-            try:
-                # To prevent file-in-use errors, copy then delete
-                shutil.copy2(file_path, dest_path)
-                os.remove(file_path)
-                logger.info(f"Archived old invoice: {os.path.basename(file_path)} to OLD directory.")
-            except Exception as e:
-                logger.error(f"Failed to archive {file_path}: {e}")
 
     except Exception as e:
         db.rollback()
