@@ -73,6 +73,8 @@ class Bill(Base):
     total_amount = synonym("amount")
     customer_purchase_amount = Column(Numeric(12, 2), default=0.0) # For Old Gold/Purchase
     advance_amount = Column(Numeric(12, 2), default=0.0) # For Advance adjusted
+    advance_source = Column(String, nullable=True) # CASH, UPI, NEFT, RTGS, CARD, CHEQUE, MIXED, UNKNOWN
+    advance_verification_status = Column(String, default="UNVERIFIED") # UNVERIFIED, VERIFIED, REJECTED
     
     payment_mode = Column(String, nullable=True)
     bank_name = Column(String, nullable=True)
@@ -82,6 +84,12 @@ class Bill(Base):
     status_text = Column(String, nullable=True)
     review_required = Column(Integer, default=1)
     is_test_data = Column(Boolean, default=False)
+    is_delivered = Column(Boolean, default=False)
+    delivered_at = Column(DateTime, nullable=True)
+    delivery_approved_by = Column(String, nullable=True)
+    
+    reversal_date = Column(DateTime, nullable=True)
+    reversal_reason = Column(String, nullable=True)
     
     pdf_path = Column(String, nullable=True)
     pdf_hash = Column(String, nullable=True)
@@ -154,6 +162,7 @@ class Cheque(Base):
     customer_name = Column(String, nullable=True)
     cheque_date = Column(DateTime, nullable=True)
     deposit_date = Column(DateTime, nullable=True)
+    expected_clearance_date = Column(DateTime, nullable=True)
     status = Column(String, default="Blue")
     cleared_at = Column(DateTime, nullable=True)
     return_reason = Column(String, nullable=True)

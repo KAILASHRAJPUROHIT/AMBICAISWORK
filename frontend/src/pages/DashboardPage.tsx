@@ -9,6 +9,8 @@ interface DashboardStats {
   verified: number;
   pendingReview: number;
   partialPaid: number;
+  unverifiedAdvancesCount: number;
+  unverifiedAdvancesAmount: number;
   totalCollection: number;
   cashCollection: number;
   bankCollection: number;
@@ -86,6 +88,8 @@ const initialStats: DashboardStats = {
   verified: 0,
   pendingReview: 0,
   partialPaid: 0,
+  unverifiedAdvancesCount: 0,
+  unverifiedAdvancesAmount: 0,
   totalCollection: 0,
   cashCollection: 0,
   bankCollection: 0,
@@ -289,10 +293,11 @@ const DashboardPage: React.FC = () => {
       
       <section className="mb-16">
         <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Operational Metrics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             <StatCard label="Bills Dated Today" value={num(stats?.totalBillsToday)} />
             <StatCard label="Imported Today" value={num(stats?.importedToday)} />
             <StatCard label="Verified Cleared" value={num(stats?.verified)} />
+            <StatCard label="Unverified Adv" value={num(stats?.unverifiedAdvancesCount)} />
             <StatCard label="Pending Previous" value={num(stats?.pendingPreviousDays)} />
             <StatCard label="Total Review" value={num(stats?.pendingReview)} />
         </div>

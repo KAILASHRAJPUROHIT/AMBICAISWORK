@@ -143,7 +143,9 @@ def status_colors():
         "Yellow": "#FFFF99",
         "Orange": "#FFA500",
         "Red": "#FF0000",
-        "Green": "#008000"
+        "Green": "#008000",
+        "Blue": "#ADD8E6",
+        "Purple": "#800080"
     }
 
 @app.post("/review_queue/", response_model=ReviewQueueItem, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_admin_or_accountant)])

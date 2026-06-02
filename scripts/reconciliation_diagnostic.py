@@ -26,8 +26,8 @@ def run_diagnostic():
         today_str = now.strftime("%Y-%m-%d")
         
         from sqlalchemy import func
-        bills = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str).all()
-        imported_today = db.query(Bill).filter(Bill.created_at >= today_start).all()
+        bills = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).all()
+        imported_today = db.query(Bill).filter(Bill.created_at >= today_start, Bill.is_test_data == False).all()
         
         print(f"Bills Dated Today: {len(bills)}")
         print(f"Bills Imported Today: {len(imported_today)}")
@@ -61,12 +61,14 @@ def run_diagnostic():
         yellow = sum(1 for b in bills if b.status == "Yellow")
         blue = sum(1 for b in bills if b.status == "Blue")
         red = sum(1 for b in bills if b.status == "Red")
+        purple = sum(1 for b in bills if b.status == "Purple")
         
         print("-" * 80)
         print(f"Total Invoices: {total_invoices}")
         print(f"Cleared (Green): {green}")
         print(f"Pending (Yellow): {yellow}")
         print(f"Review (Blue): {blue}")
+        print(f"Ambiguous/Unknown (Purple): {purple}")
         print(f"Error (Red): {red}")
         
     finally:

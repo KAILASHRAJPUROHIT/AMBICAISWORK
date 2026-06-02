@@ -39,10 +39,10 @@ def run_diagnostic():
         
         # Bills Today = invoice_date is today
         from sqlalchemy import func
-        bills_today = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str).all()
+        bills_today = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).all()
         
         # Imported Today = created_at >= today
-        imported_today = db.query(Bill).filter(Bill.created_at >= today_start).all()
+        imported_today = db.query(Bill).filter(Bill.created_at >= today_start, Bill.is_test_data == False).all()
         
         alerts_today = db.query(BankAlert).filter(BankAlert.created_at >= today_start).all()
         sms_alerts_today = db.query(SMSAlert).filter(SMSAlert.created_at >= today_start).all()

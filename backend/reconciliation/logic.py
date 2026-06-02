@@ -12,11 +12,12 @@ def get_event_fingerprint(bank, amount, utr, received_at, direction="CREDIT"):
     raw = f"{bank}|{amount:.2f}|{utr}|{date_str}|{direction}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func
 
 def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN"):
     """
-    Centralized foolproof verification logic for bank events (Email/SMS).
+    Financial Hardening Edition: Centralized foolproof verification logic.
+    Primary Principle: Never auto-confirm uncertain payments.
     """
     if alert.reconciled:
         logger.info(f"Alert {alert.id} already reconciled. Skipping.")
@@ -27,9 +28,9 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
     received_at = alert.received_at
     
     # 1. Check for ambiguous matches (Multiple invoices with same amount)
-    # Using epsilon for numeric comparison in SQLite
-    # Search by total_amount OR remaining_amount (to handle split cash+bank)
+    # Mandate: If multiple candidates exist for same amount -> REVIEW_REQUIRED
     matching_bills = db.query(Bill).filter(
+        Bill.is_test_data == False,
         or_(
             and_(Bill.total_amount >= amount - 0.01, Bill.total_amount <= amount + 0.01),
             and_(Bill.remaining_amount >= amount - 0.01, Bill.remaining_amount <= amount + 0.01)
@@ -37,22 +38,17 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
         Bill.status != "Green"
     ).all()
     
-    if not matching_bills:
-        # Check if it could be a partial payment for a larger bill matching UTR
-        if utr:
-            bill_by_utr = db.query(Bill).filter(Bill.reference_no == utr).first()
-            if bill_by_utr:
-                 matching_bills = [bill_by_utr]
+    if not matching_bills and utr:
+        bill_by_utr = db.query(Bill).filter(Bill.reference_no == utr, Bill.is_test_data == False).first()
+        if bill_by_utr:
+             matching_bills = [bill_by_utr]
         
     if not matching_bills:
-        # If no match found yet, we DO NOT mark reconciled=True.
-        # This allows background retry once the invoice is ingested.
         return
 
     # 2. Multi-Point Scoring for each candidate
     best_bill = None
     best_score = -1
-    candidates_count = len(matching_bills)
     
     scored_candidates = []
 
@@ -88,36 +84,70 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             best_score = score
             best_bill = bill
 
-    # 3. Decision Logic
+    # 3. Decision Logic with Failsafes
     if best_bill:
-        # FOOLPROOF RULES:
-        # 1. If multiple candidates exist for the same amount and no one is a clear winner (score < 100), it's ambiguous.
+        logger.info(f"Best Match for Alert {alert.id}: {best_bill.bill_number} (Score: {best_score})")
+        # Rule 4: Ambiguity Control
         is_ambiguous = (len(matching_bills) > 1 and best_score < 100)
         
-        # Check for duplicate UTR usage across the database
+        # Rule 3: Duplicate UTR Detection
         is_duplicate_utr = False
         if utr:
-            existing_cleared_payment = db.query(Payment).filter(Payment.utr_reference == utr, Payment.status == "Green").first()
+            existing_cleared_payment = db.query(Payment).filter(
+                Payment.utr_reference == utr, 
+                Payment.status == "Green"
+            ).first()
             if existing_cleared_payment and existing_cleared_payment.bill_id != best_bill.id:
                 is_duplicate_utr = True
         
+        # Rule 1: Advance Verification Failsafe
+        # Mandate: Advance is only a credit reference until evidence exists.
+        has_advance = float(best_bill.advance_amount or 0.0) > 0
+        advance_unclassified = has_advance and (not best_bill.advance_source or best_bill.advance_source == "UNKNOWN")
+        
+        # Decision
         if best_score >= 80 and not is_ambiguous and not is_duplicate_utr:
             # Check if this payment fully covers the remaining amount
             current_bank = float(best_bill.bank_received or 0.0)
             new_bank = current_bank + amount
             
+            # total_received = cash + bank + card + confirmed_bank_from_alerts
             total_received = float(best_bill.cash_received or 0.0) + new_bank + float(best_bill.card_received or 0.0)
             
-            is_fully_paid = abs(total_received - float(best_bill.total_amount)) < 1.0
+            # Plus advance and purchase (these are credits applied)
+            total_credits = total_received + float(best_bill.advance_amount or 0.0) + float(best_bill.customer_purchase_amount or 0.0)
+            
+            is_fully_paid = abs(total_credits - float(best_bill.total_amount)) < 1.0
             
             old_status = best_bill.status
+            
+            # FINAL CLEARANCE CHECK
             if is_fully_paid:
-                best_bill.status = "Green"
-                best_bill.status_text = f"Cleared (Auto-Verified via {source})"
-                best_bill.review_required = 0
+                if advance_unclassified:
+                    best_bill.status = "Purple"
+                    best_bill.status_text = "ADVANCE_PAYMENT_TYPE_UNKNOWN"
+                    best_bill.review_required = 1
+                elif has_advance and best_bill.advance_verification_status != "VERIFIED":
+                    best_bill.status = "Blue"
+                    best_bill.status_text = "ADVANCE_REQUIRES_VERIFICATION"
+                    best_bill.review_required = 1
+                else:
+                    best_bill.status = "Green"
+                    best_bill.status_text = f"Cleared (Auto-Verified via {source})"
+                    best_bill.review_required = 0
             else:
-                best_bill.status = "Blue"
-                best_bill.status_text = f"PARTIALLY_PAID (via {source}): Pending ₹{float(best_bill.total_amount) - total_received:.2f}"
+                if advance_unclassified:
+                    best_bill.status = "Purple"
+                    best_bill.status_text = "ADVANCE_PAYMENT_TYPE_UNKNOWN"
+                else:
+                    best_bill.status = "Blue"
+                    best_bill.status_text = f"PARTIALLY_PAID (via {source}): Pending ₹{float(best_bill.total_amount) - total_credits:.2f}"
+                best_bill.review_required = 1
+
+            # Rule 6: Delivery Before Payment Control
+            if best_bill.is_delivered and not is_fully_paid:
+                best_bill.status = "Orange"
+                best_bill.status_text = "DELIVERED_BEFORE_PAYMENT"
                 best_bill.review_required = 1
 
             # Update specific tracking fields
@@ -127,37 +157,39 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
                 best_bill.sms_confirmed_amount = float(best_bill.sms_confirmed_amount or 0.0) + amount
             
             best_bill.bank_received = new_bank
-            best_bill.remaining_amount = float(best_bill.total_amount) - total_received
+            best_bill.remaining_amount = float(best_bill.total_amount) - total_credits
+            if best_bill.remaining_amount < 0: best_bill.remaining_amount = 0
+            
             best_bill.reference_no = utr or best_bill.reference_no
             
-            # Update Payments
-            # Find the first pending bank payment and mark it
+            # Update Payments table
             payment = db.query(Payment).filter(Payment.bill_id == best_bill.id, Payment.mode == "BANK_TRANSFER", Payment.status != "Green").first()
             if payment:
                 if abs(float(payment.amount) - amount) < 1.0:
                     payment.status = "Green"
                     payment.utr_reference = utr or payment.utr_reference
 
-            log_audit(db, "Bill", best_bill.id, "AUTO_VERIFICATION" if is_fully_paid else "PARTIAL_PAYMENT", old_status, best_bill.status, f"Match score: {best_score}")
+            log_audit(db, "Bill", best_bill.id, "AUTO_VERIFICATION" if best_bill.status == "Green" else "SAFE_MATCH", old_status, best_bill.status, f"Match score: {best_score}")
         else:
-            # BLUE / REVIEW REQUIRED
+            # FAILSAFE PATH: RED or BLUE
             old_status = best_bill.status
-            best_bill.status = "Blue"
-            reason = "Ambiguous Match" if is_ambiguous else "Low Confidence Match"
-            if not utr: reason = "Missing UTR"
-            if is_duplicate_utr: reason = "Duplicate Reference Detected"
+            reason = "AMBIGUOUS_AMOUNT_MATCH" if is_ambiguous else "LOW_CONFIDENCE_MATCH"
+            if not utr: reason = "MISSING_UTR"
+            
+            if is_duplicate_utr:
+                best_bill.status = "Red"
+                reason = "DUPLICATE_UTR"
+            else:
+                best_bill.status = "Blue"
             
             best_bill.status_text = f"Review Required: {reason} (Score: {best_score})"
             best_bill.review_required = 1
-            log_audit(db, "Bill", best_bill.id, "FLAGGED_FOR_REVIEW", old_status, "Blue", f"{reason}, score: {best_score}")
+            log_audit(db, "Bill", best_bill.id, "FLAGGED_FOR_REVIEW", old_status, best_bill.status, f"{reason}, score: {best_score}")
             
         alert.reconciled = True
         db.commit()
 
 def reconcile_unreconciled_alerts(db: Session):
-    """
-    Retry reconciliation for all alerts that haven't been matched yet.
-    """
     unreconciled = db.query(BankAlert).filter(BankAlert.reconciled == False).all()
     if not unreconciled:
         return
@@ -165,7 +197,6 @@ def reconcile_unreconciled_alerts(db: Session):
     logger.info(f"Retrying reconciliation for {len(unreconciled)} unreconciled alerts...")
     for alert in unreconciled:
         verify_payment_event(db, alert, source="RETRY_LOGIC")
-
 
 def log_audit(db, entity_type, entity_id, action, old_status, new_status, note=""):
     audit = AuditLog(
@@ -175,23 +206,18 @@ def log_audit(db, entity_type, entity_id, action, old_status, new_status, note="
         old_status=old_status,
         new_status=new_status,
         actor="SYSTEM",
-        metadata_json=json.dumps({"note": note, "timestamp": datetime.now().isoformat()})
+        metadata_json=json.dumps({
+            "note": note, 
+            "timestamp": datetime.now().isoformat(),
+            "source": "Reconciliation_Engine"
+        })
     )
     db.add(audit)
 
 def is_store_open(dt: datetime) -> bool:
-    """
-    Check if store was open at given datetime.
-    Mon, Tue, Wed, Fri, Sat, Sun: 10:00 AM - 8:30 PM
-    Thu: 12:00 PM - 8:30 PM
-    """
-    day = dt.weekday() # 0=Mon, 3=Thu
+    day = dt.weekday()
     time = dt.time()
-    
     open_time = datetime.strptime("10:00", "%H:%M").time()
-    if day == 3: # Thursday
-        open_time = datetime.strptime("12:00", "%H:%M").time()
-        
+    if day == 3: open_time = datetime.strptime("12:00", "%H:%M").time()
     close_time = datetime.strptime("20:30", "%H:%M").time()
-    
     return open_time <= time <= close_time

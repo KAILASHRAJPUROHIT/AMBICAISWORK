@@ -185,6 +185,31 @@ class ReviewAction(BaseModel):
     comment: str
     accountant_id: str
 
+class DeliveryAction(BaseModel):
+    invoice_no: str
+    delivered_at: datetime
+    approved_by: str
+
+@app.post("/api/delivery/mark-delivered")
+async def mark_delivered(action: DeliveryAction, db: Session = Depends(get_db)):
+    bill = db.query(Bill).filter(Bill.bill_number == action.invoice_no).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+        
+    old_status = bill.status
+    bill.is_delivered = True
+    bill.delivered_at = action.delivered_at
+    bill.delivery_approved_by = action.approved_by
+    
+    # Rule 6: Delivery Before Payment Control
+    if float(bill.remaining_amount or 0) > 0:
+        bill.status = "Orange"
+        bill.status_text = "DELIVERED_BEFORE_PAYMENT"
+        
+    log_audit(db, "Bill", bill.id, "MARK_DELIVERED", old_status, bill.status, f"Approved by: {action.approved_by}")
+    db.commit()
+    return {"status": "success", "new_status": bill.status}
+
 @app.get("/api/system/share-status")
 async def get_share_status():
     online = os.path.exists(WATCH_PATH)
@@ -249,6 +274,19 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     bills_today_query = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False)
     total_bills_today = bills_today_query.count()
     
+    # Unverified Advances (Mandate 7)
+    unverified_adv_query = db.query(Bill).filter(
+        Bill.is_test_data == False,
+        Bill.advance_amount > 0,
+        Bill.advance_verification_status != "VERIFIED"
+    )
+    unverified_adv_count = unverified_adv_query.count()
+    unverified_adv_amount = float(db.query(func.sum(Bill.advance_amount)).filter(
+        Bill.is_test_data == False,
+        Bill.advance_amount > 0,
+        Bill.advance_verification_status != "VERIFIED"
+    ).scalar() or 0.0)
+    
     # Imported Today = created_at is today (record added to DB today)
     imported_today = db.query(Bill).filter(Bill.created_at >= today_start, Bill.is_test_data == False).count()
     
@@ -256,7 +294,7 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     pending_previous = db.query(Bill).filter(
         func.date(Bill.invoice_date) < today_str,
         Bill.is_test_data == False,
-        or_(Bill.status == "Yellow", Bill.status == "Blue", Bill.review_required == 1)
+        or_(Bill.status == "Yellow", Bill.status == "Blue", Bill.status == "Purple", Bill.review_required == 1)
     ).count()
     
     # Verified Today = bills dated today that are Green
@@ -270,18 +308,27 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     
     # 2. Financial Metrics (Today's Collection)
     # Mandate: Based on payment received today, not import date.
-    # We use invoice_date == today as a proxy for "Today's Sale/Cash"
     
     # Get all payments linked to bills dated today
     from backend.models import Payment as PaymentModel
     bills_today_ids = [b.id for b in bills_today_query.all()]
     payments_today = db.query(PaymentModel).filter(PaymentModel.bill_id.in_(bills_today_ids)).all()
     
+    # Mandate 7: Exclude unverified advances from collections
+    verified_adv_today = float(db.query(func.sum(Bill.advance_amount)).filter(
+        Bill.id.in_(bills_today_ids),
+        Bill.advance_verification_status == "VERIFIED"
+    ).scalar() or 0.0)
+
     total_collection = float(sum(p.amount for p in payments_today) or 0.0)
-    cash_collection = float(sum(p.amount for p in payments_today if p.mode in ["CASH", "ADVANCE", "OLD_GOLD_EXCHANGE"]) or 0.0)
+    
+    # Cash collection excludes unverified advance
+    cash_collection = float(sum(p.amount for p in payments_today if p.mode in ["CASH", "OLD_GOLD_EXCHANGE"]) or 0.0)
+    cash_collection += verified_adv_today # Only include verified advances
+
     bank_collection = float(sum(p.amount for p in payments_today if p.mode in ["BANK_TRANSFER", "CARD", "UPI", "NEFT", "IMPS", "RTGS"]) or 0.0)
     
-    # SMS/Email confirmed amounts specifically for today's bank collection
+    # Confirmed bank alerts specifically for today
     sms_confirmed = float(db.query(func.sum(Bill.sms_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
     email_confirmed = float(db.query(func.sum(Bill.email_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
     cheque_collection = float(db.query(func.sum(PaymentModel.amount)).filter(PaymentModel.bill_id.in_(bills_today_ids), PaymentModel.mode == "CHEQUE").scalar() or 0.0)
@@ -300,6 +347,8 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         "verified": verified_today,
         "pendingReview": review_required_total,
         "partialPaid": partial_paid,
+        "unverifiedAdvancesCount": unverified_adv_count,
+        "unverifiedAdvancesAmount": unverified_adv_amount,
         "totalCollection": total_collection,
         "cashCollection": cash_collection,
         "bankCollection": bank_collection,
@@ -312,6 +361,56 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         "smsRelayStatus": sms_status.get("status", "IDLE"),
         "matchAccuracy": round((verified_today / total_bills_today * 100), 2) if total_bills_today > 0 else 0.0
     }
+
+class AdvanceVerification(BaseModel):
+    invoice_no: str
+    advance_source: str
+    advance_date: datetime
+    evidence_type: str
+    evidence_ref: Optional[str]
+    accountant_id: str
+    # Cheque specific
+    cheque_no: Optional[str] = None
+    cheque_date: Optional[datetime] = None
+    deposited_date: Optional[datetime] = None
+    is_cleared: Optional[bool] = False
+    is_deposited: Optional[bool] = False
+
+@app.post("/api/advances/verify")
+async def verify_advance(action: AdvanceVerification, db: Session = Depends(get_db)):
+    from backend.reconciliation.logic import log_audit
+    bill = db.query(Bill).filter(Bill.bill_number == action.invoice_no).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+        
+    old_source = bill.advance_source or "UNKNOWN"
+    bill.advance_source = action.advance_source
+    bill.advance_verification_status = "VERIFIED" if action.is_cleared or action.advance_source == "CASH" else "UNVERIFIED"
+    
+    if action.advance_source == "CHEQUE":
+        # Create or update cheque record
+        from backend.models import Cheque
+        cheque = db.query(Cheque).filter(Cheque.bill_id == bill.id, Cheque.cheque_number == action.cheque_no).first()
+        if not cheque:
+            cheque = Cheque(
+                bill_id=bill.id,
+                cheque_number=action.cheque_no,
+                amount=bill.advance_amount,
+                cheque_date=action.cheque_date,
+                deposit_date=action.deposited_date,
+                status="Green" if action.is_cleared else "Blue"
+            )
+            db.add(cheque)
+        else:
+            cheque.status = "Green" if action.is_cleared else "Blue"
+            cheque.cleared_at = datetime.now() if action.is_cleared else None
+
+    # Recalculate bill status if everything else is verified
+    # For now just log the change
+    log_audit(db, "Bill", bill.id, "ADVANCE_CLASSIFIED", old_source, bill.advance_source, f"Verified by: {action.accountant_id}")
+    db.commit()
+    return {"status": "success", "advance_status": bill.advance_verification_status}
+
 
 @app.get("/api/invoices/pdf/{bill_id}")
 async def get_invoice_pdf(bill_id: int, db: Session = Depends(get_db)):
