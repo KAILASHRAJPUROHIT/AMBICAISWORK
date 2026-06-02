@@ -241,6 +241,24 @@ async def trigger_email_sync():
 async def get_sms_status():
     return sms_status
 
+@app.get("/debug/runtime")
+async def get_runtime_debug(db: Session = Depends(get_db)):
+    import sys
+    from backend.database import DATABASE_URL
+    from backend.pdf_ingestion import WATCH_PATH
+    
+    return {
+        "cwd": os.getcwd(),
+        "executable": sys.executable,
+        "database_url": DATABASE_URL,
+        "env_loaded": os.getenv("IMAP_SERVER") is not None,
+        "invoice_path": WATCH_PATH,
+        "invoice_count": db.query(Bill).count(),
+        "bank_alert_count": db.query(BankAlert).count(),
+        "sms_alert_count": db.query(SMSAlert).count(),
+        "sys_path": sys.path[:5]
+    }
+
 @app.post("/api/sms-sync-now")
 async def trigger_sms_sync():
     import threading

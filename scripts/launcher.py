@@ -34,8 +34,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger("Launcher")
 
+def log_environment():
+    """Print critical path and environment diagnostics for debugging."""
+    logger.info("=== Aradhana Launcher Environment ===")
+    logger.info(f"Working Directory: {os.getcwd()}")
+    logger.info(f"Executable: {sys.executable}")
+    logger.info(f"Frozen: {getattr(sys, 'frozen', False)}")
+    
+    env_path = os.path.join(os.getcwd(), ".env")
+    logger.info(f"Expected .env path: {env_path} (Exists: {os.path.exists(env_path)})")
+    
+    db_path = os.path.join(os.getcwd(), "aradhana_dev.db")
+    logger.info(f"Expected DB path: {db_path} (Exists: {os.path.exists(db_path)})")
+    
+    from backend.pdf_ingestion import WATCH_PATH
+    logger.info(f"Invoice Share Path: {WATCH_PATH} (Exists: {os.path.exists(WATCH_PATH)})")
+    logger.info("=====================================")
+
 class AradhanaLauncher:
     def __init__(self, config_path="launcher_config.json"):
+        log_environment()
         self.config_path = config_path
         self.config = self.load_config()
         self.backend_process = None
