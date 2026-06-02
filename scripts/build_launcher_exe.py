@@ -32,12 +32,12 @@ def build():
         subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller"], check=True)
 
     # Assets to bundle
-    # Format: "source;dest" (Windows uses ;)
+    # Format: (source, destination)
     add_data = [
-        ("backend;backend"),
-        ("launcher_config.json;."),
-        (".env.example;."),
-        ("frontend/dist;frontend/dist")
+        ("backend", "backend"),
+        ("launcher_config.json", "."),
+        (".env.example", "."),
+        ("frontend/dist", "frontend/dist")
     ]
     
     data_args = []
