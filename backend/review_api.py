@@ -23,12 +23,8 @@ def get_base_dir():
         exe_path = os.path.abspath(sys.executable)
         exe_dir = os.path.dirname(exe_path)
         if os.path.basename(exe_dir).lower() == 'dist':
-            root = os.path.dirname(exe_dir)
-            if os.path.exists(os.path.join(root, "aradhana_dev.db")):
-                return root
-        if os.path.exists(os.path.join(exe_dir, "aradhana_dev.db")):
-            return exe_dir
-        return exe_dir
+            return os.path.dirname(exe_dir)
+        return r"C:\Users\kaila\aradhana-payment-auditor\aradhana-payment-auditor"
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 BASE_DIR = get_base_dir()
@@ -101,14 +97,7 @@ async def get_startup_debug():
 async def get_runtime_debug(db: Session = Depends(get_db)):
     data = {}
     
-    # PART B & D Diagnostics
-    data["env_file_found"] = env_found
-    data["env_path"] = ENV_PATH
-    data["env_loaded"] = os.getenv("IMAP_SERVER") is not None
-    
-    # PART A Diagnostics
-    data["database_path_used"] = DB_PATH
-    data["database_exists"] = os.path.exists(DB_PATH)
+    data["project_root"] = BASE_DIR
     
     # Current Working Directory
     try:
@@ -116,15 +105,10 @@ async def get_runtime_debug(db: Session = Depends(get_db)):
     except Exception as e:
         data["cwd"] = f"ERROR: {str(e)}"
         
-    # Executable
-    try:
-        data["executable"] = sys.executable
-    except Exception as e:
-        data["executable"] = f"ERROR: {str(e)}"
-
-    # Database Path (compatibility field)
-    data["database_path"] = DATABASE_URL
-
+    data["database_path"] = DB_PATH
+    data["env_file_path"] = ENV_PATH
+    data["env_loaded"] = os.getenv("EMAIL_USERNAME") is not None
+    
     # Invoice Share
     try:
         data["invoice_share_path"] = WATCH_PATH
@@ -139,7 +123,9 @@ async def get_runtime_debug(db: Session = Depends(get_db)):
         data["pdf_count_in_share"] = f"ERROR: {str(e)}"
 
     # Database Counts
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_str = now.strftime("%Y-%m-%d")
     
     try:
         data["invoice_count"] = db.query(Bill).count()
@@ -147,9 +133,14 @@ async def get_runtime_debug(db: Session = Depends(get_db)):
         data["invoice_count"] = f"ERROR: {str(e)}"
 
     try:
-        data["today_invoice_count"] = db.query(Bill).filter(Bill.created_at >= today_start).count()
+        data["bills_dated_today"] = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str).count()
     except Exception as e:
-        data["today_invoice_count"] = f"ERROR: {str(e)}"
+        data["bills_dated_today"] = f"ERROR: {str(e)}"
+        
+    try:
+        data["imported_today"] = db.query(Bill).filter(Bill.created_at >= today_start).count()
+    except Exception as e:
+        data["imported_today"] = f"ERROR: {str(e)}"
 
     try:
         data["bank_alert_count"] = db.query(BankAlert).count()
@@ -162,27 +153,17 @@ async def get_runtime_debug(db: Session = Depends(get_db)):
         data["sms_alert_count"] = f"ERROR: {str(e)}"
 
     try:
-        data["verified_count"] = db.query(Bill).filter(Bill.status == "Green", Bill.created_at >= today_start).count()
+        data["verified_today"] = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str, Bill.status == "Green").count()
     except Exception as e:
-        data["verified_count"] = f"ERROR: {str(e)}"
+        data["verified_today"] = f"ERROR: {str(e)}"
 
     try:
-        data["review_required_count"] = db.query(Bill).filter(Bill.review_required == 1, Bill.created_at >= today_start).count()
+        data["pending_previous_days"] = db.query(Bill).filter(
+            func.date(Bill.invoice_date) < today_str,
+            or_(Bill.status == "Yellow", Bill.status == "Blue", Bill.review_required == 1)
+        ).count()
     except Exception as e:
-        data["review_required_count"] = f"ERROR: {str(e)}"
-
-    # Frontend/Backend Config
-    try:
-        data["frontend_api_base"] = os.getenv("FRONTEND_API_BASE", "http://localhost:8000")
-        data["backend_port"] = 8000
-    except Exception as e:
-        data["frontend_api_base"] = f"ERROR: {str(e)}"
-
-    # System Path
-    try:
-        data["sys_path"] = sys.path[:5]
-    except Exception as e:
-        data["sys_path"] = []
+        data["pending_previous_days"] = f"ERROR: {str(e)}"
 
     return data
 

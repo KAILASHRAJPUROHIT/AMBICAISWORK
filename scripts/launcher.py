@@ -11,6 +11,20 @@ import argparse
 import multiprocessing
 from pathlib import Path
 
+def get_project_root():
+    if getattr(sys, 'frozen', False):
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        if os.path.basename(exe_dir).lower() == 'dist':
+            return os.path.dirname(exe_dir)
+        return r"C:\Users\kaila\aradhana-payment-auditor\aradhana-payment-auditor"
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Force CWD and Python Path to Project Root immediately
+ROOT_DIR = get_project_root()
+os.chdir(ROOT_DIR)
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
+
 # Configure logging
 LOG_DIR = r"C:\Aradhana\PaymentAuditor\Logs"
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -75,11 +89,35 @@ class AradhanaLauncher:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex((self.config["backend_host"], port)) == 0
 
+    def free_port(self, port):
+        if os.name == 'nt':
+            try:
+                # Find process using the port
+                output = subprocess.check_output(f"netstat -ano | findstr :{port}", shell=True).decode()
+                for line in output.splitlines():
+                    if "LISTENING" in line:
+                        parts = line.strip().split()
+                        if len(parts) > 4:
+                            pid = parts[-1]
+                            # Only kill if it's our app (heuristic: python or Aradhana)
+                            try:
+                                tasklist = subprocess.check_output(f"tasklist /FI \"PID eq {pid}\" /NH", shell=True).decode().lower()
+                                if "aradhana" in tasklist or "python" in tasklist:
+                                    subprocess.run(f"taskkill /F /PID {pid} /T", shell=True, capture_output=True)
+                                    logger.info(f"Freed port {port} by killing PID {pid} ({tasklist.strip()})")
+                            except Exception:
+                                pass
+            except subprocess.CalledProcessError:
+                pass
+
     def start_backend(self):
         port = self.config["backend_port"]
         if self.is_port_in_use(port):
-            logger.warning(f"Port {port} already in use. Attempting to reuse...")
-            return True
+            logger.warning(f"Port {port} in use. Attempting to free it...")
+            self.free_port(port)
+            time.sleep(2)
+            if self.is_port_in_use(port):
+                logger.error(f"Cannot free port {port}. Backend may fail to start.")
 
         logger.info("Starting Backend API...")
         

@@ -6,29 +6,12 @@ import sys
 
 # Centralized path resolution for production environment
 def get_base_dir():
-    # Priority 1: If frozen (EXE)
     if getattr(sys, 'frozen', False):
         exe_path = os.path.abspath(sys.executable)
         exe_dir = os.path.dirname(exe_path)
-        
-        # Log for debugging during startup
-        # Note: sys.stdout might be redirected in windowed mode
-        
-        # If the EXE is inside the 'dist' folder, the project root is one level up
         if os.path.basename(exe_dir).lower() == 'dist':
-            root = os.path.dirname(exe_dir)
-            if os.path.exists(os.path.join(root, "aradhana_dev.db")):
-                return root
-        
-        # If we are already in the root (e.g. EXE moved to root)
-        if os.path.exists(os.path.join(exe_dir, "aradhana_dev.db")):
-            return exe_dir
-            
-        # Last resort: use the directory of the EXE
-        return exe_dir
-        
-    # Priority 2: Running as a script (CLI)
-    # This file is at project_root/backend/database.py
+            return os.path.dirname(exe_dir)
+        return r"C:\Users\kaila\aradhana-payment-auditor\aradhana-payment-auditor"
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 BASE_DIR = get_base_dir()
@@ -37,6 +20,11 @@ DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 # For diagnostic logging
 print(f"DATABASE_PATH_USED={DB_PATH}")
+
+# Do NOT silently create empty database in the wrong place
+if not os.path.exists(DB_PATH):
+    print(f"FATAL: Database missing at {DB_PATH}")
+    # We don't exit immediately here to allow imports to succeed, but check_db_integrity will fail.
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -57,3 +45,4 @@ def check_db_integrity():
         return True, None
     except Exception as e:
         return False, f"Database integrity check failed: {str(e)}"
+

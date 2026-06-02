@@ -76,6 +76,8 @@ interface LivePaymentEvent {
 
 const initialStats: DashboardStats = {
   totalBillsToday: 0,
+  importedToday: 0,
+  pendingPreviousDays: 0,
   verified: 0,
   pendingReview: 0,
   partialPaid: 0,

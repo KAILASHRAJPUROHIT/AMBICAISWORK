@@ -60,7 +60,7 @@ def build():
         "--noconfirm",
         "--onefile",
         "--windowed", # No console window for the launcher
-        "--name", "AradhanaAuditor_v3",
+        "--name", "AradhanaPaymentAuditor",
         "--hidden-import", "uvicorn.logging",
         "--hidden-import", "uvicorn.protocols",
         "--hidden-import", "uvicorn.protocols.http",
@@ -114,7 +114,7 @@ def build():
     print(f"Running: {' '.join(cmd)}")
     try:
         subprocess.run(cmd, check=True)
-        exe_path = os.path.join(project_root, 'dist', 'AradhanaAuditor_v3.exe')
+        exe_path = os.path.join(project_root, 'dist', 'AradhanaPaymentAuditor.exe')
         print(f"\n=== Build Success! EXE at: {exe_path} ===")
         
         # 3. Post-Build Self-Test
