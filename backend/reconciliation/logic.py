@@ -12,6 +12,8 @@ def get_event_fingerprint(bank, amount, utr, received_at, direction="CREDIT"):
     raw = f"{bank}|{amount:.2f}|{utr}|{date_str}|{direction}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
+from sqlalchemy import or_, and_
+
 def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN"):
     """
     Centralized foolproof verification logic for bank events (Email/SMS).
@@ -26,9 +28,12 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
     
     # 1. Check for ambiguous matches (Multiple invoices with same amount)
     # Using epsilon for numeric comparison in SQLite
+    # Search by total_amount OR remaining_amount (to handle split cash+bank)
     matching_bills = db.query(Bill).filter(
-        Bill.total_amount >= amount - 0.01,
-        Bill.total_amount <= amount + 0.01,
+        or_(
+            and_(Bill.total_amount >= amount - 0.01, Bill.total_amount <= amount + 0.01),
+            and_(Bill.remaining_amount >= amount - 0.01, Bill.remaining_amount <= amount + 0.01)
+        ),
         Bill.status != "Green"
     ).all()
     

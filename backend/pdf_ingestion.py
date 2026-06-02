@@ -176,12 +176,13 @@ def parse_pdf(file_path):
                     amt = float(amt_match.group(1).replace(",", ""))
                     mode = "UNKNOWN"
                     if "CASH" in line_upper: mode = "CASH"
-                    elif any(x in line_upper for x in ["UPI", "RTGS", "IMPS", "NEFT", "BANK TRANSFER"]): mode = "BANK_TRANSFER"
+                    elif any(x in line_upper for x in ["UPI", "RTGS", "IMPS", "NEFT", "BANK TRANSFER", "CHQ"]): mode = "BANK_TRANSFER"
                     elif "ADVANCE" in line_upper: mode = "ADVANCE"
-                    elif "CHEQUE" in line_upper or "CHQ" in line_upper: mode = "CHEQUE"
+                    elif "CHEQUE" in line_upper: mode = "CHEQUE"
                     elif "CARD" in line_upper: mode = "CARD"
                     elif "BALANCE" in line_upper: mode = "BALANCE"
-                    elif "OLD GOLD" in line_upper: mode = "OLD_GOLD_EXCHANGE"
+                    elif any(x in line_upper for x in ["OLD GOLD", "CUST PURC", "PURCHASE"]): mode = "OLD_GOLD_EXCHANGE"
+
                     
                     if mode != "UNKNOWN":
                         payments.append({"mode": mode, "amount": amt, "raw": line.strip()})

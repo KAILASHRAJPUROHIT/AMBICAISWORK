@@ -72,8 +72,22 @@ interface LivePaymentEvent {
   raw: string;
 }
 
+const initialStats: DashboardStats = {
+  totalBillsToday: 0,
+  verified: 0,
+  pendingReview: 0,
+  partialPaid: 0,
+  totalCollection: 0,
+  cashCollection: 0,
+  bankCollection: 0,
+  smsConfirmed: 0,
+  emailConfirmed: 0,
+  chequeCollection: 0,
+  matchAccuracy: 0
+};
+
 const DashboardPage: React.FC = () => {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<DashboardStats>(initialStats);
   const [ingestionStatus, setIngestionStatus] = useState<IngestionStatus | null>(null);
   const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null);
   const [smsStatus, setSMSStatus] = useState<SMSStatus | null>(null);

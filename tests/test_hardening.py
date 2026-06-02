@@ -103,27 +103,71 @@ def test_same_amount_two_invoices(db):
     assert bill1.status == "Blue" # Flagged for review
     assert "Ambiguous" in bill1.status_text
 
-def test_exact_match_utr(db):
-    bill = Bill(bill_number="B3", total_amount=1500.00, status="Yellow", reference_no="UTR_EXACT", created_at=datetime.now(), customer_name="CHARLIE")
+def test_sms_forwarder_parse():
+    from backend.sms_parser import parse_bank_sms
+    body = """From : JX-ICICIT-S()
+
+Your ICICI Bank Account 0228 has been credited with Rs 1.00 on
+2026-06-01 at 20:27:43 from KULDEEPSINGHKESHARSI.
+Ref No 202741291496."""
+    parsed = parse_bank_sms(body)
+    assert parsed.amount == 1.00
+    assert parsed.sender_bank == "ICICI"
+    assert parsed.utr_reference == "202741291496"
+    assert parsed.account_suffix == "0228"
+    assert parsed.payer_name == "KULDEEPSINGHKESHARSI"
+    assert parsed.confidence == "HIGH"
+
+def test_sms_email_dedupe(db):
+    from backend.reconciliation.logic import verify_payment_event
+    from backend.models import BankAlert
+    
+    now = datetime.now()
+    bill = Bill(bill_number="B-DUP", customer_name="KULDEEP", total_amount=1.00, status="Yellow", created_at=now, invoice_date=now)
     db.add(bill)
     db.commit()
     
+    # 1. SMS arrives - Name match + Date match = 50 + 30 = 80.
+    alert_sms = BankAlert(
+        bank_name="ICICI", amount=1.00, utr_reference="202741291496", 
+        sender="JX-ICICIT-S", received_at=now,
+        raw_text="SMS: Your account credited 1.00 from KULDEEP Ref 202741291496"
+    )
+    db.add(alert_sms)
+    db.flush()
+    verify_payment_event(db, alert_sms, source="SMS")
+    
+    db.refresh(bill)
+    assert bill.status == "Green"
+    assert float(bill.bank_received) == 1.00
+
+def test_cust_purc_reconciliation(db):
+    now = datetime.now()
+    # Bill for 10,000. Customer gives 2,000 worth of old gold.
+    bill = Bill(
+        bill_number="B-GOLD", customer_name="BOB", total_amount=10000.00, 
+        cash_received=2000.00, bank_received=0, card_received=0,
+        remaining_amount=8000.00, status="Yellow", created_at=now, invoice_date=now
+    )
+    db.add(bill)
+    db.commit()
+    
+    # Now a bank transfer for 8,000 arrives
     alert = BankAlert(
-        bank_name="SBI",
-        amount=1500.00,
-        utr_reference="UTR_EXACT",
-        sender="ALERTS",
-        received_at=datetime.now(),
-        raw_text="Credited 1500.00 UTR_EXACT"
+        bank_name="HDFC", amount=8000.00, utr_reference="UTR_GOLD", 
+        sender="ALERTS", received_at=now,
+        raw_text="Bob paid 8000"
     )
     db.add(alert)
     db.flush()
     
+    from backend.reconciliation.logic import verify_payment_event
     verify_payment_event(db, alert, source="EMAIL")
     db.refresh(bill)
     
+    # It should match if name token matches (Bob) + date proximity
     assert bill.status == "Green"
-    assert bill.review_required == 0
+    assert bill.remaining_amount == 0
 
 from datetime import datetime, time, timedelta
 

@@ -38,6 +38,9 @@ class ParsedBankSMS(BaseModel):
     transaction_date: Optional[str] = None
     sender_bank: Optional[str] = None
     raw_message: str
+    account_suffix: Optional[str] = None
+    payer_name: Optional[str] = None
+    confidence: str = "LOW"
 
 class NormalizedBankAlert(BaseModel):
     amount: Optional[float] = None

@@ -10,7 +10,7 @@ from email.header import decode_header
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
-from backend.models import BankAlert, Bill, AuditLog, Payment, Cheque, SMSAlert
+from backend.models import BankAlert, Bill, AuditLog, Payment, Cheque, SMSAlert, SystemSetting
 from backend.sms_parser import parse_bank_sms
 import json
 from dotenv import load_dotenv
@@ -34,6 +34,33 @@ def update_email_status(**kwargs):
         for key, value in kwargs.items():
             if key in email_status:
                 email_status[key] = value
+
+def get_checkpoint(db: Session):
+    setting = db.query(SystemSetting).filter(SystemSetting.key == "last_email_checkpoint").first()
+    if setting:
+        try:
+            return datetime.fromisoformat(setting.value)
+        except:
+            pass
+
+    # Default: Today's shop opening
+    now = datetime.now()
+    default_open = now.replace(hour=10, minute=0, second=0, microsecond=0)
+    if now.weekday() == 3: # Thursday
+        default_open = now.replace(hour=12, minute=0, second=0, microsecond=0)
+
+    return default_open
+
+def save_checkpoint(db: Session, last_ts: datetime):
+    setting = db.query(SystemSetting).filter(SystemSetting.key == "last_email_checkpoint").first()
+    if not setting:
+        setting = SystemSetting(key="last_email_checkpoint", value=last_ts.isoformat())
+        db.add(setting)
+    else:
+        current = datetime.fromisoformat(setting.value)
+        if last_ts > current:
+            setting.value = last_ts.isoformat()
+    db.commit()
 
 def parse_email_event(subject, body):
     if "[SMSForwarder]" in subject:
@@ -79,7 +106,7 @@ def get_decoded_header(header_value):
 def strip_html(text):
     return re.sub(r'<[^>]+>', ' ', text)
 
-def fetch_real_emails():
+def fetch_real_emails(since_date: datetime):
     imap_server = os.getenv("IMAP_SERVER") or os.getenv("IMAP_HOST") or os.getenv("BANK_IMAP_HOST")
     imap_user = os.getenv("IMAP_USER") or os.getenv("BANK_IMAP_USERNAME")
     imap_pass = os.getenv("IMAP_PASSWORD") or os.getenv("BANK_IMAP_PASSWORD")
@@ -90,85 +117,91 @@ def fetch_real_emails():
         logger.warning("IMAP credentials not fully configured in .env. Skipping real email fetch.")
         return []
 
-    emails = []
+    emails_list = []
     try:
         mail = imaplib.IMAP4_SSL(imap_server, port=imap_port)
         mail.login(imap_user, imap_pass)
         mail.select(imap_folder)
 
-        # Search for emails from the last 30 days
-        date_since = (datetime.now() - timedelta(days=30)).strftime("%d-%b-%Y")
-        status, messages = mail.search(None, f'(SINCE "{date_since}")')
+        # Search SINCE date (granularity is Day)
+        date_str = since_date.strftime("%d-%b-%Y")
+        status, messages = mail.search(None, f'(SINCE "{date_str}")')
         
         if status == "OK" and messages[0]:
             msg_nums = messages[0].split()
             if msg_nums:
-                # Fetch in chunks of 200 to prevent memory issues and timeouts
-                chunk_size = 200
-                for i in range(0, len(msg_nums), chunk_size):
-                    chunk = msg_nums[i:i + chunk_size]
-                    fetch_ids = b",".join(chunk)
-                    typ, data = mail.fetch(fetch_ids, "(RFC822)")
-                    for response_part in data:
-                        if isinstance(response_part, tuple):
-                            msg = email.message_from_bytes(response_part[1])
+                # Fetch only new ones - this is still simple, but limit to last 200 for each cycle
+                # to prevent long hangs.
+                chunk = msg_nums[-200:]
+                fetch_ids = b",".join(chunk)
+                typ, data = mail.fetch(fetch_ids, "(RFC822)")
+                for response_part in data:
+                    if isinstance(response_part, tuple):
+                        msg = email.message_from_bytes(response_part[1])
+                        
+                        message_id = msg.get("Message-ID")
+                        subject = get_decoded_header(msg.get("Subject"))
+                        sender = get_decoded_header(msg.get("From"))
+                        date_tuple = email.utils.parsedate_tz(msg.get("Date"))
+                        if date_tuple:
+                            local_date = datetime.fromtimestamp(email.utils.mktime_tz(date_tuple))
+                        else:
+                            local_date = datetime.now()
                             
-                            message_id = msg.get("Message-ID")
-                            subject = get_decoded_header(msg.get("Subject"))
-                            sender = get_decoded_header(msg.get("From"))
-                            date_tuple = email.utils.parsedate_tz(msg.get("Date"))
-                            if date_tuple:
-                                local_date = datetime.fromtimestamp(email.utils.mktime_tz(date_tuple))
-                            else:
-                                local_date = datetime.now()
-                            
-                            body = ""
-                            if msg.is_multipart():
-                                for part in msg.walk():
-                                    content_type = part.get_content_type()
-                                    if content_type in ["text/plain", "text/html"]:
-                                        try:
-                                            part_body = part.get_payload(decode=True).decode(errors="ignore")
-                                            if content_type == "text/html":
-                                                part_body = strip_html(part_body)
-                                            body += " " + part_body
-                                        except:
-                                            pass
-                            else:
-                                try:
-                                    body = msg.get_payload(decode=True).decode(errors="ignore")
-                                    if msg.get_content_type() == "text/html":
-                                        body = strip_html(body)
-                                except:
-                                    pass
-                            
-                            emails.append({
-                                "message_id": message_id,
-                                "subject": subject,
-                                "sender": sender,
-                                "date": local_date,
-                                "body": " ".join(body.split())
-                            })
+                        # Filter by exact time checkpoint
+                        if local_date <= since_date:
+                            continue
+
+                        body = ""
+                        if msg.is_multipart():
+                            for part in msg.walk():
+                                content_type = part.get_content_type()
+                                if content_type in ["text/plain", "text/html"]:
+                                    try:
+                                        part_body = part.get_payload(decode=True).decode(errors="ignore")
+                                        if content_type == "text/html":
+                                            part_body = strip_html(part_body)
+                                        body += " " + part_body
+                                    except:
+                                        pass
+                        else:
+                            try:
+                                body = msg.get_payload(decode=True).decode(errors="ignore")
+                                if msg.get_content_type() == "text/html":
+                                    body = strip_html(body)
+                            except:
+                                pass
+                        
+                        emails_list.append({
+                            "message_id": message_id,
+                            "subject": subject,
+                            "sender": sender,
+                            "date": local_date,
+                            "body": " ".join(body.split())
+                        })
         mail.logout()
     except Exception as e:
         logger.error(f"IMAP Fetch Error: {e}")
         update_email_status(last_error=f"IMAP Error: {str(e)}")
-    return emails
+    return emails_list
 
 def process_emails():
-    """
-    Fetches emails securely from the configured IMAP server, 
-    parses bank alert notifications, and updates the database using multi-point verification.
-    """
     logger.info("Polling bank emails via IMAP...")
     update_email_status(is_running=True)
     
     db = SessionLocal()
     events_found = 0
     try:
-        real_emails = fetch_real_emails()
+        checkpoint = get_checkpoint(db)
+        logger.info(f"Using checkpoint: {checkpoint}")
         
+        real_emails = fetch_real_emails(checkpoint)
+        
+        newest_ts = checkpoint
         for email_data in real_emails:
+            if email_data["date"] > newest_ts:
+                newest_ts = email_data["date"]
+                
             body = email_data["body"]
             event_type = parse_email_event(email_data["subject"], body)
             
@@ -176,32 +209,25 @@ def process_emails():
             if event_type == "sms_forwarded":
                 parsed_sms = parse_bank_sms(body)
                 if parsed_sms.amount and parsed_sms.amount > 0:
-                    # Check for existing SMSAlert by message_id or UTR
                     exists = db.query(SMSAlert).filter(SMSAlert.email_message_id == email_data["message_id"]).first()
                     if not exists and parsed_sms.utr_reference:
                         exists = db.query(SMSAlert).filter(SMSAlert.utr_reference == parsed_sms.utr_reference).first()
                         
                     if not exists:
-                        # Extract SMS Sender from Body if possible (From : ...)
                         sms_sender = "UNKNOWN"
                         sender_match = re.search(r"From\s*:\s*([A-Za-z0-9-]+)", body)
                         if sender_match:
                             sms_sender = sender_match.group(1)
                             
-                        # Parse timestamp
                         ts = email_data["date"]
                         if parsed_sms.transaction_date:
                             try:
-                                # Try different formats
+                                ts = datetime.fromisoformat(parsed_sms.transaction_date)
+                            except:
                                 try:
                                     ts = datetime.strptime(parsed_sms.transaction_date, "%Y-%m-%d %H:%M:%S")
                                 except:
-                                    try:
-                                        ts = datetime.strptime(parsed_sms.transaction_date, "%d-%m-%Y")
-                                    except:
-                                        pass
-                            except:
-                                pass
+                                    pass
 
                         new_sms = SMSAlert(
                             sender=sms_sender,
@@ -220,7 +246,6 @@ def process_emails():
                         events_found += 1
                         db.flush()
                         
-                        # Create a BankAlert from this for central reconciliation
                         alert = BankAlert(
                             bank_name=new_sms.bank_name,
                             amount=new_sms.amount,
@@ -237,23 +262,18 @@ def process_emails():
                 continue
 
             # --- Standard Bank Email Alerts ---
-            # Extract amount
             amt_match = re.search(r"(?:INR|RS\.?)\s*([\d,]+\.\d{2})", body, re.IGNORECASE)
             amount = float(amt_match.group(1).replace(",", "")) if amt_match else 0.0
             
             if amount <= 0: continue
             
-            # Extract UTR
             utr_match = re.search(r"Ref:\s*([A-Z0-9/]+)", body, re.IGNORECASE)
             if not utr_match:
                 utr_match = re.search(r"UTR[:\s]*([A-Z0-9]+)", body, re.IGNORECASE)
                 
             utr = utr_match.group(1) if utr_match else None
-            
-            # Generate synthetic UTR if none exists to prevent duplicate insertion
             dedupe_key = utr if utr else f"SYNC_{email_data['date'].timestamp()}_{amount}"
             
-            # Store BankAlert
             exists = db.query(BankAlert).filter(BankAlert.utr_reference == dedupe_key).first()
             if not exists:
                 alert = BankAlert(
@@ -268,18 +288,14 @@ def process_emails():
                 db.flush()
                 events_found += 1
                 
-                # RECONCILIATION LOGIC (Centralized)
                 from backend.reconciliation.logic import verify_payment_event
                 verify_payment_event(db, alert, source="EMAIL")
                 
-                # CHEQUE LOGIC
                 if event_type == "cheque_cleared":
-                    # Find cheque
                     cheque = db.query(Cheque).filter(Cheque.amount == amount, Cheque.status == "Blue").first()
                     if cheque:
                         cheque.status = "Green"
                         cheque.cleared_at = datetime.now()
-                        # Update Bill/Payment
                         bill = db.query(Bill).filter(Bill.id == cheque.bill_id).first()
                         if bill:
                             bill.status = "Green"
@@ -295,6 +311,9 @@ def process_emails():
                             bill.status = "Red"
                             bill.status_text = f"Error: {event_type.upper()}"
                             bill.review_required = 1
+
+        if newest_ts > checkpoint:
+            save_checkpoint(db, newest_ts)
 
         db.commit()
         update_email_status(
@@ -314,7 +333,7 @@ def start_email_poller():
     def run():
         while True:
             process_emails()
-            time.sleep(300) # 5 minutes
+            time.sleep(300) 
             
     thread = threading.Thread(target=run, daemon=True)
     thread.start()

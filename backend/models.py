@@ -15,6 +15,14 @@ class User(Base):
     is_active = Column(Integer, default=1)
     created_at = Column(DateTime, server_default=func.now())
 
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, unique=True, index=True)
+    value = Column(String)
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
 class LoginLog(Base):
     __tablename__ = "login_logs"
 
