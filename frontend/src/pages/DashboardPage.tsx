@@ -126,6 +126,11 @@ const DashboardPage: React.FC = () => {
   const num = (v?: number | null) => Number(v ?? 0).toLocaleString("en-IN");
 
   const fetchData = async () => {
+    const token = localStorage.getItem('session_token');
+    const headers = {
+      'X-Session-Token': token || ''
+    };
+
     try {
       const endpoints = [
         `${API_BASE}/api/dashboard/live`,
@@ -137,7 +142,9 @@ const DashboardPage: React.FC = () => {
         `${API_BASE}/api/version`
       ];
 
-      const responses = await Promise.all(endpoints.map(url => fetch(url).catch(() => null)));
+      const responses = await Promise.all(endpoints.map(url => 
+        fetch(url, { headers }).catch(() => null)
+      ));
 
       if (responses[0] && responses[0].ok) setStats(await (responses[0] as Response).json());
       if (responses[1] && responses[1].ok) setLiveFeed(await (responses[1] as Response).json());
@@ -148,6 +155,12 @@ const DashboardPage: React.FC = () => {
       if (responses[6] && responses[6].ok) {
          const vData = await (responses[6] as Response).json();
          setAppVersion(vData.version);
+      }
+
+      // Check for auth failure
+      if (responses[1] && responses[1].status === 401) {
+          setError('Session Expired. Please Login.');
+          return;
       }
 
       // Only show error if core stats or feed fail when NOT loading

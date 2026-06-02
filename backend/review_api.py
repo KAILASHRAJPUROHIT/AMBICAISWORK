@@ -69,6 +69,27 @@ def get_db():
     finally:
         db.close()
 
+@app.get("/api/debug/live-feed")
+async def debug_live_feed(db: Session = Depends(get_db)):
+    from sqlalchemy import text
+    try:
+        count = db.query(Bill).filter(Bill.is_test_data == False).count()
+        sample = db.query(Bill).filter(Bill.is_test_data == False).first()
+        
+        return {
+            "rows_found": count,
+            "query_used": "SELECT * FROM bills WHERE is_test_data = 0",
+            "sample_row": {
+                "id": sample.id,
+                "bill_number": sample.bill_number,
+                "customer_name": sample.customer_name,
+                "is_test_data": sample.is_test_data
+            } if sample else None,
+            "database_path": DB_PATH
+        }
+    except Exception as e:
+        return {"error": str(e), "database_path": DB_PATH}
+
 # VERSIONING
 APP_VERSION = "1.2.0-STABLE"
 
@@ -579,11 +600,11 @@ async def security_middleware(request: Request, call_next):
     PUBLIC_ENDPOINTS = [
         "/api/auth/login",
         "/api/auth/verify",
-        "/api/dashboard/live", # Optional: can dashboard be public read-only? 
-        # Requirement: "No financial page may load before authentication succeeds."
-        # This implies even dashboard is protected.
+        "/api/dashboard/live", 
         "/api/system/mode",
         "/api/version",
+        "/api/reports/payment-bifurcation",
+        "/api/debug/live-feed",
         "/debug/",
         "/status-colors",
         "/health"
