@@ -39,45 +39,95 @@ def get_db():
 
 @app.get("/debug/runtime")
 async def get_runtime_debug(db: Session = Depends(get_db)):
+    data = {}
+    
+    # Current Working Directory
+    try:
+        data["cwd"] = os.getcwd()
+    except Exception as e:
+        data["cwd"] = f"ERROR: {str(e)}"
+        
+    # Executable
+    try:
+        data["executable"] = sys.executable
+    except Exception as e:
+        data["executable"] = f"ERROR: {str(e)}"
+
+    # Database Path
+    try:
+        from backend.database import DATABASE_URL
+        data["database_path"] = DATABASE_URL
+        data["database_exists"] = os.path.exists(DATABASE_URL.replace("sqlite:///", "")) if "sqlite" in DATABASE_URL else True
+    except Exception as e:
+        data["database_path"] = f"ERROR: {str(e)}"
+        data["database_exists"] = False
+
+    # Environment
+    try:
+        data["env_loaded"] = os.getenv("IMAP_SERVER") is not None
+    except Exception as e:
+        data["env_loaded"] = f"ERROR: {str(e)}"
+
+    # Invoice Share
+    try:
+        data["invoice_share_path"] = WATCH_PATH
+        exists = os.path.exists(WATCH_PATH)
+        data["invoice_share_reachable"] = exists
+        if exists:
+            data["pdf_count_in_share"] = len([f for f in os.listdir(WATCH_PATH) if f.lower().endswith(".pdf")])
+        else:
+            data["pdf_count_in_share"] = 0
+    except Exception as e:
+        data["invoice_share_reachable"] = False
+        data["pdf_count_in_share"] = f"ERROR: {str(e)}"
+
+    # Database Counts
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     
-    # Calculate counts
-    invoice_count = db.query(Bill).count()
-    today_invoice_count = db.query(Bill).filter(Bill.created_at >= today_start).count()
-    bank_alert_count = db.query(BankAlert).count()
-    sms_alert_count = db.query(SMSAlert).count()
-    verified_count = db.query(Bill).filter(Bill.status == "Green", Bill.created_at >= today_start).count()
-    review_required_count = db.query(Bill).filter(Bill.review_required == 1, Bill.created_at >= today_start).count()
-    
-    # PDF check
-    pdf_count = 0
-    share_reachable = False
-    if os.path.exists(WATCH_PATH):
-        share_reachable = True
-        try:
-            pdf_count = len([f for f in os.listdir(WATCH_PATH) if f.lower().endswith(".pdf")])
-        except Exception:
-            pdf_count = -1
+    try:
+        data["invoice_count"] = db.query(Bill).count()
+    except Exception as e:
+        data["invoice_count"] = f"ERROR: {str(e)}"
 
-    return {
-        "cwd": os.getcwd(),
-        "executable": sys.executable,
-        "database_path": DATABASE_URL,
-        "database_exists": os.path.exists(DATABASE_URL.replace("sqlite:///", "")) if "sqlite" in DATABASE_URL else True,
-        "env_loaded": os.getenv("IMAP_SERVER") is not None,
-        "invoice_share_path": WATCH_PATH,
-        "invoice_share_reachable": share_reachable,
-        "pdf_count_in_share": pdf_count,
-        "invoice_count": invoice_count,
-        "today_invoice_count": today_invoice_count,
-        "bank_alert_count": bank_alert_count,
-        "sms_alert_count": sms_alert_count,
-        "verified_count": verified_count,
-        "review_required_count": review_required_count,
-        "frontend_api_base": os.getenv("FRONTEND_API_BASE", "http://localhost:8000"),
-        "backend_port": 8000,
-        "sys_path": sys.path[:5]
-    }
+    try:
+        data["today_invoice_count"] = db.query(Bill).filter(Bill.created_at >= today_start).count()
+    except Exception as e:
+        data["today_invoice_count"] = f"ERROR: {str(e)}"
+
+    try:
+        data["bank_alert_count"] = db.query(BankAlert).count()
+    except Exception as e:
+        data["bank_alert_count"] = f"ERROR: {str(e)}"
+
+    try:
+        data["sms_alert_count"] = db.query(SMSAlert).count()
+    except Exception as e:
+        data["sms_alert_count"] = f"ERROR: {str(e)}"
+
+    try:
+        data["verified_count"] = db.query(Bill).filter(Bill.status == "Green", Bill.created_at >= today_start).count()
+    except Exception as e:
+        data["verified_count"] = f"ERROR: {str(e)}"
+
+    try:
+        data["review_required_count"] = db.query(Bill).filter(Bill.review_required == 1, Bill.created_at >= today_start).count()
+    except Exception as e:
+        data["review_required_count"] = f"ERROR: {str(e)}"
+
+    # Frontend/Backend Config
+    try:
+        data["frontend_api_base"] = os.getenv("FRONTEND_API_BASE", "http://localhost:8000")
+        data["backend_port"] = 8000
+    except Exception as e:
+        data["frontend_api_base"] = f"ERROR: {str(e)}"
+
+    # System Path
+    try:
+        data["sys_path"] = sys.path[:5]
+    except Exception as e:
+        data["sys_path"] = []
+
+    return data
 
 @app.get("/debug/routes")
 async def get_routes():
