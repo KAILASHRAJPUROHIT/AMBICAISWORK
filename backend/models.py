@@ -11,6 +11,7 @@ class User(Base):
     name = Column(String, nullable=False)
     role = Column(String, nullable=False) # ADMIN, OWNER, ACCOUNTANT, STAFF, VIEWER
     email = Column(String, nullable=True)
+    security_email = Column(String, nullable=True) # Private destination for OTP/Alerts
     hashed_password = Column(String, nullable=True)
     is_active = Column(Integer, default=1)
     created_at = Column(DateTime, server_default=func.now())
