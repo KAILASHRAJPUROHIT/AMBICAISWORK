@@ -2,10 +2,12 @@ import os
 import sys
 import argparse
 from datetime import datetime, timedelta
+from pathlib import Path
 from sqlalchemy.orm import Session
 
 # Add the project root to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from backend.database import SessionLocal
 from backend.models import SystemSetting

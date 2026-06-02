@@ -4,11 +4,13 @@ import shutil
 import argparse
 import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 from sqlalchemy.orm import Session
 import json
 
-# Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Add project root to sys.path
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from backend.database import SessionLocal
 from backend.models import Bill, AuditLog, Payment

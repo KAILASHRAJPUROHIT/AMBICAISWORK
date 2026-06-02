@@ -1,8 +1,10 @@
 import sys
 import os
+from pathlib import Path
 
-# Add project root to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add project root to sys.path
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal

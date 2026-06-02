@@ -1,6 +1,13 @@
 import os
 import json
+import sys
 from datetime import datetime
+from pathlib import Path
+
+# Add the project root to sys.path
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
 from backend.reconciliation.status_engine_v2 import StatusEngineV2
 
 # Configuration

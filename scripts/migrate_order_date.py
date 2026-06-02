@@ -1,3 +1,11 @@
+import sys
+import os
+from pathlib import Path
+
+# Add project root to sys.path
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
 from backend.database import engine
 from sqlalchemy import text, inspect
 
