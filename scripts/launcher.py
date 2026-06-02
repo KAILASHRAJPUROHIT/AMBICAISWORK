@@ -292,7 +292,11 @@ def run_self_test():
         import email.message
         import email.header
         import email.utils
-        print("OK: email modules imported")
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        print("OK: email modules and MIME submodules imported")
+        import smtplib
+        print("OK: smtplib imported")
         import sqlite3
         print("OK: sqlite3 imported")
         import pathlib
