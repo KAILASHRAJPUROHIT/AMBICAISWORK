@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import StatCard from '../components/StatCard';
 import AlertSoundSystem from '../api/AlertSoundSystem';
 import '../Dashboard.css';
@@ -211,8 +212,9 @@ const DashboardPage: React.FC = () => {
     window.open(`${API_BASE}/api/invoices/pdf/${bill_id}`, '_blank');
   };
 
-  // GROUPING LOGIC
-  const groupedFeed = liveFeed.reduce((acc: { [key: string]: LiveInvoice[] }, inv) => {
+  // GROUPING LOGIC (Limit to 8 for dashboard compactness)
+  const displayFeed = liveFeed.slice(0, 8);
+  const groupedFeed = displayFeed.reduce((acc: { [key: string]: LiveInvoice[] }, inv) => {
     const date = inv.invoice_date || 'Unknown Date';
     if (!acc[date]) acc[date] = [];
     acc[date].push(inv);
@@ -234,6 +236,16 @@ const DashboardPage: React.FC = () => {
       <div className="h-6 w-24 bg-gray-300 rounded"></div>
     </div>
   );
+
+  const operatorLabel = (status_text: string) => {
+      if (!status_text) return '';
+      return status_text
+          .replace('CASH_PLUS_BANK_CONFIRMED', 'Cash & Bank Cleared')
+          .replace('LOW_CONFIDENCE_MATCH', 'Manual Review Needed')
+          .replace('ADVANCE_PAYMENT_TYPE_UNKNOWN', 'Advance Unverified')
+          .replace('AMBIGUOUS_AMOUNT_MATCH', 'Ambiguous Match')
+          .replace('PARTIALLY_PAID', 'Partial Payment');
+  };
 
   if (loading) return (
     <div className="p-8 bg-gray-50 min-h-screen">
@@ -328,7 +340,7 @@ const DashboardPage: React.FC = () => {
          </div>
       </div>
 
-      <header className="mb-12 flex justify-between items-end">
+      <header className="mb-6 flex justify-between items-end">
         <div>
            <div className="flex items-center space-x-3 mb-1">
               <h1 className="text-4xl font-black text-gray-900 tracking-tight">Aradhana Auditor Live</h1>
@@ -344,8 +356,8 @@ const DashboardPage: React.FC = () => {
         )}
       </header>
       
-      <section className="mb-16">
-        <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Operational Metrics</h2>
+      <section className="mb-6">
+        <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-200 pb-2">Operational Metrics</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             <StatCard label="Bills Dated Today" value={num(stats?.totalBillsToday)} />
             <StatCard label="Imported Today" value={num(stats?.importedToday)} />
@@ -388,7 +400,12 @@ const DashboardPage: React.FC = () => {
         )}
 
         <div className={stats?.is_owner ? "lg:col-span-2" : "lg:col-span-3"}>
-          <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Live Pipeline Feed</h2>
+          <div className="flex justify-between items-center mb-6 border-b border-gray-200 pb-2">
+             <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Recent Pipeline Activity</h2>
+             <Link to="/reconciliation" className="text-[10px] bg-black text-white px-4 py-2 rounded-lg uppercase font-black tracking-widest hover:bg-gray-800 transition-colors shadow-lg shadow-black/10">
+                 Open Full Pipeline
+             </Link>
+          </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             {sortedDates.length > 0 ? sortedDates.map(date => (
               <div key={date}>
@@ -447,7 +464,7 @@ const DashboardPage: React.FC = () => {
                             inv.status === 'Purple' ? 'bg-purple-100 text-purple-700' :
                             'bg-red-100 text-red-700'
                           }`}>
-                            {inv.status_text || inv.status}
+                            {operatorLabel(inv.status_text || inv.status)}
                           </span>
                         </td>
                       </tr>
@@ -469,9 +486,9 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-16">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-6">
         <div className="lg:col-span-3">
-          <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Live Payment Events (SMS/Email)</h2>
+          <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Recent Payment Events</h2>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -486,7 +503,7 @@ const DashboardPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {paymentEvents.map((event) => (
+                {paymentEvents.slice(0, 5).map((event) => (
                   <tr key={event.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                     <td className="p-4 font-bold text-gray-900">[{event.source}]</td>
                     <td className="p-4 text-sm text-gray-600">

@@ -121,9 +121,14 @@ function App() {
                         Extraction Review
                       </NavLink>
                     )}
-                    {['admin', 'owner', 'accountant'].includes(role) && (
+                    {['admin', 'owner', 'accountant', 'developer'].includes(role) && (
                       <NavLink to="/audit-logs" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
                         Audit Logs
+                      </NavLink>
+                    )}
+                    {['admin', 'owner', 'developer'].includes(role) && (
+                      <NavLink to="/system-health" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
+                        System Health
                       </NavLink>
                     )}
                   </nav>
@@ -162,7 +167,12 @@ function App() {
                         <ProtectedRoute roles={['admin', 'accountant', 'owner']}><PrimeExtractionReviewPage /></ProtectedRoute>
                     } />
                     <Route path="/audit-logs" element={
-                        <ProtectedRoute roles={['admin', 'owner', 'accountant']}><AuditLogsPage /></ProtectedRoute>
+                        <ProtectedRoute roles={['admin', 'owner', 'accountant', 'developer']}><AuditLogsPage /></ProtectedRoute>
+                    } />
+                    <Route path="/system-health" element={
+                        <ProtectedRoute roles={['admin', 'owner', 'developer']}>
+                            <div className="p-8"><h1 className="text-2xl font-black uppercase">System Health</h1><p>Diagnostic page for developers.</p></div>
+                        </ProtectedRoute>
                     } />
                   </Routes>
                 </main>
