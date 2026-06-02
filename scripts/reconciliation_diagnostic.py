@@ -1,13 +1,14 @@
-import os
-import sys
-from datetime import datetime
 from pathlib import Path
+import sys
+import os
+from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 # Add project root to sys.path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from backend.database import SessionLocal
 from backend.models import Bill, Payment, BankAlert, SMSAlert

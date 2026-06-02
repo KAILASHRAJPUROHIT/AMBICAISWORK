@@ -1,10 +1,11 @@
+from pathlib import Path
 import sys
 import os
-from pathlib import Path
 
 # Add project root to sys.path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from backend.database import engine
 from sqlalchemy import text, inspect

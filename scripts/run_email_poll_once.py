@@ -1,13 +1,14 @@
-import os
+from pathlib import Path
 import sys
+import os
 import logging
 from datetime import datetime
-from pathlib import Path
 from sqlalchemy.orm import Session
 
 # Add the project root to sys.path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from backend.database import SessionLocal
 from backend.email_poller import process_emails, email_status, get_checkpoint

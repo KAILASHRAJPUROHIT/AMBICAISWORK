@@ -1,13 +1,14 @@
-import os
+from pathlib import Path
 import sys
+import os
 import argparse
 from datetime import datetime, timedelta
-from pathlib import Path
 from sqlalchemy.orm import Session
 
 # Add the project root to sys.path
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from backend.database import SessionLocal
 from backend.models import SystemSetting
