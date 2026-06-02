@@ -17,7 +17,7 @@ def send_email(to_email: str, subject: str, html_body: str):
     sender_password = os.getenv("EMAIL_PASSWORD")
 
     if not sender_email or not sender_password:
-        logger.error("Email credentials not configured.")
+        logger.error("Email credentials not configured in .env")
         return False
 
     msg = MIMEMultipart()
@@ -27,13 +27,15 @@ def send_email(to_email: str, subject: str, html_body: str):
     msg.attach(MIMEText(html_body, 'html'))
 
     try:
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
+        logger.info(f"OTP_EMAIL_ATTEMPT to {to_email} via {smtp_server}:{smtp_port}")
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=10) as server:
             server.starttls()
             server.login(sender_email, sender_password)
             server.send_message(msg)
+        logger.info(f"OTP_EMAIL_SENT_SUCCESS to {to_email}")
         return True
     except Exception as e:
-        logger.error(f"Failed to send email to {to_email}: {e}")
+        logger.error(f"OTP_EMAIL_SEND_FAILED to {to_email}: {str(e)}")
         return False
 
 def send_otp_email(to_email: str, otp_code: str):
