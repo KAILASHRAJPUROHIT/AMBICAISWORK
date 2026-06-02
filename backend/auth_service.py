@@ -21,9 +21,10 @@ def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not hashed_password: return False
     return hash_password(plain_password) == hashed_password
 
-def create_otp(db: Session, employee_id: str) -> Optional[str]:
+def create_otp(db: Session, employee_id: str, is_resend: bool = False) -> Optional[str]:
     user = db.query(User).filter(User.employee_id == employee_id).first()
     if not user:
         logger.error(f"User {employee_id} not found.")
@@ -35,7 +36,7 @@ def create_otp(db: Session, employee_id: str) -> Optional[str]:
         logger.error(f"User {employee_id} has no registered email.")
         return None
 
-    # Clear old OTPs
+    # Mandate: Invalidate previous unused OTPs for same employee_id
     db.query(OTP).filter(OTP.employee_id == employee_id).delete()
 
     otp_code = generate_otp()
@@ -54,34 +55,58 @@ def create_otp(db: Session, employee_id: str) -> Optional[str]:
     sent = send_otp_email(target_email, otp_code)
     if not sent:
         logger.warning(f"Failed to send OTP email to {target_email}")
-        
-    logger.info(f"OTP created and sent to {target_email}. Expires at {expires_at}")
+    
+    event_type = "OTP_RESENT" if is_resend else "OTP_SENT"
+    log_event(db, employee_id, event_type)
+    
+    logger.info(f"{event_type} to {target_email}. Expires at {expires_at}")
     return otp_code
 
 def verify_otp(db: Session, employee_id: str, otp_code: str) -> bool:
+    otp_code = otp_code.strip()
+    
+    # Find the latest unused OTP record
     otp_record = db.query(OTP).filter(
         OTP.employee_id == employee_id,
-        OTP.otp_code == otp_code,
-        OTP.expires_at > datetime.now()
-    ).first()
+        OTP.is_verified == 0
+    ).order_by(OTP.created_at.desc()).first()
     
-    if otp_record:
-        if otp_record.attempts >= MAX_LOGIN_ATTEMPTS:
-            logger.warning(f"Too many OTP attempts for {employee_id}")
-            return False
-            
-        # OTP is single use, delete it after success
+    if not otp_record:
+        logger.warning(f"OTP_VERIFY_FAILED: No active OTP found for {employee_id}")
+        log_event(db, employee_id, "OTP_NOT_FOUND")
+        return False
+
+    # Check Expiry
+    if otp_record.expires_at < datetime.now():
+        logger.warning(f"OTP_EXPIRED for {employee_id} at {otp_record.expires_at}")
+        log_event(db, employee_id, "OTP_EXPIRED")
         db.delete(otp_record)
         db.commit()
+        return False
+
+    # Check Max Attempts
+    if otp_record.attempts >= MAX_LOGIN_ATTEMPTS:
+        logger.warning(f"OTP_LOCKED: Too many attempts for {employee_id}")
+        log_event(db, employee_id, "OTP_LOCKED")
+        return False
+
+    # Check Code Match
+    if otp_record.otp_code == otp_code:
+        # Success!
+        otp_record.is_verified = 1
+        # Consumed - we can either update or delete. User says "single use". 
+        # I'll delete to be safe or mark verified. Let's delete.
+        db.delete(otp_record)
+        db.commit()
+        log_event(db, employee_id, "OTP_VERIFY_SUCCESS")
         return True
-    
-    # Increment attempts on failure
-    otp_record = db.query(OTP).filter(OTP.employee_id == employee_id).first()
-    if otp_record:
+    else:
+        # Failure - increment attempts
         otp_record.attempts += 1
         db.commit()
-        
-    return False
+        logger.warning(f"OTP_VERIFY_FAILED: Code mismatch for {employee_id} (Attempt {otp_record.attempts})")
+        log_event(db, employee_id, "OTP_VERIFY_FAILED")
+        return False
 
 def create_user_session(db: Session, employee_id: str) -> str:
     session_token = ''.join(random.choices(string.ascii_letters + string.digits, k=32))

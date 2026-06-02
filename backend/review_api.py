@@ -728,7 +728,17 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Failed to generate OTP")
     
     log_event(db, user.employee_id, "LOGIN_REQUEST")
-    return {"status": "success", "message": "OTP sent to your registered email"}
+    
+    # Return email hint for masking
+    email = user.security_email if user.security_email else user.email
+    user_part, domain_part = email.split('@')
+    email_hint = f"{user_part[0]}***{user_part[-1]}@{domain_part}"
+    
+    return {
+        "status": "success", 
+        "message": "OTP sent to your registered email",
+        "email_hint": email_hint
+    }
 
 @app.post("/api/auth/verify")
 async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Request = None):
@@ -756,6 +766,26 @@ async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Req
     
     log_event(db, target_id, "LOGIN_FAILED", ip=req.client.host if req else None)
     raise HTTPException(status_code=401, detail="Invalid or expired OTP")
+
+@app.post("/api/auth/resend-otp")
+async def resend_otp(request: LoginRequest, db: Session = Depends(get_db)):
+    # We use LoginRequest because it has employee_id. Password is also sent but we can skip re-verifying it 
+    # if we want to be fast, but for security, let's verify password again.
+    from backend.auth_service import verify_password
+    user = db.query(User).filter(func.lower(User.employee_id) == request.employee_id.lower()).first()
+    
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid ID or inactive account")
+    
+    if not verify_password(request.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid password")
+    
+    # Generate new OTP (create_otp handles invalidation of old ones)
+    otp = create_otp(db, user.employee_id, is_resend=True)
+    if not otp:
+        raise HTTPException(status_code=500, detail="Failed to resend OTP")
+    
+    return {"status": "success", "message": "New OTP sent to your registered email"}
 
 @app.get("/api/auth/me")
 async def get_me(request: Request, db: Session = Depends(get_db)):

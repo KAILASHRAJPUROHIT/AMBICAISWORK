@@ -13,6 +13,13 @@ const LoginPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
+    // Dynamic Data from Login Response
+    const [maskedEmail, setMaskedEmail] = useState('');
+
+    // Timers
+    const [resendTimer, setResendTimer] = useState(0);
+    const [expiryTimer, setExpiryTimer] = useState(300); // 5 minutes
+
     // Diagnostic Info
     const [diag, setDiag] = useState({ url: '', reachable: 'Checking...', status: 0, response: '' });
 
@@ -33,8 +40,26 @@ const LoginPage: React.FC = () => {
         console.log("UI STATE CHANGE: step =", step);
         if (step === 'OTP') {
             console.log("OTP_SCREEN_RENDERED");
+            setResendTimer(60);
+            setExpiryTimer(300);
         }
     }, [step]);
+
+    // Resend Timer Hook
+    useEffect(() => {
+        if (resendTimer > 0) {
+            const t = setTimeout(() => setResendTimer(resendTimer - 1), 1000);
+            return () => clearTimeout(t);
+        }
+    }, [resendTimer]);
+
+    // Expiry Timer Hook
+    useEffect(() => {
+        if (step === 'OTP' && expiryTimer > 0) {
+            const t = setTimeout(() => setExpiryTimer(expiryTimer - 1), 1000);
+            return () => clearTimeout(t);
+        }
+    }, [step, expiryTimer]);
 
     useEffect(() => {
         refreshCaptcha();
@@ -64,6 +89,10 @@ const LoginPage: React.FC = () => {
             console.log("LOGIN_RESPONSE_RECEIVED:", res);
             updateDiag(200, JSON.stringify(res));
 
+            // Extract email for masking if available (we might need backend to return it)
+            // For now use a placeholder or update backend to return email hint
+            setMaskedEmail(res.email_hint || 'registered email');
+
             console.log("TRANSITIONING TO OTP STEP...");
             setSuccess("OTP sent to your registered email.");
             setStep('OTP');
@@ -81,12 +110,35 @@ const LoginPage: React.FC = () => {
         }
     };
 
+    const handleResend = async () => {
+        if (resendTimer > 0) return;
+        setLoading(true);
+        setError(null);
+        try {
+            const response = await fetch(`${window.location.origin}/api/auth/resend-otp`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ employee_id: employeeId, password })
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || "Resend failed");
+            
+            setSuccess("New OTP sent.");
+            setResendTimer(60);
+            setExpiryTimer(300);
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleVerify = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
         try {
-            const data = await verifyOTP(employeeId, otp);
+            const data = await verifyOTP(employeeId, otp.trim());
             localStorage.setItem('session_token', data.token);
             localStorage.setItem('user', JSON.stringify(data.user));
             window.location.href = '/';
@@ -115,6 +167,12 @@ const LoginPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
     };
 
     return (
@@ -195,26 +253,49 @@ const LoginPage: React.FC = () => {
                     </form>
                 ) : step === 'OTP' ? (
                     (() => { console.log("OTP_FORM_MOUNTED_IN_DOM"); return (
-                    <form onSubmit={handleVerify} className="login-form">
-                        <div className="form-group">
-                            <label>One-Time Password</label>
-                            <input 
-                                type="text" 
-                                value={otp} 
-                                onChange={(e) => setOtp(e.target.value)}
-                                placeholder="6-digit code"
-                                maxLength={6}
-                                required
-                            />
-                            <p className="otp-hint">OTP sent to your registered email.</p>
+                    <div className="login-form">
+                        <div className="mb-6 text-center">
+                            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">OTP sent to:</p>
+                            <p className="font-black text-gray-900 text-sm">{maskedEmail}</p>
                         </div>
-                        <button type="submit" disabled={loading} className="login-btn">
-                            {loading ? 'Verifying...' : 'Complete Login'}
-                        </button>
-                        <button type="button" className="btn-link" onClick={() => { setStep('LOGIN'); setSuccess(null); }}>
-                            Back to Login
-                        </button>
-                    </form>
+
+                        <form onSubmit={handleVerify}>
+                            <div className="form-group">
+                                <label>One-Time Password</label>
+                                <input 
+                                    type="text" 
+                                    value={otp} 
+                                    onChange={(e) => setOtp(e.target.value)}
+                                    placeholder="6-digit code"
+                                    maxLength={6}
+                                    required
+                                />
+                                <div className="flex justify-between mt-2">
+                                    <span className="text-[9px] font-bold text-gray-400 uppercase">Expires in {formatTime(expiryTimer)}</span>
+                                    {expiryTimer === 0 && <span className="text-[9px] font-bold text-red-500 uppercase tracking-tighter animate-pulse">OTP Expired</span>}
+                                </div>
+                            </div>
+
+                            <button type="submit" disabled={loading || expiryTimer === 0} className="login-btn">
+                                {loading ? 'Verifying...' : 'Complete Login'}
+                            </button>
+                        </form>
+
+                        <div className="mt-6 space-y-4 text-center">
+                            <button 
+                                type="button" 
+                                disabled={resendTimer > 0 || loading}
+                                onClick={handleResend}
+                                className={`text-[10px] font-black uppercase tracking-widest ${resendTimer > 0 ? 'text-gray-300' : 'text-blue-600 hover:underline'}`}
+                            >
+                                {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : 'Resend OTP Now'}
+                            </button>
+                            <br/>
+                            <button type="button" className="btn-link" onClick={() => { setStep('LOGIN'); setSuccess(null); }}>
+                                Back to Login
+                            </button>
+                        </div>
+                    </div>
                     )})()
                 ) : (
                     <form onSubmit={handleForgot} className="login-form">
