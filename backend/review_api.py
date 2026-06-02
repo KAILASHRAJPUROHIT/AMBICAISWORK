@@ -783,6 +783,46 @@ async def logout(request: Request, db: Session = Depends(get_db)):
         db.commit()
     return {"status": "success"}
 
+# Recovery Models
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    otp_code: str
+    new_password: str
+
+@app.post("/api/auth/forgot-password")
+async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    # Mandate Step 2 & 3: Check active user by email and send OTP
+    user = db.query(User).filter(func.lower(User.email) == request.email.lower(), User.is_active == 1).first()
+    
+    if user:
+        otp = create_otp(db, user.employee_id)
+        if otp:
+            log_event(db, user.employee_id, "FORGOT_PASSWORD_REQUEST")
+            return {"status": "success", "message": "Reset OTP sent to your registered email."}
+            
+    # Generic message for security even if email not found
+    return {"status": "success", "message": "Recovery instructions sent if email exists."}
+
+@app.post("/api/auth/reset-password")
+async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(func.lower(User.email) == request.email.lower(), User.is_active == 1).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if verify_otp(db, user.employee_id, request.otp_code):
+        from backend.auth_service import hash_password
+        user.hashed_password = hash_password(request.new_password)
+        db.commit()
+        
+        log_event(db, user.employee_id, "PASSWORD_RESET_SUCCESS")
+        return {"status": "success", "message": "Password changed successfully."}
+    
+    log_event(db, user.employee_id, "PASSWORD_RESET_FAILED")
+    raise HTTPException(status_code=401, detail="Invalid or expired reset OTP")
+
 # ... existing routes ...
 
 @app.middleware("http")
@@ -790,6 +830,8 @@ async def security_middleware(request: Request, call_next):
     PUBLIC_ENDPOINTS = [
         "/api/auth/login",
         "/api/auth/verify",
+        "/api/auth/forgot-password",
+        "/api/auth/reset-password",
         "/api/dashboard/live", 
         "/api/system/mode",
         "/api/version",

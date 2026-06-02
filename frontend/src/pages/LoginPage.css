@@ -72,6 +72,7 @@
     font-weight: 600;
     transition: all 0.3s ease;
     box-sizing: border-box;
+    text-transform: none !important; /* Force no transform */
 }
 
 .login-form input:focus {
@@ -79,7 +80,65 @@
     border-color: #000;
 }
 
-.login-form button {
+.password-input-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.password-toggle-btn {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent !important;
+    border: none !important;
+    color: #000 !important;
+    font-size: 10px !important;
+    font-weight: 900 !important;
+    text-transform: uppercase !important;
+    padding: 0.5rem 1rem !important;
+    width: auto !important;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.password-toggle-btn:hover {
+    background: #f0f0f0 !important;
+    border-radius: 0.5rem;
+}
+
+/* Ensure password input has padding for the toggle button */
+.password-input-wrapper input {
+    padding-right: 4.5rem !important;
+}
+
+.captcha-group {
+    background: #fcfcfc;
+    padding: 1.5rem;
+    border-radius: 1.5rem;
+    border: 1px solid #f0f0f0;
+}
+
+.captcha-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.captcha-question {
+    font-weight: 900;
+    color: #000;
+    font-size: 0.9rem;
+}
+
+.captcha-input {
+    width: 100px !important; /* Increased width */
+    padding: 0.8rem !important;
+    text-align: center;
+}
+
+.login-btn {
     width: 100%;
     padding: 1.2rem;
     background: #000;
@@ -94,14 +153,15 @@
     transition: all 0.3s ease;
 }
 
-.login-form button:hover {
+.login-btn:hover {
     background: #333;
     transform: translateY(-2px);
 }
 
-.login-form button:disabled {
+.login-btn:disabled {
     background: #ccc;
     cursor: not-allowed;
+    transform: none;
 }
 
 .login-error {
@@ -113,6 +173,44 @@
     font-size: 0.85rem;
     font-weight: 600;
     text-align: center;
+    border: 1px solid #ffa39e;
+}
+
+.login-success {
+    background: #f6ffed;
+    color: #52c41a;
+    padding: 1rem;
+    border-radius: 1rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    border: 1px solid #b7eb8f;
+}
+
+.forgot-password-link {
+    background: none !important;
+    border: none !important;
+    color: #aaa !important;
+    font-size: 10px !important;
+    font-weight: 900 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.1rem !important;
+    cursor: pointer;
+    padding: 0 !important;
+    width: auto !important;
+}
+
+.forgot-password-link:hover {
+    color: #000 !important;
+}
+
+.recovery-hint {
+    font-size: 0.8rem;
+    color: #888;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    line-height: 1.5;
 }
 
 .otp-hint {
