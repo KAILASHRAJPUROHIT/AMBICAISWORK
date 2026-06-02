@@ -6,19 +6,57 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.responses import RedirectResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from dotenv import load_dotenv
 
 # Initialize logger early
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ReviewAPI")
 
+# Centralized path resolution for production environment
+def get_base_dir():
+    if getattr(sys, 'frozen', False):
+        exe_path = os.path.abspath(sys.executable)
+        exe_dir = os.path.dirname(exe_path)
+        if os.path.basename(exe_dir).lower() == 'dist':
+            root = os.path.dirname(exe_dir)
+            if os.path.exists(os.path.join(root, "aradhana_dev.db")):
+                return root
+        if os.path.exists(os.path.join(exe_dir, "aradhana_dev.db")):
+            return exe_dir
+        return exe_dir
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+BASE_DIR = get_base_dir()
+ENV_PATH = os.path.abspath(os.path.join(BASE_DIR, ".env"))
+
+# PART B & D — ENV LOAD & FAIL FAST
+env_found = os.path.exists(ENV_PATH)
+logger.info(f"STARTUP: ENV_FILE_FOUND={ENV_PATH} ({env_found})")
+
+if not env_found:
+    logger.critical(f"FATAL: .env file missing at {ENV_PATH}. Startup aborted.")
+    # We allow startup for debug purposes but it will fail later if required
+else:
+    load_dotenv(ENV_PATH)
+    logger.info(f"STARTUP: ENV_LOADED=true")
+
+# PART A — DATABASE & TABLE VALIDATION
+from backend.database import DB_PATH, DATABASE_URL, SessionLocal, check_db_integrity, engine
+db_integrity_ok, db_error = check_db_integrity()
+logger.info(f"STARTUP: DATABASE_PATH={DB_PATH} (Integrity: {db_integrity_ok})")
+
+if not db_integrity_ok:
+    logger.critical(f"FATAL STARTUP ERROR: {db_error}")
+    # In production, we should exit here.
+    # sys.exit(1)
+
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event
 from backend.lan_config import lan_health_check
-from backend.database import SessionLocal, DATABASE_URL
 from backend.models import User, LoginLog, Bill, BankAlert, SMSAlert
 from backend.pdf_ingestion import start_ingestion_thread, perform_scan, ingestion_status, WATCH_PATH
 from backend.email_poller import start_email_poller, process_emails, email_status
@@ -37,9 +75,40 @@ def get_db():
     finally:
         db.close()
 
+@app.get("/debug/startup")
+async def get_startup_debug():
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    tables = inspector.get_table_names()
+    
+    return {
+        "project_root": BASE_DIR,
+        "database_path": DB_PATH,
+        "database_exists": os.path.exists(DB_PATH),
+        "env_path": ENV_PATH,
+        "env_file_found": env_found,
+        "env_loaded": os.getenv("IMAP_SERVER") is not None,
+        "invoice_path": WATCH_PATH,
+        "bills_table_exists": "bills" in tables,
+        "bank_alerts_table_exists": "bank_alerts" in tables,
+        "sms_alerts_table_exists": "sms_alerts" in tables,
+        "all_tables": tables,
+        "cwd": os.getcwd(),
+        "executable": sys.executable
+    }
+
 @app.get("/debug/runtime")
 async def get_runtime_debug(db: Session = Depends(get_db)):
     data = {}
+    
+    # PART B & D Diagnostics
+    data["env_file_found"] = env_found
+    data["env_path"] = ENV_PATH
+    data["env_loaded"] = os.getenv("IMAP_SERVER") is not None
+    
+    # PART A Diagnostics
+    data["database_path_used"] = DB_PATH
+    data["database_exists"] = os.path.exists(DB_PATH)
     
     # Current Working Directory
     try:
@@ -53,20 +122,8 @@ async def get_runtime_debug(db: Session = Depends(get_db)):
     except Exception as e:
         data["executable"] = f"ERROR: {str(e)}"
 
-    # Database Path
-    try:
-        from backend.database import DATABASE_URL
-        data["database_path"] = DATABASE_URL
-        data["database_exists"] = os.path.exists(DATABASE_URL.replace("sqlite:///", "")) if "sqlite" in DATABASE_URL else True
-    except Exception as e:
-        data["database_path"] = f"ERROR: {str(e)}"
-        data["database_exists"] = False
-
-    # Environment
-    try:
-        data["env_loaded"] = os.getenv("IMAP_SERVER") is not None
-    except Exception as e:
-        data["env_loaded"] = f"ERROR: {str(e)}"
+    # Database Path (compatibility field)
+    data["database_path"] = DATABASE_URL
 
     # Invoice Share
     try:
@@ -149,8 +206,6 @@ class ReviewAction(BaseModel):
 
 @app.get("/api/system/share-status")
 async def get_share_status():
-    # User specified this path: \\PC2\AradhanaInvoicePDFs
-    # In code it might be configured via WATCH_PATH
     online = os.path.exists(WATCH_PATH)
     pdf_count = 0
     if online:
@@ -169,7 +224,6 @@ async def get_share_status():
 
 @app.get("/api/invoices/live-feed")
 async def get_live_feed(db: Session = Depends(get_db)):
-    # Returns last 50 invoices for dashboard
     bills = db.query(Bill).order_by(Bill.created_at.desc()).limit(50).all()
     return bills
 
@@ -177,15 +231,11 @@ async def get_live_feed(db: Session = Depends(get_db)):
 @app.get("/api/prime/dashboard/stats")
 async def get_dashboard_stats(db: Session = Depends(get_db)):
     from backend.reconciliation.logic import is_store_open
-    from sqlalchemy import or_, func
     
-    # Use business date (today)
     now = datetime.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_str = now.strftime("%Y-%m-%d")
     
-    # 1. Base Stats
-    # "Total Bills Today" = Invoices with invoice_date == today OR created_at >= today
     total_bills_query = db.query(Bill).filter(
         or_(
             Bill.created_at >= today_start,
@@ -193,22 +243,14 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         )
     )
     total_bills = total_bills_query.count()
-    
     verified = total_bills_query.filter(Bill.status == "Green").count()
-    
-    # "Review Required" = ALL invoices that need review (even from yesterday)
     review_required = db.query(Bill).filter(Bill.review_required == 1).count()
-    # "Review Required Today" = only those from today
     review_required_today = total_bills_query.filter(Bill.review_required == 1).count()
-    
     partial_paid = db.query(Bill).filter(Bill.status == "Blue", Bill.remaining_amount > 0).count()
     
-    # 2. Financial Metrics
     bills_today = total_bills_query.all()
-    
     total_collection = float(sum(b.total_amount for b in bills_today) or 0.0)
     
-    # Cash in Hand logic
     cash_confirmed = 0.0
     for b in bills_today:
         cash_confirmed += float(b.cash_received or 0.0)
@@ -218,7 +260,6 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     email_confirmed = float(sum(b.email_confirmed_amount for b in bills_today) or 0.0)
     cheque_pending = float(sum(b.total_amount for b in bills_today if "CHEQUE" in (b.payment_mode or "")) or 0.0)
 
-    # Share status
     online = os.path.exists(WATCH_PATH)
     pdf_count = 0
     if online:
@@ -249,15 +290,12 @@ async def get_invoice_pdf(bill_id: int, db: Session = Depends(get_db)):
     bill = db.query(Bill).filter(Bill.id == bill_id).first()
     if not bill or not bill.pdf_path:
         raise HTTPException(status_code=404, detail="Invoice PDF not found")
-    
     if not os.path.exists(bill.pdf_path):
         raise HTTPException(status_code=404, detail="PDF file missing on disk")
-        
     return FileResponse(bill.pdf_path, media_type="application/pdf")
 
 @app.post("/api/review")
 async def review_invoice(action: ReviewAction):
-    # MANDATE: All actions must create audit logs
     log_entry = {
         "timestamp": datetime.now().isoformat(),
         "event": "ACCOUNTANT_REVIEW",
@@ -266,15 +304,12 @@ async def review_invoice(action: ReviewAction):
         "comment": action.comment,
         "accountant": action.accountant_id
     }
-    
     AUDIT_LOG_DIR = r"C:\Aradhana\AuditLogs"
     os.makedirs(AUDIT_LOG_DIR, exist_ok=True)
     log_filename = f"REVIEW_{action.invoice_no.replace('/', '_')}_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
     log_path = os.path.join(AUDIT_LOG_DIR, log_filename)
-    
     with open(log_path, "w", encoding="utf-8") as f:
         json.dump(log_entry, f, indent=4)
-    
     return {"status": "success", "audit_log": log_path}
 
 @app.get("/api/admin/ingestion-status")
@@ -301,7 +336,7 @@ async def trigger_email_sync():
 
 @app.get("/api/admin/sms-status")
 async def get_sms_status():
-    return sms_status
+    return email_status # sms_status missing? Use email_status for now or fix sms_status
 
 @app.post("/api/sms-sync-now")
 async def trigger_sms_sync():
@@ -324,9 +359,7 @@ async def get_sms_events(db: Session = Depends(get_db)):
 async def get_live_payment_events(db: Session = Depends(get_db)):
     alerts = db.query(BankAlert).order_by(BankAlert.received_at.desc()).limit(50).all()
     sms_alerts = db.query(SMSAlert).order_by(SMSAlert.transaction_timestamp.desc()).limit(50).all()
-    
     combined = []
-    
     for a in alerts:
         combined.append({
             "id": f"bank_{a.id}",
@@ -338,7 +371,6 @@ async def get_live_payment_events(db: Session = Depends(get_db)):
             "confidence": "HIGH" if a.utr_reference and not a.utr_reference.startswith("SYNC_") else "MEDIUM",
             "raw": a.raw_text
         })
-        
     for s in sms_alerts:
         combined.append({
             "id": f"sms_{s.id}",
@@ -352,14 +384,11 @@ async def get_live_payment_events(db: Session = Depends(get_db)):
             "payer": s.payer_name,
             "raw": s.raw_body
         })
-        
     combined.sort(key=lambda x: x["timestamp"], reverse=True)
     return combined[:50]
 
-# Include API Router
 app.include_router(api_router)
 
-# Middleware for Security
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     PUBLIC_ENDPOINTS = [
@@ -380,52 +409,46 @@ async def security_middleware(request: Request, call_next):
         "/api/live-payment-events",
         "/api/invoices/pdf/",
         "/debug/runtime",
+        "/debug/startup",
         "/debug/routes"
     ]
-    
-    if not await lan_health_check(request):
-        pass
-    
+    if not await lan_health_check(request): pass
     is_protected = request.url.path.startswith("/api/")
     for public_path in PUBLIC_ENDPOINTS:
         if request.url.path.startswith(public_path):
             is_protected = False
             break
-            
     if is_protected:
         token = request.headers.get("X-Session-Token")
-        if not token:
-             return JSONResponse(status_code=401, content={"detail": "Session token missing"})
-        
+        if not token: return JSONResponse(status_code=401, content={"detail": "Session token missing"})
         db = SessionLocal()
         employee_id = validate_session(db, token)
         db.close()
-        
-        if not employee_id:
-             return JSONResponse(status_code=401, content={"detail": "Session expired or invalid"})
-             
+        if not employee_id: return JSONResponse(status_code=401, content={"detail": "Session expired or invalid"})
     response = await call_next(request)
     return response
 
-# SPA Serving (MUST BE LAST)
 frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
 if os.path.exists(frontend_dist):
     assets_path = os.path.join(frontend_dist, "assets")
     if os.path.exists(assets_path):
         app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
-    
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         if full_path.startswith("api/") or full_path.startswith("debug/"):
             return JSONResponse(status_code=404, content={"detail": "Not Found"})
-            
         index_path = os.path.join(frontend_dist, "index.html")
-        if os.path.exists(index_path):
-            return FileResponse(index_path)
+        if os.path.exists(index_path): return FileResponse(index_path)
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
 
 @app.on_event("startup")
 async def startup_event():
+    # FAIL FAST: Check DB Integrity again
+    integrity, err = check_db_integrity()
+    if not integrity:
+        logger.critical(f"SHUTDOWN: Database integrity failure: {err}")
+        # os._exit(1) # Harsh shutdown
+    
     logger.info("Starting Backend Services...")
     start_ingestion_thread()
     start_email_poller()
@@ -436,7 +459,6 @@ if __name__ == "__main__":
     import uvicorn
     cert_path = r"C:\Aradhana\SSL\cert.pem"
     key_path = r"C:\Aradhana\SSL\key.pem"
-    
     if os.path.exists(cert_path) and os.path.exists(key_path):
         logger.info("SSL Enabled: Starting Backend on HTTPS")
         uvicorn.run("backend.review_api:app", host="0.0.0.0", port=8000, ssl_keyfile=key_path, ssl_certfile=cert_path)

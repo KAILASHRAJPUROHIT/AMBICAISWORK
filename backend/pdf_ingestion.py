@@ -17,7 +17,15 @@ import json
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("PDF_Ingestion")
 
-WATCH_PATH = r"C:\Aradhana\InvoicePDFs"
+# PART C — SHARE PATH
+# Prefer network share \\PC2\AradhanaInvoicePDFs as per mandate
+DEFAULT_SHARE = r"\\PC2\AradhanaInvoicePDFs"
+WATCH_PATH = os.getenv("INVOICE_SHARE_PATH", DEFAULT_SHARE)
+
+# If the share is explicitly local but user wants network, we log warning
+if WATCH_PATH.startswith("C:") and DEFAULT_SHARE.startswith("\\\\"):
+    logger.warning(f"WATCH_PATH is local ({WATCH_PATH}). Network share ({DEFAULT_SHARE}) is ignored.")
+
 from backend.invoice_lifecycle import handle_duplicate
 
 # OCR Settings
