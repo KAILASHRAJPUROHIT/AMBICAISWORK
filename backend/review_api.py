@@ -749,7 +749,8 @@ async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Req
             "user": {
                 "name": user.name,
                 "role": user.role,
-                "employee_id": user.employee_id
+                "employee_id": user.employee_id,
+                "reset_required": user.password_reset_required == 1
             }
         }
     

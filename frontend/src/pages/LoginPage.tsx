@@ -30,6 +30,13 @@ const LoginPage: React.FC = () => {
     };
 
     useEffect(() => {
+        console.log("UI STATE CHANGE: step =", step);
+        if (step === 'OTP') {
+            console.log("OTP_SCREEN_RENDERED");
+        }
+    }, [step]);
+
+    useEffect(() => {
         refreshCaptcha();
         const apiBase = window.location.origin;
         setDiag(prev => ({ ...prev, url: `${apiBase}/api/auth/login` }));
@@ -50,12 +57,14 @@ const LoginPage: React.FC = () => {
             return;
         }
 
-        console.log("LOGIN REQUEST: employee_id submitted:", employeeId);
+        console.log("LOGIN_REQUEST_SENT: employee_id submitted:", employeeId);
         setLoading(true);
         try {
             const res = await login(employeeId, password);
+            console.log("LOGIN_RESPONSE_RECEIVED:", res);
             updateDiag(200, JSON.stringify(res));
-            console.log("LOGIN SUCCESS:", res);
+
+            console.log("TRANSITIONING TO OTP STEP...");
             setSuccess("OTP sent to your registered email.");
             setStep('OTP');
         } catch (err: any) {
@@ -185,6 +194,7 @@ const LoginPage: React.FC = () => {
                         </div>
                     </form>
                 ) : step === 'OTP' ? (
+                    (() => { console.log("OTP_FORM_MOUNTED_IN_DOM"); return (
                     <form onSubmit={handleVerify} className="login-form">
                         <div className="form-group">
                             <label>One-Time Password</label>
@@ -205,6 +215,7 @@ const LoginPage: React.FC = () => {
                             Back to Login
                         </button>
                     </form>
+                    )})()
                 ) : (
                     <form onSubmit={handleForgot} className="login-form">
                          <p className="recovery-hint">Password recovery requires access to your private security mailbox.</p>

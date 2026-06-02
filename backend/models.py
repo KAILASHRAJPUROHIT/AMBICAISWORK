@@ -13,6 +13,7 @@ class User(Base):
     email = Column(String, nullable=True)
     security_email = Column(String, nullable=True) # Private destination for OTP/Alerts
     hashed_password = Column(String, nullable=True)
+    password_reset_required = Column(Boolean, default=False)
     is_active = Column(Integer, default=1)
     created_at = Column(DateTime, server_default=func.now())
 

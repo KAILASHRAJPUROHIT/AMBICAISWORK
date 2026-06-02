@@ -6,6 +6,7 @@ class UserRole(Enum):
     ADMIN = "admin"
     OWNER = "owner"
     ACCOUNTANT = "accountant"
+    DEVELOPER = "developer"
     STAFF = "staff"
     VIEWER = "viewer"
 
@@ -22,9 +23,19 @@ class Permission(Enum):
     EMERGENCY_CONTROLS = "emergency_controls"
     ACCESS_MASTER_CONSOLE = "access_master_console"
     VIEW_AUDIT_LOGS = "view_audit_logs"
+    SYSTEM_DIAGNOSTICS = "system_diagnostics"
+    MAINTENANCE_MODE = "maintenance_mode"
+    DEBUG_ACCESS = "debug_access"
 
 
 _ROLE_PERMISSIONS = {
+    UserRole.DEVELOPER: {
+        Permission.VIEW_AUDIT_LOGS,
+        Permission.SYSTEM_DIAGNOSTICS,
+        Permission.MAINTENANCE_MODE,
+        Permission.DEBUG_ACCESS,
+        Permission.EMERGENCY_CONTROLS, # Service restart, force sync
+    },
     UserRole.ACCOUNTANT: {
         Permission.VIEW_REVIEWS,
         Permission.RESOLVE_REVIEWS,
