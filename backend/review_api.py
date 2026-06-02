@@ -376,7 +376,19 @@ async def get_live_feed(db: Session = Depends(get_db)):
 
 @app.get("/api/dashboard/live")
 @app.get("/api/prime/dashboard/stats")
-async def get_dashboard_stats(db: Session = Depends(get_db)):
+async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
+    # Authenticate for financial data check
+    token = request.headers.get("X-Session-Token")
+    user_role = "VIEWER"
+    actor_id = "UNKNOWN"
+    if token:
+        employee_id = validate_session(db, token)
+        if employee_id:
+            user = db.query(User).filter(User.employee_id == employee_id).first()
+            if user:
+                user_role = user.role.upper()
+                actor_id = user.employee_id
+                
     now = datetime.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_str = now.strftime("%Y-%m-%d")
@@ -394,17 +406,36 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     review_required_total = db.query(Bill).filter(Bill.review_required == 1, Bill.is_test_data == False).count()
     partial_paid = db.query(Bill).filter(Bill.status == "Blue", Bill.remaining_amount > 0, Bill.is_test_data == False).count()
     
+    # Financial visibility check
+    is_owner = user_role in ["OWNER", "ADMIN"]
+    
+    # Log attempt if non-owner
+    if not is_owner:
+        from backend.reconciliation.logic import log_audit
+        log_audit(db, "System", 0, "FINANCIAL_DATA_ACCESS", user_role, "DENIED", f"User: {actor_id}")
+    
     from backend.models import Payment as PaymentModel
     bills_today_ids = [b.id for b in bills_today_query.all()]
-    payments_today = db.query(PaymentModel).filter(PaymentModel.bill_id.in_(bills_today_ids)).all()
-    verified_adv_today = float(db.query(func.sum(Bill.advance_amount)).filter(Bill.id.in_(bills_today_ids), Bill.advance_verification_status == "VERIFIED").scalar() or 0.0)
-    total_collection = float(sum(p.amount for p in payments_today) or 0.0)
-    cash_collection = float(sum(p.amount for p in payments_today if p.mode in ["CASH", "OLD_GOLD_EXCHANGE"]) or 0.0)
-    cash_collection += verified_adv_today
-    bank_collection = float(sum(p.amount for p in payments_today if p.mode in ["BANK_TRANSFER", "CARD", "UPI", "NEFT", "IMPS", "RTGS"]) or 0.0)
-    sms_confirmed = float(db.query(func.sum(Bill.sms_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
-    email_confirmed = float(db.query(func.sum(Bill.email_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
-    cheque_collection = float(db.query(func.sum(PaymentModel.amount)).filter(PaymentModel.bill_id.in_(bills_today_ids), PaymentModel.mode == "CHEQUE").scalar() or 0.0)
+    
+    # Mandate: Only Owners/Admins see collections
+    if is_owner:
+        payments_today = db.query(PaymentModel).filter(PaymentModel.bill_id.in_(bills_today_ids)).all()
+        verified_adv_today = float(db.query(func.sum(Bill.advance_amount)).filter(Bill.id.in_(bills_today_ids), Bill.advance_verification_status == "VERIFIED").scalar() or 0.0)
+        total_collection = float(sum(p.amount for p in payments_today) or 0.0)
+        cash_collection = float(sum(p.amount for p in payments_today if p.mode in ["CASH", "OLD_GOLD_EXCHANGE"]) or 0.0)
+        cash_collection += verified_adv_today
+        bank_collection = float(sum(p.amount for p in payments_today if p.mode in ["BANK_TRANSFER", "CARD", "UPI", "NEFT", "IMPS", "RTGS"]) or 0.0)
+        sms_confirmed = float(db.query(func.sum(Bill.sms_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
+        email_confirmed = float(db.query(func.sum(Bill.email_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
+        cheque_collection = float(db.query(func.sum(PaymentModel.amount)).filter(PaymentModel.bill_id.in_(bills_today_ids), PaymentModel.mode == "CHEQUE").scalar() or 0.0)
+    else:
+        # Strictly hide from Accountant/Staff/Biller
+        total_collection = 0.0
+        cash_collection = 0.0
+        bank_collection = 0.0
+        sms_confirmed = 0.0
+        email_confirmed = 0.0
+        cheque_collection = 0.0
 
     online = os.path.exists(WATCH_PATH)
     pdf_count = 0
@@ -420,7 +451,8 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         "smsConfirmed": sms_confirmed, "emailConfirmed": email_confirmed, "chequeCollection": cheque_collection,
         "pdfCountInShare": pdf_count, "invoiceWatcherStatus": "READY" if online else "OFFLINE",
         "emailPollerStatus": email_status.get("status", "IDLE"), "smsRelayStatus": sms_status.get("status", "IDLE"),
-        "matchAccuracy": round((verified_today / total_bills_today * 100), 2) if total_bills_today > 0 else 0.0
+        "matchAccuracy": round((verified_today / total_bills_today * 100), 2) if total_bills_today > 0 else 0.0,
+        "is_owner": is_owner
     }
 
 class AdvanceVerification(BaseModel):

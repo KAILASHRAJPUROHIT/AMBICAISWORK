@@ -16,13 +16,14 @@ def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 def seed_users():
-    # Ensure table exists
     Base.metadata.create_all(bind=engine)
-    
     db = SessionLocal()
     try:
         # 1. OWNER
         owner_email = "info@aradhanajewellers.com"
+        # Mandate: Security alerts to kuldeeprajpurohit309@gmail.com
+        owner_security_email = "kuldeeprajpurohit309@gmail.com"
+        
         owner = db.query(User).filter(User.email == owner_email).first()
         if not owner:
             print(f"Creating OWNER: {owner_email}")
@@ -30,13 +31,15 @@ def seed_users():
                 employee_id="OWNER-01",
                 name="Aradhana Owner",
                 email=owner_email,
+                security_email=owner_security_email,
                 role="OWNER",
-                hashed_password=hash_password("Owner@123"), # Default password
+                hashed_password=hash_password("Owner@123"),
                 is_active=1
             )
             db.add(owner)
         else:
-            print(f"OWNER already exists.")
+            print(f"Updating OWNER security email...")
+            owner.security_email = owner_security_email
             owner.role = "OWNER"
             owner.hashed_password = hash_password("Owner@123")
 
@@ -50,7 +53,7 @@ def seed_users():
                 name="Aradhana Accountant",
                 email=acc_email,
                 role="ACCOUNTANT",
-                hashed_password=hash_password("Acc@123"), # Default password
+                hashed_password=hash_password("Acc@123"),
                 is_active=1
             )
             db.add(accountant)

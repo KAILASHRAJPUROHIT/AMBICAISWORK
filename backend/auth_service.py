@@ -25,8 +25,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_otp(db: Session, employee_id: str) -> Optional[str]:
     user = db.query(User).filter(User.employee_id == employee_id).first()
-    if not user or not user.email:
-        logger.error(f"User {employee_id} not found or has no email.")
+    if not user:
+        logger.error(f"User {employee_id} not found.")
+        return None
+
+    # Priority: security_email, then primary email
+    target_email = user.security_email if user.security_email else user.email
+    if not target_email:
+        logger.error(f"User {employee_id} has no registered email.")
         return None
 
     # Clear old OTPs
@@ -45,11 +51,11 @@ def create_otp(db: Session, employee_id: str) -> Optional[str]:
     db.commit()
     
     # Send actual email
-    sent = send_otp_email(user.email, otp_code)
+    sent = send_otp_email(target_email, otp_code)
     if not sent:
-        logger.warning(f"Failed to send OTP email to {user.email}")
+        logger.warning(f"Failed to send OTP email to {target_email}")
         
-    logger.info(f"OTP created and sent to {user.email}. Expires at {expires_at}")
+    logger.info(f"OTP created and sent to {target_email}. Expires at {expires_at}")
     return otp_code
 
 def verify_otp(db: Session, employee_id: str, otp_code: str) -> bool:
@@ -97,7 +103,6 @@ def validate_session(db: Session, token: str) -> Optional[str]:
     ).first()
     
     if session:
-        # Sliding window? For now just return
         return session.employee_id
     return None
 
