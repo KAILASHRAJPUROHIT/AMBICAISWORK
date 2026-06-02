@@ -79,6 +79,12 @@ def build():
         "--collect-all", "sqlalchemy",
         "--collect-all", "watchdog",
         "--collect-all", "dotenv",
+        "--collect-all", "pdfplumber",
+        "--collect-all", "pdfminer",
+        "--collect-all", "PIL",
+        "--collect-all", "pypdfium2",
+        "--collect-all", "charset_normalizer",
+        "--collect-all", "cryptography",
     ]
     
     cmd.extend(data_args)

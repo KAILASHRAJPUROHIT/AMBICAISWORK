@@ -193,11 +193,29 @@ def run_self_test():
         import dotenv
         print("OK: Dotenv imported")
         
+        # PDF Parsing Dependencies
+        import pdfplumber
+        print(f"OK: pdfplumber imported (version: {pdfplumber.__version__})")
+        import pdfminer
+        print(f"OK: pdfminer imported (version: {pdfminer.__version__})")
+        import PIL
+        from PIL import Image
+        print(f"OK: Pillow (PIL) imported (version: {PIL.__version__})")
+        try:
+            import pypdfium2
+            print("OK: pypdfium2 imported")
+        except ImportError:
+            print("INFO: pypdfium2 not found (optional)")
+            
         sys.path.insert(0, os.getcwd())
         from backend.database import SessionLocal
         db = SessionLocal()
         db.close()
         print("OK: Database connection initialized")
+        
+        # Verify backend imports
+        from backend.pdf_ingestion import parse_pdf
+        print("OK: Backend PDF ingestion module imported")
         
         config = AradhanaLauncher().load_config()
         print(f"OK: Config loaded: {config.get('backend_host')}:{config.get('backend_port')}")
