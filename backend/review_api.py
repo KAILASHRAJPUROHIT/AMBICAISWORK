@@ -697,14 +697,52 @@ async def force_sync(command: str, db: Session = Depends(get_db), owner: User = 
 
 # ... rest ...
 
+# Auth Models
+class LoginRequest(BaseModel):
+    employee_id: str
+    password: str
+
+class VerifyRequest(BaseModel):
+    employee_id: str
+    otp_code: str
+
+@app.post("/api/auth/login")
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    from backend.auth_service import verify_password
+    logger.info(f"LOGIN ATTEMPT: Received employee_id='{request.employee_id}'")
+    
+    # CASE INSENSITIVE LOOKUP
+    user = db.query(User).filter(func.lower(User.employee_id) == request.employee_id.lower()).first()
+    
+    if not user or not user.is_active:
+        logger.warning(f"LOGIN FAILED: User '{request.employee_id}' not found or inactive")
+        raise HTTPException(status_code=401, detail="Invalid ID or inactive account")
+    
+    if not verify_password(request.password, user.hashed_password):
+        log_event(db, user.employee_id, "PASSWORD_FAILED")
+        logger.warning(f"LOGIN FAILED: Invalid password for '{user.employee_id}'")
+        raise HTTPException(status_code=401, detail="Invalid password")
+    
+    otp = create_otp(db, user.employee_id)
+    if not otp:
+        raise HTTPException(status_code=500, detail="Failed to generate OTP")
+    
+    log_event(db, user.employee_id, "LOGIN_REQUEST")
+    return {"status": "success", "message": "OTP sent to your registered email"}
+
 @app.post("/api/auth/verify")
 async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Request = None):
-    # Verify OTP
-    if verify_otp(db, request.employee_id, request.otp_code):
-        token = create_user_session(db, request.employee_id)
-        user = db.query(User).filter(User.employee_id == request.employee_id).first()
+    logger.info(f"VERIFY ATTEMPT: employee_id='{request.employee_id}', otp='{request.otp_code}'")
+    
+    # Use the normalized ID from DB if found
+    user = db.query(User).filter(func.lower(User.employee_id) == request.employee_id.lower()).first()
+    target_id = user.employee_id if user else request.employee_id
 
-        log_event(db, request.employee_id, "LOGIN_SUCCESS", ip=req.client.host if req else None)
+    # Verify OTP
+    if verify_otp(db, target_id, request.otp_code):
+        token = create_user_session(db, target_id)
+        
+        log_event(db, target_id, "LOGIN_SUCCESS", ip=req.client.host if req else None)
         return {
             "status": "success",
             "token": token,
@@ -714,8 +752,8 @@ async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Req
                 "employee_id": user.employee_id
             }
         }
-
-    log_event(db, request.employee_id, "LOGIN_FAILED", ip=req.client.host if req else None)
+    
+    log_event(db, target_id, "LOGIN_FAILED", ip=req.client.host if req else None)
     raise HTTPException(status_code=401, detail="Invalid or expired OTP")
 
 @app.get("/api/auth/me")

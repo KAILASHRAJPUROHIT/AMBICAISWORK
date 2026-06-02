@@ -12,6 +12,7 @@ const LoginPage: React.FC = () => {
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        console.log("employee_id submitted:", employeeId);
         setLoading(true);
         setError(null);
         try {
@@ -58,7 +59,7 @@ const LoginPage: React.FC = () => {
                             <input 
                                 type="text" 
                                 value={employeeId} 
-                                onChange={(e) => setEmployeeId(e.target.value.toUpperCase())}
+                                onChange={(e) => setEmployeeId(e.target.value)}
                                 placeholder="Enter your ID"
                                 required
                             />
