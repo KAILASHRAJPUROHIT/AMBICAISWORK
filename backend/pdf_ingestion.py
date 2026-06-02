@@ -234,11 +234,13 @@ def parse_pdf(file_path):
                         except: pass
 
                     if "CASH" in line_upper: mode = "CASH"
-                    elif any(x in line_upper for x in ["UPI", "RTGS", "IMPS", "NEFT", "BANK TRANSFER", "CHQ"]): mode = "BANK_TRANSFER"
+                    elif "UPI" in line_upper: mode = "UPI"
+                    elif "IMPS" in line_upper: mode = "IMPS"
+                    elif "NEFT" in line_upper: mode = "NEFT"
+                    elif any(x in line_upper for x in ["RTGS", "CHEQUE", "CHQ"]): mode = "RTGS_OR_CHEQUE"
                     elif "ADVANCE" in line_upper: 
                         mode = "ADVANCE"
                         advance_total += amt
-                    elif "CHEQUE" in line_upper: mode = "CHEQUE"
                     elif "CARD" in line_upper: mode = "CARD"
                     elif "BALANCE" in line_upper: mode = "BALANCE"
                     elif any(x in line_upper for x in ["OLD GOLD", "CUST PURC", "PURCHASE"]): 

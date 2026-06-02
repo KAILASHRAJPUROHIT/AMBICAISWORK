@@ -15,7 +15,7 @@ import json
 
 def trace_reconciliation(identifier: str):
     db = SessionLocal()
-    from sqlalchemy import or_, and_
+    from sqlalchemy import or_, and_, func
     print(f"\n{'='*60}")
     print(f"RECONCILIATION TRACE FOR: {identifier}")
     print(f"{'='*60}\n")
@@ -28,10 +28,6 @@ def trace_reconciliation(identifier: str):
         sms = db.query(SMSAlert).filter(SMSAlert.utr_reference == identifier).first()
         if sms:
             alert = db.query(BankAlert).filter(BankAlert.utr_reference == identifier).first()
-            if not alert:
-                print(f"Found SMS alert {identifier} but no corresponding BankAlert yet.")
-                # We can mock a BankAlert from SMS for tracing if needed, 
-                # but verify_payment_event works on BankAlert.
 
     if not bill and not alert:
         print(f"ERROR: Could not find Bill or BankAlert with identifier: {identifier}")
@@ -43,11 +39,12 @@ def trace_reconciliation(identifier: str):
         print(f"  ID: {bill.id}")
         print(f"  Bill No: {bill.bill_number}")
         print(f"  Customer: {bill.customer_name}")
-        print(f"  Amount: {bill.total_amount}")
+        print(f"  Amount: {bill.amount}")
         print(f"  Date: {bill.invoice_date}")
         print(f"  Status: {bill.status} ({bill.status_text})")
         print(f"  Ref in DB: {bill.reference_no}")
         print(f"  Remaining: {bill.remaining_amount}")
+        print(f"  Cash Rcvd: {bill.cash_received}")
         print(f"  Bank Rcvd: {bill.bank_received}")
         print("-" * 30)
 
@@ -68,22 +65,16 @@ def trace_reconciliation(identifier: str):
         utr = alert.utr_reference
         received_at = alert.received_at
 
-        from sqlalchemy import or_, and_
         matching_bills = db.query(Bill).filter(
+            Bill.is_test_data == False,
             or_(
-                and_(Bill.total_amount >= amount - 0.01, Bill.total_amount <= amount + 0.01),
+                and_(Bill.amount >= amount - 0.01, Bill.amount <= amount + 0.01),
                 and_(Bill.remaining_amount >= amount - 0.01, Bill.remaining_amount <= amount + 0.01)
             )
         ).all()
 
-        print(f"  Candidate bills with same amount (₹{amount}): {len(matching_bills)}")
+        print(f"  Candidate bills with amount/remaining match (₹{amount}): {len(matching_bills)}")
         
-        if not matching_bills and utr:
-            bill_by_utr = db.query(Bill).filter(Bill.reference_no == utr).first()
-            if bill_by_utr:
-                print(f"  No amount match, but found Bill by UTR: {bill_by_utr.bill_number}")
-                matching_bills = [bill_by_utr]
-
         scored_candidates = []
         for b in matching_bills:
             score = 0
@@ -93,10 +84,13 @@ def trace_reconciliation(identifier: str):
             if utr and b.reference_no and utr == b.reference_no:
                 score += 100
                 details.append("UTR Match (+100)")
-            elif utr and b.reference_no:
-                details.append(f"UTR Mismatch (Alert: {utr}, Bill: {b.reference_no})")
+
+            # B. Exact Remaining Amount Match (+100)
+            if abs(float(b.remaining_amount or 0) - amount) < 0.01:
+                score += 100
+                details.append("Exact Remaining Match (+100)")
                 
-            # B. Customer Name Match (+50)
+            # C. Customer Name Match (+50)
             if b.customer_name and b.customer_name.lower() != "unknown":
                 name_tokens = [t for t in b.customer_name.lower().replace("(", " ").replace(")", " ").split() if len(t) > 2]
                 raw_text = alert.raw_text.lower()
@@ -104,10 +98,8 @@ def trace_reconciliation(identifier: str):
                 if len(name_tokens) > 0 and (matches / len(name_tokens)) >= 0.5:
                     score += 50
                     details.append(f"Name Match (+50, {matches}/{len(name_tokens)} tokens)")
-                else:
-                    details.append(f"Name Match Fail ({matches}/{len(name_tokens)} tokens)")
             
-            # C. Date Proximity (+30)
+            # D. Date Proximity (+30)
             if b.invoice_date:
                 days_diff = (received_at.date() - b.invoice_date.date()).days
                 if 0 <= days_diff <= 3:
@@ -116,13 +108,6 @@ def trace_reconciliation(identifier: str):
                 elif -2 <= days_diff <= 7:
                     score += 10
                     details.append(f"Date Proximity (+10, {days_diff} days diff)")
-                else:
-                    details.append(f"Date Too Far ({days_diff} days diff)")
-
-            # D. Bank Name Match (+20)
-            if b.bank_name and alert.bank_name and b.bank_name.lower() == alert.bank_name.lower():
-                score += 20
-                details.append(f"Bank Match (+20, {alert.bank_name})")
 
             scored_candidates.append({
                 "bill_no": b.bill_number,
@@ -136,13 +121,10 @@ def trace_reconciliation(identifier: str):
             for d in res['details']:
                 print(f"    - {d}")
 
-        if not scored_candidates:
-            print("  NO CANDIDATES EVALUATED.")
-    
     # 3. If we searched for a bill, look for candidate alerts
     if bill:
         print("\nSEARCHING FOR CANDIDATE PAYMENTS FOR BILL...")
-        amount = float(bill.total_amount)
+        amount = float(bill.amount)
         rem_amount = float(bill.remaining_amount or amount)
         
         candidate_alerts = db.query(BankAlert).filter(
@@ -152,9 +134,9 @@ def trace_reconciliation(identifier: str):
             )
         ).all()
         
-        print(f"  Candidate alerts with same amount: {len(candidate_alerts)}")
+        print(f"  Candidate alerts with amount match: {len(candidate_alerts)}")
         for a in candidate_alerts:
-            print(f"    - ID: {a.id}, Bank: {a.bank_name}, Amount: {a.amount}, UTR: {a.utr_reference}, Date: {a.received_at}")
+            print(f"    - ID: {a.id}, Bank: {a.bank_name}, Amount: {a.amount}, UTR: {a.utr_reference}, Date: {a.received_at}, Recon: {a.reconciled}")
 
     db.close()
     print(f"\n{'='*60}\n")

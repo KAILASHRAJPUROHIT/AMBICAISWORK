@@ -28,7 +28,6 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
     received_at = alert.received_at
     
     # 1. Check for ambiguous matches (Multiple invoices with same amount)
-    # Mandate: If multiple candidates exist for same amount -> REVIEW_REQUIRED
     matching_bills = db.query(Bill).filter(
         Bill.is_test_data == False,
         or_(
@@ -49,7 +48,6 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
     # 2. Multi-Point Scoring for each candidate
     best_bill = None
     best_score = -1
-    
     scored_candidates = []
 
     for bill in matching_bills:
@@ -58,8 +56,13 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
         # A. UTR Match (+100)
         if utr and bill.reference_no and utr == bill.reference_no:
             score += 100
+
+        # B. Exact Remaining Amount Match (+100)
+        # Mandate: If alert matches exactly what's left after CASH/ADV/GOLD
+        if abs(float(bill.remaining_amount or 0) - amount) < 0.01:
+            score += 100
             
-        # B. Customer Name Match (+50)
+        # C. Customer Name Match (+50)
         if bill.customer_name and bill.customer_name.lower() != "unknown":
             name_tokens = [t for t in bill.customer_name.lower().replace("(", " ").replace(")", " ").split() if len(t) > 2]
             raw_text = alert.raw_text.lower()
@@ -67,7 +70,7 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             if len(name_tokens) > 0 and (matches / len(name_tokens)) >= 0.5:
                 score += 50
                 
-        # C. Date Proximity (+30)
+        # D. Date Proximity (+30)
         if bill.invoice_date:
             days_diff = (received_at.date() - bill.invoice_date.date()).days
             if 0 <= days_diff <= 3:
@@ -75,7 +78,7 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             elif -2 <= days_diff <= 7:
                 score += 10
         
-        # D. Bank Name Match (+20)
+        # E. Bank Name Match (+20)
         if bill.bank_name and alert.bank_name and bill.bank_name.lower() == alert.bank_name.lower():
             score += 20
             
@@ -86,8 +89,8 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
 
     # 3. Decision Logic with Failsafes
     if best_bill:
-        logger.info(f"Best Match for Alert {alert.id}: {best_bill.bill_number} (Score: {best_score})")
         # Rule 4: Ambiguity Control
+        # If multiple candidates have high scores, it's ambiguous.
         is_ambiguous = (len(matching_bills) > 1 and best_score < 100)
         
         # Rule 3: Duplicate UTR Detection
@@ -109,10 +112,10 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
         ).first()
         if historical_payment:
             is_historical_claim = True
-            logger.warning(f"HISTORICAL CLAIM DETECTED: Bill {best_bill.bill_number} references payment from {historical_payment.payment_date} (Invoice Date: {best_bill.invoice_date})")
+        
+        logger.info(f"Recon Decision for {best_bill.bill_number}: Score={best_score}, Ambiguous={is_ambiguous}, DuplicateUTR={is_duplicate_utr}, HistClaim={is_historical_claim}")
         
         # Rule 1: Advance Verification Failsafe
-        # Mandate: Advance is only a credit reference until evidence exists.
         has_advance = float(best_bill.advance_amount or 0.0) > 0
         advance_unclassified = has_advance and (not best_bill.advance_source or best_bill.advance_source == "UNKNOWN")
         
@@ -122,10 +125,11 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             current_bank = float(best_bill.bank_received or 0.0)
             new_bank = current_bank + amount
             
-            # total_received = cash + bank + card + confirmed_bank_from_alerts
+            # total_received = confirmed_cash + new_bank + card
+            # Mandate 2: Treat cash amount as ERP-confirmed cash receipt.
             total_received = float(best_bill.cash_received or 0.0) + new_bank + float(best_bill.card_received or 0.0)
             
-            # Plus advance and purchase (these are credits applied)
+            # Plus credits (advance and purchase)
             total_credits = total_received + float(best_bill.advance_amount or 0.0) + float(best_bill.customer_purchase_amount or 0.0)
             
             is_fully_paid = abs(total_credits - float(best_bill.total_amount)) < 1.0
@@ -144,7 +148,11 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
                     best_bill.review_required = 1
                 else:
                     best_bill.status = "Green"
-                    best_bill.status_text = f"Cleared (Auto-Verified via {source})"
+                    # Rule 4: CASH_PLUS_BANK_CONFIRMED
+                    if float(best_bill.cash_received or 0) > 0:
+                        best_bill.status_text = "Cleared (CASH_PLUS_BANK_CONFIRMED)"
+                    else:
+                        best_bill.status_text = f"Cleared (Auto-Verified via {source})"
                     best_bill.review_required = 0
             else:
                 if advance_unclassified:
@@ -174,7 +182,7 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             best_bill.reference_no = utr or best_bill.reference_no
             
             # Update Payments table
-            payment = db.query(Payment).filter(Payment.bill_id == best_bill.id, Payment.mode == "BANK_TRANSFER", Payment.status != "Green").first()
+            payment = db.query(Payment).filter(Payment.bill_id == best_bill.id, Payment.mode.in_(["BANK_TRANSFER", "UPI", "IMPS", "NEFT", "RTGS_OR_CHEQUE"]), Payment.status != "Green").first()
             if payment:
                 if abs(float(payment.amount) - amount) < 1.0:
                     payment.status = "Green"
@@ -193,7 +201,6 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             elif is_historical_claim:
                 best_bill.status = "Purple"
                 reason = "HISTORICAL_PAYMENT_VERIFICATION"
-                # Owner Escalation Rule: ₹50,000 threshold
                 if float(historical_payment.amount) >= 50000.0:
                     reason += " [HIGH_VALUE_ESCALATION]"
             else:

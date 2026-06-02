@@ -309,8 +309,14 @@ async def get_live_feed(db: Session = Depends(get_db)):
     results = []
     for b in bills:
         delay_seconds = 0
+        timestamp_anomaly = False
         if b.invoice_generated_at and b.ingested_at:
-            delay_seconds = (b.ingested_at - b.invoice_generated_at).total_seconds()
+            diff = (b.ingested_at - b.invoice_generated_at).total_seconds()
+            if diff < 0:
+                delay_seconds = 0
+                timestamp_anomaly = True
+            else:
+                delay_seconds = diff
 
         # Historical Payment Check
         historical_claim = db.query(PaymentModel).filter(
@@ -327,6 +333,7 @@ async def get_live_feed(db: Session = Depends(get_db)):
             "invoice_generated_at": b.invoice_generated_at.isoformat() if b.invoice_generated_at else None,
             "ingested_at": b.ingested_at.isoformat() if b.ingested_at else None,
             "pipeline_delay_seconds": delay_seconds,
+            "timestamp_anomaly": timestamp_anomaly,
             "customer_name": b.customer_name,
             "invoice_total": float(b.amount or 0),
             "cust_purc": float(b.customer_purchase_amount or 0),
