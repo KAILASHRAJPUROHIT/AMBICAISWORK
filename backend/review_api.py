@@ -23,6 +23,14 @@ from fastapi.responses import FileResponse
 # Initialize FastAPI app
 app = FastAPI(title="Aradhana Review API")
 
+# Dependency
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 @app.get("/debug/runtime")
 async def get_runtime_debug(db: Session = Depends(get_db)):
     import sys
@@ -92,14 +100,6 @@ os.makedirs(AUDIT_LOG_DIR, exist_ok=True)
 
 import logging
 logger = logging.getLogger("ReviewAPI")
-
-# Dependency
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
