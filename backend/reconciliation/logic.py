@@ -45,6 +45,8 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
                  matching_bills = [bill_by_utr]
         
     if not matching_bills:
+        # If no match found yet, we DO NOT mark reconciled=True.
+        # This allows background retry once the invoice is ingested.
         return
 
     # 2. Multi-Point Scoring for each candidate
@@ -52,6 +54,8 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
     best_score = -1
     candidates_count = len(matching_bills)
     
+    scored_candidates = []
+
     for bill in matching_bills:
         score = 0
         
@@ -79,14 +83,17 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
         if bill.bank_name and alert.bank_name and bill.bank_name.lower() == alert.bank_name.lower():
             score += 20
             
+        scored_candidates.append((bill, score))
         if score > best_score:
             best_score = score
             best_bill = bill
 
     # 3. Decision Logic
     if best_bill:
-        # FOOLPROOF RULES
-        is_ambiguous = (candidates_count > 1 and best_score < 100)
+        # FOOLPROOF RULES:
+        # 1. If multiple candidates have high scores, it's ambiguous.
+        high_score_count = sum(1 for b, s in scored_candidates if s >= 80)
+        is_ambiguous = (high_score_count > 1 and best_score < 100)
         
         # Check for duplicate UTR usage across the database
         is_duplicate_utr = False
@@ -147,6 +154,19 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             
         alert.reconciled = True
         db.commit()
+
+def reconcile_unreconciled_alerts(db: Session):
+    """
+    Retry reconciliation for all alerts that haven't been matched yet.
+    """
+    unreconciled = db.query(BankAlert).filter(BankAlert.reconciled == False).all()
+    if not unreconciled:
+        return
+        
+    logger.info(f"Retrying reconciliation for {len(unreconciled)} unreconciled alerts...")
+    for alert in unreconciled:
+        verify_payment_event(db, alert, source="RETRY_LOGIC")
+
 
 def log_audit(db, entity_type, entity_id, action, old_status, new_status, note=""):
     audit = AuditLog(

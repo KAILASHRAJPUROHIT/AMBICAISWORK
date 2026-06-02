@@ -339,6 +339,10 @@ def process_emails():
         if newest_ts > checkpoint:
             save_checkpoint(db, newest_ts)
 
+        # RETRY RECONCILIATION FOR UNRECONCILED ALERTS
+        from backend.reconciliation.logic import reconcile_unreconciled_alerts
+        reconcile_unreconciled_alerts(db)
+
         db.commit()
         update_email_status(
             last_sync=datetime.now().isoformat(),

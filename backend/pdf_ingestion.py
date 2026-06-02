@@ -313,8 +313,8 @@ def process_invoice(file_path):
             parsed_items_json=invoice_data["parsed_items_json"],
             amount_in_words=invoice_data["amount_in_words"],
             cash_received=sum(p["amount"] for p in invoice_data["payments"] if p["mode"] in ["CASH", "ADVANCE", "OLD_GOLD_EXCHANGE"]),
-            bank_received=sum(p["amount"] for p in invoice_data["payments"] if p["mode"] == "BANK_TRANSFER"),
-            card_received=sum(p["amount"] for p in invoice_data["payments"] if p["mode"] == "CARD"),
+            bank_received=0.0,
+            card_received=0.0,
             remaining_amount=invoice_data["total_amount"] - sum(p["amount"] for p in invoice_data["payments"] if p["mode"] in ["CASH", "ADVANCE", "OLD_GOLD_EXCHANGE"]),
             sms_confirmed_amount=0.0,
             email_confirmed_amount=0.0
@@ -360,6 +360,11 @@ def process_invoice(file_path):
 
         db.commit()
         logger.info(f"Invoice Inserted: {new_bill.bill_number} from {os.path.basename(file_path)}")
+        
+        # TRIGGER RECONCILIATION RETRY for this new bill
+        from backend.reconciliation.logic import reconcile_unreconciled_alerts
+        reconcile_unreconciled_alerts(db)
+        
         increment_status("invoices_inserted")
         update_status(last_processed_time=datetime.now().isoformat())
 
