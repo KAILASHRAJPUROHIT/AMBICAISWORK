@@ -20,6 +20,7 @@ interface DashboardStats {
   chequeCollection: number;
   pdfCountInShare: number;
   matchAccuracy: number;
+  is_owner?: boolean;
 }
 
 interface IngestionStatus {
@@ -356,6 +357,7 @@ const DashboardPage: React.FC = () => {
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {stats?.is_owner && (
         <div className="lg:col-span-1">
           <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Financial Collection (Today)</h2>
           <div className="grid grid-cols-1 gap-4">
@@ -383,8 +385,9 @@ const DashboardPage: React.FC = () => {
               </div>
           </div>
         </div>
+        )}
 
-        <div className="lg:col-span-2">
+        <div className={stats?.is_owner ? "lg:col-span-2" : "lg:col-span-3"}>
           <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Live Pipeline Feed</h2>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             {sortedDates.length > 0 ? sortedDates.map(date => (

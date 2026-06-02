@@ -329,6 +329,7 @@ async def get_share_status():
 
 @app.get("/api/invoices/live-feed")
 async def get_live_feed(db: Session = Depends(get_db)):
+    from backend.models import Payment as PaymentModel
     bills = db.query(Bill).filter(Bill.is_test_data == False).order_by(Bill.ingested_at.desc()).limit(50).all()
     results = []
     for b in bills:
@@ -723,21 +724,45 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         logger.warning(f"LOGIN FAILED: Invalid password for '{user.employee_id}'")
         raise HTTPException(status_code=401, detail="Invalid password")
     
-    otp = create_otp(db, user.employee_id)
-    if not otp:
-        raise HTTPException(status_code=500, detail="Failed to generate OTP")
-    
     log_event(db, user.employee_id, "LOGIN_REQUEST")
     
-    # Return email hint for masking
+    # Get/Create OTP with cooldown
+    otp_res = create_otp(db, user.employee_id)
+    if otp_res.get("status") == "error":
+        raise HTTPException(status_code=500, detail=otp_res["message"])
+    
+    # Email hint for masking
     email = user.security_email if user.security_email else user.email
     user_part, domain_part = email.split('@')
-    email_hint = f"{user_part[0]}***{user_part[-1]}@{domain_part}"
+    masked_email = f"{user_part[0]}***{user_part[-1]}@{domain_part}"
     
     return {
-        "status": "success", 
-        "message": "OTP sent to your registered email",
-        "email_hint": email_hint
+        "status": otp_res["status"],
+        "otp_sent": otp_res["otp_sent"],
+        "message": otp_res["message"],
+        "resend_available_in": otp_res["resend_available_in"],
+        "expires_in": otp_res["expires_in"],
+        "masked_email": masked_email
+    }
+
+@app.get("/api/auth/otp-status")
+async def get_otp_status(employee_id: str, db: Session = Depends(get_db), user: User = Depends(lambda r, d: require_role(["OWNER", "DEVELOPER", "ADMIN"], r, d))):
+    from backend.models import OTP
+    latest = db.query(OTP).filter(OTP.employee_id == employee_id).order_by(OTP.created_at.desc()).first()
+    if not latest:
+        return {"status": "none"}
+    
+    now = datetime.now()
+    age = (now - latest.created_at).total_seconds()
+    
+    return {
+        "created_at": latest.created_at.isoformat(),
+        "expires_at": latest.expires_at.isoformat(),
+        "used": latest.is_verified == 1,
+        "attempts": latest.attempts,
+        "can_resend": age >= 60,
+        "resend_available_in": max(0, int(60 - age)),
+        "expired": latest.expires_at < now
     }
 
 @app.post("/api/auth/verify")

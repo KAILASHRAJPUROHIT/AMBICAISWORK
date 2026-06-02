@@ -30,7 +30,10 @@ const ProtectedRoute = ({ children, roles }: { children: React.ReactElement, rol
 };
 
 function App() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<any>(() => {
+    const saved = localStorage.getItem('user');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,12 +42,19 @@ function App() {
         if (token) {
             try {
                 const userData = await getMe();
-                setUser(userData);
+                // Ensure backend returned a valid object before overriding local cache
+                if (userData && userData.role) {
+                    setUser(userData);
+                    localStorage.setItem('user', JSON.stringify(userData));
+                }
             } catch (err) {
                 console.error("Auth check failed", err);
                 localStorage.removeItem('session_token');
                 localStorage.removeItem('user');
+                setUser(null);
             }
+        } else {
+            setUser(null);
         }
         setLoading(false);
     };
