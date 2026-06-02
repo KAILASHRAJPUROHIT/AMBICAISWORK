@@ -60,6 +60,7 @@ class Bill(Base):
     bill_series = Column(String, nullable=True)
     bill_number = Column(String, unique=True, nullable=False)
     invoice_date = Column(DateTime, nullable=True)
+    order_date = Column(DateTime, nullable=True)
     customer_name = Column(String, nullable=True)
     customer_mobile = Column(String, nullable=True)
     customer_address = Column(Text, nullable=True)

@@ -4,6 +4,8 @@ import '../Dashboard.css';
 
 interface DashboardStats {
   totalBillsToday: number;
+  importedToday: number;
+  pendingPreviousDays: number;
   verified: number;
   pendingReview: number;
   partialPaid: number;
@@ -276,11 +278,12 @@ const DashboardPage: React.FC = () => {
       
       <section className="mb-16">
         <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Operational Metrics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <StatCard label="Total Invoices" value={stats?.totalBillsToday || 0} />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <StatCard label="Bills Dated Today" value={stats?.totalBillsToday || 0} />
+            <StatCard label="Imported Today" value={stats?.importedToday || 0} />
             <StatCard label="Verified Cleared" value={stats?.verified || 0} />
-            <StatCard label="Review Required" value={stats?.pendingReview || 0} />
-            <StatCard label="Partial Paid" value={stats?.partialPaid || 0} />
+            <StatCard label="Pending Previous" value={stats?.pendingPreviousDays || 0} />
+            <StatCard label="Total Review" value={stats?.pendingReview || 0} />
         </div>
       </section>
 

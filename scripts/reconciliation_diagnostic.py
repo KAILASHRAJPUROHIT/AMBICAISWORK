@@ -17,15 +17,25 @@ def run_diagnostic():
     
     db = SessionLocal()
     try:
-        # Today's invoices
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        bills = db.query(Bill).filter(Bill.created_at >= today_start).all()
+        # Today's invoices (Strict invoice_date logic)
+        now = datetime.now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_str = now.strftime("%Y-%m-%d")
         
-        if not bills:
+        from sqlalchemy import func
+        bills = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str).all()
+        imported_today = db.query(Bill).filter(Bill.created_at >= today_start).all()
+        
+        print(f"Bills Dated Today: {len(bills)}")
+        print(f"Bills Imported Today: {len(imported_today)}")
+        
+        if not bills and not imported_today:
             print("No invoices found for today.")
             return
 
-        print(f"{'Inv No':<15} | {'Total':>10} | {'CustPurc':>10} | {'Advance':>10} | {'Net Pay':>10} | {'Status':<15}")
+        # Show dated today first
+        display_bills = bills if bills else imported_today
+        print(f"\n{'Inv No':<15} | {'Total':>10} | {'CustPurc':>10} | {'Advance':>10} | {'Net Pay':>10} | {'Status':<15}")
         print("-" * 80)
         
         count = 0

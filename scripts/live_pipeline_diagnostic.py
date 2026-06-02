@@ -30,13 +30,22 @@ def run_diagnostic():
     # 2. Database Stats
     db = SessionLocal()
     try:
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        now = datetime.now()
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today_str = now.strftime("%Y-%m-%d")
         
-        bills_today = db.query(Bill).filter(Bill.created_at >= today_start).all()
+        # Bills Today = invoice_date is today
+        from sqlalchemy import func
+        bills_today = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str).all()
+        
+        # Imported Today = created_at >= today
+        imported_today = db.query(Bill).filter(Bill.created_at >= today_start).all()
+        
         alerts_today = db.query(BankAlert).filter(BankAlert.created_at >= today_start).all()
         sms_alerts_today = db.query(SMSAlert).filter(SMSAlert.created_at >= today_start).all()
         
-        print(f"Bills Ingested Today: {len(bills_today)}")
+        print(f"Bills Dated Today (Invoice Date): {len(bills_today)}")
+        print(f"Bills Imported Today (Created At): {len(imported_today)}")
         print(f"Bank Alerts Today (Email): {len(alerts_today)}")
         print(f"SMS Alerts Today: {len(sms_alerts_today)}")
         
@@ -47,11 +56,17 @@ def run_diagnostic():
         print(f"  - Regular Bank emails: {bank_email_count}")
         
         # 3. Reconciliation Stats
-        verified = len([b for b in bills_today if b.status == "Green"])
-        review_req = len([b for b in bills_today if b.review_required == 1])
+        verified_today = len([b for b in bills_today if b.status == "Green"])
         
-        print(f"Verified Today: {verified}")
-        print(f"Review Required Today: {review_req}")
+        # Pending Previous Days = unresolved invoices where invoice_date < today
+        from sqlalchemy import or_
+        pending_previous = db.query(Bill).filter(
+            func.date(Bill.invoice_date) < today_str,
+            or_(Bill.status == "Yellow", Bill.status == "Blue", Bill.review_required == 1)
+        ).count()
+        
+        print(f"Verified Dated Today: {verified_today}")
+        print(f"Pending from Previous Days: {pending_previous}")
         
         # 4. Latest Events
         print("\nLatest 10 Normalized Payment Events:")
@@ -62,25 +77,24 @@ def run_diagnostic():
 
         # 5. Dashboard Payload Simulation
         print("\nDashboard Metric Payload Simulation:")
-        total_collection = float(sum(b.total_amount for b in bills_today) or 0.0)
-        cash_confirmed = 0.0
-        for b in bills_today:
-            if is_store_open(b.created_at):
-                cash_confirmed += float(b.cash_received or 0.0)
         
-        bank_confirmed = float(sum(b.bank_received for b in bills_today) or 0.0)
-        sms_confirmed = float(sum(b.sms_confirmed_amount for b in bills_today) or 0.0)
-        email_confirmed = float(sum(b.email_confirmed_amount for b in bills_today) or 0.0)
+        # Today's Collection (Strict: only payments for bills dated today)
+        bills_today_ids = [b.id for b in bills_today]
+        from backend.models import Payment as PaymentModel
+        payments_today = db.query(PaymentModel).filter(PaymentModel.bill_id.in_(bills_today_ids)).all()
+        
+        total_collection = float(sum(p.amount for p in payments_today) or 0.0)
+        cash_collection = float(sum(p.amount for p in payments_today if p.mode in ["CASH", "ADVANCE", "OLD_GOLD_EXCHANGE"]) or 0.0)
+        bank_collection = float(sum(p.amount for p in payments_today if p.mode in ["BANK_TRANSFER", "CARD", "UPI", "NEFT", "IMPS", "RTGS"]) or 0.0)
         
         payload = {
             "totalBillsToday": len(bills_today),
-            "verified": verified,
-            "pendingReview": review_req,
+            "importedToday": len(imported_today),
+            "pendingPreviousDays": pending_previous,
+            "verified": verified_today,
             "totalCollection": total_collection,
-            "cashCollection": cash_confirmed,
-            "bankCollection": bank_confirmed,
-            "smsConfirmed": sms_confirmed,
-            "emailConfirmed": email_confirmed
+            "cashCollection": cash_collection,
+            "bankCollection": bank_collection
         }
         for k, v in payload.items():
             print(f"  {k}: {v}")

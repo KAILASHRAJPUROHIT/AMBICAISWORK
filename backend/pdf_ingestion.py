@@ -135,11 +135,30 @@ def parse_pdf(file_path):
             if "-" in data["bill_number"]:
                 data["bill_series"] = data["bill_number"].split("-")[0]
 
-        # 2. Date
-        date_match = re.search(r"Date\s*:\s*(\d{2}[-/]\d{2}[-/]\d{4})", text)
-        if date_match:
+        # 2. Date Parsing (Strict)
+        # PART A: Invoice Date (Strictly from "Date: DD/MM/YYYY")
+        # We look for a line that starts with "Date:" or has "Date:" after "Invoice No"
+        invoice_date_match = re.search(r"\bDate\s*[:\s]*(\d{2}[-/]\d{2}[-/]\d{4})", text)
+        if invoice_date_match:
             try:
-                data["invoice_date"] = datetime.strptime(date_match.group(1).replace("/", "-"), "%d-%m-%Y")
+                data["invoice_date"] = datetime.strptime(invoice_date_match.group(1).replace("/", "-"), "%d-%m-%Y")
+            except: pass
+
+        # PART B: Order Date (Auxiliary dates in brackets or labeled RO/P2/CO)
+        order_date_matches = re.findall(r"(?:C\.O\.No\.|RO-|P2-).*?(\d{2}[-/]\d{2}[-/]\d{4})", text)
+        if not order_date_matches:
+             order_date_matches = re.findall(r"\((\d{2}[-/]\d{2}[-/]\d{4})\)", text)
+             
+        if order_date_matches:
+            try:
+                for d_str in order_date_matches:
+                    d_val = datetime.strptime(d_str.replace("/", "-"), "%d-%m-%Y")
+                    # If it's different from invoice date, it's likely the order date
+                    if d_val != data["invoice_date"]:
+                        data["order_date"] = d_val
+                        break
+                if not data.get("order_date") and order_date_matches:
+                     data["order_date"] = datetime.strptime(order_date_matches[0].replace("/", "-"), "%d-%m-%Y")
             except: pass
 
         # 3. Customer Name
@@ -301,6 +320,7 @@ def process_invoice(file_path):
             bill_series=invoice_data["bill_series"],
             bill_number=invoice_data["bill_number"],
             invoice_date=invoice_data["invoice_date"],
+            order_date=invoice_data.get("order_date"),
             customer_name=invoice_data.get("customer_name") or "Unknown",
             customer_mobile=invoice_data.get("customer_mobile"),
             customer_address=invoice_data.get("customer_address"),

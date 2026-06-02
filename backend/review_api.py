@@ -236,30 +236,49 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_str = now.strftime("%Y-%m-%d")
     
-    total_bills_query = db.query(Bill).filter(
-        or_(
-            Bill.created_at >= today_start,
-            func.date(Bill.invoice_date) == today_str
-        )
-    )
-    total_bills = total_bills_query.count()
-    verified = total_bills_query.filter(Bill.status == "Green").count()
-    review_required = db.query(Bill).filter(Bill.review_required == 1).count()
-    review_required_today = total_bills_query.filter(Bill.review_required == 1).count()
+    # 1. Base Stats (Strict Date Logic)
+    
+    # Bills Today = invoice_date is today
+    bills_today_query = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str)
+    total_bills_today = bills_today_query.count()
+    
+    # Imported Today = created_at is today (record added to DB today)
+    imported_today = db.query(Bill).filter(Bill.created_at >= today_start).count()
+    
+    # Pending Previous Days = unresolved invoices where invoice_date < today
+    pending_previous = db.query(Bill).filter(
+        func.date(Bill.invoice_date) < today_str,
+        or_(Bill.status == "Yellow", Bill.status == "Blue", Bill.review_required == 1)
+    ).count()
+    
+    # Verified Today = bills dated today that are Green
+    verified_today = bills_today_query.filter(Bill.status == "Green").count()
+    
+    # Total Review Required (All time)
+    review_required_total = db.query(Bill).filter(Bill.review_required == 1).count()
+    
+    # Partial Paid (All time)
     partial_paid = db.query(Bill).filter(Bill.status == "Blue", Bill.remaining_amount > 0).count()
     
-    bills_today = total_bills_query.all()
-    total_collection = float(sum(b.total_amount for b in bills_today) or 0.0)
+    # 2. Financial Metrics (Today's Collection)
+    # Mandate: Based on payment received today, not import date.
+    # We use invoice_date == today as a proxy for "Today's Sale/Cash"
     
-    cash_confirmed = 0.0
-    for b in bills_today:
-        cash_confirmed += float(b.cash_received or 0.0)
-            
-    bank_confirmed = float(sum(b.bank_received for b in bills_today) or 0.0)
-    sms_confirmed = float(sum(b.sms_confirmed_amount for b in bills_today) or 0.0)
-    email_confirmed = float(sum(b.email_confirmed_amount for b in bills_today) or 0.0)
-    cheque_pending = float(sum(b.total_amount for b in bills_today if "CHEQUE" in (b.payment_mode or "")) or 0.0)
+    # Get all payments linked to bills dated today
+    from backend.models import Payment as PaymentModel
+    bills_today_ids = [b.id for b in bills_today_query.all()]
+    payments_today = db.query(PaymentModel).filter(PaymentModel.bill_id.in_(bills_today_ids)).all()
+    
+    total_collection = float(sum(p.amount for p in payments_today) or 0.0)
+    cash_collection = float(sum(p.amount for p in payments_today if p.mode in ["CASH", "ADVANCE", "OLD_GOLD_EXCHANGE"]) or 0.0)
+    bank_collection = float(sum(p.amount for p in payments_today if p.mode in ["BANK_TRANSFER", "CARD", "UPI", "NEFT", "IMPS", "RTGS"]) or 0.0)
+    
+    # SMS/Email confirmed amounts specifically for today's bank collection
+    sms_confirmed = float(db.query(func.sum(Bill.sms_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str).scalar() or 0.0)
+    email_confirmed = float(db.query(func.sum(Bill.email_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str).scalar() or 0.0)
+    cheque_collection = float(db.query(func.sum(PaymentModel.amount)).filter(PaymentModel.bill_id.in_(bills_today_ids), PaymentModel.mode == "CHEQUE").scalar() or 0.0)
 
+    # Share status
     online = os.path.exists(WATCH_PATH)
     pdf_count = 0
     if online:
@@ -267,22 +286,20 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         except: pass
 
     return {
-        "totalBillsToday": total_bills,
-        "verified": verified,
-        "pendingReview": review_required,
-        "pendingReviewToday": review_required_today,
+        "totalBillsToday": total_bills_today,
+        "importedToday": imported_today,
+        "pendingPreviousDays": pending_previous,
+        "verified": verified_today,
+        "pendingReview": review_required_total,
         "partialPaid": partial_paid,
         "totalCollection": total_collection,
-        "cashCollection": cash_confirmed,
-        "bankCollection": bank_confirmed,
-        "smsConfirmed": sms_confirmed,
-        "emailConfirmed": email_confirmed,
-        "chequeCollection": cheque_pending,
+        "cashCollection": cash_collection,
+        "bankCollection": bank_collection,
         "pdfCountInShare": pdf_count,
         "invoiceWatcherStatus": "READY" if online else "OFFLINE",
         "emailPollerStatus": email_status.get("status", "IDLE"),
         "smsRelayStatus": sms_status.get("status", "IDLE"),
-        "matchAccuracy": round((verified / total_bills * 100), 2) if total_bills > 0 else 0.0
+        "matchAccuracy": round((verified_today / total_bills_today * 100), 2) if total_bills_today > 0 else 0.0
     }
 
 @app.get("/api/invoices/pdf/{bill_id}")
