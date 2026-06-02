@@ -177,13 +177,52 @@ def run_backend_internal():
     else:
         uvicorn.run(app, host=config["backend_host"], port=config["backend_port"])
 
+def run_self_test():
+    print("=== Aradhana Payment Auditor Self-Test ===")
+    try:
+        import pydantic
+        print(f"OK: Pydantic imported (version: {pydantic.__version__})")
+        import fastapi
+        print(f"OK: FastAPI imported (version: {fastapi.__version__})")
+        import uvicorn
+        print(f"OK: Uvicorn imported (version: {uvicorn.__version__})")
+        import sqlalchemy
+        print(f"OK: SQLAlchemy imported (version: {sqlalchemy.__version__})")
+        import watchdog
+        print("OK: Watchdog imported")
+        import dotenv
+        print("OK: Dotenv imported")
+        
+        sys.path.insert(0, os.getcwd())
+        from backend.database import SessionLocal
+        db = SessionLocal()
+        db.close()
+        print("OK: Database connection initialized")
+        
+        config = AradhanaLauncher().load_config()
+        print(f"OK: Config loaded: {config.get('backend_host')}:{config.get('backend_port')}")
+        
+        print("\nSELF-TEST PASSED SUCCESSFULLY")
+        return True
+    except Exception as e:
+        print(f"\nSELF-TEST FAILED: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     parser = argparse.ArgumentParser(description="Aradhana Payment Auditor Launcher")
     parser.add_argument("--install-startup", action="store_true", help="Install to Windows Startup")
     parser.add_argument("--remove-startup", action="store_true", help="Remove from Windows Startup")
+    parser.add_argument("--self-test", action="store_true", help="Verify dependencies and environment")
     parser.add_argument("--backend-internal", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    
+    if args.self_test:
+        success = run_self_test()
+        sys.exit(0 if success else 1)
+        
     if args.backend_internal:
         run_backend_internal()
         sys.exit(0)

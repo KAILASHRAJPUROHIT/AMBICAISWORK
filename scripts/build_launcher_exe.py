@@ -2,6 +2,7 @@ import os
 import sys
 import subprocess
 import shutil
+import time
 
 def build():
     project_root = os.getcwd()
@@ -23,6 +24,12 @@ def build():
 
     # 2. Prepare PyInstaller Command
     print("\n=== Step 2: Building EXE with PyInstaller ===")
+    
+    # Kill any existing instance to avoid PermissionError
+    if os.name == 'nt':
+        print("Ensuring no existing instances of AradhanaPaymentAuditor.exe are running...")
+        subprocess.run(['taskkill', '/F', '/IM', 'AradhanaPaymentAuditor.exe'], capture_output=True)
+        time.sleep(2) # Give it a moment to release file handles
     
     # Ensure pyinstaller is installed
     try:
@@ -62,6 +69,13 @@ def build():
         "--hidden-import", "uvicorn.protocols.websockets.auto",
         "--hidden-import", "uvicorn.lifespan",
         "--hidden-import", "uvicorn.lifespan.on",
+        "--collect-all", "pydantic",
+        "--collect-all", "pydantic_core",
+        "--collect-all", "fastapi",
+        "--collect-all", "starlette",
+        "--collect-all", "sqlalchemy",
+        "--collect-all", "watchdog",
+        "--collect-all", "dotenv",
     ]
     
     cmd.extend(data_args)
@@ -70,10 +84,24 @@ def build():
     print(f"Running: {' '.join(cmd)}")
     try:
         subprocess.run(cmd, check=True)
-        print("\n=== Success! ===")
-        print(f"EXE created at: {os.path.join(project_root, 'dist', 'AradhanaPaymentAuditor.exe')}")
+        exe_path = os.path.join(project_root, 'dist', 'AradhanaPaymentAuditor.exe')
+        print(f"\n=== Build Success! EXE at: {exe_path} ===")
+        
+        # 3. Post-Build Self-Test
+        print("\n=== Step 3: Running Post-Build Self-Test ===")
+        test_res = subprocess.run([exe_path, "--self-test"], capture_output=True, text=True)
+        print(test_res.stdout)
+        if test_res.returncode == 0:
+            print("✓ Post-build self-test passed!")
+            print(f"Final EXE Size: {os.path.getsize(exe_path) / (1024*1024):.2f} MB")
+        else:
+            print("❌ Post-build self-test failed!")
+            print(test_res.stderr)
+            sys.exit(1)
+
     except subprocess.CalledProcessError as e:
         print(f"PyInstaller build failed: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     build()
