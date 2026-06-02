@@ -178,6 +178,22 @@ const DashboardPage: React.FC = () => {
     window.open(`${API_BASE}/api/invoices/pdf/${bill_id}`, '_blank');
   };
 
+  // GROUPING LOGIC
+  const groupedFeed = liveFeed.reduce((acc: { [key: string]: LiveInvoice[] }, inv) => {
+    const date = inv.invoice_date || 'Unknown Date';
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(inv);
+    return acc;
+  }, {});
+
+  const sortedDates = Object.keys(groupedFeed).sort((a, b) => b.localeCompare(a));
+
+  const formatDelay = (seconds: number) => {
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+    return `${Math.round(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
+  };
+
   const SkeletonCard = () => (
     <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm animate-pulse">
       <div className="h-2 w-16 bg-gray-200 rounded mb-4"></div>
@@ -335,57 +351,67 @@ const DashboardPage: React.FC = () => {
         <div className="lg:col-span-2">
           <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Live Pipeline Feed</h2>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">PDF</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Bill No</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Customer</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Total</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Net Pay</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Paid</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Remaining</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {liveFeed.map((inv) => (
-                  <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="p-4">
-                      {inv.pdf_path ? (
-                        <button 
-                          onClick={() => openPDF(inv.id)}
-                          className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                          title="Open Invoice PDF"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                          </svg>
-                        </button>
-                      ) : (
-                        <span className="text-[8px] text-gray-300 font-bold uppercase">No PDF</span>
-                      )}
-                    </td>
-                    <td className="p-4 font-bold text-gray-900">{inv.bill_number}</td>
-                    <td className="p-4 text-sm text-gray-600 truncate max-w-[120px]">{inv.customer_name}</td>
-                    <td className="p-4 font-bold text-gray-400 text-right text-xs">{money(inv.invoice_total)}</td>
-                    <td className="p-4 font-black text-gray-900 text-right">{money(inv.net_payable)}</td>
-                    <td className="p-4 font-bold text-green-600 text-right text-xs">{money(inv.paid_amount)}</td>
-                    <td className="p-4 font-black text-blue-900 text-right">{money(inv.remaining_amount)}</td>
-                    <td className="p-4">
-                      <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase ${
-                        inv.status === 'Green' ? 'bg-green-100 text-green-700' : 
-                        inv.status === 'Yellow' ? 'bg-yellow-100 text-yellow-700' :
-                        inv.status === 'Blue' ? 'bg-blue-100 text-blue-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {inv.status_text || inv.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {sortedDates.map(date => (
+              <div key={date}>
+                <div className="bg-black text-white px-4 py-2 text-[10px] font-black uppercase tracking-tighter">
+                   {date}
+                </div>
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase">PDF</th>
+                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Bill No / Time</th>
+                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Customer</th>
+                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Net Pay</th>
+                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Delay</th>
+                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupedFeed[date].map((inv) => (
+                      <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                        <td className="p-4">
+                          {inv.pdf_path ? (
+                            <button 
+                              onClick={() => openPDF(inv.id)}
+                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                              </svg>
+                            </button>
+                          ) : (
+                            <span className="text-[8px] text-gray-300 font-bold uppercase">No PDF</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                           <div className="font-black text-gray-900 leading-none">{inv.bill_number}</div>
+                           <div className="text-[9px] text-gray-400 font-bold mt-1 uppercase">Gen: {(inv as any).invoice_time || 'N/A'}</div>
+                        </td>
+                        <td className="p-4 text-sm text-gray-600 truncate max-w-[100px] font-medium">{inv.customer_name}</td>
+                        <td className="p-4 font-black text-gray-900 text-right">{money(inv.net_payable)}</td>
+                        <td className="p-4 text-right">
+                           <span className={`text-[9px] font-black px-2 py-0.5 rounded ${(inv as any).pipeline_delay_seconds > 600 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>
+                             {formatDelay((inv as any).pipeline_delay_seconds || 0)}
+                           </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase ${
+                            inv.status === 'Green' ? 'bg-green-100 text-green-700' : 
+                            inv.status === 'Yellow' ? 'bg-yellow-100 text-yellow-700' :
+                            inv.status === 'Blue' ? 'bg-blue-100 text-blue-700' :
+                            inv.status === 'Purple' ? 'bg-purple-100 text-purple-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {inv.status_text || inv.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
             {liveFeed.length === 0 && (
               <div className="p-12 text-center text-gray-400 italic">No invoices ingested yet. Waiting for PDFs...</div>
             )}

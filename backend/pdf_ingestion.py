@@ -99,16 +99,34 @@ def check_share_health():
 def parse_pdf(file_path):
     try:
         text = ""
+        metadata = {}
         with pdfplumber.open(file_path) as pdf:
+            metadata = pdf.metadata
             for page in pdf.pages:
                 text += page.extract_text() + "\n"
         
+        # Extract precise generation time
+        invoice_gen_at = None
+        creation_date = metadata.get("CreationDate")
+        if creation_date:
+            # Format: D:20260601152211+05'30'
+            try:
+                clean_date = creation_date.replace("D:", "").split("+")[0].split("-")[0]
+                invoice_gen_at = datetime.strptime(clean_date[:14], "%Y%m%d%H%M%S")
+            except: pass
+            
+        if not invoice_gen_at:
+            # Fallback to file mtime
+            mtime = os.path.getmtime(file_path)
+            invoice_gen_at = datetime.fromtimestamp(mtime)
+
         if not text.strip() and (OCR_ACCELERATION != "cpu"):
             logger.info(f"No text extracted from {file_path}, attempting OCR fallback...")
             pass
 
         data = {
             "raw_text": text,
+            "invoice_generated_at": invoice_gen_at,
             "bill_series": None,
             "bill_number": None,
             "invoice_date": None,
@@ -329,6 +347,8 @@ def process_invoice(file_path):
             bill_series=invoice_data["bill_series"],
             bill_number=invoice_data["bill_number"],
             invoice_date=invoice_data["invoice_date"],
+            invoice_generated_at=invoice_data.get("invoice_generated_at"),
+            ingested_at=datetime.now(),
             order_date=invoice_data.get("order_date"),
             customer_name=invoice_data.get("customer_name") or "Unknown",
             customer_mobile=invoice_data.get("customer_mobile"),

@@ -210,6 +210,41 @@ async def mark_delivered(action: DeliveryAction, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "success", "new_status": bill.status}
 
+@app.post("/api/maintenance/start")
+async def start_maintenance(reason: str, developer_id: str, db: Session = Depends(get_db)):
+    # OTP verification should happen before this in frontend
+    from backend.models import MaintenanceSession
+    session = MaintenanceSession(
+        developer_id=developer_id,
+        reason=reason,
+        start_at=datetime.now()
+    )
+    db.add(session)
+    db.commit()
+    return {"status": "success", "session_id": session.id}
+
+@app.post("/api/maintenance/stop")
+async def stop_maintenance(session_id: int, actions: str, db: Session = Depends(get_db)):
+    from backend.models import MaintenanceSession
+    session = db.query(MaintenanceSession).filter(MaintenanceSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Maintenance session not found")
+    
+    session.end_at = datetime.now()
+    session.actions_performed = actions
+    db.commit()
+    return {"status": "success"}
+
+@app.get("/api/system/mode")
+async def get_system_mode():
+    from backend.lan_config import is_physical_lan_connected
+    is_lan = is_physical_lan_connected()
+    return {
+        "mode": "PRODUCTION", # Default
+        "lan_connected": is_lan,
+        "blocked": not is_lan
+    }
+
 @app.get("/api/system/share-status")
 async def get_share_status():
     online = os.path.exists(WATCH_PATH)
@@ -241,10 +276,19 @@ async def get_live_feed(db: Session = Depends(get_db)):
         # SG-891: invoice_total 23672, cust_purc 18572, net_payable 5100
         # If Bill.amount is 23672, and Bill.customer_purchase_amount is 18572, then:
         
+        # Pipeline Delay calculation
+        delay_seconds = 0
+        if b.invoice_generated_at and b.ingested_at:
+            delay_seconds = (b.ingested_at - b.invoice_generated_at).total_seconds()
+
         results.append({
             "id": b.id,
             "bill_number": b.bill_number,
             "invoice_date": b.invoice_date.strftime("%Y-%m-%d") if b.invoice_date else None,
+            "invoice_time": b.invoice_generated_at.strftime("%I:%M:%S %p") if b.invoice_generated_at else None,
+            "invoice_generated_at": b.invoice_generated_at.isoformat() if b.invoice_generated_at else None,
+            "ingested_at": b.ingested_at.isoformat() if b.ingested_at else None,
+            "pipeline_delay_seconds": delay_seconds,
             "customer_name": b.customer_name,
             "invoice_total": float(b.amount or 0),
             "cust_purc": float(b.customer_purchase_amount or 0),

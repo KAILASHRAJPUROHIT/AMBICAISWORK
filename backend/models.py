@@ -105,6 +105,8 @@ class Bill(Base):
     email_confirmed_amount = Column(Numeric(12, 2), default=0.0)
     remaining_amount = Column(Numeric(12, 2), default=0.0)
     
+    invoice_generated_at = Column(DateTime, nullable=True)
+    ingested_at = Column(DateTime, server_default=func.now())
     created_at = Column(DateTime, server_default=func.now())
 
 class Payment(Base):
@@ -166,6 +168,17 @@ class Cheque(Base):
     status = Column(String, default="Blue")
     cleared_at = Column(DateTime, nullable=True)
     return_reason = Column(String, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+class MaintenanceSession(Base):
+    __tablename__ = "maintenance_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    developer_id = Column(String, nullable=False)
+    start_at = Column(DateTime, server_default=func.now())
+    end_at = Column(DateTime, nullable=True)
+    reason = Column(String, nullable=False)
+    actions_performed = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 class AuditLog(Base):
