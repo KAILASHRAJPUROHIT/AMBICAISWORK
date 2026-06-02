@@ -185,6 +185,9 @@ def fetch_real_emails(since_date: datetime):
         update_email_status(last_error=f"IMAP Error: {str(e)}")
     return emails_list
 
+from backend.email_parser import parse_bank_email
+from backend.schemas import RawEmail
+
 def process_emails():
     logger.info("Polling bank emails via IMAP...")
     update_email_status(is_running=True)
@@ -196,93 +199,131 @@ def process_emails():
         logger.info(f"Using checkpoint: {checkpoint}")
         
         real_emails = fetch_real_emails(checkpoint)
+        logger.info(f"Fetched {len(real_emails)} emails since checkpoint.")
         
         newest_ts = checkpoint
         for email_data in real_emails:
-            if email_data["date"] > newest_ts:
-                newest_ts = email_data["date"]
-                
+            sender = email_data["sender"].lower()
+            subject = email_data["subject"]
             body = email_data["body"]
-            event_type = parse_email_event(email_data["subject"], body)
+            received_at = email_data["date"]
             
-            # --- Special Case: [SMSForwarder] ---
-            if event_type == "sms_forwarded":
-                parsed_sms = parse_bank_sms(body)
-                if parsed_sms.amount and parsed_sms.amount > 0:
-                    exists = db.query(SMSAlert).filter(SMSAlert.email_message_id == email_data["message_id"]).first()
-                    if not exists and parsed_sms.utr_reference:
-                        exists = db.query(SMSAlert).filter(SMSAlert.utr_reference == parsed_sms.utr_reference).first()
-                        
-                    if not exists:
-                        sms_sender = "UNKNOWN"
-                        sender_match = re.search(r"From\s*:\s*([A-Za-z0-9-]+)", body)
-                        if sender_match:
-                            sms_sender = sender_match.group(1)
-                            
-                        ts = email_data["date"]
-                        if parsed_sms.transaction_date:
-                            try:
-                                ts = datetime.fromisoformat(parsed_sms.transaction_date)
-                            except:
-                                try:
-                                    ts = datetime.strptime(parsed_sms.transaction_date, "%Y-%m-%d %H:%M:%S")
-                                except:
-                                    pass
+            if received_at > newest_ts:
+                newest_ts = received_at
+            
+            logger.info(f"Processing Email: From={sender}, Subject={subject}, Date={received_at}")
 
-                        new_sms = SMSAlert(
-                            sender=sms_sender,
-                            transaction_timestamp=ts,
-                            bank_name=parsed_sms.sender_bank or "ICICI",
-                            account_suffix=parsed_sms.account_suffix,
-                            credit_or_debit="CREDIT", 
-                            amount=parsed_sms.amount,
-                            utr_reference=parsed_sms.utr_reference,
-                            payer_name=parsed_sms.payer_name,
-                            raw_body=body,
-                            email_message_id=email_data["message_id"],
-                            parsed_confidence=1.0 if parsed_sms.confidence == "HIGH" else 0.5
-                        )
-                        db.add(new_sms)
-                        events_found += 1
-                        db.flush()
-                        
-                        alert = BankAlert(
-                            bank_name=new_sms.bank_name,
-                            amount=new_sms.amount,
-                            utr_reference=new_sms.utr_reference if new_sms.utr_reference else f"SMS_{email_data['message_id']}",
-                            sender=new_sms.sender,
-                            received_at=new_sms.transaction_timestamp,
-                            raw_text=f"SMS Forwarded via Email: {body}"
-                        )
-                        db.add(alert)
-                        db.flush()
-                        
-                        from backend.reconciliation.logic import verify_payment_event
-                        verify_payment_event(db, alert, source="SMS_FORWARDER")
+            # --- Classification Rules ---
+            
+            # Rule 3: Google security emails
+            if "no-reply@accounts.google.com" in sender:
+                logger.info(f"Skipping Google security email from {sender}")
+                continue
+                
+            # Rule 4: Promotional emails (simple heuristic)
+            if any(promo in subject.lower() for promo in ["offer", "discount", "sale", "promotional", "newsletter"]):
+                logger.info(f"Skipping promotional email: {subject}")
                 continue
 
-            # --- Standard Bank Email Alerts ---
-            amt_match = re.search(r"(?:INR|RS\.?)\s*([\d,]+\.\d{2})", body, re.IGNORECASE)
-            amount = float(amt_match.group(1).replace(",", "")) if amt_match else 0.0
+            # Rule 1: SMS Forwarder
+            is_sms_forwarder = "info@aradhanajewellers.com" in sender or "[SMSForwarder]" in subject
             
-            if amount <= 0: continue
-            
-            utr_match = re.search(r"Ref:\s*([A-Z0-9/]+)", body, re.IGNORECASE)
-            if not utr_match:
-                utr_match = re.search(r"UTR[:\s]*([A-Z0-9]+)", body, re.IGNORECASE)
+            if is_sms_forwarder:
+                logger.info(f"Classified as SMS_FORWARDER: {subject}")
+                parsed_sms = parse_bank_sms(body)
+                if not parsed_sms.amount or parsed_sms.amount <= 0:
+                    logger.warning(f"SMSForwarder skip: No amount found or amount <= 0. Body: {body[:100]}...")
+                    continue
                 
-            utr = utr_match.group(1) if utr_match else None
-            dedupe_key = utr if utr else f"SYNC_{email_data['date'].timestamp()}_{amount}"
+                exists = db.query(SMSAlert).filter(SMSAlert.email_message_id == email_data["message_id"]).first()
+                if not exists and parsed_sms.utr_reference:
+                    exists = db.query(SMSAlert).filter(SMSAlert.utr_reference == parsed_sms.utr_reference).first()
+                    
+                if exists:
+                    logger.info(f"SMSAlert duplicate skipped: {parsed_sms.utr_reference or email_data['message_id']}")
+                    continue
+
+                sms_sender = "UNKNOWN"
+                sender_match = re.search(r"From\s*:\s*([A-Za-z0-9-]+)", body)
+                if sender_match:
+                    sms_sender = sender_match.group(1)
+                    
+                ts = received_at
+                if parsed_sms.transaction_date:
+                    try:
+                        ts = datetime.fromisoformat(parsed_sms.transaction_date)
+                    except:
+                        try:
+                            ts = datetime.strptime(parsed_sms.transaction_date, "%Y-%m-%d %H:%M:%S")
+                        except:
+                            pass
+
+                new_sms = SMSAlert(
+                    sender=sms_sender,
+                    transaction_timestamp=ts,
+                    bank_name=parsed_sms.sender_bank or "ICICI",
+                    account_suffix=parsed_sms.account_suffix,
+                    credit_or_debit="CREDIT", 
+                    amount=parsed_sms.amount,
+                    utr_reference=parsed_sms.utr_reference,
+                    payer_name=parsed_sms.payer_name,
+                    raw_body=body,
+                    email_message_id=email_data["message_id"],
+                    parsed_confidence=1.0 if parsed_sms.confidence == "HIGH" else 0.5
+                )
+                db.add(new_sms)
+                db.flush()
+                
+                utr_to_use = new_sms.utr_reference if new_sms.utr_reference else f"SMS_{email_data['message_id']}"
+                
+                # Deduplicate BankAlert as well
+                exists_alert = db.query(BankAlert).filter(BankAlert.utr_reference == utr_to_use).first()
+                if not exists_alert:
+                    alert = BankAlert(
+                        bank_name=new_sms.bank_name,
+                        amount=new_sms.amount,
+                        utr_reference=utr_to_use,
+                        sender=new_sms.sender,
+                        received_at=new_sms.transaction_timestamp,
+                        raw_text=f"SMS Forwarded via Email: {body}"
+                    )
+                    db.add(alert)
+                    db.flush()
+                    events_found += 1
+                    
+                    from backend.reconciliation.logic import verify_payment_event
+                    verify_payment_event(db, alert, source="SMS_FORWARDER")
+                    logger.info(f"Successfully processed SMS_FORWARDER: {alert.utr_reference}, Amount={alert.amount}")
+                else:
+                    logger.info(f"BankAlert duplicate (from SMS): {utr_to_use} already exists.")
+                continue
+
+            # Rule 2: Bank Email Alerts (forwarded from shreearadhana1001@gmail.com)
+            is_forwarded_bank = "shreearadhana1001@gmail.com" in sender
+            is_direct_bank = any(bank in (sender + subject).lower() for bank in ["icici", "hdfc", "sbi", "axis", "kotak"])
             
-            exists = db.query(BankAlert).filter(BankAlert.utr_reference == dedupe_key).first()
-            if not exists:
+            if is_forwarded_bank or is_direct_bank:
+                logger.info(f"Classified as BANK_EMAIL: {subject} (Forwarded={is_forwarded_bank})")
+                parsed_email = parse_bank_email(subject, body)
+                
+                if not parsed_email.amount or parsed_email.amount <= 0:
+                    logger.warning(f"Bank email skip: No amount found. Subject={subject}")
+                    continue
+                
+                dedupe_key = parsed_email.utr_reference if parsed_email.utr_reference else f"SYNC_{received_at.timestamp()}_{parsed_email.amount}"
+                
+                exists = db.query(BankAlert).filter(BankAlert.utr_reference == dedupe_key).first()
+                if exists:
+                    logger.info(f"BankAlert duplicate skipped: {dedupe_key}")
+                    continue
+                    
                 alert = BankAlert(
-                    bank_name="IMAP_BANK",
-                    amount=amount,
+                    bank_name=parsed_email.sender_bank or "IMAP_BANK",
+                    amount=parsed_email.amount,
                     utr_reference=dedupe_key,
                     sender=email_data["sender"],
-                    received_at=email_data["date"],
-                    raw_text=f"Subject: {email_data['subject']}\nBody: {body}"
+                    received_at=received_at,
+                    raw_text=f"Subject: {subject}\nBody: {body}"
                 )
                 db.add(alert)
                 db.flush()
@@ -290,27 +331,10 @@ def process_emails():
                 
                 from backend.reconciliation.logic import verify_payment_event
                 verify_payment_event(db, alert, source="EMAIL")
-                
-                if event_type == "cheque_cleared":
-                    cheque = db.query(Cheque).filter(Cheque.amount == amount, Cheque.status == "Blue").first()
-                    if cheque:
-                        cheque.status = "Green"
-                        cheque.cleared_at = datetime.now()
-                        bill = db.query(Bill).filter(Bill.id == cheque.bill_id).first()
-                        if bill:
-                            bill.status = "Green"
-                            bill.status_text = "Cleared (Cheque Cleared)"
-                            bill.review_required = 0
-                elif event_type in ["cheque_bounced", "cheque_returned"]:
-                    cheque = db.query(Cheque).filter(Cheque.amount == amount, Cheque.status == "Blue").first()
-                    if cheque:
-                        cheque.status = "Red"
-                        cheque.return_reason = event_type.upper()
-                        bill = db.query(Bill).filter(Bill.id == cheque.bill_id).first()
-                        if bill:
-                            bill.status = "Red"
-                            bill.status_text = f"Error: {event_type.upper()}"
-                            bill.review_required = 1
+                logger.info(f"Successfully processed BANK_EMAIL: {alert.utr_reference}, Amount={alert.amount}")
+                continue
+            
+            logger.info(f"Email skipped: No matching classification for {sender} / {subject}")
 
         if newest_ts > checkpoint:
             save_checkpoint(db, newest_ts)

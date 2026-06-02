@@ -17,8 +17,26 @@ from backend.email_poller import start_email_poller, process_emails, email_statu
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
 from backend.api_routes import router as api_router
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
 # Initialize FastAPI app
 app = FastAPI(title="Aradhana Review API")
+
+# Serve static files from frontend/dist if it exists
+frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
+if os.path.exists(frontend_dist):
+    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+    
+    @app.exception_handler(404)
+    async def fallback_to_index(request: Request, exc):
+        # Only fallback for non-API routes
+        if not request.url.path.startswith("/api/"):
+            index_path = os.path.join(frontend_dist, "index.html")
+            if os.path.exists(index_path):
+                return FileResponse(index_path)
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
 app.include_router(api_router)
 
 @app.on_event("startup")
