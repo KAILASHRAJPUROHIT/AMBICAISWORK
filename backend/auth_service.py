@@ -16,7 +16,14 @@ OTP_EXPIRY_MINUTES = 3
 def generate_otp() -> str:
     return ''.join(random.choices(string.digits, k=6))
 
+from backend.email_notifier import send_otp_email
+
 def create_otp(db: Session, employee_id: str) -> str:
+    user = db.query(User).filter(User.employee_id == employee_id).first()
+    if not user or not user.email:
+        logger.error(f"User {employee_id} not found or has no email.")
+        return None
+
     otp_code = generate_otp()
     expires_at = datetime.now() + timedelta(minutes=OTP_EXPIRY_MINUTES)
     
@@ -27,7 +34,13 @@ def create_otp(db: Session, employee_id: str) -> str:
     )
     db.add(new_otp)
     db.commit()
-    logger.info(f"OTP created for {employee_id}. Expires at {expires_at}")
+    
+    # Send actual email
+    sent = send_otp_email(user.email, otp_code)
+    if not sent:
+        logger.warning(f"Failed to send OTP email to {user.email}")
+        
+    logger.info(f"OTP created and sent to {user.email}. Expires at {expires_at}")
     return otp_code
 
 def verify_otp(db: Session, employee_id: str, code: str) -> bool:

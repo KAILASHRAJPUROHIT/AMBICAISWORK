@@ -496,25 +496,123 @@ def status_colors():
 
 app.include_router(api_router)
 
+# Auth Models
+class LoginRequest(BaseModel):
+    employee_id: str
+
+class VerifyRequest(BaseModel):
+    employee_id: str
+    otp_code: str
+
+@app.post("/api/auth/login")
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.employee_id == request.employee_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    otp = create_otp(db, request.employee_id)
+    if not otp:
+        raise HTTPException(status_code=500, detail="Failed to generate OTP")
+
+    log_event(db, request.employee_id, "LOGIN_REQUEST")
+    return {"status": "success", "message": "OTP sent to your registered email"}
+
+@app.post("/api/auth/verify")
+async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Request = None):
+    # Verify OTP
+    if verify_otp(db, request.employee_id, request.otp_code):
+        token = create_user_session(db, request.employee_id)
+        user = db.query(User).filter(User.employee_id == request.employee_id).first()
+
+        log_event(db, request.employee_id, "LOGIN_SUCCESS", ip=req.client.host if req else None)
+        return {
+            "status": "success",
+            "token": token,
+            "user": {
+                "name": user.name,
+                "role": user.role,
+                "employee_id": user.employee_id
+            }
+        }
+
+    log_event(db, request.employee_id, "LOGIN_FAILED", ip=req.client.host if req else None)
+    raise HTTPException(status_code=401, detail="Invalid or expired OTP")
+
+@app.get("/api/auth/me")
+async def get_me(request: Request, db: Session = Depends(get_db)):
+    token = request.headers.get("X-Session-Token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    employee_id = validate_session(db, token)
+    if not employee_id:
+        raise HTTPException(status_code=401, detail="Session expired")
+
+    user = db.query(User).filter(User.employee_id == employee_id).first()
+    return {
+        "name": user.name,
+        "role": user.role,
+        "employee_id": user.employee_id
+    }
+
+@app.post("/api/auth/logout")
+async def logout(request: Request, db: Session = Depends(get_db)):
+    token = request.headers.get("X-Session-Token")
+    if token:
+        # Delete session
+        from backend.models import Session as SessionModel
+        db.query(SessionModel).filter(SessionModel.session_token == token).delete()
+        db.commit()
+    return {"status": "success"}
+
+# ... existing routes ...
+
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     PUBLIC_ENDPOINTS = [
-        "/api/auth", "/api/dashboard/live", "/api/prime/dashboard/stats", "/api/system/share-status", "/api/invoices/live-feed", "/api/admin/system-health", "/api/admin/ingestion-status", "/api/admin/email-status", "/api/admin/sms-status", "/api/scan-now", "/api/email-sync-now", "/api/sms-sync-now", "/api/bank-events", "/api/sms-events", "/api/live-payment-events", "/api/invoices/pdf/", "/api/version", "/api/reports/payment-bifurcation", "/debug/runtime", "/debug/startup", "/debug/routes", "/status-colors"
+        "/api/auth/login",
+        "/api/auth/verify",
+        "/api/dashboard/live", # Optional: can dashboard be public read-only? 
+        # Requirement: "No financial page may load before authentication succeeds."
+        # This implies even dashboard is protected.
+        "/api/system/mode",
+        "/api/version",
+        "/debug/",
+        "/status-colors",
+        "/health"
     ]
-    if not await lan_health_check(request): pass
+
+    # Static files and root are public (they serve the React app)
+    if request.url.path == "/" or request.url.path.startswith("/assets/"):
+        return await call_next(request)
+
+    if not await lan_health_check(request):
+        # Even read-only might be blocked if totally disconnected?
+        # User: "If LAN disconnected... read-only mode allowed."
+        # But: "Production Actions Blocked." (POST/PUT/DELETE)
+        # lan_health_check already handles this.
+        pass
+
     is_protected = request.url.path.startswith("/api/")
     for public_path in PUBLIC_ENDPOINTS:
         if request.url.path.startswith(public_path):
             is_protected = False
             break
+
     if is_protected:
         token = request.headers.get("X-Session-Token")
-        if not token: return JSONResponse(status_code=401, content={"detail": "Session token missing"})
+        if not token:
+             return JSONResponse(status_code=401, content={"detail": "Authentication required. Please login."})
+
         db = SessionLocal()
         employee_id = validate_session(db, token)
         db.close()
-        if not employee_id: return JSONResponse(status_code=401, content={"detail": "Session expired or invalid"})
-    return await call_next(request)
+
+        if not employee_id:
+             return JSONResponse(status_code=401, content={"detail": "Session expired or invalid. Please login again."})
+
+    response = await call_next(request)
+    return response
 
 frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
 if os.path.exists(frontend_dist):

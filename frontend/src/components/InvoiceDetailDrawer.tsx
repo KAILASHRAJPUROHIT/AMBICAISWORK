@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { ReconciliationItem } from '../types';
+import ConfirmationDialog from './ConfirmationDialog';
+import AlertSoundSystem from '../api/AlertSoundSystem';
 import '../Reconciliation.css'; 
 
 interface InvoiceDetailDrawerProps {
@@ -8,6 +10,24 @@ interface InvoiceDetailDrawerProps {
 }
 
 const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose }) => {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmType, setConfirmType] = useState<'VERIFY' | 'REJECT'>('VERIFY');
+
+  const handleAction = (type: 'VERIFY' | 'REJECT') => {
+    setConfirmType(type);
+    setConfirmOpen(true);
+    if (type === 'REJECT') {
+        AlertSoundSystem.playWarning();
+    }
+  };
+
+  const executeAction = async () => {
+    // API call would go here
+    console.log(`Executing ${confirmType} for ${item.billNo}`);
+    setConfirmOpen(false);
+    onClose();
+  };
+
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
@@ -64,6 +84,21 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
             </div>
           </section>
           
+          <div className="mt-8 grid grid-cols-2 gap-4">
+             <button 
+                onClick={() => handleAction('REJECT')}
+                className="p-5 rounded-2xl bg-red-50 text-red-600 font-black uppercase text-xs tracking-widest hover:bg-red-100 transition-all border-2 border-red-100"
+             >
+                Reject / Escalate
+             </button>
+             <button 
+                onClick={() => handleAction('VERIFY')}
+                className="p-5 rounded-2xl bg-green-600 text-white font-black uppercase text-xs tracking-widest hover:bg-green-700 transition-all shadow-lg shadow-green-200"
+             >
+                Verify & Clear
+             </button>
+          </div>
+
           <div className="mt-8 p-6 bg-blue-50 rounded-2xl border border-blue-100">
              <p className="text-sm text-blue-700 leading-relaxed text-center italic">
                Deep-dive view for individual product lines is currently only available via the <b>Prime Extraction Review</b> evidence portal.
@@ -71,6 +106,19 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
           </div>
         </div>
       </div>
+
+      <ConfirmationDialog 
+        isOpen={confirmOpen}
+        title={confirmType === 'VERIFY' ? 'Confirm Clearance' : 'Flag for Review'}
+        message={confirmType === 'VERIFY' 
+            ? `Are you sure you want to verify and clear Voucher ${item.billNo} for ₹${item.invoiceAmount.toLocaleString()}? This action is immutable.`
+            : `Are you sure you want to reject the match for Voucher ${item.billNo}? This will escalate the item to the owner report.`
+        }
+        confirmLabel={confirmType === 'VERIFY' ? 'Yes, Clear it' : 'Flag Item'}
+        onConfirm={executeAction}
+        onCancel={() => setConfirmOpen(false)}
+        type={confirmType === 'VERIFY' ? 'NORMAL' : 'CRITICAL'}
+      />
     </div>
   );
 };

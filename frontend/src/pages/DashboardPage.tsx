@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import StatCard from '../components/StatCard';
+import AlertSoundSystem from '../api/AlertSoundSystem';
 import '../Dashboard.css';
 
 interface DashboardStats {
@@ -55,6 +56,10 @@ interface LiveInvoice {
   id: number;
   bill_number: string;
   invoice_date: string;
+  invoice_time: string | null;
+  invoice_generated_at: string | null;
+  ingested_at: string | null;
+  pipeline_delay_seconds: number;
   customer_name: string;
   invoice_total: number;
   cust_purc: number;
@@ -148,13 +153,17 @@ const DashboardPage: React.FC = () => {
       // Only show error if core stats or feed fail when NOT loading
       if ((!responses[0] || !responses[0].ok) && (!responses[1] || !responses[1].ok) && !loading) {
           setError('API Connection Lost');
+          AlertSoundSystem.playCritical();
       } else {
           setError(null);
       }
       
     } catch (err: any) {
       console.error("Fetch error:", err);
-      if (!loading) setError('Backend Unreachable');
+      if (!loading) {
+          setError('Backend Unreachable');
+          AlertSoundSystem.playCritical();
+      }
     } finally {
       setLoading(false);
     }
@@ -197,6 +206,7 @@ const DashboardPage: React.FC = () => {
   const sortedDates = Object.keys(groupedFeed).sort((a, b) => b.localeCompare(a));
 
   const formatDelay = (seconds: number) => {
+    if (seconds < 0) return '---';
     if (seconds < 60) return `${Math.round(seconds)}s`;
     if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
     return `${Math.round(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
@@ -397,7 +407,7 @@ const DashboardPage: React.FC = () => {
                         </td>
                         <td className="p-4">
                            <div className="font-black text-gray-900 leading-none">{inv.bill_number}</div>
-                           <div className="text-[9px] text-gray-400 font-bold mt-1 uppercase">Gen: {(inv as any).invoice_time || 'N/A'}</div>
+                           <div className="text-[9px] text-gray-400 font-bold mt-1 uppercase">Gen: {inv.invoice_date} {inv.invoice_time || ''}</div>
                            {inv.is_historical_claim && (
                              <div className="mt-1 flex items-center text-[8px] font-black text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 uppercase tracking-tighter animate-pulse">
                                 ⚠ Historical Claim
@@ -407,8 +417,8 @@ const DashboardPage: React.FC = () => {
                         <td className="p-4 text-sm text-gray-600 truncate max-w-[100px] font-medium">{inv.customer_name}</td>
                         <td className="p-4 font-black text-gray-900 text-right">{money(inv.net_payable)}</td>
                         <td className="p-4 text-right">
-                           <span className={`text-[9px] font-black px-2 py-0.5 rounded ${(inv as any).pipeline_delay_seconds > 600 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>
-                             {formatDelay((inv as any).pipeline_delay_seconds || 0)}
+                           <span className={`text-[9px] font-black px-2 py-0.5 rounded ${inv.pipeline_delay_seconds > 600 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>
+                             {formatDelay(inv.pipeline_delay_seconds || 0)}
                            </span>
                         </td>
                         <td className="p-4">

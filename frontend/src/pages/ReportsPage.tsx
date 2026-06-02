@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import ReportSummaryCard from '../components/ReportSummaryCard';
 import { getOwnerReport } from '../api/client';
+import ConfirmationDialog from '../components/ConfirmationDialog';
+import AlertSoundSystem from '../api/AlertSoundSystem';
 
 interface PaymentBifurcation {
   mode: string;
@@ -15,10 +17,24 @@ const ReportsPage = () => {
   const [bifurcation, setBifurcation] = useState<PaymentBifurcation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
+  const [exportType, setExportType] = useState('');
 
   const API_BASE = window.location.origin;
 
   const money = (v: number) => `₹${Number(v).toLocaleString('en-IN')}`;
+
+  const handleExport = (type: string) => {
+    setExportType(type);
+    setExportConfirmOpen(true);
+    AlertSoundSystem.playWarning();
+  };
+
+  const executeExport = () => {
+    console.log(`Exporting as ${exportType}...`);
+    setExportConfirmOpen(false);
+    // Real export logic here
+  };
 
   useEffect(() => {
     async function fetchData() {
@@ -71,8 +87,18 @@ const ReportsPage = () => {
           <p className="mt-2 text-lg text-gray-600 font-medium">Payment-wise bifurcation and operational summaries.</p>
         </div>
         <div className="flex space-x-4">
-           <button className="px-6 py-2 bg-white border border-gray-200 rounded-xl font-bold text-xs uppercase hover:bg-gray-50 transition-colors">Export PDF</button>
-           <button className="px-6 py-2 bg-white border border-gray-200 rounded-xl font-bold text-xs uppercase hover:bg-gray-50 transition-colors">Export Excel</button>
+           <button 
+             onClick={() => handleExport('PDF')}
+             className="px-6 py-2 bg-white border border-gray-200 rounded-xl font-bold text-xs uppercase hover:bg-gray-50 transition-colors"
+           >
+             Export PDF
+           </button>
+           <button 
+             onClick={() => handleExport('EXCEL')}
+             className="px-6 py-2 bg-white border border-gray-200 rounded-xl font-bold text-xs uppercase hover:bg-gray-50 transition-colors"
+           >
+             Export Excel
+           </button>
         </div>
       </header>
       
@@ -117,6 +143,16 @@ const ReportsPage = () => {
           </section>
         </div>
       )}
+
+      <ConfirmationDialog 
+        isOpen={exportConfirmOpen}
+        title="Owner Approval Required"
+        message={`This action will generate a detailed ${exportType} report containing sensitive financial data. All export actions are audited. Proceed?`}
+        confirmLabel="Approve & Export"
+        onConfirm={executeExport}
+        onCancel={() => setExportConfirmOpen(false)}
+        type="WARNING"
+      />
     </div>
   );
 };
