@@ -208,8 +208,27 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const openPDF = (bill_id: number) => {
-    window.open(`${API_BASE}/api/invoices/pdf/${bill_id}`, '_blank');
+  const openPDF = async (bill_id: number) => {
+    try {
+      const token = localStorage.getItem('session_token');
+      const response = await fetch(`${API_BASE}/api/invoices/pdf/${bill_id}`, {
+        headers: { 'X-Session-Token': token || '' }
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          window.location.href = '/login';
+        } else {
+          throw new Error('Failed to load PDF');
+        }
+        return;
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch (e) {
+      console.error("Error opening PDF:", e);
+      alert("Error opening PDF. It may not exist on the server.");
+    }
   };
 
   // GROUPING LOGIC (Limit to 8 for dashboard compactness)
