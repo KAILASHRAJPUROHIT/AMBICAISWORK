@@ -52,9 +52,14 @@ interface SMSStatus {
 interface LiveInvoice {
   id: number;
   bill_number: string;
+  invoice_date: string;
   customer_name: string;
-  total_amount: number;
-  payment_mode: string;
+  invoice_total: number;
+  cust_purc: number;
+  advance: number;
+  net_payable: number;
+  paid_amount: number;
+  remaining_amount: number;
   status: string;
   status_text: string;
   pdf_path: string | null;
@@ -331,7 +336,10 @@ const DashboardPage: React.FC = () => {
                   <th className="p-4 text-[10px] font-black text-gray-400 uppercase">PDF</th>
                   <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Bill No</th>
                   <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Customer</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Amount</th>
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Total</th>
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Net Pay</th>
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Paid</th>
+                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Remaining</th>
                   <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Status</th>
                 </tr>
               </thead>
@@ -354,8 +362,11 @@ const DashboardPage: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 font-bold text-gray-900">{inv.bill_number}</td>
-                    <td className="p-4 text-sm text-gray-600 truncate max-w-[150px]">{inv.customer_name}</td>
-                    <td className="p-4 font-black text-gray-900">{money(inv.total_amount)}</td>
+                    <td className="p-4 text-sm text-gray-600 truncate max-w-[120px]">{inv.customer_name}</td>
+                    <td className="p-4 font-bold text-gray-400 text-right text-xs">{money(inv.invoice_total)}</td>
+                    <td className="p-4 font-black text-gray-900 text-right">{money(inv.net_payable)}</td>
+                    <td className="p-4 font-bold text-green-600 text-right text-xs">{money(inv.paid_amount)}</td>
+                    <td className="p-4 font-black text-blue-900 text-right">{money(inv.remaining_amount)}</td>
                     <td className="p-4">
                       <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase ${
                         inv.status === 'Green' ? 'bg-green-100 text-green-700' : 

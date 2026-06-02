@@ -39,7 +39,13 @@ def read_user(user_id: int, db: Session = Depends(get_db)):
 
 @app.post("/bills/", dependencies=[Depends(require_admin)])
 def create_bill(user_id: int, amount: float, status: str = "Yellow", db: Session = Depends(get_db)):
-    db_bill = Bill(bill_number=f"BILL-{datetime.now().timestamp()}", customer_name=f"User {user_id}", amount=amount, status=status)
+    db_bill = Bill(
+        bill_number=f"BILL-{datetime.now().timestamp()}", 
+        customer_name=f"User {user_id}", 
+        amount=amount, 
+        status=status,
+        is_test_data=True
+    )
     db.add(db_bill)
     db.commit()
     db.refresh(db_bill)

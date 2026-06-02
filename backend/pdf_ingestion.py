@@ -183,6 +183,9 @@ def parse_pdf(file_path):
         in_narration = False
         words_found = False
         payments = []
+        cust_purc_total = 0.0
+        advance_total = 0.0
+        
         for i, line in enumerate(lines):
             line_upper = line.upper()
             if re.search(r"Total\s+[\d,]+\.\d{2}", line, re.IGNORECASE):
@@ -205,17 +208,23 @@ def parse_pdf(file_path):
                     mode = "UNKNOWN"
                     if "CASH" in line_upper: mode = "CASH"
                     elif any(x in line_upper for x in ["UPI", "RTGS", "IMPS", "NEFT", "BANK TRANSFER", "CHQ"]): mode = "BANK_TRANSFER"
-                    elif "ADVANCE" in line_upper: mode = "ADVANCE"
+                    elif "ADVANCE" in line_upper: 
+                        mode = "ADVANCE"
+                        advance_total += amt
                     elif "CHEQUE" in line_upper: mode = "CHEQUE"
                     elif "CARD" in line_upper: mode = "CARD"
                     elif "BALANCE" in line_upper: mode = "BALANCE"
-                    elif any(x in line_upper for x in ["OLD GOLD", "CUST PURC", "PURCHASE"]): mode = "OLD_GOLD_EXCHANGE"
+                    elif any(x in line_upper for x in ["OLD GOLD", "CUST PURC", "PURCHASE"]): 
+                        mode = "OLD_GOLD_EXCHANGE"
+                        cust_purc_total += amt
 
                     
                     if mode != "UNKNOWN":
                         payments.append({"mode": mode, "amount": amt, "raw": line.strip()})
         
         data["payments"] = payments
+        data["customer_purchase_amount"] = cust_purc_total
+        data["advance_amount"] = advance_total
         if not payments:
             data["payments"] = [{"mode": "CASH", "amount": data["total_amount"], "raw": "Fallback default"}] # fallback
 
@@ -329,6 +338,8 @@ def process_invoice(file_path):
             sgst=invoice_data["sgst"],
             round_off=invoice_data["round_off"],
             total_amount=invoice_data["total_amount"],
+            customer_purchase_amount=invoice_data.get("customer_purchase_amount", 0.0),
+            advance_amount=invoice_data.get("advance_amount", 0.0),
             payment_mode=",".join(modes),
             bank_name=invoice_data["bank_name"],
             reference_no=invoice_data["reference_no"],
@@ -340,7 +351,7 @@ def process_invoice(file_path):
             raw_extracted_text=invoice_data["raw_text"],
             parsed_items_json=invoice_data["parsed_items_json"],
             amount_in_words=invoice_data["amount_in_words"],
-            cash_received=sum(p["amount"] for p in invoice_data["payments"] if p["mode"] in ["CASH", "ADVANCE", "OLD_GOLD_EXCHANGE"]),
+            cash_received=sum(p["amount"] for p in invoice_data["payments"] if p["mode"] in ["CASH"]),
             bank_received=0.0,
             card_received=0.0,
             remaining_amount=invoice_data["total_amount"] - sum(p["amount"] for p in invoice_data["payments"] if p["mode"] in ["CASH", "ADVANCE", "OLD_GOLD_EXCHANGE"]),

@@ -71,6 +71,8 @@ class Bill(Base):
     round_off = Column(Numeric(12, 2), nullable=True)
     amount = Column(Numeric(12, 2), nullable=False) # Rename back to amount for compatibility
     total_amount = synonym("amount")
+    customer_purchase_amount = Column(Numeric(12, 2), default=0.0) # For Old Gold/Purchase
+    advance_amount = Column(Numeric(12, 2), default=0.0) # For Advance adjusted
     
     payment_mode = Column(String, nullable=True)
     bank_name = Column(String, nullable=True)
@@ -79,6 +81,7 @@ class Bill(Base):
     status = Column(String, default="Yellow")
     status_text = Column(String, nullable=True)
     review_required = Column(Integer, default=1)
+    is_test_data = Column(Boolean, default=False)
     
     pdf_path = Column(String, nullable=True)
     pdf_hash = Column(String, nullable=True)

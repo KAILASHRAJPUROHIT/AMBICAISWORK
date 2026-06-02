@@ -205,8 +205,34 @@ async def get_share_status():
 
 @app.get("/api/invoices/live-feed")
 async def get_live_feed(db: Session = Depends(get_db)):
-    bills = db.query(Bill).order_by(Bill.created_at.desc()).limit(50).all()
-    return bills
+    # Filter out test data
+    bills = db.query(Bill).filter(Bill.is_test_data == False).order_by(Bill.created_at.desc()).limit(50).all()
+    
+    results = []
+    for b in bills:
+        # Net Payable calculation: total - purchase - advance
+        # But in our DB, 'amount' is usually the net payable? 
+        # Let's follow user requirement: 
+        # SG-891: invoice_total 23672, cust_purc 18572, net_payable 5100
+        # If Bill.amount is 23672, and Bill.customer_purchase_amount is 18572, then:
+        
+        results.append({
+            "id": b.id,
+            "bill_number": b.bill_number,
+            "invoice_date": b.invoice_date.strftime("%Y-%m-%d") if b.invoice_date else None,
+            "customer_name": b.customer_name,
+            "invoice_total": float(b.amount or 0),
+            "cust_purc": float(b.customer_purchase_amount or 0),
+            "advance": float(b.advance_amount or 0),
+            "net_payable": float(b.amount or 0) - float(b.customer_purchase_amount or 0) - float(b.advance_amount or 0),
+            "paid_amount": float(b.cash_received or 0) + float(b.bank_received or 0) + float(b.card_received or 0) + float(b.sms_confirmed_amount or 0) + float(b.email_confirmed_amount or 0),
+            "remaining_amount": float(b.remaining_amount or 0),
+            "status": b.status,
+            "status_text": b.status_text,
+            "pdf_path": b.pdf_path,
+            "created_at": b.created_at.isoformat()
+        })
+    return results
 
 @app.get("/api/dashboard/live")
 @app.get("/api/prime/dashboard/stats")
@@ -220,15 +246,16 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     # 1. Base Stats (Strict Date Logic)
     
     # Bills Today = invoice_date is today
-    bills_today_query = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str)
+    bills_today_query = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False)
     total_bills_today = bills_today_query.count()
     
     # Imported Today = created_at is today (record added to DB today)
-    imported_today = db.query(Bill).filter(Bill.created_at >= today_start).count()
+    imported_today = db.query(Bill).filter(Bill.created_at >= today_start, Bill.is_test_data == False).count()
     
     # Pending Previous Days = unresolved invoices where invoice_date < today
     pending_previous = db.query(Bill).filter(
         func.date(Bill.invoice_date) < today_str,
+        Bill.is_test_data == False,
         or_(Bill.status == "Yellow", Bill.status == "Blue", Bill.review_required == 1)
     ).count()
     
@@ -236,10 +263,10 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     verified_today = bills_today_query.filter(Bill.status == "Green").count()
     
     # Total Review Required (All time)
-    review_required_total = db.query(Bill).filter(Bill.review_required == 1).count()
+    review_required_total = db.query(Bill).filter(Bill.review_required == 1, Bill.is_test_data == False).count()
     
     # Partial Paid (All time)
-    partial_paid = db.query(Bill).filter(Bill.status == "Blue", Bill.remaining_amount > 0).count()
+    partial_paid = db.query(Bill).filter(Bill.status == "Blue", Bill.remaining_amount > 0, Bill.is_test_data == False).count()
     
     # 2. Financial Metrics (Today's Collection)
     # Mandate: Based on payment received today, not import date.
@@ -255,8 +282,8 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     bank_collection = float(sum(p.amount for p in payments_today if p.mode in ["BANK_TRANSFER", "CARD", "UPI", "NEFT", "IMPS", "RTGS"]) or 0.0)
     
     # SMS/Email confirmed amounts specifically for today's bank collection
-    sms_confirmed = float(db.query(func.sum(Bill.sms_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str).scalar() or 0.0)
-    email_confirmed = float(db.query(func.sum(Bill.email_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str).scalar() or 0.0)
+    sms_confirmed = float(db.query(func.sum(Bill.sms_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
+    email_confirmed = float(db.query(func.sum(Bill.email_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
     cheque_collection = float(db.query(func.sum(PaymentModel.amount)).filter(PaymentModel.bill_id.in_(bills_today_ids), PaymentModel.mode == "CHEQUE").scalar() or 0.0)
 
     # Share status
