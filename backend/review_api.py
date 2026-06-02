@@ -23,21 +23,57 @@ from fastapi.responses import FileResponse
 # Initialize FastAPI app
 app = FastAPI(title="Aradhana Review API")
 
+@app.get("/debug/runtime")
+async def get_runtime_debug(db: Session = Depends(get_db)):
+    import sys
+    from backend.database import DATABASE_URL
+    from backend.pdf_ingestion import WATCH_PATH
+    
+    return {
+        "cwd": os.getcwd(),
+        "executable": sys.executable,
+        "database_url": DATABASE_URL,
+        "env_loaded": os.getenv("IMAP_SERVER") is not None,
+        "invoice_path": WATCH_PATH,
+        "invoice_count": db.query(Bill).count(),
+        "bank_alert_count": db.query(BankAlert).count(),
+        "sms_alert_count": db.query(SMSAlert).count(),
+        "sys_path": sys.path[:5]
+    }
+
+@app.get("/debug/routes")
+async def get_routes():
+    routes = []
+    for route in app.routes:
+        routes.append({
+            "path": route.path,
+            "name": route.name,
+            "methods": list(route.methods) if hasattr(route, "methods") else []
+        })
+    return routes
+
+app.include_router(api_router)
+
 # Serve static files from frontend/dist if it exists
 frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
 if os.path.exists(frontend_dist):
-    app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+    # Mount assets folder specifically
+    assets_path = os.path.join(frontend_dist, "assets")
+    if os.path.exists(assets_path):
+        app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
     
-    @app.exception_handler(404)
-    async def fallback_to_index(request: Request, exc):
-        # Only fallback for non-API routes
-        if not request.url.path.startswith("/api/"):
-            index_path = os.path.join(frontend_dist, "index.html")
-            if os.path.exists(index_path):
-                return FileResponse(index_path)
+    # Catch-all route for SPA to return index.html
+    # This MUST be the last route registered
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Skip if it looks like an API or Debug call that missed (should have been 404)
+        if full_path.startswith("api/") or full_path.startswith("debug/"):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+            
+        index_path = os.path.join(frontend_dist, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
-
-app.include_router(api_router)
 
 from backend.invoice_lifecycle import start_lifecycle_automation
 
