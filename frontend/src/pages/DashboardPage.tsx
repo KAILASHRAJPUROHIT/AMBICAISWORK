@@ -130,7 +130,7 @@ const DashboardPage: React.FC = () => {
   const num = (v?: number | null) => Number(v ?? 0).toLocaleString("en-IN");
 
   const fetchData = async () => {
-    const token = localStorage.getItem('session_token');
+    const token = localStorage.getItem('aradhana_session_token');
     const headers = {
       'X-Session-Token': token || ''
     };
