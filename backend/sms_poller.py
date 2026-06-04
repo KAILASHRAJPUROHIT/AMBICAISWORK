@@ -68,6 +68,13 @@ def process_sms():
         
         for sms in source_sms:
             raw_body = sms["body"]
+            
+            # Rule: Payment Evidence Hardening
+            bad_words = ["failed", "failure", "unsuccessful", "declined", "reversed", "reversal", "cancelled", "canceled", "timeout", "expired", "refund", "chargeback"]
+            if any(word in raw_body.lower() for word in bad_words):
+                logger.warning("Hardening Rule Triggered: Ignored failure/reversal sms.")
+                continue
+
             parsed_data = parse_sms_body(raw_body)
             
             # Skip non-credit or zero amount

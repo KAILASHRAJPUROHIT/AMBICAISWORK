@@ -20,6 +20,21 @@ def parse_bank_sms(body: str) -> ParsedBankSMS:
     confidence = "LOW"
     
     body_upper = body.upper()
+    body_lower = body.lower()
+    
+    # Critical Rule: Ignore failure messages
+    failure_keywords = ["failed", "failure", "unsuccessful", "declined", "reversed", "reversal", "cancelled", "canceled", "timeout", "expired", "refund", "chargeback"]
+    if any(keyword in body_lower for keyword in failure_keywords):
+        return ParsedBankSMS(
+            amount=None,
+            utr_reference=None,
+            transaction_date=None,
+            sender_bank=None,
+            raw_message=body,
+            payer_name=None,
+            account_suffix=None,
+            confidence="LOW"
+        )
     
     # 1. ICICI Forwarder Format (Exact user requirement)
     # Account\s+(\d+).*?credited\s+with\s+Rs\s+([\d,]+\.\d+|\d+).*?on\s+(\d{4}-\d{2}-\d{2})\s+at\s+(\d{2}:\d{2}:\d{2}).*?from\s+(.*?)\.\s*Ref\s+No\s+([A-Za-z0-9]+)

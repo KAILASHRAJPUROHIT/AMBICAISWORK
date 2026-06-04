@@ -33,8 +33,12 @@ def test_auth_flow():
         
         # 2. OTP Generation (Step 4 & 5)
         print("Step 4 & 5: Generating and 'Sending' OTP...")
-        otp_code = create_otp(db, employee_id)
-        assert otp_code is not None
+        otp_res = create_otp(db, employee_id)
+        assert otp_res.get("status") == "success"
+        
+        # Get actual OTP from DB to test verification
+        db_otp = db.query(OTP).filter(OTP.employee_id == employee_id).first()
+        otp_code = db_otp.otp_code
         print(f" -> OTP Generated: {otp_code}")
         
         # 3. OTP Verification (Step 7)

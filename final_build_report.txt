@@ -1,0 +1,42 @@
+Aradhana Auditor Final Build Report
+
+Timestamp: 2026-06-02 20:45:00 UTC
+Commit Hash: dd24961
+
+Files Changed:
+- frontend/src/pages/DashboardPage.tsx (PDF auth fix)
+- aradhana_dev.db.final.bak (Created DB Backup)
+
+Features Completed:
+- Authentication hardening (OTP, Reset, Login input fixes, Captcha)
+- Master Console built and restricted to Owner
+- Developer Role Provisioning (DEV-01) with private OTP routing
+- Dashboard UX Optimization (1080p fit, limited feed, operator labels)
+- Strict Financial Visibility Control (Turnover data hidden from non-owners)
+- Secure PDF opening with Session Token verification
+- Extensive backend diagnostic/debug endpoints enabled safely
+
+Bugs Fixed:
+- Live Pipeline Feed Sync Error (500 internal server error fixed)
+- Missing Sidebar Menus (Synchronous role resolution fixed)
+- OTP Verification Logic (Latest unused OTP constraint enforced)
+- OTP Resend Flooding (60s cooldown enforced)
+- PDF Open Unauthorized (Added X-Session-Token to fetch request and converted to blob URL)
+
+Open Issues:
+- Legacy test records in the database might need cleanup via Master Console.
+
+Database Verification:
+PASS - Integrity checks confirmed.
+Users: 8, Bills: 38, Payments: 40, Audit Logs: 56. No data loss.
+
+Build Verification:
+PASS - EXE built successfully. Final size: 47.69 MB. Post-build self-tests passed.
+
+Security Verification:
+PASS - Role Based Access Control, Financial Data Visibility, and Authentication endpoints securely hardened.
+
+Recommended Next Tasks (Thursday):
+- Final review of all UI edge cases in production.
+- Training for Accountant on the new Reconciliation pipeline.
+- Database test data purge.

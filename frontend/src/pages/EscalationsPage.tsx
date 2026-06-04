@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getHeaders } from '../api/client';
 
 const EscalationsPage: React.FC = () => {
   const [escalations, setEscalations] = useState<any[]>([]);
@@ -6,7 +7,7 @@ const EscalationsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/prime/manual-report-import/latest')
+    fetch(`${window.location.origin}/api/prime/manual-report-import/latest`, { headers: getHeaders() })
       .then(res => {
         if (!res.ok) throw new Error('API Unavailable: Could not fetch escalation records.');
         return res.json();

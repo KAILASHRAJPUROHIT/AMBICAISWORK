@@ -224,6 +224,13 @@ def process_emails():
 
             # --- Classification Rules ---
             
+            # Rule: Payment Evidence Hardening
+            content_lower = (subject + " " + body).lower()
+            bad_words = ["failed", "failure", "unsuccessful", "declined", "reversed", "reversal", "cancelled", "canceled", "timeout", "expired", "refund", "chargeback"]
+            if any(word in content_lower for word in bad_words):
+                logger.warning(f"Hardening Rule Triggered: Ignored failure/reversal email: {subject}")
+                continue
+            
             # Rule 3: Google security emails
             if "no-reply@accounts.google.com" in sender:
                 logger.info(f"Skipping Google security email from {sender}")

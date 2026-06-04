@@ -7,7 +7,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    employee_id = Column(String, unique=True, nullable=True)
+    employee_id = Column(String, unique=True, nullable=False)
     name = Column(String, nullable=False)
     role = Column(String, nullable=False) # ADMIN, OWNER, ACCOUNTANT, STAFF, VIEWER
     email = Column(String, nullable=True)

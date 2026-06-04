@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Set
+from typing import Set, Any
 
 
 class UserRole(Enum):
@@ -71,11 +71,13 @@ _ROLE_PERMISSIONS = {
 }
 
 
-def get_permissions(role_str: str) -> Set[Permission]:
+def get_permissions(role_input: Any) -> Set[Permission]:
     """
-    Returns the set of permissions for a given user role string.
+    Returns the set of permissions for a given user role.
     """
     try:
+        # If it's already an enum, get its value. If it's a string, use it.
+        role_str = role_input.value if isinstance(role_input, Enum) else str(role_input)
         role = UserRole(role_str.lower())
         return _ROLE_PERMISSIONS.get(role, set())
     except ValueError:

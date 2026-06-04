@@ -122,6 +122,7 @@ const DashboardPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState({ pdf: false, email: false, sms: false });
   const [selectedEvent, setSelectedEvent] = useState<LivePaymentEvent | null>(null);
+  const [expandedDates, setExpandedDates] = useState<{[key: string]: boolean}>({});
 
   const API_BASE = window.location.origin;
 
@@ -231,9 +232,8 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  // GROUPING LOGIC (Limit to 8 for dashboard compactness)
-  const displayFeed = liveFeed.slice(0, 8);
-  const groupedFeed = displayFeed.reduce((acc: { [key: string]: LiveInvoice[] }, inv) => {
+  // GROUPING LOGIC
+  const groupedFeed = liveFeed.reduce((acc: { [key: string]: LiveInvoice[] }, inv) => {
     const date = inv.invoice_date || 'Unknown Date';
     if (!acc[date]) acc[date] = [];
     acc[date].push(inv);
@@ -241,6 +241,10 @@ const DashboardPage: React.FC = () => {
   }, {});
 
   const sortedDates = Object.keys(groupedFeed).sort((a, b) => b.localeCompare(a));
+
+  const toggleDate = (date: string) => {
+    setExpandedDates(prev => ({ ...prev, [date]: !prev[date] }));
+  };
 
   const formatDelay = (seconds: number) => {
     if (seconds < 0) return '---';
@@ -418,6 +422,30 @@ const DashboardPage: React.FC = () => {
         </div>
         )}
 
+        {!stats?.is_owner && (
+        <div className="lg:col-span-1">
+          <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Accountant Action Items</h2>
+          <div className="grid grid-cols-1 gap-4">
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm border-l-4 border-l-red-500">
+                 <p className="text-[10px] font-black text-red-500 uppercase mb-2 tracking-tighter">Review Queue</p>
+                 <p className="text-xl font-black text-gray-900">{num(stats?.pendingReview)}</p>
+              </div>
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm border-l-4 border-l-orange-500">
+                 <p className="text-[10px] font-black text-orange-500 uppercase mb-2 tracking-tighter">Pending Reconciliations</p>
+                 <p className="text-xl font-black text-gray-900">{num(stats?.pendingPreviousDays)}</p>
+              </div>
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm border-l-4 border-l-blue-500">
+                 <p className="text-[10px] font-black text-blue-500 uppercase mb-2 tracking-tighter">Advance Verification Queue</p>
+                 <p className="text-xl font-black text-gray-900">{num(stats?.unverifiedAdvancesCount)}</p>
+              </div>
+              <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm border-l-4 border-l-yellow-500">
+                 <p className="text-[10px] font-black text-yellow-600 uppercase mb-2 tracking-tighter">Operational Alerts</p>
+                 <p className="text-xl font-black text-gray-900">{!ingestionStatus?.watcher_running || !emailStatus?.is_running ? '1' : '0'}</p>
+              </div>
+          </div>
+        </div>
+        )}
+
         <div className={stats?.is_owner ? "lg:col-span-2" : "lg:col-span-3"}>
           <div className="flex justify-between items-center mb-6 border-b border-gray-200 pb-2">
              <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Recent Pipeline Activity</h2>
@@ -426,10 +454,19 @@ const DashboardPage: React.FC = () => {
              </Link>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            {sortedDates.length > 0 ? sortedDates.map(date => (
+            {sortedDates.length > 0 ? sortedDates.map(date => {
+              const dateItems = groupedFeed[date];
+              const isExpanded = expandedDates[date];
+              const displayItems = isExpanded ? dateItems : dateItems.slice(0, 5);
+
+              return (
               <div key={date}>
-                <div className="bg-black text-white px-4 py-2 text-[10px] font-black uppercase tracking-tighter">
-                   {date}
+                <div 
+                   className="bg-black text-white px-4 py-2 text-[10px] font-black uppercase tracking-tighter flex justify-between cursor-pointer hover:bg-gray-900 transition-colors"
+                   onClick={() => toggleDate(date)}
+                >
+                   <span>{date} ({dateItems.length} invoices)</span>
+                   <span>{isExpanded ? 'Collapse ▲' : (dateItems.length > 5 ? `Expand ▼ (+${dateItems.length - 5} more)` : '')}</span>
                 </div>
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -443,8 +480,10 @@ const DashboardPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {groupedFeed[date].map((inv) => (
-                      <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                    {displayItems.map((inv) => {
+                      const isRisk = ['Red', 'Purple', 'Blue'].includes(inv.status);
+                      return (
+                      <tr key={inv.id} className={`border-b border-gray-50 transition-colors ${isRisk ? 'bg-red-50/50 hover:bg-red-50' : 'hover:bg-gray-50'}`}>
                         <td className="p-4">
                           {inv.pdf_path ? (
                             <button 
@@ -487,11 +526,11 @@ const DashboardPage: React.FC = () => {
                           </span>
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
-            )) : (
+            )}) : (
               <div className="p-12 text-center text-gray-400 italic">
                 {error === 'Session Expired. Please Login.' ? (
                     <span className="text-red-500 font-bold">Authentication Required to View Feed</span>

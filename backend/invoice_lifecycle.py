@@ -20,35 +20,40 @@ DUPLICATE_ROOT = r"C:\Aradhana\DUPLICATE"
 for path in [WATCH_PATH, ARCHIVE_ROOT, DUPLICATE_ROOT]:
     os.makedirs(path, exist_ok=True)
 
+def robust_copy(src, dest, retries=5, delay=2):
+    """Attempt to copy a file, retrying if it is locked. Never deletes the source."""
+    for i in range(retries):
+        try:
+            shutil.copy2(src, dest)
+            return True
+        except PermissionError as e:
+            logger.warning(f"File locked, retrying copy {src} -> {dest} (Attempt {i+1}/{retries})")
+            time.sleep(delay)
+        except Exception as e:
+            logger.error(f"Error copying {src} to {dest}: {e}")
+            break
+    return False
+
 def handle_duplicate(file_path, db: Session, reason="Duplicate detected"):
-    """Move a duplicate file to the DUPLICATE folder."""
+    """Log duplicate detection. Do NOT move or delete source invoices."""
     filename = os.path.basename(file_path)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest_name = f"{timestamp}_{filename}"
-    dest_path = os.path.join(DUPLICATE_ROOT, dest_name)
+    logger.info(f"Ignored duplicate {filename} (Reason: {reason}) - Source kept intact per mandate.")
     
-    try:
-        shutil.move(file_path, dest_path)
-        logger.info(f"Moved duplicate {filename} to {dest_path}")
-        
-        # Log to audit logs
-        log = AuditLog(
-            entity_type="FILE",
-            entity_id=0,
-            action="DUPLICATE_MOVE",
-            old_status="ACTIVE",
-            new_status="DUPLICATE",
-            actor="SYSTEM_LIFECYCLE",
-            metadata_json=json.dumps({
-                "original_path": file_path,
-                "dest_path": dest_path,
-                "reason": reason
-            })
-        )
-        db.add(log)
-        db.commit()
-    except Exception as e:
-        logger.error(f"Failed to move duplicate {file_path}: {e}")
+    # Log to audit logs
+    log = AuditLog(
+        entity_type="FILE",
+        entity_id=0,
+        action="DUPLICATE_DETECTED",
+        old_status="ACTIVE",
+        new_status="IGNORED",
+        actor="SYSTEM_LIFECYCLE",
+        metadata_json=json.dumps({
+            "original_path": file_path,
+            "reason": reason
+        })
+    )
+    db.add(log)
+    db.commit()
 
 def get_store_opening_time():
     """Get today's store opening time based on the rules."""
@@ -95,8 +100,7 @@ def run_archive_job():
             filename = os.path.basename(bill.pdf_path)
             dest_path = os.path.join(archive_dir, filename)
             
-            try:
-                shutil.move(bill.pdf_path, dest_path)
+            if robust_copy(bill.pdf_path, dest_path):
                 bill.pdf_path = dest_path
                 archived_count += 1
                 
@@ -112,8 +116,8 @@ def run_archive_job():
                     })
                 )
                 db.add(log)
-            except Exception as e:
-                logger.error(f"Failed to archive bill {bill.bill_number}: {e}")
+            else:
+                logger.error(f"Failed to archive bill {bill.bill_number} after retries")
                 
         db.commit()
         logger.info(f"Archive job complete. Moved {archived_count} files.")

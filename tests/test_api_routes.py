@@ -33,7 +33,7 @@ def test_permissions_endpoint_owner():
     assert "view_escalations" in data["permissions"]
     assert "resolve_escalations" in data["permissions"]
     assert "view_reports" in data["permissions"]
-    assert "view_reviews" not in data["permissions"]
+    assert "view_reviews" in data["permissions"]
 
 
 def test_permissions_endpoint_admin():

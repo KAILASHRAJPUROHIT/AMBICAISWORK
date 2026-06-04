@@ -38,6 +38,19 @@ def extract_bank(subject: str, body: str) -> Optional[str]:
 def parse_bank_email(subject: str, body: str) -> ParsedBankEmail:
     combined_text = subject + " \n " + body
     
+    # Critical Rule: Ignore failure messages
+    failure_keywords = ["failed", "failure", "unsuccessful", "declined", "reversed", "reversal", "cancelled", "canceled", "timeout", "expired", "refund", "chargeback"]
+    combined_lower = combined_text.lower()
+    if any(keyword in combined_lower for keyword in failure_keywords):
+        return ParsedBankEmail(
+            amount=None,
+            utr_reference=None,
+            transaction_date=None,
+            sender_bank=None,
+            raw_subject=subject,
+            raw_body=body
+        )
+    
     return ParsedBankEmail(
         amount=extract_amount(combined_text),
         utr_reference=extract_utr(combined_text),

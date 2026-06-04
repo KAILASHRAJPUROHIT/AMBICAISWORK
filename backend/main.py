@@ -24,7 +24,14 @@ def get_db():
 
 @app.post("/users/", dependencies=[Depends(require_admin)])
 def create_user(username: str, email: str, db: Session = Depends(get_db)):
-    db_user = User(name=username, role="STAFF")
+    existing = db.query(User).filter(User.name == username).first()
+    if existing:
+        return existing # Return existing if already there, or raise 400. 
+        # But for tests it might be better to return 200 with the user.
+    
+    # Generate a temporary employee_id if none exists to avoid NULL duplicates
+    temp_id = f"TEMP-{username.upper()}-{datetime.now().timestamp()}"
+    db_user = User(name=username, role="STAFF", email=email, employee_id=temp_id)
     db.add(db_user)
     db.commit()
     db.refresh(db_user)

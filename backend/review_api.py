@@ -61,6 +61,14 @@ from backend.invoice_lifecycle import start_lifecycle_automation
 # Initialize FastAPI app
 app = FastAPI(title="Aradhana Review API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Dependency
 def get_db():
     db = SessionLocal()
@@ -558,7 +566,63 @@ async def get_live_payment_events(db: Session = Depends(get_db)):
 def status_colors():
     return {"Yellow": "#FFFF99", "Orange": "#FFA500", "Red": "#FF0000", "Green": "#008000", "Blue": "#ADD8E6", "Purple": "#800080"}
 
-app.include_router(api_router)
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+@app.get("/api/prime/manual-report-import/latest")
+async def get_latest_prime_import():
+    path = r"C:\Aradhana\PrimeExports\JSON\prime_report_import.json"
+    if not os.path.exists(path):
+        return {"timestamp": datetime.now().isoformat(), "count": 0, "records": []}
+    
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+            return data
+    except Exception as e:
+        logger.error(f"Error reading prime import: {e}")
+        return {"error": str(e)}
+
+app.include_router(api_router, prefix="/api")
+
+@app.get("/api/system/health")
+async def system_health(db: Session = Depends(get_db)):
+    # Check DB
+    from sqlalchemy import text
+    try:
+        db.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception as e:
+        logger.error(f"Health Check DB Error: {e}")
+        db_ok = False
+        
+    return {
+        "status": "online" if db_ok else "degraded",
+        "database": "connected" if db_ok else "disconnected",
+        "services": {
+            "email_poller": email_status,
+            "sms_poller": sms_status,
+            "pdf_ingestion": ingestion_status
+        },
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/api/reconciliations")
+async def list_reconciliations(db: Session = Depends(get_db)):
+    # This should return a list of bills that need reconciliation or their status
+    # For compatibility with frontend ReconciliationQueuePage
+    bills = db.query(Bill).filter(Bill.is_test_data == False).order_by(Bill.ingested_at.desc()).limit(100).all()
+    return [{
+        "invoice_no": b.bill_number,
+        "status": b.status.upper(),
+        "details": {
+            "customer": b.customer_name,
+            "total": float(b.amount or 0),
+            "payments": float(b.cash_received or 0) + float(b.bank_received or 0) + float(b.card_received or 0) + float(b.sms_confirmed_amount or 0) + float(b.email_confirmed_amount or 0),
+            "mode": b.payment_mode or "BANK"
+        }
+    } for b in bills]
 
 # RBAC Dependencies
 async def require_role(roles: List[str], request: Request, db: Session = Depends(get_db)):
@@ -575,8 +639,8 @@ async def require_role(roles: List[str], request: Request, db: Session = Depends
         raise HTTPException(status_code=403, detail="Access denied: Insufficient permissions")
     return user
 
-async def require_owner(user: User = Depends(lambda r, d: require_role(["OWNER", "ADMIN"], r, d))):
-    return user
+async def require_owner(request: Request, db: Session = Depends(get_db)):
+    return await require_role(["OWNER", "ADMIN"], request, db)
 
 # MASTER CONSOLE: User Administration
 @app.get("/api/admin/users")
@@ -925,18 +989,6 @@ async def security_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
-frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
-if os.path.exists(frontend_dist):
-    assets_path = os.path.join(frontend_dist, "assets")
-    if os.path.exists(assets_path):
-        app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
-        if full_path.startswith("api/") or full_path.startswith("debug/"): return JSONResponse(status_code=404, content={"detail": "Not Found"})
-        index_path = os.path.join(frontend_dist, "index.html")
-        if os.path.exists(index_path): return FileResponse(index_path)
-        return JSONResponse(status_code=404, content={"detail": "Not Found"})
-
 # MASTER CONSOLE: Financial Health Dashboard
 @app.get("/api/admin/financial/health")
 async def get_financial_health(db: Session = Depends(get_db), owner: User = Depends(require_owner)):
@@ -956,6 +1008,18 @@ async def get_financial_health(db: Session = Depends(get_db), owner: User = Depe
         "bank_variance_amount": total_invoiced_bank - total_confirmed_bank,
         "reconciliation_accuracy": round((total_confirmed_bank / total_invoiced_bank * 100), 2) if total_invoiced_bank > 0 else 100.0
     }
+
+frontend_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
+if os.path.exists(frontend_dist):
+    assets_path = os.path.join(frontend_dist, "assets")
+    if os.path.exists(assets_path):
+        app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        if full_path.startswith("api/") or full_path.startswith("debug/"): return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        index_path = os.path.join(frontend_dist, "index.html")
+        if os.path.exists(index_path): return FileResponse(index_path)
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
 
 @app.on_event("startup")
 async def startup_event():

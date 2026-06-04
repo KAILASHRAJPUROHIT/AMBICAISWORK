@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReconciliationTable from '../components/ReconciliationTable';
 import InvoiceDetailDrawer from '../components/InvoiceDetailDrawer';
 import type { ReconciliationItem } from '../types';
+import { getHeaders } from '../api/client';
 
 const ReconciliationQueuePage: React.FC = () => {
   const [items, setItems] = useState<ReconciliationItem[]>([]);
@@ -10,7 +11,7 @@ const ReconciliationQueuePage: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<ReconciliationItem | null>(null);
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/reconciliations')
+    fetch(`${window.location.origin}/api/reconciliations`, { headers: getHeaders() })
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch live reconciliation data.');
         return res.json();

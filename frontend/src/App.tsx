@@ -7,6 +7,7 @@ import ReportsPage from './pages/ReportsPage';
 import PrimeExtractionReviewPage from './pages/PrimeExtractionReviewPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import MasterConsolePage from './pages/MasterConsolePage';
+import SystemHealthPage from './pages/SystemHealthPage';
 import LoginPage from './pages/LoginPage';
 import { getMe, logout } from './api/client';
 import './index.css';
@@ -170,9 +171,7 @@ function App() {
                         <ProtectedRoute roles={['admin', 'owner', 'accountant', 'developer']}><AuditLogsPage /></ProtectedRoute>
                     } />
                     <Route path="/system-health" element={
-                        <ProtectedRoute roles={['admin', 'owner', 'developer']}>
-                            <div className="p-8"><h1 className="text-2xl font-black uppercase">System Health</h1><p>Diagnostic page for developers.</p></div>
-                        </ProtectedRoute>
+                        <ProtectedRoute roles={['admin', 'owner', 'developer']}><SystemHealthPage /></ProtectedRoute>
                     } />
                   </Routes>
                 </main>

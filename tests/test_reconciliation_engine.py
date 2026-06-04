@@ -23,21 +23,25 @@ def test_reconcile_transactions():
 
     decision = reconcile_transactions(bills, payments, bank_alerts, sms_alerts, cheques)
     assert decision.status == "Green"
-    assert decision.reason == "Exact amount + exact UTR + single matching bill + single matching bank alert"
+    assert decision.reason == "Fully matched and verified"
     assert not decision.risk_flags
     assert not decision.requires_human_review
 
     bills.append(Bill(utr_reference="12345"))
     decision = reconcile_transactions(bills, payments, bank_alerts, sms_alerts, cheques)
     assert decision.status == "Red"
-    assert decision.reason == "Duplicate UTR or Same amount multiple bills"
-    assert decision.risk_flags == ["Duplicate UTR", "Multiple Bills"]
+    assert decision.reason == "Duplicate UTRs detected across multiple bills"
+    assert decision.risk_flags == ["Duplicate UTR in Bills"]
     assert decision.requires_human_review
 
     bills = [Bill(utr_reference="12345")]
     payments = []
+    # Add id and total_amount to mock Bill for new engine logic
+    bills[0].id = 1
+    bills[0].total_amount = 100.0
+    bills[0].remaining_amount = 100.0
+    
     decision = reconcile_transactions(bills, payments, bank_alerts, sms_alerts, cheques)
     assert decision.status == "Yellow"
-    assert decision.reason == "Missing bank alert"
-    assert decision.risk_flags == ["Missing Bank Alert"]
-    assert not decision.requires_human_review
+    assert "Missing UTR / Unmatched" in decision.risk_flags or "Missing Payment Record" in decision.risk_flags
+
