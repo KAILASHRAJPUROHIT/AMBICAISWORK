@@ -336,21 +336,28 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
 
 @app.post("/api/auth/verify")
 async def verify(request: VerifyRequest, db: Session = Depends(get_db)):
+    logger.info(f"OTP_VERIFY_REQUEST: employee_id={request.employee_id}")
     user = db.query(User).filter(func.lower(User.employee_id) == request.employee_id.lower()).first()
     if verify_otp(db, user.employee_id, request.otp_code):
         token = create_user_session(db, user.employee_id)
+        logger.info(f"OTP_VERIFY_SUCCESS: generated session_token={token[:8]}...")
         return {"status": "success", "session_token": token, "user": {"name": user.name, "role": user.role, "employee_id": user.employee_id}}
+    logger.warning(f"OTP_VERIFY_FAILED: invalid code for {request.employee_id}")
     raise HTTPException(status_code=401, detail="Invalid or expired OTP")
 
 @app.get("/api/auth/validate-session")
 async def get_validate_session(request: Request, db: Session = Depends(get_db)):
     token = request.headers.get("X-Session-Token")
+    logger.info(f"VALIDATE_SESSION_REQUEST: token_received={token[:8] if token else 'NONE'}...")
     employee_id = validate_session(db, token)
     if not employee_id:
+        logger.warning("VALIDATE_SESSION_FAILED: session invalid or expired")
         raise HTTPException(status_code=401, detail="Session expired")
     user = db.query(User).filter(User.employee_id == employee_id).first()
     if not user:
+        logger.warning(f"VALIDATE_SESSION_FAILED: user {employee_id} not found")
         raise HTTPException(status_code=401, detail="User not found")
+    logger.info(f"VALIDATE_SESSION_SUCCESS: user={user.employee_id}")
     return {"valid": True, "user": {"name": user.name, "role": user.role, "employee_id": user.employee_id}}
 
 @app.get("/api/auth/me")

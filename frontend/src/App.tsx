@@ -19,11 +19,15 @@ const ProtectedRoute = ({ children, roles, user }: { children: React.ReactElemen
     const token = localStorage.getItem('aradhana_session_token');
     const location = useLocation();
 
+    console.log(`[DEBUG] ProtectedRoute: path=${location.pathname}, hasToken=${!!token}, hasUser=${!!user}, role=${user?.role}`);
+
     if (!token || !user) {
+        console.warn(`[DEBUG] ProtectedRoute: Unauthorized access attempt to ${location.pathname}. Redirecting to /login.`);
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
     if (roles && user.role && !roles.includes(user.role.toLowerCase())) {
+        console.warn(`[DEBUG] ProtectedRoute: Insufficient permissions for ${user.role} on ${location.pathname}. Redirecting to /dashboard.`);
         return <Navigate to="/dashboard" replace />;
     }
 
@@ -33,37 +37,52 @@ const ProtectedRoute = ({ children, roles, user }: { children: React.ReactElemen
 function App() {
   const [user, setUser] = useState<any>(() => {
     const saved = localStorage.getItem('user');
+    console.log(`[DEBUG] App: Initializing user state from localStorage. hasSavedUser=${!!saved}`);
     return saved ? JSON.parse(saved) : null;
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // PRE-FLIGHT CLEANUP: Remove old keys from previous versions
+    ['token', 'sessionToken', 'auth_token', 'session_token'].forEach(k => localStorage.removeItem(k));
+
     const checkAuth = async () => {
         const token = localStorage.getItem('aradhana_session_token');
+        console.log(`[DEBUG] App.checkAuth: tokenFound=${!!token}`);
+
         if (token) {
             try {
-                // Hard validation check
+                console.log(`[DEBUG] App.checkAuth: Validating session with backend...`);
                 const response = await fetch(`${window.location.origin}/api/auth/validate-session`, {
                    headers: {
                       'X-Session-Token': token
                    }
                 });
-                if (!response.ok) throw new Error("Invalid session");
+                
+                console.log(`[DEBUG] App.checkAuth: validate-session responseStatus=${response.status}`);
+
+                if (!response.ok) {
+                    throw new Error(`Session validation failed with status ${response.status}`);
+                }
+                
                 const validationData = await response.json();
+                console.log(`[DEBUG] App.checkAuth: validationDataReceived=`, validationData);
                 
                 if (validationData.valid && validationData.user) {
+                    console.log(`[DEBUG] App.checkAuth: Session is VALID. User: ${validationData.user.employee_id}`);
                     setUser(validationData.user);
                     localStorage.setItem('user', JSON.stringify(validationData.user));
                 } else {
-                    throw new Error("Invalid session data");
+                    throw new Error("Invalid session data structure");
                 }
             } catch (err) {
-                console.error("Auth check failed", err);
+                console.error("[DEBUG] App.checkAuth: ERROR during validation:", err);
                 localStorage.removeItem('aradhana_session_token');
                 localStorage.removeItem('user');
                 setUser(null);
             }
         } else {
+            console.log(`[DEBUG] App.checkAuth: No token found. User is unauthenticated.`);
             setUser(null);
         }
         setLoading(false);

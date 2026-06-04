@@ -1,28 +1,34 @@
-Aradhana Auditor Security & Reports Build Report
+Aradhana Auditor Login Fix Build Report
 
 Date: 2026-06-04
-Commit Hash Before: 9dd1cff9327572703859666f44f9c6f2f2545d1f
-Commit Hash After: a843a3035965c32304d439d9a0829f0cd7f7f362
+Commit Hash Before: 134c9a8a729e161a0076a26d705c75463777f98d
+Commit Hash After: c9afded4f19a338e17e41d72ce3890c04fa2ad8a
 
-Files Changed:
-- frontend/src/App.tsx (Fixed session token storage key to 'aradhana_session_token', updated /api/auth/validate-session integration)
-- backend/review_api.py (Standardized OTP verify response to return 'session_token', fixed dashboard metrics and added missing status endpoints)
-- frontend/src/api/client.ts (Updated global headers to use 'aradhana_session_token')
-- frontend/src/pages/LoginPage.tsx (Updated local storage mapping to 'aradhana_session_token')
+Root Cause of Login Loop:
+1. Field name mismatch between backend response ('token') and frontend storage expectation ('session_token').
+2. Concurrent usage of multiple storage keys ('token', 'session_token', 'aradhana_session_token') causing race conditions during AuthProvider initialization.
+3. Lack of explicit debug tracing during the P0 regression state.
 
-Security Fixes:
-- **Session Validation Loop Resolved:** Fixed a P0 regression where successful logins were discarded due to a field name mismatch ('token' vs 'session_token'). Canonicalized the contract to use 'session_token' across all layers.
-- **Mandatory Auth Gate:** Application now rigorously enforces authentication on every route except /login. Hard refreshing without a valid token triggers immediate flush and redirect.
+Standardized Token Contract:
+- Backend OTP Verify Success: returns {"success": true, "session_token": "...", "user": {...}}
+- Frontend Storage Key: "aradhana_session_token"
+- Frontend User Key: "user"
+- Authenticated API Header: "X-Session-Token"
+- Backend Validation: GET /api/auth/validate-session (verifies X-Session-Token)
 
-UI Enhancements:
-- **Dashboard Metrics:** Successfully restored all live collection and status counters. All dashboard cards now reflect real-time database state instead of falling back to 0.
+Files Fixed:
+- backend/review_api.py (Standardized verify response and validate-session logic, added debug logging)
+- backend/auth_service.py (Added debug logging to validate_session)
+- frontend/src/App.tsx (Implemented pre-flight cleanup of old keys, added rigorous validation logging, ensured loading guard prevents premature redirects)
+- frontend/src/pages/LoginPage.tsx (Updated to canonical aradhana_session_token storage, added success/error logging)
+- tests/test_auth_gate.py (Added flow test for session validation)
 
 Tests Run:
-- tests/test_auth_gate.py: 3 PASS
+- tests/test_auth_gate.py: 4 PASS (Covering public access, 401 rejection, and valid session validation)
 - tests/test_operational_modules.py: 5 PASS
 
 Frontend Build Result:
 PASS - No TypeScript or build errors.
 
 Financial Safety Confirmation:
-CONFIRMED - OTP & RBAC enforced strictly. No financial records deleted. Dashboard relies strictly on aggregate sums derived from live database transactions.
+CONFIRMED - No financial data records altered. OTP and RBAC enforced strictly. Session expiry correctly handled on both layers.

@@ -138,11 +138,26 @@ const LoginPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
+            console.log(`[DEBUG] LoginPage.handleVerify: Submitting OTP for ${employeeId}...`);
             const data = await verifyOTP(employeeId, otp.trim());
-            localStorage.setItem('aradhana_session_token', data.session_token);
-            localStorage.setItem('user', JSON.stringify(data.user));
-            window.location.href = '/';
+            console.log(`[DEBUG] LoginPage.handleVerify: OTP Verified SUCCESS. Received data:`, data);
+
+            if (data.session_token) {
+                // CLEANUP: Remove any potentially conflicting old keys
+                ['token', 'sessionToken', 'auth_token', 'session_token'].forEach(k => localStorage.removeItem(k));
+
+                console.log(`[DEBUG] LoginPage.handleVerify: Storing aradhana_session_token and user object.`);
+                localStorage.setItem('aradhana_session_token', data.session_token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                
+                console.log(`[DEBUG] LoginPage.handleVerify: Redirecting to dashboard root...`);
+                // Use a standard navigation path
+                window.location.href = '/dashboard';
+            } else {
+                throw new Error("Login success but no session token received from backend.");
+            }
         } catch (err: any) {
+            console.error(`[DEBUG] LoginPage.handleVerify: ERROR:`, err);
             setError(err.message);
         } finally {
             setLoading(false);
