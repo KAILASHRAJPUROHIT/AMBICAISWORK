@@ -1,42 +1,41 @@
-Aradhana Auditor Final Build Report
+Aradhana Auditor Operational Module & Diagnostics Build Report
 
-Timestamp: 2026-06-02 20:45:00 UTC
-Commit Hash: dd24961
+Date: 2026-06-04
+Commit Hash Before: cb0904e
+Commit Hash After: ef88d5196a87a31db469da88ee4cb567883a7ff4
 
 Files Changed:
-- frontend/src/pages/DashboardPage.tsx (PDF auth fix)
-- aradhana_dev.db.final.bak (Created DB Backup)
+- backend/review_api.py (Health endpoint enhancements, Reconciliation detail expansion, PUBLIC_ENDPOINTS update)
+- frontend/src/pages/ReconciliationQueuePage.tsx (Added comprehensive filters)
+- frontend/src/pages/SystemHealthPage.tsx (Implemented relative 'Last Polled' timestamps and service metrics)
+- frontend/src/pages/EscalationsPage.tsx (Wired to correct API, fixed empty state)
+- frontend/src/pages/ReportsPage.tsx (Added explicit empty state)
+- frontend/src/pages/PrimeExtractionReviewPage.tsx (Updated empty state message)
+- frontend/src/types.ts (Added ReconciliationItem fields for filtering)
+- tests/test_operational_modules.py (New backend validation tests)
 
-Features Completed:
-- Authentication hardening (OTP, Reset, Login input fixes, Captcha)
-- Master Console built and restricted to Owner
-- Developer Role Provisioning (DEV-01) with private OTP routing
-- Dashboard UX Optimization (1080p fit, limited feed, operator labels)
-- Strict Financial Visibility Control (Turnover data hidden from non-owners)
-- Secure PDF opening with Session Token verification
-- Extensive backend diagnostic/debug endpoints enabled safely
+Routes Fixed & Enhanced:
+- /api/system/health (Added last_polled_at, event_count, error fields)
+- /api/reconciliations (Expanded with payments breakdown and mode)
+- /api/escalations/open (Restored and wired to UI)
+- /api/reports/owner (Verified and empty state added)
+- /api/prime/manual-report-import/latest (Verified and empty state added)
 
-Bugs Fixed:
-- Live Pipeline Feed Sync Error (500 internal server error fixed)
-- Missing Sidebar Menus (Synchronous role resolution fixed)
-- OTP Verification Logic (Latest unused OTP constraint enforced)
-- OTP Resend Flooding (60s cooldown enforced)
-- PDF Open Unauthorized (Added X-Session-Token to fetch request and converted to blob URL)
+UI Enhancements:
+- Reconciliation Queue Filter Bar: Search, Status, Mode, Confidence, Difference, Date Range.
+- System Health Cards: Real-time 'Last Polled' relative timestamps (e.g., '2 min ago').
+- Explicit Empty States: Consistent messaging across all reporting modules.
 
-Open Issues:
-- Legacy test records in the database might need cleanup via Master Console.
+Tests Run:
+- tests/test_operational_modules.py: 5 PASS
+- tests/test_missing_modules.py: 4 PASS
+- tests/test_api_hardening.py: 10 PASS
 
-Database Verification:
-PASS - Integrity checks confirmed.
-Users: 8, Bills: 38, Payments: 40, Audit Logs: 56. No data loss.
+Frontend Build Result:
+PASS - No TypeScript or build errors.
 
-Build Verification:
-PASS - EXE built successfully. Final size: 47.69 MB. Post-build self-tests passed.
+Financial Safety Confirmation:
+CONFIRMED - No financial records deleted. Reconciliation logic unchanged. RBAC and OTP enforced. Audit logs active for all control actions.
 
-Security Verification:
-PASS - Role Based Access Control, Financial Data Visibility, and Authentication endpoints securely hardened.
-
-Recommended Next Tasks (Thursday):
-- Final review of all UI edge cases in production.
-- Training for Accountant on the new Reconciliation pipeline.
-- Database test data purge.
+Known Remaining Issues:
+- Real-time notification system (beep/popup) subject to environment security constraints.

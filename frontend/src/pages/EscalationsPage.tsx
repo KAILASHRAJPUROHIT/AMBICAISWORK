@@ -7,15 +7,13 @@ const EscalationsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${window.location.origin}/api/prime/manual-report-import/latest`, { headers: getHeaders() })
+    fetch(`${window.location.origin}/api/escalations/open`, { headers: getHeaders() })
       .then(res => {
         if (!res.ok) throw new Error('API Unavailable: Could not fetch escalation records.');
         return res.json();
       })
       .then(data => {
-        const records = data.records || [];
-        const filtered = records.filter((r: any) => r.validation_status === 'NEEDS_REVIEW');
-        setEscalations(filtered);
+        setEscalations(data);
       })
       .catch(err => {
         console.error("Escalations fetch error:", err);
@@ -44,7 +42,7 @@ const EscalationsPage: React.FC = () => {
         {escalations.length === 0 ? (
           <div className="bg-white p-16 text-center rounded-3xl border border-gray-100 shadow-sm">
             <p className="text-green-600 text-2xl font-black mb-2">Clean Slate</p>
-            <p className="text-gray-400 font-medium">All imported records are currently validated. No escalations found.</p>
+            <p className="text-gray-400 font-medium italic">No escalation records found.</p>
           </div>
         ) : (
           escalations.map((item, idx) => (
@@ -52,25 +50,28 @@ const EscalationsPage: React.FC = () => {
               <div>
                 <div className="flex items-center gap-4 mb-2">
                   <h3 className="text-2xl font-black text-gray-900 font-mono tracking-tighter">
-                     {item.invoice_no || 'MANUAL_MATCH_REQUIRED'}
+                     {item.review_id || 'MANUAL_MATCH_REQUIRED'}
                   </h3>
                   <span className="bg-red-50 text-red-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-red-100">
-                    {item.unresolved_fields?.[0] || 'CRITICAL_ERROR'}
+                    {item.severity?.toUpperCase() || 'CRITICAL_ERROR'}
                   </span>
                 </div>
-                <p className="text-gray-500 font-bold uppercase text-[11px] tracking-widest mb-4">{item.customer_name}</p>
+                <p className="text-gray-500 font-bold uppercase text-[11px] tracking-widest mb-4">ID: {item.escalation_id}</p>
                 
                 <div className="bg-gray-50 px-4 py-3 rounded-xl border border-gray-100 max-w-xl">
                    <p className="text-xs text-gray-600 leading-relaxed">
-                     <strong>Alert:</strong> Total Sale <b>₹{item.sale_amount?.toLocaleString()}</b> does not match the sum of extracted payment rows. 
-                     Audit trail indicates missing or conflicting settlement data in Prime.
+                     <strong>Alert:</strong> {item.escalation_reason} 
+                     Audit trail indicates conflicting settlement data in Prime.
                    </p>
                 </div>
               </div>
               
               <div className="text-right">
-                 <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Mismatch Amount</p>
-                 <p className="text-3xl font-black text-red-600">₹{(item.sale_amount || 0).toLocaleString()}</p>
+                 <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Status</p>
+                 <p className={`text-xl font-black ${item.owner_notified ? 'text-blue-600' : 'text-red-600'}`}>
+                    {item.owner_notified ? 'OWNER NOTIFIED' : 'PENDING NOTIFICATION'}
+                 </p>
+                 <p className="text-[10px] text-gray-400 mt-2 font-mono uppercase">{new Date(item.created_at).toLocaleString()}</p>
               </div>
             </div>
           ))

@@ -81,8 +81,8 @@ const PrimeExtractionReviewPage: React.FC = () => {
   );
 
   if (!data || !data.records || data.records.length === 0) return (
-    <div className="p-20 text-center bg-white rounded-3xl shadow-sm border border-gray-100 text-gray-400 font-bold text-xl">
-      No invoices found in latest manual report.
+    <div className="p-20 text-center bg-white rounded-3xl shadow-sm border border-gray-100 text-gray-400 font-bold text-xl uppercase tracking-tighter">
+      No extraction records pending review.
     </div>
   );
 

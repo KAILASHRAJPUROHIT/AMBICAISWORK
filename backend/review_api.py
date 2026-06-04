@@ -89,7 +89,8 @@ async def security_middleware(request: Request, call_next):
         "/health",
         "/api/prime/manual-report-import/latest",
         "/api/escalations/open",
-        "/api/system/health"
+        "/api/system/health",
+        "/api/reconciliations"
     ]
 
     if request.url.path == "/" or request.url.path.startswith("/assets/"):
@@ -149,7 +150,6 @@ async def get_version():
         "environment": "PRODUCTION",
         "server_time": datetime.now().isoformat()
     }
-
 @app.get("/api/system/health")
 async def system_health(db: Session = Depends(get_db)):
     from sqlalchemy import text
@@ -159,17 +159,33 @@ async def system_health(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Health Check DB Error: {e}")
         db_ok = False
-        
+
     return {
         "status": "online" if db_ok else "degraded",
         "database": "connected" if db_ok else "disconnected",
         "services": {
-            "email_poller": email_status,
-            "sms_poller": sms_status,
-            "pdf_ingestion": ingestion_status
+            "invoice_watcher": {
+                "status": "RUNNING" if ingestion_status.get("watcher_running") else "STOPPED",
+                "last_polled_at": ingestion_status.get("last_processed_time"),
+                "event_count": ingestion_status.get("files_processed", 0),
+                "error": ingestion_status.get("last_error")
+            },
+            "bank_email_poller": {
+                "status": "RUNNING" if email_status.get("is_running") else "STOPPED",
+                "last_polled_at": email_status.get("last_sync"),
+                "event_count": email_status.get("events_found", 0),
+                "error": email_status.get("last_error")
+            },
+            "android_sms_relay": {
+                "status": "ACTIVE" if sms_status.get("is_running") else "INACTIVE",
+                "last_polled_at": sms_status.get("last_sync"),
+                "event_count": sms_status.get("events_found", 0),
+                "error": sms_status.get("last_error")
+            }
         },
         "timestamp": datetime.now().isoformat()
     }
+
 
 # REPORTS & ESCALATIONS
 @app.get("/api/reports/owner")
@@ -422,8 +438,15 @@ async def get_live_feed(db: Session = Depends(get_db)):
 async def list_reconciliations(db: Session = Depends(get_db)):
     bills = db.query(Bill).filter(Bill.is_test_data == False).order_by(Bill.ingested_at.desc()).limit(100).all()
     return [{
-        "invoice_no": b.bill_number, "status": b.status.upper(),
-        "details": {"customer": b.customer_name, "total": float(b.amount or 0)}
+        "invoice_no": b.bill_number,
+        "status": b.status.upper(),
+        "invoice_date": b.invoice_date.strftime("%Y-%m-%d") if b.invoice_date else None,
+        "details": {
+            "customer": b.customer_name,
+            "total": float(b.amount or 0),
+            "payments": float(b.cash_received or 0) + float(b.bank_received or 0) + float(b.card_received or 0) + float(b.sms_confirmed_amount or 0) + float(b.email_confirmed_amount or 0),
+            "mode": b.payment_mode or "BANK"
+        }
     } for b in bills]
 
 # UTILS

@@ -106,6 +106,10 @@ const ReportsPage = () => {
         <div className="p-20 text-center text-blue-600 font-black text-2xl animate-pulse uppercase">
           Generating Reports...
         </div>
+      ) : reports.length === 0 && bifurcation.length === 0 ? (
+        <div className="p-20 text-center bg-white rounded-3xl shadow-sm border border-gray-100 text-gray-400 font-bold text-xl">
+          No reports available yet.
+        </div>
       ) : (
         <div className="space-y-12">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

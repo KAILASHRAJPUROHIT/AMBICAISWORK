@@ -8,6 +8,8 @@ export interface ReconciliationItem {
   paymentMode: string;
   matchConfidence: 'High' | 'Medium' | 'Low';
   status: 'Verified' | 'Pending' | 'Delivered Before Payment' | 'Risk / Mismatch' | 'Cheque Pending' | 'Archived' | 'Advance Pending' | 'Ambiguous Match' | 'Realizing Cheque';
+  rawStatus: string;
+  invoiceDate: string | null;
 }
 
 export interface AuditLogItem {
