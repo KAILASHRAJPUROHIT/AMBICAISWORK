@@ -82,6 +82,7 @@ async def security_middleware(request: Request, call_next):
     PUBLIC_ENDPOINTS = [
         "/api/auth/login",
         "/api/auth/verify",
+        "/api/auth/validate-session",
         "/api/version",
         "/api/debug/",
         "/debug/",
@@ -342,15 +343,14 @@ async def verify(request: VerifyRequest, db: Session = Depends(get_db)):
         token = create_user_session(db, user.employee_id)
         res_data = {
             "success": True,
-            "debug_id": "STABLE_V4_AUTH",
             "session_token": token,
-            "token": token,
-            "aradhana_session_token": token,
-            "user": {"name": user.name, "role": user.role, "employee_id": user.employee_id}
+            "user": {
+                "employee_id": user.employee_id,
+                "name": user.name,
+                "role": user.role
+            }
         }
-        logging.info(f"[OTP_VERIFY_PAYLOAD] keys={list(res_data.keys())} token_present={bool(token)}")
-        print("[OTP VERIFY RESPONSE]", {"success": True, "session_token_present": bool(token)})
-        logger.info(f"OTP_VERIFY_SUCCESS: generated session_token={token[:8]}...")
+        logger.info(f"OTP_VERIFY_SUCCESS: employee_id={user.employee_id}")
         return res_data
     logger.warning(f"OTP_VERIFY_FAILED: invalid code for {request.employee_id}")
     raise HTTPException(status_code=401, detail="Invalid or expired OTP")

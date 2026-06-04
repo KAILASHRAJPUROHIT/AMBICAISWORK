@@ -150,18 +150,26 @@ def create_user_session(db: Session, employee_id: str) -> str:
     return session_token
 
 def validate_session(db: Session, token: str) -> Optional[str]:
-    logging.info(f"VALIDATE_SESSION_CORE: checking token={token[:8]}...")
+    if not token:
+        logging.warning("VALIDATE_SESSION_CORE: received empty token")
+        return None
+        
+    logging.info(f"VALIDATE_SESSION_CORE: checking token={token[:8]}... (full_length={len(token)})")
+    now = datetime.now()
     session = db.query(SessionModel).filter(
-        SessionModel.session_token == token,
-        SessionModel.expires_at > datetime.now()
+        SessionModel.session_token == token
     ).first()
     
-    if session:
-        logging.info(f"VALIDATE_SESSION_CORE: valid session found for {session.employee_id}")
-        return session.employee_id
-    
-    logging.warning(f"VALIDATE_SESSION_CORE: no active session found for token")
-    return None
+    if not session:
+        logging.warning(f"VALIDATE_SESSION_CORE: token not found in database: {token[:8]}...")
+        return None
+        
+    if session.expires_at < now:
+        logging.warning(f"VALIDATE_SESSION_CORE: session expired for {session.employee_id} at {session.expires_at} (now={now})")
+        return None
+        
+    logging.info(f"VALIDATE_SESSION_CORE: valid session found for {session.employee_id}")
+    return session.employee_id
 
 def log_event(db: Session, employee_id: str, event: str, ip: str = None):
     log = LoginLog(

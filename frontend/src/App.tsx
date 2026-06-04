@@ -43,6 +43,18 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const handleAuthSuccess = () => {
+        const saved = localStorage.getItem('user');
+        if (saved) {
+            console.log("[DEBUG] App: Auth success event received. Updating user state.");
+            setUser(JSON.parse(saved));
+        }
+    };
+    window.addEventListener('aradhana-auth-success', handleAuthSuccess);
+    return () => window.removeEventListener('aradhana-auth-success', handleAuthSuccess);
+  }, []);
+
+  useEffect(() => {
     // PRE-FLIGHT CLEANUP: Remove old keys from previous versions
     ['token', 'sessionToken', 'auth_token', 'session_token'].forEach(k => localStorage.removeItem(k));
 
@@ -62,6 +74,8 @@ function App() {
                 console.log(`[DEBUG] App.checkAuth: validate-session responseStatus=${response.status}`);
 
                 if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`[DEBUG] App.checkAuth: Backend rejected session. Status: ${response.status}, Body: ${errorText}`);
                     throw new Error(`Session validation failed with status ${response.status}`);
                 }
                 
@@ -77,6 +91,8 @@ function App() {
                 }
             } catch (err) {
                 console.error("[DEBUG] App.checkAuth: ERROR during validation:", err);
+                // Only clear if we are NOT on login page? 
+                // Actually, if it fails validation on startup, we should clear.
                 localStorage.removeItem('aradhana_session_token');
                 localStorage.removeItem('user');
                 setUser(null);

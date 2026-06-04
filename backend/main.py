@@ -26,8 +26,7 @@ def get_db():
 def create_user(username: str, email: str, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.name == username).first()
     if existing:
-        return existing # Return existing if already there, or raise 400. 
-        # But for tests it might be better to return 200 with the user.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User with this username already exists")
     
     # Generate a temporary employee_id if none exists to avoid NULL duplicates
     temp_id = f"TEMP-{username.upper()}-{datetime.now().timestamp()}"

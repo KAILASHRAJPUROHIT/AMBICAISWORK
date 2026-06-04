@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { login, verifyOTP } from '../api/client';
 import './LoginPage.css';
 
 const LoginPage: React.FC = () => {
+    const navigate = useNavigate();
     const [employeeId, setEmployeeId] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -91,7 +93,7 @@ const LoginPage: React.FC = () => {
 
             // Extract email for masking if available (we might need backend to return it)
             // For now use a placeholder or update backend to return email hint
-            setMaskedEmail(res.email_hint || 'registered email');
+            setMaskedEmail(res.masked_email || 'registered email');
 
             console.log("TRANSITIONING TO OTP STEP...");
             setSuccess("OTP sent to your registered email.");
@@ -140,30 +142,26 @@ const LoginPage: React.FC = () => {
         try {
             console.log(`[DEBUG] LoginPage.handleVerify: Submitting OTP for ${employeeId}...`);
             const data = await verifyOTP(employeeId, otp.trim());
-            console.log(`[DEBUG] LoginPage.handleVerify: DATA_TYPE=${typeof data}`, data);
             
-            // DIAGNOSTIC ALERT: Only if token missing
-            const sessionToken = data.session_token || data.token || data.aradhana_session_token;
-
-            if (sessionToken) {
-                console.log(`[DEBUG] LoginPage.handleVerify: Token found. Type: ${data.session_token ? 'session_token' : (data.token ? 'token' : 'aradhana_session_token')}`);
+            if (data.success && data.session_token) {
+                console.log(`[DEBUG] LoginPage.handleVerify: Token found. Redirecting...`);
                 
-                // CLEANUP: Remove any potentially conflicting old keys
-                ['token', 'sessionToken', 'auth_token', 'session_token'].forEach(k => localStorage.removeItem(k));
-
-                localStorage.setItem('aradhana_session_token', sessionToken);
+                localStorage.setItem('aradhana_session_token', data.session_token);
                 localStorage.setItem('user', JSON.stringify(data.user));
                 
-                console.log(`[DEBUG] LoginPage.handleVerify: Redirecting...`);
-                window.location.href = '/dashboard';
+                // Task 3: Dispatch event so App knows we are logged in without a full reload
+                window.dispatchEvent(new Event('aradhana-auth-success'));
+                
+                navigate('/dashboard', { replace: true });
             } else {
                 const keys = data ? Object.keys(data).join(', ') : 'null/empty';
-                console.error(`[DEBUG] LoginPage.handleVerify: MISSING TOKEN. Keys: ${keys}. Full Data:`, data);
+                updateDiag(401, JSON.stringify(data));
                 throw new Error(`Login success but no session token. Keys received: ${keys}`);
             }
         } catch (err: any) {
             console.error(`[DEBUG] LoginPage.handleVerify: ERROR:`, err);
             setError(err.message);
+            updateDiag(401, err.message);
         } finally {
             setLoading(false);
         }
@@ -351,9 +349,14 @@ const LoginPage: React.FC = () => {
                         <span className={diag.reachable === 'YES' ? 'text-green-400' : 'text-red-400'}>{diag.reachable}</span>
                     </div>
                     {diag.status > 0 && (
-                        <div className="flex justify-between">
-                            <span>LAST STATUS:</span>
-                            <span className="text-orange-400">{diag.status}</span>
+                        <div className="flex flex-col mt-2 border-t border-gray-800 pt-2">
+                            <div className="flex justify-between">
+                                <span>LAST STATUS:</span>
+                                <span className="text-orange-400">{diag.status}</span>
+                            </div>
+                            <div className="mt-1 text-gray-500 break-all">
+                                {diag.response}
+                            </div>
                         </div>
                     )}
                 </div>
