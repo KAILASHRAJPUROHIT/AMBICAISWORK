@@ -37,7 +37,9 @@ const ReconciliationQueuePage: React.FC = () => {
           matchConfidence: r.status === 'GREEN' ? 'High' : (r.status === 'YELLOW' ? 'Medium' : 'Low'),
           status: r.status === 'GREEN' ? 'Verified' : (r.status === 'YELLOW' ? 'Advance Pending' : (r.status === 'ORANGE' ? 'Ambiguous Match' : (r.status === 'BLUE' ? 'Realizing Cheque' : 'Risk / Mismatch'))),
           rawStatus: r.status,
-          invoiceDate: r.invoice_date
+          invoiceDate: r.invoice_date,
+          invoiceUrl: r.details?.invoice_url || null,
+          proofUrl: r.details?.proof_url || null
         }));
         setItems(transformed);
       })

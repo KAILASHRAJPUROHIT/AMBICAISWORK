@@ -39,8 +39,10 @@ interface ImportedRecord {
 
 interface ExtractionData {
   timestamp: string;
-  count: number;
-  records: ImportedRecord[];
+  total: number;
+  items: ImportedRecord[];
+  pending_count: number;
+  processed_count: number;
 }
 
 const PrimeExtractionReviewPage: React.FC = () => {
@@ -80,18 +82,18 @@ const PrimeExtractionReviewPage: React.FC = () => {
     </div>
   );
 
-  if (!data || !data.records || data.records.length === 0) return (
+  if (!data || !data.items || data.items.length === 0) return (
     <div className="p-20 text-center bg-white rounded-3xl shadow-sm border border-gray-100 text-gray-400 font-bold text-xl uppercase tracking-tighter">
       No extraction records pending review.
     </div>
   );
 
   // Calculate Header Metrics
-  const totalSales = data.records.reduce((sum: number, r: ImportedRecord) => sum + (r.sale_amount || 0), 0);
-  const totalCash = data.records.reduce((sum: number, r: ImportedRecord) => sum + (r.cash_amount || 0), 0);
-  const totalBank = data.records.reduce((sum: number, r: ImportedRecord) => sum + (r.bank_amount || 0), 0);
-  const totalCard = data.records.reduce((sum: number, r: ImportedRecord) => sum + (r.card_amount || 0), 0);
-  const reviewCount = data.records.filter((r: ImportedRecord) => r.validation_status === 'NEEDS_REVIEW').length;
+  const totalSales = data.items.reduce((sum: number, r: ImportedRecord) => sum + (r.sale_amount || 0), 0);
+  const totalCash = data.items.reduce((sum: number, r: ImportedRecord) => sum + (r.cash_amount || 0), 0);
+  const totalBank = data.items.reduce((sum: number, r: ImportedRecord) => sum + (r.bank_amount || 0), 0);
+  const totalCard = data.items.reduce((sum: number, r: ImportedRecord) => sum + (r.card_amount || 0), 0);
+  const reviewCount = data.items.filter((r: ImportedRecord) => r.validation_status === 'NEEDS_REVIEW').length;
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen font-sans">
@@ -106,7 +108,7 @@ const PrimeExtractionReviewPage: React.FC = () => {
                Review Required: {reviewCount}
              </div>
              <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-[10px] font-black shadow-sm uppercase tracking-tighter">
-               Total Records: {data.records.length}
+               Total Records: {data.items.length}
              </div>
           </div>
         </div>
@@ -133,7 +135,7 @@ const PrimeExtractionReviewPage: React.FC = () => {
       </header>
 
       <div className="space-y-8">
-        {data.records.map((inv: ImportedRecord, idx: number) => {
+        {data.items.map((inv: ImportedRecord, idx: number) => {
           const statusColor = inv.validation_status === 'GREEN' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-yellow-100 text-yellow-800 border-yellow-200';
           
           return (

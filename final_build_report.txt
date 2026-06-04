@@ -1,41 +1,39 @@
 Aradhana Auditor Operational Module & Diagnostics Build Report
 
 Date: 2026-06-04
-Commit Hash Before: cb0904e
-Commit Hash After: ef88d5196a87a31db469da88ee4cb567883a7ff4
+Commit Hash Before: ef88d5196a87a31db469da88ee4cb567883a7ff4
+Commit Hash After: ba4789c27990a61dc87e6cad71b81adb5abee6d1
 
 Files Changed:
-- backend/review_api.py (Health endpoint enhancements, Reconciliation detail expansion, PUBLIC_ENDPOINTS update)
-- frontend/src/pages/ReconciliationQueuePage.tsx (Added comprehensive filters)
-- frontend/src/pages/SystemHealthPage.tsx (Implemented relative 'Last Polled' timestamps and service metrics)
-- frontend/src/pages/EscalationsPage.tsx (Wired to correct API, fixed empty state)
-- frontend/src/pages/ReportsPage.tsx (Added explicit empty state)
-- frontend/src/pages/PrimeExtractionReviewPage.tsx (Updated empty state message)
-- frontend/src/types.ts (Added ReconciliationItem fields for filtering)
-- tests/test_operational_modules.py (New backend validation tests)
+- backend/review_api.py (Accurate system_health endpoint querying DB, added PDF invoice endpoint, adjusted escalations/reports/prime import response schemas)
+- frontend/src/components/ReconciliationTable.tsx (Compact columns added including Date, Invoice PDF Link, Payment Proof Link, Actions)
+- frontend/src/pages/ReconciliationQueuePage.tsx (Updated mapping to include invoiceUrl and proofUrl)
+- frontend/src/pages/PrimeExtractionReviewPage.tsx (Fixed mapping of data.items instead of data.records)
+- frontend/src/pages/EscalationsPage.tsx (Fixed mapping to data.items to resolve empty state bug)
+- frontend/src/types.ts (Added invoiceUrl and proofUrl to ReconciliationItem)
+- tests/test_operational_modules.py (Updated test assertions to validate correct response shapes and fields)
 
 Routes Fixed & Enhanced:
-- /api/system/health (Added last_polled_at, event_count, error fields)
-- /api/reconciliations (Expanded with payments breakdown and mode)
-- /api/escalations/open (Restored and wired to UI)
-- /api/reports/owner (Verified and empty state added)
-- /api/prime/manual-report-import/latest (Verified and empty state added)
+- /api/system/health (Queries real database counts for invoice_watcher, bank_email_poller, android_sms_relay)
+- /api/invoices/pdf/{bill_id} (New authenticated route to serve invoice PDFs securely)
+- /api/reconciliations (Added invoice_url and proof_url safely mapping to paths)
+- /api/escalations/open (Returns {"items": [], "total": 0})
+- /api/reports/owner (Returns safely structured nested data preventing undefined errors)
+- /api/prime/manual-report-import/latest (Returns {"items": [], "total": 0, "pending_count": 0, "processed_count": 0} format)
 
 UI Enhancements:
-- Reconciliation Queue Filter Bar: Search, Status, Mode, Confidence, Difference, Date Range.
-- System Health Cards: Real-time 'Last Polled' relative timestamps (e.g., '2 min ago').
-- Explicit Empty States: Consistent messaging across all reporting modules.
+- Reconciliation Queue Compact Table: Added Date, Bill No, Customer, Invoice Amount, Bank Amount, Difference, Mode, Confidence, Status, Invoice PDF link, Payment Proof link, Actions.
+- Re-wired 'No Proof' explicitly when endpoints don't exist.
+- Resolved 'API Unavailable' and 'Undefined' crashes on Escalations, Reports, and Extraction Review pages.
 
 Tests Run:
 - tests/test_operational_modules.py: 5 PASS
-- tests/test_missing_modules.py: 4 PASS
-- tests/test_api_hardening.py: 10 PASS
 
 Frontend Build Result:
 PASS - No TypeScript or build errors.
 
 Financial Safety Confirmation:
-CONFIRMED - No financial records deleted. Reconciliation logic unchanged. RBAC and OTP enforced. Audit logs active for all control actions.
+CONFIRMED - No financial records deleted. Reconciliation logic unchanged. RBAC and OTP enforced. Audit logs active for all control actions. No fake stats; querying real database state.
 
 Known Remaining Issues:
-- Real-time notification system (beep/popup) subject to environment security constraints.
+- Payment proof links currently display 'No Proof' natively as no specific proof attachment backend mapping is integrated yet.

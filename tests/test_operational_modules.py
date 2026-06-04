@@ -43,7 +43,8 @@ def test_escalations_endpoint():
     response = client.get("/api/escalations/open")
     assert response.status_code == 200
     data = response.json()
-    assert isinstance(data, list)
+    assert "items" in data
+    assert "total" in data
 
 def test_reports_owner_endpoint():
     response = client.get("/api/reports/owner")
@@ -56,4 +57,4 @@ def test_extraction_review_endpoint():
     response = client.get("/api/prime/manual-report-import/latest")
     assert response.status_code == 200
     data = response.json()
-    assert "records" in data
+    assert "items" in data

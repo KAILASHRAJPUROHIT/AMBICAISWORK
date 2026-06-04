@@ -10,6 +10,8 @@ export interface ReconciliationItem {
   status: 'Verified' | 'Pending' | 'Delivered Before Payment' | 'Risk / Mismatch' | 'Cheque Pending' | 'Archived' | 'Advance Pending' | 'Ambiguous Match' | 'Realizing Cheque';
   rawStatus: string;
   invoiceDate: string | null;
+  invoiceUrl: string | null;
+  proofUrl: string | null;
 }
 
 export interface AuditLogItem {

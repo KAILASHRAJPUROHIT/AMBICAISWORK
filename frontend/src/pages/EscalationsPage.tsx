@@ -13,7 +13,7 @@ const EscalationsPage: React.FC = () => {
         return res.json();
       })
       .then(data => {
-        setEscalations(data);
+        setEscalations(data.items || []);
       })
       .catch(err => {
         console.error("Escalations fetch error:", err);

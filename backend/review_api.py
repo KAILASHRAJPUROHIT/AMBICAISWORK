@@ -153,12 +153,23 @@ async def get_version():
 @app.get("/api/system/health")
 async def system_health(db: Session = Depends(get_db)):
     from sqlalchemy import text
+    from backend.models import Bill, BankAlert, SMSAlert
     try:
         db.execute(text("SELECT 1"))
         db_ok = True
     except Exception as e:
         logger.error(f"Health Check DB Error: {e}")
         db_ok = False
+
+    # Actual database counts for services
+    try:
+        invoice_processed_count = db.query(Bill).count()
+        email_event_count = db.query(BankAlert).count()
+        sms_event_count = db.query(SMSAlert).count()
+    except Exception:
+        invoice_processed_count = 0
+        email_event_count = 0
+        sms_event_count = 0
 
     return {
         "status": "online" if db_ok else "degraded",
@@ -167,19 +178,19 @@ async def system_health(db: Session = Depends(get_db)):
             "invoice_watcher": {
                 "status": "RUNNING" if ingestion_status.get("watcher_running") else "STOPPED",
                 "last_polled_at": ingestion_status.get("last_processed_time"),
-                "event_count": ingestion_status.get("files_processed", 0),
+                "event_count": invoice_processed_count,
                 "error": ingestion_status.get("last_error")
             },
             "bank_email_poller": {
                 "status": "RUNNING" if email_status.get("is_running") else "STOPPED",
                 "last_polled_at": email_status.get("last_sync"),
-                "event_count": email_status.get("events_found", 0),
+                "event_count": email_event_count,
                 "error": email_status.get("last_error")
             },
             "android_sms_relay": {
                 "status": "ACTIVE" if sms_status.get("is_running") else "INACTIVE",
                 "last_polled_at": sms_status.get("last_sync"),
-                "event_count": sms_status.get("events_found", 0),
+                "event_count": sms_event_count,
                 "error": sms_status.get("last_error")
             }
         },
@@ -203,11 +214,11 @@ async def get_owner_report_api(db: Session = Depends(get_db)):
     
     daily_summary = {
         "generated_at": now.isoformat(),
-        "processed_count": processed_count or 100,
-        "open_reviews": open_reviews or 5,
-        "escalated_reviews": 2,
-        "resolved_reviews": resolved_reviews or 95,
-        "high_risk_count": 1,
+        "processed_count": processed_count or 0,
+        "open_reviews": open_reviews or 0,
+        "escalated_reviews": 0,
+        "resolved_reviews": resolved_reviews or 0,
+        "high_risk_count": 0,
         "critical_risk_count": 0,
         "summary_notes": "Live system report summary."
     }
@@ -215,7 +226,7 @@ async def get_owner_report_api(db: Session = Depends(get_db)):
     return {
         "daily_summary": daily_summary,
         "report_date": today_str,
-        "owner_action_required": True,
+        "owner_action_required": open_reviews > 0,
         "report_lines": [
             f"System check at {now.strftime('%H:%M:%S')}",
             f"Total processed: {processed_count}",
@@ -258,22 +269,16 @@ async def get_payment_bifurcation(
 
 @app.get("/api/escalations/open")
 async def get_open_escalations_api():
-    return [
-        {
-            "escalation_id": "ESC-001",
-            "review_id": "REV-101",
-            "escalation_reason": "High value bank mismatch",
-            "severity": "high",
-            "owner_notified": True,
-            "created_at": datetime.now().isoformat()
-        }
-    ]
+    return {
+        "items": [],
+        "total": 0
+    }
 
 @app.get("/api/prime/manual-report-import/latest")
 async def get_latest_prime_import():
     path = r"C:\Aradhana\PrimeExports\JSON\prime_report_import.json"
     if not os.path.exists(path):
-        return {"timestamp": datetime.now().isoformat(), "count": 0, "records": []}
+        return {"timestamp": datetime.now().isoformat(), "total": 0, "items": [], "pending_count": 0, "processed_count": 0}
     
     try:
         with open(path, "r") as f:
@@ -284,10 +289,19 @@ async def get_latest_prime_import():
                 elif isinstance(obj, dict): return {k: sanitize(v) for k, v in obj.items()}
                 elif isinstance(obj, list): return [sanitize(i) for i in obj]
                 return obj
-            return sanitize(data)
+            safe_data = sanitize(data)
+            records = safe_data.get("records", [])
+            return {
+                "timestamp": safe_data.get("timestamp", datetime.now().isoformat()),
+                "total": len(records),
+                "items": records,
+                "pending_count": len([r for r in records if r.get("validation_status") == "NEEDS_REVIEW"]),
+                "processed_count": len([r for r in records if r.get("validation_status") == "GREEN"])
+            }
     except Exception as e:
         logger.error(f"Error reading prime import: {e}")
-        return {"error": str(e)}
+        return {"error": str(e), "timestamp": datetime.now().isoformat(), "total": 0, "items": [], "pending_count": 0, "processed_count": 0}
+
 
 # AUTH
 class LoginRequest(BaseModel):
@@ -434,6 +448,13 @@ async def get_live_feed(db: Session = Depends(get_db)):
         "invoice_total": float(b.amount or 0), "status": b.status, "ingested_at": b.ingested_at.isoformat()
     } for b in bills]
 
+@app.get("/api/invoices/pdf/{bill_id}")
+async def get_invoice_pdf(bill_id: int, db: Session = Depends(get_db)):
+    bill = db.query(Bill).filter(Bill.id == bill_id).first()
+    if not bill or not bill.pdf_path or not os.path.exists(bill.pdf_path):
+        raise HTTPException(status_code=404, detail="PDF not found")
+    return FileResponse(bill.pdf_path, media_type="application/pdf")
+
 @app.get("/api/reconciliations")
 async def list_reconciliations(db: Session = Depends(get_db)):
     bills = db.query(Bill).filter(Bill.is_test_data == False).order_by(Bill.ingested_at.desc()).limit(100).all()
@@ -445,7 +466,9 @@ async def list_reconciliations(db: Session = Depends(get_db)):
             "customer": b.customer_name,
             "total": float(b.amount or 0),
             "payments": float(b.cash_received or 0) + float(b.bank_received or 0) + float(b.card_received or 0) + float(b.sms_confirmed_amount or 0) + float(b.email_confirmed_amount or 0),
-            "mode": b.payment_mode or "BANK"
+            "mode": b.payment_mode or "BANK",
+            "invoice_url": f"/api/invoices/pdf/{b.id}" if b.pdf_path else None,
+            "proof_url": None
         }
     } for b in bills]
 
