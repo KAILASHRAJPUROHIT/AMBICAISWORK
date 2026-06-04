@@ -457,14 +457,30 @@ def perform_scan():
     if not check_share_health():
         return
     
-    logger.info(f"Folder scan started: {WATCH_PATH}")
-    files = [f for f in os.listdir(WATCH_PATH) if f.lower().endswith(".pdf")]
-    update_status(pdf_files_found=len(files))
+    logger.info(f"Folder scan started: {WATCH_PATH!r}")
+    exists = os.path.exists(WATCH_PATH)
+    logger.info(f"os.path.exists(WATCH_PATH): {exists}")
     
-    for file in files:
-        process_invoice(os.path.join(WATCH_PATH, file))
-    
-    logger.info(f"Folder scan complete. Total files in folder: {len(files)}.")
+    try:
+        all_files = os.listdir(WATCH_PATH)
+        logger.info(f"os.listdir count: {len(all_files)}")
+        logger.info(f"First 5 files: {all_files[:5]}")
+        
+        pdf_files = [f for f in all_files if f.lower().endswith(".pdf")]
+        logger.info(f"PDF files count: {len(pdf_files)}")
+        
+        update_status(pdf_files_found=len(pdf_files), path_exists=True)
+        
+        for file in pdf_files:
+            process_invoice(os.path.join(WATCH_PATH, file))
+        
+        logger.info(f"Folder scan complete. Total files in folder: {len(all_files)}.")
+    except Exception as e:
+        logger.error(f"Error scanning folder {WATCH_PATH}: {e}")
+        update_status(last_error=f"Scan Error: {str(e)}")
+        # Keep watcher_running True if path exists as per instructions
+        update_status(path_exists=os.path.exists(WATCH_PATH))
+
 
 class InvoiceHandler(FileSystemEventHandler):
     def on_created(self, event):
@@ -503,8 +519,8 @@ def start_watcher():
 
 def start_ingestion_thread():
     # Run scan first
-    # scan_thread = threading.Thread(target=perform_scan, daemon=True)
-    # scan_thread.start()
+    scan_thread = threading.Thread(target=perform_scan, daemon=True)
+    scan_thread.start()
     
     # Run watcher (which now also performs periodic scans)
     watcher_thread = threading.Thread(target=start_watcher, daemon=True)
