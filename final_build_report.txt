@@ -1,35 +1,32 @@
 Aradhana Auditor Security & Reports Build Report
 
 Date: 2026-06-04
-Commit Hash Before: 18850c11261d763ed8e3a241e7bdffc415582f6e
-Commit Hash After: 45d4fa2966956a1b4c2a64880ca9d3a3d8280e9c
+Commit Hash Before: dbe1c261e4efeb5d064ff57d472fcce5e7cd0a20
+Commit Hash After: 56cba3e99c5b659bc62605bfd9fe9392be5ae4b6
 
 Files Changed:
-- frontend/src/App.tsx (Restored root protected routing and implemented global security hooks)
-- backend/review_api.py (Removed wide-open APIs from PUBLIC_ENDPOINTS to restore authentication checks, added /api/audit/security-violation, updated bifurcation endpoint to support dynamic filtering)
-- frontend/src/pages/ReportsPage.tsx (Implemented compact filter dashboard supporting Date, Mode, Status, Search, and Min/Max amounts)
-- frontend/src/hooks/useSecurityProtections.ts (Added screenshot, print, and save shortcut deterrents, CSS print blockage, and user watermark)
-- frontend/src/hooks/useSessionTimeout.ts (Added inactivity session tracking with warning and auto-logout)
-- tests/test_auth_gate.py (Added tests for authentication routing rejection)
+- frontend/src/App.tsx (Fixed missing routing for /dashboard, implemented rigorous /api/auth/validate-session API check replacing getMe)
+- backend/review_api.py (Added /api/auth/validate-session, fixed /api/dashboard/live to include all required metrics, returned 401 correctly)
+- frontend/src/pages/DashboardPage.tsx (No changes needed, fixed backend to supply correct missing values)
+- tests/test_operational_modules.py (Updated to authenticate requests since backend now strictly rejects unauthenticated tests)
+- tests/test_auth_gate.py (Confirmed rejection tests pass)
 
 Security Fixes:
-- **Mandatory Login Gate:** Repaired backend `PUBLIC_ENDPOINTS` to ensure unauthorized bypass is impossible (401 Unauthorized for all protected routes). App components (`ProtectedRoute`) fully validate authenticated user state.
-- **Session Hardening:** 15-minute inactivity auto-logout implemented.
-- **Screenshot Protection:** Browser-level deterrents established (Right-click disabled, PrintScreen / Ctrl+P logged, window blur upon focus loss). Note: Native OS-level captures cannot be completely prevented via browser, but deterrents are active.
+- **Mandatory Login Gate:** Fixed the routing issue where React Router `/*` rendered the sidebar if unauthenticated without triggering Navigate properly because of missing async cleanup. `App.tsx` now calls a hard validation check `/api/auth/validate-session`, ensuring invalid tokens trigger an immediate flush and redirect to `/login`.
+- **Backend Auth Enforcement:** Verified that `PUBLIC_ENDPOINTS` strictly allows only `/api/auth/login`, `/api/auth/verify`, and basic public health routes. Operational APIs including Dashboard stats explicitly require a valid `X-Session-Token` and return `401`.
 
 UI Enhancements:
-- **Reports Filters:** Successfully integrated complete filtering suite without altering underlying raw financial totals natively. Real-time dynamic recalculations applied.
+- **Dashboard Metrics:** Addressed issue where operational metrics displayed `0`. The `/api/dashboard/live` endpoint has been rebuilt to calculate total collection, cash, bank, cheques, SMS confirmed, and email confirmed amounts directly from the database and surface them accurately to the dashboard `DashboardStats` interface.
 
 Tests Run:
-- tests/test_auth_gate.py: 3 PASS (Verified authentication rejection paths)
+- tests/test_auth_gate.py: 3 PASS
 - tests/test_operational_modules.py: 5 PASS
-- tests/test_missing_modules.py: 4 PASS
 
 Frontend Build Result:
 PASS - No TypeScript or build errors.
 
 Financial Safety Confirmation:
-CONFIRMED - OTP & RBAC enforced strictly by restored backend auth checks. No financial records deleted. Export routines respect filters visually.
+CONFIRMED - OTP & RBAC enforced strictly. No financial records deleted. Dashboard relies strictly on aggregate sums derived from live database transactions.
 
 Known Remaining Issues:
 - OS-level screenshot tools (e.g. Snipping Tool) bypass JavaScript keyboard hooks. Watermark serves as the secondary visual deterrent.

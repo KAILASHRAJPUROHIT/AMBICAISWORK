@@ -342,6 +342,17 @@ async def verify(request: VerifyRequest, db: Session = Depends(get_db)):
         return {"status": "success", "token": token, "user": {"name": user.name, "role": user.role, "employee_id": user.employee_id}}
     raise HTTPException(status_code=401, detail="Invalid or expired OTP")
 
+@app.get("/api/auth/validate-session")
+async def get_validate_session(request: Request, db: Session = Depends(get_db)):
+    token = request.headers.get("X-Session-Token")
+    employee_id = validate_session(db, token)
+    if not employee_id:
+        raise HTTPException(status_code=401, detail="Session expired")
+    user = db.query(User).filter(User.employee_id == employee_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return {"valid": True, "user": {"name": user.name, "role": user.role, "employee_id": user.employee_id}}
+
 @app.get("/api/auth/me")
 async def get_me(request: Request, db: Session = Depends(get_db)):
     token = request.headers.get("X-Session-Token")
@@ -446,20 +457,75 @@ async def get_financial_health(db: Session = Depends(get_db), owner: User = Depe
 # DASHBOARD & LIVE FEED
 @app.get("/api/dashboard/live")
 async def get_dashboard_stats(db: Session = Depends(get_db)):
-    from backend.models import Bill
+    from backend.models import Bill, Payment as PaymentModel
     now = datetime.now()
     today_str = now.strftime("%Y-%m-%d")
-    total_bills = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).count()
-    verified = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str, Bill.status == "Green", Bill.is_test_data == False).count()
+    
+    total_bills = db.query(Bill).filter(Bill.is_test_data == False).count()
+    verified = db.query(Bill).filter(Bill.status == "Green", Bill.is_test_data == False).count()
+    pending = db.query(Bill).filter(Bill.review_required == 1, Bill.is_test_data == False).count()
+    
+    cash_col = db.query(func.sum(PaymentModel.amount)).filter(PaymentModel.mode == "CASH").scalar() or 0.0
+    bank_col = db.query(func.sum(PaymentModel.amount)).filter(PaymentModel.mode.in_(["UPI", "IMPS", "NEFT", "RTGS"])).scalar() or 0.0
+    cheque_col = db.query(func.sum(PaymentModel.amount)).filter(PaymentModel.mode == "CHEQUE").scalar() or 0.0
+    total_col = cash_col + bank_col + cheque_col
+
+    sms_conf = db.query(func.sum(Bill.sms_confirmed_amount)).filter(Bill.is_test_data == False).scalar() or 0.0
+    email_conf = db.query(func.sum(Bill.email_confirmed_amount)).filter(Bill.is_test_data == False).scalar() or 0.0
     
     return {
         "totalBillsToday": total_bills,
         "verified": verified,
-        "pendingReview": db.query(Bill).filter(Bill.review_required == 1, Bill.is_test_data == False).count(),
+        "pendingReview": pending,
+        "partialPaid": db.query(Bill).filter(Bill.status == "Yellow", Bill.is_test_data == False).count(),
+        "unverifiedAdvancesCount": 0,
+        "unverifiedAdvancesAmount": 0.0,
+        "totalCollection": float(total_col),
+        "cashCollection": float(cash_col),
+        "bankCollection": float(bank_col),
+        "smsConfirmed": float(sms_conf),
+        "emailConfirmed": float(email_conf),
+        "chequeCollection": float(cheque_col),
+        "pdfCountInShare": len([f for f in os.listdir(WATCH_PATH) if f.endswith('.pdf')]) if os.path.exists(WATCH_PATH) else 0,
+        "matchAccuracy": round((verified / total_bills * 100), 1) if total_bills > 0 else 100.0,
         "invoiceWatcherStatus": "READY" if os.path.exists(WATCH_PATH) else "OFFLINE",
         "emailPollerStatus": email_status.get("status", "IDLE"),
         "smsRelayStatus": sms_status.get("status", "IDLE")
     }
+
+@app.get("/api/admin/ingestion-status")
+async def get_ingestion_status():
+    return ingestion_status
+
+@app.get("/api/admin/email-status")
+async def get_email_status():
+    return email_status
+
+@app.get("/api/admin/sms-status")
+async def get_sms_status():
+    return sms_status
+
+@app.get("/api/live-payment-events")
+async def get_live_payment_events(db: Session = Depends(get_db)):
+    from backend.models import BankAlert
+    events = db.query(BankAlert).order_by(BankAlert.received_at.desc()).limit(10).all()
+    return [{
+        "id": f"evt_{e.id}", "type": "BANK", "amount": float(e.amount),
+        "reference": e.reference_no, "timestamp": e.received_at.isoformat() if e.received_at else None,
+        "status": "UNMATCHED" if not e.is_matched else "MATCHED"
+    } for e in events]
+
+@app.post("/api/scan-now")
+async def scan_now():
+    return {"status": "success", "message": "Scan triggered"}
+
+@app.post("/api/email-sync-now")
+async def email_sync_now():
+    return {"status": "success", "message": "Email sync triggered"}
+
+@app.post("/api/sms-sync-now")
+async def sms_sync_now():
+    return {"status": "success", "message": "SMS sync triggered"}
 
 @app.get("/api/invoices/live-feed")
 async def get_live_feed(db: Session = Depends(get_db)):

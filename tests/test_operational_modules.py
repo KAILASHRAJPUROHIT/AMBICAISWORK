@@ -2,13 +2,46 @@ import pytest
 from fastapi.testclient import TestClient
 from backend.review_api import app
 from backend.database import SessionLocal
-from backend.models import User, Bill
+from backend.models import User, Session as SessionModel
 import json
+from datetime import datetime, timedelta
 
 client = TestClient(app)
 
-def test_system_health_fields():
-    response = client.get("/api/system/health")
+@pytest.fixture
+def auth_header():
+    db = SessionLocal()
+    # Create test owner
+    employee_id = "TEST-OWNER-02"
+    user = db.query(User).filter(User.employee_id == employee_id).first()
+    if not user:
+        user = User(
+            employee_id=employee_id,
+            name="Test Owner",
+            email="owner2@test.com",
+            role="OWNER",
+            is_active=1
+        )
+        db.add(user)
+        db.commit()
+    
+    # Create session
+    token = "TEST-SESSION-TOKEN-02"
+    session = db.query(SessionModel).filter(SessionModel.session_token == token).first()
+    if not session:
+        session = SessionModel(
+            employee_id=employee_id,
+            session_token=token,
+            expires_at=datetime.now() + timedelta(hours=1)
+        )
+        db.add(session)
+        db.commit()
+    
+    db.close()
+    return {"X-Session-Token": token}
+
+def test_system_health_fields(auth_header):
+    response = client.get("/api/system/health", headers=auth_header)
     assert response.status_code == 200
     data = response.json()
     assert "services" in data
@@ -23,8 +56,8 @@ def test_system_health_fields():
         assert "event_count" in data["services"][service]
         assert "error" in data["services"][service]
 
-def test_reconciliations_endpoint():
-    response = client.get("/api/reconciliations")
+def test_reconciliations_endpoint(auth_header):
+    response = client.get("/api/reconciliations", headers=auth_header)
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
@@ -38,23 +71,25 @@ def test_reconciliations_endpoint():
         assert "total" in item["details"]
         assert "payments" in item["details"]
         assert "mode" in item["details"]
+        assert "invoice_url" in item["details"]
+        assert "proof_url" in item["details"]
 
-def test_escalations_endpoint():
-    response = client.get("/api/escalations/open")
+def test_escalations_endpoint(auth_header):
+    response = client.get("/api/escalations/open", headers=auth_header)
     assert response.status_code == 200
     data = response.json()
     assert "items" in data
     assert "total" in data
 
-def test_reports_owner_endpoint():
-    response = client.get("/api/reports/owner")
+def test_reports_owner_endpoint(auth_header):
+    response = client.get("/api/reports/owner", headers=auth_header)
     assert response.status_code == 200
     data = response.json()
     assert "daily_summary" in data
     assert "report_date" in data
 
-def test_extraction_review_endpoint():
-    response = client.get("/api/prime/manual-report-import/latest")
+def test_extraction_review_endpoint(auth_header):
+    response = client.get("/api/prime/manual-report-import/latest", headers=auth_header)
     assert response.status_code == 200
     data = response.json()
     assert "items" in data

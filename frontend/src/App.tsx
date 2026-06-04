@@ -9,7 +9,7 @@ import AuditLogsPage from './pages/AuditLogsPage';
 import MasterConsolePage from './pages/MasterConsolePage';
 import SystemHealthPage from './pages/SystemHealthPage';
 import LoginPage from './pages/LoginPage';
-import { getMe, logout } from './api/client';
+import { logout } from './api/client';
 import { useSecurityProtections } from './hooks/useSecurityProtections';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 import './index.css';
@@ -23,8 +23,8 @@ const ProtectedRoute = ({ children, roles, user }: { children: React.ReactElemen
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 
-    if (roles && !roles.includes(user.role.toLowerCase())) {
-        return <Navigate to="/" replace />;
+    if (roles && user.role && !roles.includes(user.role.toLowerCase())) {
+        return <Navigate to="/dashboard" replace />;
     }
 
     return children;
@@ -42,11 +42,20 @@ function App() {
         const token = localStorage.getItem('session_token');
         if (token) {
             try {
-                const userData = await getMe();
-                // Ensure backend returned a valid object before overriding local cache
-                if (userData && userData.role) {
-                    setUser(userData);
-                    localStorage.setItem('user', JSON.stringify(userData));
+                // Hard validation check
+                const response = await fetch(`${window.location.origin}/api/auth/validate-session`, {
+                   headers: {
+                      'X-Session-Token': token
+                   }
+                });
+                if (!response.ok) throw new Error("Invalid session");
+                const validationData = await response.json();
+                
+                if (validationData.valid && validationData.user) {
+                    setUser(validationData.user);
+                    localStorage.setItem('user', JSON.stringify(validationData.user));
+                } else {
+                    throw new Error("Invalid session data");
                 }
             } catch (err) {
                 console.error("Auth check failed", err);
@@ -64,6 +73,8 @@ function App() {
 
   const handleLogout = async () => {
     try { await logout(); } catch(e) {}
+    localStorage.removeItem('session_token');
+    localStorage.removeItem('user');
     setUser(null);
     window.location.href = '/login';
   };
@@ -80,7 +91,7 @@ function App() {
   return (
     <Router>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={!user ? <LoginPage /> : <Navigate to="/dashboard" replace />} />
         
         <Route path="/*" element={
           <ProtectedRoute user={user}>
@@ -95,7 +106,7 @@ function App() {
                   </div>
 
                   <nav className="flex-1 space-y-2">
-                    <NavLink to="/" end className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
+                    <NavLink to="/dashboard" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
                       Dashboard
                     </NavLink>
                     
@@ -154,7 +165,8 @@ function App() {
                 {/* Main content */}
                 <main className="flex-1 overflow-y-auto">
                   <Routes>
-                    <Route path="/" element={<DashboardPage />} />
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/master-console" element={
                         <ProtectedRoute user={user} roles={['admin', 'owner']}><MasterConsolePage /></ProtectedRoute>
                     } />
