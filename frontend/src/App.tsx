@@ -16,7 +16,7 @@ import './index.css';
 
 // Protected Route Component
 const ProtectedRoute = ({ children, roles, user }: { children: React.ReactElement, roles?: string[], user: any }) => {
-    const token = localStorage.getItem('session_token');
+    const token = localStorage.getItem('aradhana_session_token');
     const location = useLocation();
 
     if (!token || !user) {
@@ -39,7 +39,7 @@ function App() {
 
   useEffect(() => {
     const checkAuth = async () => {
-        const token = localStorage.getItem('session_token');
+        const token = localStorage.getItem('aradhana_session_token');
         if (token) {
             try {
                 // Hard validation check
@@ -59,7 +59,7 @@ function App() {
                 }
             } catch (err) {
                 console.error("Auth check failed", err);
-                localStorage.removeItem('session_token');
+                localStorage.removeItem('aradhana_session_token');
                 localStorage.removeItem('user');
                 setUser(null);
             }
@@ -73,7 +73,7 @@ function App() {
 
   const handleLogout = async () => {
     try { await logout(); } catch(e) {}
-    localStorage.removeItem('session_token');
+    localStorage.removeItem('aradhana_session_token');
     localStorage.removeItem('user');
     setUser(null);
     window.location.href = '/login';

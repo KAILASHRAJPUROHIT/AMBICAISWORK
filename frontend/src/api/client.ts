@@ -1,7 +1,7 @@
 const BASE_URL = window.location.origin;
 
 export function getHeaders() {
-  const token = localStorage.getItem('session_token');
+  const token = localStorage.getItem('aradhana_session_token');
   return {
     'Content-Type': 'application/json',
     ...(token ? { 'X-Session-Token': token } : {})
@@ -62,7 +62,7 @@ export async function logout() {
         method: 'POST',
         headers: getHeaders()
     });
-    localStorage.removeItem('session_token');
+    localStorage.removeItem('aradhana_session_token');
     localStorage.removeItem('user');
     return handleResponse(response, 'Logout failed');
 }

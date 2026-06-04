@@ -139,7 +139,7 @@ const LoginPage: React.FC = () => {
         setError(null);
         try {
             const data = await verifyOTP(employeeId, otp.trim());
-            localStorage.setItem('session_token', data.token);
+            localStorage.setItem('aradhana_session_token', data.session_token);
             localStorage.setItem('user', JSON.stringify(data.user));
             window.location.href = '/';
         } catch (err: any) {
