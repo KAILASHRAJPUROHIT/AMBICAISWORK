@@ -10,13 +10,13 @@ import MasterConsolePage from './pages/MasterConsolePage';
 import SystemHealthPage from './pages/SystemHealthPage';
 import LoginPage from './pages/LoginPage';
 import { getMe, logout } from './api/client';
+import { useSecurityProtections } from './hooks/useSecurityProtections';
+import { useSessionTimeout } from './hooks/useSessionTimeout';
 import './index.css';
 
 // Protected Route Component
-const ProtectedRoute = ({ children, roles }: { children: React.ReactElement, roles?: string[] }) => {
+const ProtectedRoute = ({ children, roles, user }: { children: React.ReactElement, roles?: string[], user: any }) => {
     const token = localStorage.getItem('session_token');
-    const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : null;
     const location = useLocation();
 
     if (!token || !user) {
@@ -68,6 +68,9 @@ function App() {
     window.location.href = '/login';
   };
 
+  useSecurityProtections(user);
+  useSessionTimeout(user, handleLogout);
+
   if (loading) {
     return <div className="h-screen flex items-center justify-center font-black text-2xl uppercase tracking-widest animate-pulse">Initializing Secure Environment...</div>;
   }
@@ -80,7 +83,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         
         <Route path="/*" element={
-          <ProtectedRoute>
+          <ProtectedRoute user={user}>
             <div className="flex min-h-screen bg-gray-100 font-sans">
                 {/* Sidebar */}
                 <aside className="w-72 bg-black shadow-2xl p-8 flex flex-col text-white">
@@ -153,25 +156,25 @@ function App() {
                   <Routes>
                     <Route path="/" element={<DashboardPage />} />
                     <Route path="/master-console" element={
-                        <ProtectedRoute roles={['admin', 'owner']}><MasterConsolePage /></ProtectedRoute>
+                        <ProtectedRoute user={user} roles={['admin', 'owner']}><MasterConsolePage /></ProtectedRoute>
                     } />
                     <Route path="/reconciliation" element={
-                        <ProtectedRoute roles={['admin', 'accountant', 'owner']}><ReconciliationQueuePage /></ProtectedRoute>
+                        <ProtectedRoute user={user} roles={['admin', 'accountant', 'owner']}><ReconciliationQueuePage /></ProtectedRoute>
                     } />
                     <Route path="/escalations" element={
-                        <ProtectedRoute roles={['admin', 'owner']}><EscalationsPage /></ProtectedRoute>
+                        <ProtectedRoute user={user} roles={['admin', 'owner']}><EscalationsPage /></ProtectedRoute>
                     } />
                     <Route path="/reports" element={
-                        <ProtectedRoute roles={['admin', 'owner', 'accountant']}><ReportsPage /></ProtectedRoute>
+                        <ProtectedRoute user={user} roles={['admin', 'owner', 'accountant']}><ReportsPage /></ProtectedRoute>
                     } />
                     <Route path="/prime-extraction-review" element={
-                        <ProtectedRoute roles={['admin', 'accountant', 'owner']}><PrimeExtractionReviewPage /></ProtectedRoute>
+                        <ProtectedRoute user={user} roles={['admin', 'accountant', 'owner']}><PrimeExtractionReviewPage /></ProtectedRoute>
                     } />
                     <Route path="/audit-logs" element={
-                        <ProtectedRoute roles={['admin', 'owner', 'accountant', 'developer']}><AuditLogsPage /></ProtectedRoute>
+                        <ProtectedRoute user={user} roles={['admin', 'owner', 'accountant', 'developer']}><AuditLogsPage /></ProtectedRoute>
                     } />
                     <Route path="/system-health" element={
-                        <ProtectedRoute roles={['admin', 'owner', 'developer']}><SystemHealthPage /></ProtectedRoute>
+                        <ProtectedRoute user={user} roles={['admin', 'owner', 'developer']}><SystemHealthPage /></ProtectedRoute>
                     } />
                   </Routes>
                 </main>

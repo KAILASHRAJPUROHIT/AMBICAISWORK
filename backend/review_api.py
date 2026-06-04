@@ -80,17 +80,13 @@ def get_db():
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     PUBLIC_ENDPOINTS = [
-        "/api/auth/",
+        "/api/auth/login",
+        "/api/auth/verify",
         "/api/version",
-        "/api/reports/",
         "/api/debug/",
         "/debug/",
         "/status-colors",
-        "/health",
-        "/api/prime/manual-report-import/latest",
-        "/api/escalations/open",
-        "/api/system/health",
-        "/api/reconciliations"
+        "/health"
     ]
 
     if request.url.path == "/" or request.url.path.startswith("/assets/"):
@@ -238,6 +234,11 @@ async def get_owner_report_api(db: Session = Depends(get_db)):
 async def get_payment_bifurcation(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    status: Optional[str] = None,
+    customer: Optional[str] = None,
+    bill_number: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
     db: Session = Depends(get_db)
 ):
     from backend.models import Payment as PaymentModel
@@ -246,6 +247,11 @@ async def get_payment_bifurcation(
     filters = [Bill.is_test_data == False]
     if start_date: filters.append(func.date(Bill.invoice_date) >= start_date)
     if end_date: filters.append(func.date(Bill.invoice_date) <= end_date)
+    if status and status.upper() != 'ALL': filters.append(func.upper(Bill.status) == status.upper())
+    if customer: filters.append(Bill.customer_name.ilike(f"%{customer}%"))
+    if bill_number: filters.append(Bill.bill_number.ilike(f"%{bill_number}%"))
+    if min_amount is not None: filters.append(Bill.amount >= min_amount)
+    if max_amount is not None: filters.append(Bill.amount <= max_amount)
         
     bills = db.query(Bill).filter(and_(*filters)).all()
     bill_ids = [b.id for b in bills]
@@ -253,18 +259,20 @@ async def get_payment_bifurcation(
     modes = ["CASH", "UPI", "IMPS", "NEFT", "RTGS", "CHEQUE", "CARD", "ADVANCE", "OLD_GOLD_EXCHANGE", "MIXED", "UNKNOWN"]
     bifurcation = {m: {"total": 0.0, "verified": 0.0, "unverified": 0.0, "count": 0} for m in modes}
     
-    payments = db.query(PaymentModel).filter(PaymentModel.bill_id.in_(bill_ids)).all()
-    for p in payments:
-        mode = p.mode if p.mode in modes else "UNKNOWN"
-        amt = float(p.amount)
-        bifurcation[mode]["total"] += amt
-        if p.status == "Green": bifurcation[mode]["verified"] += amt
-        else: bifurcation[mode]["unverified"] += amt
-        bifurcation[mode]["count"] += 1
+    if bill_ids:
+        payments = db.query(PaymentModel).filter(PaymentModel.bill_id.in_(bill_ids)).all()
+        for p in payments:
+            mode = p.mode if p.mode in modes else "UNKNOWN"
+            amt = float(p.amount)
+            bifurcation[mode]["total"] += amt
+            if p.status == "Green": bifurcation[mode]["verified"] += amt
+            else: bifurcation[mode]["unverified"] += amt
+            bifurcation[mode]["count"] += 1
     
     report = []
     for m, data in bifurcation.items():
-        report.append({"mode": m, "total": data["total"], "verified": data["verified"], "unverified": data["unverified"], "count": data["count"]})
+        if data["count"] > 0 or not (status or customer or bill_number or min_amount is not None or max_amount is not None):
+            report.append({"mode": m, "total": data["total"], "verified": data["verified"], "unverified": data["unverified"], "count": data["count"]})
     return report
 
 @app.get("/api/escalations/open")
@@ -349,6 +357,19 @@ async def logout(request: Request, db: Session = Depends(get_db)):
         from backend.models import Session as SessionModel
         db.query(SessionModel).filter(SessionModel.session_token == token).delete()
         db.commit()
+    return {"status": "success"}
+
+class SecurityViolation(BaseModel):
+    type: str
+
+@app.post("/api/audit/security-violation")
+async def log_security_violation(violation: SecurityViolation, request: Request, db: Session = Depends(get_db)):
+    token = request.headers.get("X-Session-Token")
+    employee_id = validate_session(db, token) if token else "UNKNOWN"
+    ip_address = request.client.host if request.client else "UNKNOWN"
+    
+    from backend.reconciliation.logic import log_audit
+    log_audit(db, "Security", 0, violation.type, None, ip_address, f"User: {employee_id}")
     return {"status": "success"}
 
 # MASTER CONSOLE: User Administration
