@@ -95,6 +95,7 @@ def create_otp(db: Session, employee_id: str, is_resend: bool = False) -> Dict[s
     }
 
 def verify_otp(db: Session, employee_id: str, otp_code: str) -> bool:
+    print(f"[DEBUG] verify_otp called for {employee_id} with code {otp_code}")
     otp_code = otp_code.strip()
     
     # Find the latest unused OTP record

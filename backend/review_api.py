@@ -350,6 +350,7 @@ async def verify(request: VerifyRequest, db: Session = Depends(get_db)):
                 "role": user.role
             }
         }
+        print(f"[DEBUG] OTP_VERIFY_SUCCESS_BUILDER: token_type={type(token)}, keys={list(res_data.keys())}")
         logger.info(f"OTP_VERIFY_SUCCESS: employee_id={user.employee_id}")
         return res_data
     logger.warning(f"OTP_VERIFY_FAILED: invalid code for {request.employee_id}")
