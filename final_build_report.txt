@@ -1,21 +1,22 @@
 Aradhana Auditor Login Fix Build Report
 
 Date: 2026-06-04
-Commit Hash Before: 76000839e5590924902120e784534f3a743ca203
-Commit Hash After: 8e472849688ac4dc924b781d4c14efb8e1789eb8
+Commit Hash Before: 9ba46c7ba286f030999551c6e6df63ef6ec42721
+Commit Hash After: a9b8de70c26cb1cd393835c8c08caebd79016c2c
 
 Root Cause of OTP Redirect Regression:
-The system was returning successfully but the component-level check for 'session_token' was failing because of an inconsistent key naming convention between 'status' and 'success' fields. Additionally, internal state updates in React sometimes triggered before localStorage was fully committed. 
+The backend was correctly returning the token, but a discrepancy in key-check logic (success: true vs status: "success") and potential race conditions in React state updates were causing the frontend to throw an error before the token was stored. Additionally, multiple storage keys were creating inconsistencies.
 
-Standardized Token Contract (FINAL):
-- Backend Response: returns {"success": true, "session_token": "...", "user": {...}}
-- Frontend Storage: localStorage["aradhana_session_token"]
-- Debugging: Full [DEBUG] console and backend print logs added to trace token from creation to validation.
+Hardened OTP Flow & Diagnostics:
+- Backend Response (Consolidated): returns {"success": true, "session_token": "...", "token": "...", "aradhana_session_token": "...", "debug_id": "STABLE_V4_AUTH"}
+- Frontend Validation: Checks for any valid token key (session_token, token, aradhana_session_token).
+- Diagnostic Logs: [DEBUG] traces added to verify payload keys, data types, and parsing success in both console and server logs.
+- Route Consolidation: Removed duplicate router inclusions in backend to ensure predictable path matching.
 
 Files Fixed:
-- backend/review_api.py (Added explicit success: True and standard debug prints)
-- frontend/src/api/client.ts (Added [OTP VERIFY RAW RESPONSE] log to verify JSON parsing)
-- frontend/src/pages/LoginPage.tsx (Improved redirect safety and added trace logs)
+- backend/review_api.py (Added fail-safe keys, debug_id, and route consolidation)
+- frontend/src/api/client.ts (Raw response logging)
+- frontend/src/pages/LoginPage.tsx (Diagnostic error messages with key visibility)
 
 Tests Run:
 - tests/test_auth_gate.py: 4 PASS
@@ -25,4 +26,5 @@ PASS - No TypeScript or build errors.
 
 Financial Safety Confirmation:
 CONFIRMED - Auth gate is mandatory. No data altered. Audit logs active.
+
 

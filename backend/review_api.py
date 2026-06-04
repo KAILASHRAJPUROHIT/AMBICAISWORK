@@ -341,10 +341,14 @@ async def verify(request: VerifyRequest, db: Session = Depends(get_db)):
     if verify_otp(db, user.employee_id, request.otp_code):
         token = create_user_session(db, user.employee_id)
         res_data = {
-            "success": True, 
-            "session_token": token, 
+            "success": True,
+            "debug_id": "STABLE_V4_AUTH",
+            "session_token": token,
+            "token": token,
+            "aradhana_session_token": token,
             "user": {"name": user.name, "role": user.role, "employee_id": user.employee_id}
         }
+        logging.info(f"[OTP_VERIFY_PAYLOAD] keys={list(res_data.keys())} token_present={bool(token)}")
         print("[OTP VERIFY RESPONSE]", {"success": True, "session_token_present": bool(token)})
         logger.info(f"OTP_VERIFY_SUCCESS: generated session_token={token[:8]}...")
         return res_data

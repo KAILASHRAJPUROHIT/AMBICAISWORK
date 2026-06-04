@@ -140,21 +140,26 @@ const LoginPage: React.FC = () => {
         try {
             console.log(`[DEBUG] LoginPage.handleVerify: Submitting OTP for ${employeeId}...`);
             const data = await verifyOTP(employeeId, otp.trim());
-            console.log(`[DEBUG] LoginPage.handleVerify: OTP Verified SUCCESS. Received data:`, data);
+            console.log(`[DEBUG] LoginPage.handleVerify: DATA_TYPE=${typeof data}`, data);
+            
+            // DIAGNOSTIC ALERT: Only if token missing
+            const sessionToken = data.session_token || data.token || data.aradhana_session_token;
 
-            if (data.session_token) {
+            if (sessionToken) {
+                console.log(`[DEBUG] LoginPage.handleVerify: Token found. Type: ${data.session_token ? 'session_token' : (data.token ? 'token' : 'aradhana_session_token')}`);
+                
                 // CLEANUP: Remove any potentially conflicting old keys
                 ['token', 'sessionToken', 'auth_token', 'session_token'].forEach(k => localStorage.removeItem(k));
 
-                console.log(`[DEBUG] LoginPage.handleVerify: Storing aradhana_session_token and user object.`);
-                localStorage.setItem('aradhana_session_token', data.session_token);
+                localStorage.setItem('aradhana_session_token', sessionToken);
                 localStorage.setItem('user', JSON.stringify(data.user));
                 
-                console.log(`[DEBUG] LoginPage.handleVerify: Redirecting to dashboard root...`);
-                // Use a standard navigation path
+                console.log(`[DEBUG] LoginPage.handleVerify: Redirecting...`);
                 window.location.href = '/dashboard';
             } else {
-                throw new Error("Login success but no session token received from backend.");
+                const keys = data ? Object.keys(data).join(', ') : 'null/empty';
+                console.error(`[DEBUG] LoginPage.handleVerify: MISSING TOKEN. Keys: ${keys}. Full Data:`, data);
+                throw new Error(`Login success but no session token. Keys received: ${keys}`);
             }
         } catch (err: any) {
             console.error(`[DEBUG] LoginPage.handleVerify: ERROR:`, err);
