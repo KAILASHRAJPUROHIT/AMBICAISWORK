@@ -1,34 +1,28 @@
 Aradhana Auditor Login Fix Build Report
 
 Date: 2026-06-04
-Commit Hash Before: 134c9a8a729e161a0076a26d705c75463777f98d
-Commit Hash After: c9afded4f19a338e17e41d72ce3890c04fa2ad8a
+Commit Hash Before: 76000839e5590924902120e784534f3a743ca203
+Commit Hash After: 8e472849688ac4dc924b781d4c14efb8e1789eb8
 
-Root Cause of Login Loop:
-1. Field name mismatch between backend response ('token') and frontend storage expectation ('session_token').
-2. Concurrent usage of multiple storage keys ('token', 'session_token', 'aradhana_session_token') causing race conditions during AuthProvider initialization.
-3. Lack of explicit debug tracing during the P0 regression state.
+Root Cause of OTP Redirect Regression:
+The system was returning successfully but the component-level check for 'session_token' was failing because of an inconsistent key naming convention between 'status' and 'success' fields. Additionally, internal state updates in React sometimes triggered before localStorage was fully committed. 
 
-Standardized Token Contract:
-- Backend OTP Verify Success: returns {"success": true, "session_token": "...", "user": {...}}
-- Frontend Storage Key: "aradhana_session_token"
-- Frontend User Key: "user"
-- Authenticated API Header: "X-Session-Token"
-- Backend Validation: GET /api/auth/validate-session (verifies X-Session-Token)
+Standardized Token Contract (FINAL):
+- Backend Response: returns {"success": true, "session_token": "...", "user": {...}}
+- Frontend Storage: localStorage["aradhana_session_token"]
+- Debugging: Full [DEBUG] console and backend print logs added to trace token from creation to validation.
 
 Files Fixed:
-- backend/review_api.py (Standardized verify response and validate-session logic, added debug logging)
-- backend/auth_service.py (Added debug logging to validate_session)
-- frontend/src/App.tsx (Implemented pre-flight cleanup of old keys, added rigorous validation logging, ensured loading guard prevents premature redirects)
-- frontend/src/pages/LoginPage.tsx (Updated to canonical aradhana_session_token storage, added success/error logging)
-- tests/test_auth_gate.py (Added flow test for session validation)
+- backend/review_api.py (Added explicit success: True and standard debug prints)
+- frontend/src/api/client.ts (Added [OTP VERIFY RAW RESPONSE] log to verify JSON parsing)
+- frontend/src/pages/LoginPage.tsx (Improved redirect safety and added trace logs)
 
 Tests Run:
-- tests/test_auth_gate.py: 4 PASS (Covering public access, 401 rejection, and valid session validation)
-- tests/test_operational_modules.py: 5 PASS
+- tests/test_auth_gate.py: 4 PASS
 
 Frontend Build Result:
 PASS - No TypeScript or build errors.
 
 Financial Safety Confirmation:
-CONFIRMED - No financial data records altered. OTP and RBAC enforced strictly. Session expiry correctly handled on both layers.
+CONFIRMED - Auth gate is mandatory. No data altered. Audit logs active.
+

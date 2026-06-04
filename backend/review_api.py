@@ -340,8 +340,14 @@ async def verify(request: VerifyRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(func.lower(User.employee_id) == request.employee_id.lower()).first()
     if verify_otp(db, user.employee_id, request.otp_code):
         token = create_user_session(db, user.employee_id)
+        res_data = {
+            "success": True, 
+            "session_token": token, 
+            "user": {"name": user.name, "role": user.role, "employee_id": user.employee_id}
+        }
+        print("[OTP VERIFY RESPONSE]", {"success": True, "session_token_present": bool(token)})
         logger.info(f"OTP_VERIFY_SUCCESS: generated session_token={token[:8]}...")
-        return {"status": "success", "session_token": token, "user": {"name": user.name, "role": user.role, "employee_id": user.employee_id}}
+        return res_data
     logger.warning(f"OTP_VERIFY_FAILED: invalid code for {request.employee_id}")
     raise HTTPException(status_code=401, detail="Invalid or expired OTP")
 

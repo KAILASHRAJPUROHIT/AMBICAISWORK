@@ -22,7 +22,11 @@ async function handleResponse(response: Response, errorMessage: string) {
   }
   
   if (contentType && contentType.includes('application/json')) {
-    return response.json();
+    const data = await response.json();
+    if (response.url.includes('/api/auth/verify')) {
+        console.log("[OTP VERIFY RAW RESPONSE]", data);
+    }
+    return data;
   }
   return response.text();
 }
