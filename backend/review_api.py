@@ -53,7 +53,7 @@ if not db_integrity_ok:
 
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event, hash_password
 from backend.lan_config import lan_health_check
-from backend.models import User, LoginLog, Bill, BankAlert, SMSAlert, SystemSetting, AuditLog
+from backend.models import User, LoginLog, Bill, Payment, BankAlert, SMSAlert, SystemSetting, AuditLog
 from backend.pdf_ingestion import start_ingestion_thread, perform_scan, ingestion_status, WATCH_PATH
 from backend.email_poller import start_email_poller, process_emails, email_status
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
@@ -596,6 +596,241 @@ async def get_live_payment_events(db: Session = Depends(get_db)):
         combined.append({"id": f"sms_{s.id}", "source": "SMS", "bank": s.bank_name, "account": s.account_suffix, "amount": float(s.amount), "reference": s.utr_reference, "timestamp": s.transaction_timestamp.isoformat(), "confidence": "HIGH" if s.parsed_confidence >= 0.9 else "MEDIUM" if s.parsed_confidence >= 0.6 else "LOW", "payer": s.payer_name, "raw": s.raw_body})
     combined.sort(key=lambda x: x["timestamp"], reverse=True)
     return combined[:50]
+
+def iso_or_none(value):
+    return value.isoformat() if value else None
+
+def review_age(created_at):
+    if not created_at:
+        return None
+    delta = datetime.now() - created_at
+    total_minutes = max(0, int(delta.total_seconds() // 60))
+    if total_minutes < 60:
+        return f"{total_minutes}m"
+    hours = total_minutes // 60
+    if hours < 24:
+        return f"{hours}h"
+    return f"{hours // 24}d"
+
+def requires_accountant_approval(payment_mode: str) -> bool:
+    normalized_mode = (payment_mode or "").upper()
+    return any(token in normalized_mode for token in ("OLD_GOLD_EXCHANGE", "OLD GOLD", "ADVANCE"))
+
+def reconciliation_display_status(
+    invoice_amount: float,
+    bank_amount: float,
+    difference: float,
+    confidence: str,
+    payment_mode: str,
+    stored_status: str,
+    advance_amount: float,
+) -> str:
+    normalized_status = (stored_status or "").upper()
+    normalized_mode = (payment_mode or "").upper()
+    mismatch_statuses = {"MISMATCH", "ERROR", "PAYMENT_TOTAL_MISMATCH", "FRAUD_RISK", "AMBIGUOUS_MATCH", "RED"}
+
+    if difference < -0.01 or normalized_status in mismatch_statuses:
+        return "RISK / MISMATCH"
+    if requires_accountant_approval(payment_mode):
+        return "ACCOUNTANT APPROVAL REQUIRED"
+    if "CHEQUE" in normalized_mode and normalized_status not in {"GREEN", "CLEARED", "VERIFIED", "PAID"}:
+        return "REALIZING CHEQUE"
+    if advance_amount > 0 and abs(invoice_amount - bank_amount) >= 0.01:
+        return "ADVANCE PENDING"
+    if invoice_amount > 0 and abs(invoice_amount - bank_amount) < 0.01 and bank_amount > 0 and confidence.upper() == "HIGH":
+        return "CLEAR"
+    if 0 < bank_amount < invoice_amount:
+        return "PARTIAL PAYMENT"
+    if bank_amount == 0:
+        return "PENDING BANK"
+    return "RISK / MISMATCH"
+
+def reconciliation_confidence(invoice_amount: float, total_received: float, payment_mode: str = "") -> str:
+    if requires_accountant_approval(payment_mode):
+        return "Medium"
+    if invoice_amount > 0 and abs(invoice_amount - total_received) < 0.01 and total_received > 0:
+        return "High"
+    if 0 < total_received < invoice_amount:
+        return "Medium"
+    return "Low"
+
+def reconciliation_difference_type(difference: float) -> str:
+    if abs(difference) < 0.01:
+        return "zero"
+    if difference > 0:
+        return "outstanding"
+    return "overpaid"
+
+def reconciliation_status_color(status: str) -> str:
+    normalized = (status or "").upper()
+    if normalized == "CLEAR":
+        return "GREEN"
+    if normalized in {"PARTIAL PAYMENT", "REALIZING CHEQUE"}:
+        return "BLUE"
+    if normalized == "PENDING BANK":
+        return "YELLOW"
+    if normalized in {"ADVANCE PENDING", "ACCOUNTANT APPROVAL REQUIRED"}:
+        return "PURPLE"
+    return "RED"
+
+def reconciliation_status_explanation(status: str) -> str:
+    normalized = (status or "").upper()
+    if normalized == "CLEAR":
+        return "Invoice amount fully matched by verified payment evidence."
+    if normalized == "PARTIAL PAYMENT":
+        return "Partial payment received. Outstanding balance remains."
+    if normalized == "PENDING BANK":
+        return "No verified bank payment received yet."
+    if normalized == "RISK / MISMATCH":
+        return "Payment evidence conflicts with invoice value."
+    if normalized == "REALIZING CHEQUE":
+        return "Cheque deposited. Awaiting bank clearance."
+    if normalized == "ADVANCE PENDING":
+        return "Advance received. Final settlement pending."
+    if normalized == "ACCOUNTANT APPROVAL REQUIRED":
+        return "Old gold exchange or advance payment requires accountant approval even though amounts may match."
+    return "Review required."
+
+def is_operational_bill(bill: Bill) -> bool:
+    bill_no = (bill.bill_number or "").upper()
+    excluded_prefixes = ("TEST-", "ARCH-", "HARDENING-")
+    return not bool(bill.is_test_data) and not bill_no.startswith(excluded_prefixes)
+
+@app.get("/api/reconciliation/open")
+async def get_real_reconciliation_open(db: Session = Depends(get_db)):
+    bills = (
+        db.query(Bill)
+        .filter(
+            Bill.is_test_data == False,
+            ~Bill.bill_number.ilike("TEST-%"),
+            ~Bill.bill_number.ilike("ARCH-%"),
+            ~Bill.bill_number.ilike("HARDENING-%"),
+            or_(
+                Bill.review_required == 1,
+                Bill.status != "Green",
+                Bill.remaining_amount > 0,
+            ),
+        )
+        .order_by(Bill.invoice_generated_at.desc().nullslast(), Bill.created_at.desc())
+        .limit(200)
+        .all()
+    )
+
+    rows = []
+    for bill in bills:
+        if not is_operational_bill(bill):
+            continue
+
+        payments = (
+            db.query(Payment)
+            .filter(Payment.bill_id == bill.id)
+            .order_by(Payment.payment_date.asc().nullslast(), Payment.created_at.asc())
+            .all()
+        )
+        payment_total = sum(float(payment.amount or 0.0) for payment in payments)
+        fallback_total = (
+            float(bill.cash_received or 0.0)
+            + float(bill.bank_received or 0.0)
+            + float(bill.card_received or 0.0)
+        )
+        total_received = payment_total if payment_total > 0 else fallback_total
+        bank_amount = total_received
+        invoice_amount = float(bill.amount or 0.0)
+        utr_reference = bill.reference_no or next((payment.utr_reference for payment in payments if payment.utr_reference), None)
+        bank_alert_by_utr = {}
+        if utr_reference:
+            for alert in db.query(BankAlert).filter(BankAlert.utr_reference == utr_reference).all():
+                bank_alert_by_utr[alert.utr_reference] = alert
+        payment_breakdown = []
+        for payment in payments:
+            payment_utr = payment.utr_reference or bill.reference_no
+            evidence = bank_alert_by_utr.get(payment_utr) if payment_utr else None
+            if not evidence and payment_utr:
+                evidence = db.query(BankAlert).filter(BankAlert.utr_reference == payment_utr).first()
+            payment_breakdown.append({
+                "amount": float(payment.amount or 0.0),
+                "mode": payment.mode or "UNKNOWN",
+                "timestamp": iso_or_none(payment.payment_date) or iso_or_none(payment.created_at),
+                "utr_reference": payment_utr,
+                "reference": payment_utr or payment.cheque_number,
+                "source": (evidence.sender if evidence else None) or ("manual" if not payment_utr else "bank"),
+                "evidence_link": None,
+                "evidence_available": bool(evidence),
+            })
+
+        if not payment_breakdown and fallback_total > 0:
+            fallback_parts = [
+                ("CASH", float(bill.cash_received or 0.0)),
+                ("BANK", float(bill.bank_received or 0.0)),
+                ("CARD", float(bill.card_received or 0.0)),
+            ]
+            for mode, amount in fallback_parts:
+                if amount > 0:
+                    payment_breakdown.append({
+                        "amount": amount,
+                        "mode": mode,
+                        "timestamp": iso_or_none(bill.invoice_generated_at) or iso_or_none(bill.created_at),
+                        "utr_reference": bill.reference_no if mode == "BANK" else None,
+                        "reference": bill.reference_no if mode == "BANK" else None,
+                        "source": "bill_summary",
+                        "evidence_link": None,
+                        "evidence_available": False,
+                    })
+
+        bank_alert = None
+        if utr_reference:
+            bank_alert = db.query(BankAlert).filter(BankAlert.utr_reference == utr_reference).first()
+        if not bank_alert and total_received:
+            bank_alert = (
+                db.query(BankAlert)
+                .filter(BankAlert.amount == total_received)
+                .order_by(BankAlert.received_at.desc())
+                .first()
+            )
+        difference = round(invoice_amount - total_received, 2)
+        payment_mode = bill.payment_mode or ", ".join(payment.mode for payment in payments if payment.mode) or "UNKNOWN"
+        approval_required = requires_accountant_approval(payment_mode)
+        confidence = reconciliation_confidence(invoice_amount, total_received, payment_mode)
+        status = reconciliation_display_status(
+            invoice_amount=invoice_amount,
+            bank_amount=bank_amount,
+            difference=difference,
+            confidence=confidence,
+            payment_mode=payment_mode,
+            stored_status=bill.status,
+            advance_amount=float(bill.advance_amount or 0.0),
+        )
+
+        rows.append({
+            "bill_no": bill.bill_number,
+            "customer_name": bill.customer_name or "",
+            "invoice_amount": invoice_amount,
+            "bank_amount": bank_amount,
+            "total_received": total_received,
+            "difference": difference,
+            "outstanding": difference if difference > 0 else 0.0,
+            "overpaid": abs(difference) if difference < 0 else 0.0,
+            "difference_type": reconciliation_difference_type(difference),
+            "payment_mode": payment_mode,
+            "status": status,
+            "status_color": reconciliation_status_color(status),
+            "confidence": confidence,
+            "review_required": bool(bill.review_required) or approval_required,
+            "status_explanation": reconciliation_status_explanation(status),
+            "invoice_date": iso_or_none(bill.invoice_date),
+            "invoice_generated_at": iso_or_none(bill.invoice_generated_at),
+            "bank_time": iso_or_none(bank_alert.received_at) if bank_alert else None,
+            "verified_at": None,
+            "verified_by": None,
+            "utr_reference": utr_reference,
+            "review_age": review_age(bill.created_at),
+            "source_system": "ARADHANA_BILLS",
+            "created_at": iso_or_none(bill.created_at),
+            "updated_at": None,
+            "payment_breakdown": payment_breakdown,
+        })
+
+    return rows
 
 @app.get("/status-colors")
 def status_colors():
