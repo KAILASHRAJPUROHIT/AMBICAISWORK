@@ -2,6 +2,8 @@ import os
 import json
 import logging
 import sys
+import secrets
+import string
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
@@ -759,6 +761,18 @@ def log_user_audit(db: Session, actor: User, target: User, action: str, changed_
     )
     db.add(audit)
 
+def generate_temporary_password(length: int = 16) -> str:
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    while True:
+        password = ''.join(secrets.choice(alphabet) for _ in range(length))
+        if (
+            any(ch.islower() for ch in password)
+            and any(ch.isupper() for ch in password)
+            and any(ch.isdigit() for ch in password)
+            and any(ch in "!@#$%^&*" for ch in password)
+        ):
+            return password
+
 # MASTER CONSOLE: User Administration
 @app.get("/api/admin/users")
 async def list_users(
@@ -822,7 +836,6 @@ class UserUpdate(BaseModel):
     permissions: Optional[List[str]] = None
 
 class PasswordResetRequest(BaseModel):
-    temporary_password: Optional[str] = None
     send_reset_otp: bool = False
 
 @app.post("/api/admin/users")
@@ -836,7 +849,9 @@ async def create_user(request: UserCreate, db: Session = Depends(get_db), owner:
 
     role = normalize_role(request.role)
     permissions = normalize_permissions(role, request.permissions)
-    password_hash = hash_password(request.password) if request.password else None
+    generated_temporary_password = not bool(request.password)
+    temporary_password = request.password or generate_temporary_password()
+    password_hash = hash_password(temporary_password)
     new_user = User(
         employee_id=employee_id,
         name=request.name,
@@ -844,7 +859,7 @@ async def create_user(request: UserCreate, db: Session = Depends(get_db), owner:
         security_email=request.security_email,
         role=role,
         hashed_password=password_hash,
-        password_reset_required=request.password_reset_required,
+        password_reset_required=True,
         is_active=1 if request.is_active else 0
     )
     db.add(new_user)
@@ -857,15 +872,18 @@ async def create_user(request: UserCreate, db: Session = Depends(get_db), owner:
         "security_email": new_user.security_email,
         "role": new_user.role,
         "is_active": new_user.is_active == 1,
-        "password_reset_required": bool(new_user.password_reset_required),
+        "password_reset_required": True,
         "permissions": permissions,
-        "temporary_password_set": bool(request.password),
+        "temporary_password_generated": generated_temporary_password,
         "reset_otp_requested": request.send_otp_to_security_email,
     })
     if request.send_otp_to_security_email:
         create_otp(db, new_user.employee_id, is_resend=False)
     db.commit()
-    return {"status": "success", "user": safe_user_response(db, new_user)}
+    response = {"status": "success", "user": safe_user_response(db, new_user)}
+    if generated_temporary_password:
+        response["temporary_password"] = temporary_password
+    return response
 
 @app.patch("/api/admin/users/{employee_id}")
 async def update_user(employee_id: str, request: UserUpdate, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
@@ -951,17 +969,19 @@ async def reset_user_password(employee_id: str, request: PasswordResetRequest, d
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    changed_fields: Dict[str, Any] = {"password_reset_required": True}
-    if request.temporary_password:
-        user.hashed_password = hash_password(request.temporary_password)
-        changed_fields["temporary_password_set"] = True
+    temporary_password = generate_temporary_password()
+    user.hashed_password = hash_password(temporary_password)
+    changed_fields: Dict[str, Any] = {
+        "password_reset_required": True,
+        "temporary_password_generated": True,
+    }
     user.password_reset_required = True
     if request.send_reset_otp:
         create_otp(db, user.employee_id, is_resend=True)
         changed_fields["reset_otp_requested"] = True
     log_user_audit(db, owner, user, "PASSWORD_RESET_TRIGGERED", changed_fields)
     db.commit()
-    return {"status": "success", "password_reset_required": True}
+    return {"status": "success", "password_reset_required": True, "temporary_password": temporary_password}
 
 @app.post("/api/admin/users/{employee_id}/archive")
 async def archive_user(employee_id: str, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
@@ -1250,8 +1270,23 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
         raise HTTPException(status_code=404, detail="User not found")
         
     if verify_otp(db, user.employee_id, request.otp_code):
-        from backend.auth_service import hash_password
         user.hashed_password = hash_password(request.new_password)
+        user.password_reset_required = False
+        db.add(AuditLog(
+            entity_type="User",
+            entity_id=user.id,
+            action="PASSWORD_RESET_COMPLETED",
+            old_status=None,
+            new_status=user.role,
+            actor=user.employee_id,
+            metadata_json=json.dumps({
+                "actor_employee_id": user.employee_id,
+                "target_employee_id": user.employee_id,
+                "changed_fields": {"password_reset_required": False},
+                "timestamp": datetime.now().isoformat(),
+                "source": "SelfServicePasswordReset",
+            })
+        ))
         db.commit()
         
         log_event(db, user.employee_id, "PASSWORD_RESET_SUCCESS")

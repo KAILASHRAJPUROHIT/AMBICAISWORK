@@ -2,11 +2,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from fastapi.testclient import TestClient
+from datetime import datetime, timedelta
 
 import backend.review_api as review_api
 from backend.database import Base
-from backend.models import User, AuditLog
-from backend.auth_service import hash_password
+from backend.models import User, AuditLog, OTP
+from backend.auth_service import hash_password, verify_password
 
 
 def make_client(monkeypatch):
@@ -78,7 +79,7 @@ def test_non_owner_cannot_manage_users(monkeypatch):
 
 
 def test_password_hash_is_never_returned(monkeypatch):
-    client, _ = make_client(monkeypatch)
+    client, SessionLocal = make_client(monkeypatch)
     response = client.post(
         "/api/admin/users",
         headers={"X-Session-Token": "owner-token"},
@@ -87,14 +88,52 @@ def test_password_hash_is_never_returned(monkeypatch):
             "name": "Developer",
             "email": "dev@example.com",
             "role": "DEVELOPER",
-            "password": "Temporary123",
             "permissions": ["dashboard_access", "audit_logs_access"],
         },
     )
     assert response.status_code == 200
     payload = response.json()
+    generated_password = payload["temporary_password"]
+    assert generated_password
     assert "hashed_password" not in str(payload)
-    assert "Temporary123" not in str(payload)
+    assert payload["user"]["password_reset_required"] is True
+
+    db = SessionLocal()
+    try:
+        created = db.query(User).filter(User.employee_id == "DEV-01").first()
+        assert created is not None
+        assert created.hashed_password != generated_password
+        assert verify_password(generated_password, created.hashed_password)
+    finally:
+        db.close()
+
+
+def test_owner_entered_temp_password_is_not_returned(monkeypatch):
+    client, SessionLocal = make_client(monkeypatch)
+    response = client.post(
+        "/api/admin/users",
+        headers={"X-Session-Token": "owner-token"},
+        json={
+            "employee_id": "VIEW-01",
+            "name": "Viewer",
+            "email": "viewer@example.com",
+            "role": "VIEWER",
+            "password": "OwnerEntered123!",
+            "permissions": ["dashboard_access", "reports_access", "audit_logs_access"],
+        },
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert "temporary_password" not in payload
+    assert "OwnerEntered123!" not in str(payload)
+
+    db = SessionLocal()
+    try:
+        created = db.query(User).filter(User.employee_id == "VIEW-01").first()
+        assert created is not None
+        assert verify_password("OwnerEntered123!", created.hashed_password)
+    finally:
+        db.close()
 
 
 def test_archive_does_not_delete_user(monkeypatch):
@@ -126,5 +165,54 @@ def test_update_user_logs_audit_event(monkeypatch):
         actions = [log.action for log in db.query(AuditLog).all()]
         assert "USER_UPDATED" in actions
         assert "PERMISSIONS_UPDATED" in actions
+    finally:
+        db.close()
+
+
+def test_admin_reset_generates_temp_password_and_logs(monkeypatch):
+    client, SessionLocal = make_client(monkeypatch)
+    response = client.post(
+        "/api/admin/users/ACC-01/reset-password",
+        headers={"X-Session-Token": "owner-token"},
+        json={"send_reset_otp": False},
+    )
+    assert response.status_code == 200
+    temporary_password = response.json()["temporary_password"]
+    assert temporary_password
+    assert "hashed_password" not in response.text
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.employee_id == "ACC-01").first()
+        assert user.password_reset_required is True
+        assert verify_password(temporary_password, user.hashed_password)
+        assert db.query(AuditLog).filter(AuditLog.action == "PASSWORD_RESET_TRIGGERED").count() == 1
+    finally:
+        db.close()
+
+
+def test_self_reset_clears_reset_required_and_logs(monkeypatch):
+    client, SessionLocal = make_client(monkeypatch)
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.employee_id == "ACC-01").first()
+        user.password_reset_required = True
+        db.add(OTP(employee_id="ACC-01", otp_code="123456", expires_at=datetime.now() + timedelta(minutes=5)))
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post(
+        "/api/auth/reset-password",
+        json={"email": "acc@example.com", "otp_code": "123456", "new_password": "NewSecure123!"},
+    )
+    assert response.status_code == 200
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.employee_id == "ACC-01").first()
+        assert user.password_reset_required is False
+        assert verify_password("NewSecure123!", user.hashed_password)
+        assert db.query(AuditLog).filter(AuditLog.action == "PASSWORD_RESET_COMPLETED").count() == 1
     finally:
         db.close()

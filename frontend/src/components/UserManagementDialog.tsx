@@ -93,12 +93,14 @@ const UserManagementDialog: React.FC<UserManagementDialogProps> = ({ isOpen, mod
   const [formData, setFormData] = useState<UserFormState>(() => makeInitialState(mode, user));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const isEdit = mode === 'edit';
 
   useEffect(() => {
     if (isOpen) {
       setFormData(makeInitialState(mode, user));
       setError(null);
+      setGeneratedPassword(null);
     }
   }, [isOpen, mode, user]);
 
@@ -152,8 +154,14 @@ const UserManagementDialog: React.FC<UserManagementDialogProps> = ({ isOpen, mod
         const err = await response.json();
         throw new Error(err.detail || 'Failed to save user');
       }
+      const result = await response.json();
       onSuccess();
-      onClose();
+      if (result.temporary_password) {
+        setGeneratedPassword(result.temporary_password);
+        setFormData(prev => ({ ...prev, temporary_password: '' }));
+      } else {
+        onClose();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save user');
     } finally {
@@ -170,7 +178,6 @@ const UserManagementDialog: React.FC<UserManagementDialogProps> = ({ isOpen, mod
         method: 'POST',
         headers: getHeaders(),
         body: JSON.stringify({
-          temporary_password: formData.temporary_password || null,
           send_reset_otp: formData.send_otp_to_security_email,
         }),
       });
@@ -178,7 +185,9 @@ const UserManagementDialog: React.FC<UserManagementDialogProps> = ({ isOpen, mod
         const err = await response.json();
         throw new Error(err.detail || 'Failed to trigger password reset');
       }
+      const result = await response.json();
       onSuccess();
+      setGeneratedPassword(result.temporary_password || null);
       setFormData(prev => ({ ...prev, temporary_password: '', password_reset_required: true }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to trigger password reset');
@@ -199,6 +208,23 @@ const UserManagementDialog: React.FC<UserManagementDialogProps> = ({ isOpen, mod
         </div>
 
         {error && <div className="mb-6 p-4 bg-red-50 text-red-600 rounded-xl text-xs font-bold uppercase">{error}</div>}
+        {generatedPassword && (
+          <div className="mb-6 p-5 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-2xl">
+            <p className="text-xs font-black uppercase tracking-widest mb-2">Temporary password shown once</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <code className="px-4 py-3 bg-white rounded-xl border border-yellow-200 font-black text-sm">{generatedPassword}</code>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(generatedPassword)}
+                className="px-4 py-3 bg-yellow-200 text-yellow-900 rounded-xl font-black text-xs uppercase tracking-widest"
+              >
+                Copy
+              </button>
+            </div>
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-widest">Copy now. This password will never be shown again.</p>
+            <p className="mt-2 text-[10px] font-bold uppercase tracking-widest">Password hashes are never exposed.</p>
+          </div>
+        )}
 
         <form onSubmit={submitUser} className="space-y-8">
           <section>
@@ -284,19 +310,18 @@ const UserManagementDialog: React.FC<UserManagementDialogProps> = ({ isOpen, mod
           <section>
             <h4 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-4">Security</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <label className="space-y-2 md:col-span-2">
-                <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">
-                  {isEdit ? 'Temporary Password For Reset' : 'Temporary Password'}
-                </span>
-                <input
-                  type="password"
-                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold"
-                  value={formData.temporary_password}
-                  onChange={e => setFormData({ ...formData, temporary_password: e.target.value })}
-                  required={!isEdit}
-                  placeholder={isEdit ? 'Leave blank to only require reset' : ''}
-                />
-              </label>
+              {!isEdit && (
+                <label className="space-y-2 md:col-span-2">
+                  <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Optional Temporary Password</span>
+                  <input
+                    type="password"
+                    className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold"
+                    value={formData.temporary_password}
+                    onChange={e => setFormData({ ...formData, temporary_password: e.target.value })}
+                    placeholder="Leave blank to generate securely"
+                  />
+                </label>
+              )}
               <label className="p-4 bg-gray-50 border border-gray-100 rounded-2xl flex items-center gap-3 self-end">
                 <input
                   type="checkbox"
