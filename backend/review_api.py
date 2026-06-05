@@ -3,7 +3,7 @@ import json
 import logging
 import sys
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
@@ -49,9 +49,9 @@ logger.info(f"STARTUP: DATABASE_PATH={DB_PATH} (Integrity: {db_integrity_ok})")
 if not db_integrity_ok:
     logger.critical(f"FATAL STARTUP ERROR: {db_error}")
 
-from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event
+from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event, hash_password
 from backend.lan_config import lan_health_check
-from backend.models import User, LoginLog, Bill, BankAlert, SMSAlert
+from backend.models import User, LoginLog, Bill, BankAlert, SMSAlert, SystemSetting, AuditLog
 from backend.pdf_ingestion import start_ingestion_thread, perform_scan, ingestion_status, WATCH_PATH
 from backend.email_poller import start_email_poller, process_emails, email_status
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
@@ -328,9 +328,29 @@ async def get_share_status():
     return {"online": online, "path": WATCH_PATH, "label": "Invoice PDF Share (PC2)", "status_color": "Green" if online else "Red", "pdf_count": pdf_count}
 
 @app.get("/api/invoices/live-feed")
-async def get_live_feed(db: Session = Depends(get_db)):
+async def get_live_feed(days: int = 7, per_day: int = 20, db: Session = Depends(get_db)):
     from backend.models import Payment as PaymentModel
-    bills = db.query(Bill).filter(Bill.is_test_data == False).order_by(Bill.ingested_at.desc()).limit(50).all()
+    safe_days = max(1, min(days, 31))
+    safe_per_day = max(1, min(per_day, 100))
+    cutoff = datetime.now() - timedelta(days=safe_days)
+    candidate_bills = db.query(Bill).filter(
+        Bill.is_test_data == False,
+        ~Bill.bill_number.like('TEST-%'),
+        ~Bill.bill_number.like('ARCH-%'),
+        or_(Bill.invoice_date == None, Bill.invoice_date >= cutoff)
+    ).order_by(Bill.invoice_date.desc(), Bill.invoice_generated_at.desc(), Bill.ingested_at.desc()).all()
+
+    bills_by_date = {}
+    bills = []
+    for bill in candidate_bills:
+        effective_date = bill.invoice_date or bill.order_date or bill.invoice_generated_at or bill.created_at
+        date_key = effective_date.strftime("%Y-%m-%d") if effective_date else "Unknown Date"
+        count = bills_by_date.get(date_key, 0)
+        if count >= safe_per_day:
+            continue
+        bills_by_date[date_key] = count + 1
+        bills.append(bill)
+
     results = []
     for b in bills:
         delay_seconds = 0
@@ -349,11 +369,13 @@ async def get_live_feed(db: Session = Depends(get_db)):
             PaymentModel.payment_date != None,
             func.date(PaymentModel.payment_date) < func.date(b.invoice_date)
         ).first()
+        
+        effective_date = b.invoice_date or b.order_date or b.invoice_generated_at or b.created_at
 
         results.append({
             "id": b.id,
             "bill_number": b.bill_number,
-            "invoice_date": b.invoice_date.strftime("%Y-%m-%d") if b.invoice_date else None,
+            "invoice_date": effective_date.strftime("%Y-%m-%d") if effective_date else None,
             "invoice_time": b.invoice_generated_at.strftime("%I:%M:%S %p") if b.invoice_generated_at else None,
             "invoice_generated_at": b.invoice_generated_at.isoformat() if b.invoice_generated_at else None,
             "ingested_at": b.ingested_at.isoformat() if b.ingested_at else None,
@@ -406,6 +428,16 @@ async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
     verified_today = bills_today_query.filter(Bill.status == "Green").count()
     review_required_total = db.query(Bill).filter(Bill.review_required == 1, Bill.is_test_data == False).count()
     partial_paid = db.query(Bill).filter(Bill.status == "Blue", Bill.remaining_amount > 0, Bill.is_test_data == False).count()
+    total_sale_today = float(db.query(func.sum(Bill.amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
+    cash_in_hand_today = float(db.query(func.sum(Bill.cash_received)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
+    bank_confirmed_today = float(db.query(
+        func.sum(
+            func.coalesce(Bill.bank_received, 0)
+            + func.coalesce(Bill.card_received, 0)
+            + func.coalesce(Bill.sms_confirmed_amount, 0)
+            + func.coalesce(Bill.email_confirmed_amount, 0)
+        )
+    ).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
     
     # Financial visibility check
     is_owner = user_role in ["OWNER", "ADMIN"]
@@ -416,7 +448,13 @@ async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
         log_audit(db, "System", 0, "FINANCIAL_DATA_ACCESS", user_role, "DENIED", f"User: {actor_id}")
     
     from backend.models import Payment as PaymentModel
+    from backend.models import Cheque
     bills_today_ids = [b.id for b in bills_today_query.all()]
+    cheques_pending_today = float(db.query(func.sum(Cheque.amount)).filter(
+        Cheque.bill_id.in_(bills_today_ids),
+        Cheque.status.in_(["Blue", "CHEQUE_DEPOSITED", "CHEQUE_CLEARING", "REALIZING_CHEQUE"])
+    ).scalar() or 0.0) if bills_today_ids else 0.0
+    latest_invoice_date = db.query(func.max(func.date(Bill.invoice_date))).filter(Bill.is_test_data == False).scalar()
     
     # Mandate: Only Owners/Admins see collections
     if is_owner:
@@ -448,6 +486,9 @@ async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
         "totalBillsToday": total_bills_today, "importedToday": imported_today, "pendingPreviousDays": pending_previous,
         "verified": verified_today, "pendingReview": review_required_total, "partialPaid": partial_paid,
         "unverifiedAdvancesCount": unverified_adv_count, "unverifiedAdvancesAmount": unverified_adv_amount,
+        "totalSaleToday": total_sale_today if is_owner else None, "cashInHandToday": cash_in_hand_today if is_owner else None,
+        "bankConfirmedToday": bank_confirmed_today if is_owner else None, "chequesPendingToday": cheques_pending_today if is_owner else None,
+        "totalReview": review_required_total, "financialDataAvailable": total_bills_today > 0, "latestOperationalDate": latest_invoice_date,
         "totalCollection": total_collection, "cashCollection": cash_collection, "bankCollection": bank_collection,
         "smsConfirmed": sms_confirmed, "emailConfirmed": email_confirmed, "chequeCollection": cheque_collection,
         "pdfCountInShare": pdf_count, "invoiceWatcherStatus": "READY" if online else "OFFLINE",
@@ -575,49 +616,318 @@ async def require_role(roles: List[str], request: Request, db: Session = Depends
         raise HTTPException(status_code=403, detail="Access denied: Insufficient permissions")
     return user
 
-async def require_owner(user: User = Depends(lambda r, d: require_role(["OWNER", "ADMIN"], r, d))):
-    return user
+async def require_owner(request: Request, db: Session = Depends(get_db)):
+    return await require_role(["OWNER", "ADMIN"], request, db)
+
+PERMISSION_GROUPS = [
+    "dashboard_access",
+    "reconciliation_access",
+    "reports_access",
+    "extraction_review_access",
+    "audit_logs_access",
+    "master_console_access",
+    "user_management_access",
+    "emergency_controls_access",
+    "financial_metrics_access",
+]
+
+ROLE_PERMISSION_PRESETS: Dict[str, List[str]] = {
+    "OWNER": PERMISSION_GROUPS,
+    "ADMIN": [
+        "dashboard_access",
+        "reconciliation_access",
+        "reports_access",
+        "extraction_review_access",
+        "audit_logs_access",
+        "master_console_access",
+        "user_management_access",
+    ],
+    "ACCOUNTANT": [
+        "dashboard_access",
+        "reconciliation_access",
+        "reports_access",
+        "extraction_review_access",
+        "audit_logs_access",
+    ],
+    "STAFF": [
+        "dashboard_access",
+        "extraction_review_access",
+    ],
+    "DEVELOPER": [
+        "dashboard_access",
+        "audit_logs_access",
+    ],
+    "VIEWER": [
+        "dashboard_access",
+        "reports_access",
+        "audit_logs_access",
+    ],
+}
+
+UNSAFE_PERMISSION_BY_ROLE: Dict[str, List[str]] = {
+    "DEVELOPER": ["financial_metrics_access", "emergency_controls_access"],
+    "ACCOUNTANT": ["financial_metrics_access", "emergency_controls_access", "user_management_access"],
+    "STAFF": ["financial_metrics_access", "emergency_controls_access", "user_management_access", "master_console_access"],
+    "VIEWER": ["financial_metrics_access", "emergency_controls_access", "user_management_access", "master_console_access", "reconciliation_access", "extraction_review_access"],
+}
+
+def normalize_role(role: str) -> str:
+    normalized = (role or "").strip().upper()
+    if normalized not in ROLE_PERMISSION_PRESETS:
+        raise HTTPException(status_code=400, detail="Unsupported user role")
+    return normalized
+
+def normalize_permissions(role: str, permissions: Optional[List[str]]) -> List[str]:
+    requested = permissions if permissions is not None else ROLE_PERMISSION_PRESETS[role]
+    normalized = []
+    invalid = []
+    for permission in requested:
+        key = str(permission).strip().lower()
+        if key not in PERMISSION_GROUPS:
+            invalid.append(key)
+        elif key not in normalized:
+            normalized.append(key)
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Unsupported permission groups: {', '.join(invalid)}")
+    unsafe = [p for p in normalized if p in UNSAFE_PERMISSION_BY_ROLE.get(role, [])]
+    if unsafe:
+        raise HTTPException(status_code=400, detail=f"Unsafe permission groups for {role}: {', '.join(unsafe)}")
+    return normalized
+
+def setting_key(kind: str, employee_id: str) -> str:
+    return f"user_{kind}:{employee_id}"
+
+def get_setting(db: Session, key: str) -> Optional[str]:
+    setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+    return setting.value if setting else None
+
+def set_setting(db: Session, key: str, value: str):
+    setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+    if setting:
+        setting.value = value
+    else:
+        db.add(SystemSetting(key=key, value=value))
+
+def get_user_permissions(db: Session, user: User) -> List[str]:
+    stored = get_setting(db, setting_key("permissions", user.employee_id or ""))
+    if stored:
+        try:
+            parsed = json.loads(stored)
+            if isinstance(parsed, list):
+                return normalize_permissions(normalize_role(user.role), parsed)
+        except (json.JSONDecodeError, HTTPException):
+            pass
+    return ROLE_PERMISSION_PRESETS.get(normalize_role(user.role), [])
+
+def is_user_archived(db: Session, user: User) -> bool:
+    return get_setting(db, setting_key("archived", user.employee_id or "")) == "true"
+
+def safe_user_response(db: Session, user: User) -> Dict[str, Any]:
+    archived = is_user_archived(db, user)
+    employee_id = user.employee_id or ""
+    return {
+        "id": user.id,
+        "employee_id": employee_id,
+        "name": user.name,
+        "email": user.email,
+        "security_email": user.security_email,
+        "role": user.role,
+        "is_active": user.is_active == 1,
+        "password_reset_required": bool(user.password_reset_required),
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+        "is_archived": archived,
+        "is_migrated": employee_id.startswith("MIGRATED-"),
+        "is_test_user": employee_id.startswith("TEST-"),
+        "permissions": get_user_permissions(db, user),
+    }
+
+def log_user_audit(db: Session, actor: User, target: User, action: str, changed_fields: Dict[str, Any]):
+    audit = AuditLog(
+        entity_type="User",
+        entity_id=target.id,
+        action=action,
+        old_status=None,
+        new_status=target.role,
+        actor=actor.employee_id,
+        metadata_json=json.dumps({
+            "actor_employee_id": actor.employee_id,
+            "target_employee_id": target.employee_id,
+            "changed_fields": changed_fields,
+            "timestamp": datetime.now().isoformat(),
+            "source": "MasterConsoleUserManagement",
+        })
+    )
+    db.add(audit)
 
 # MASTER CONSOLE: User Administration
 @app.get("/api/admin/users")
-async def list_users(db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+async def list_users(
+    include_inactive: bool = False,
+    include_archived: bool = False,
+    include_test: bool = False,
+    role: Optional[str] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    owner: User = Depends(require_owner)
+):
     users = db.query(User).all()
-    return [{
-        "id": u.id,
-        "employee_id": u.employee_id,
-        "name": u.name,
-        "email": u.email,
-        "role": u.role,
-        "is_active": u.is_active == 1
-    } for u in users]
+    role_filter = role.upper() if role else None
+    search_filter = search.lower().strip() if search else None
+    visible_users = []
+    for user in users:
+        employee_id = user.employee_id or ""
+        archived = is_user_archived(db, user)
+        is_migrated = employee_id.startswith("MIGRATED-")
+        is_test_user = employee_id.startswith("TEST-")
+        if not include_inactive and user.is_active != 1:
+            continue
+        if not include_archived and (archived or is_migrated):
+            continue
+        if not include_test and is_test_user:
+            continue
+        if role_filter and user.role.upper() != role_filter:
+            continue
+        if search_filter:
+            haystack = " ".join([
+                employee_id,
+                user.name or "",
+                user.email or "",
+                user.security_email or "",
+            ]).lower()
+            if search_filter not in haystack:
+                continue
+        visible_users.append(safe_user_response(db, user))
+    return visible_users
 
 class UserCreate(BaseModel):
     employee_id: str
     name: str
-    email: str
+    email: Optional[str] = None
+    security_email: Optional[str] = None
     role: str
-    password: str
+    password: Optional[str] = None
+    permissions: Optional[List[str]] = None
+    send_otp_to_security_email: bool = False
+    password_reset_required: bool = True
+    is_active: bool = True
+
+class UserUpdate(BaseModel):
+    employee_id: Optional[str] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+    security_email: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    password_reset_required: Optional[bool] = None
+    permissions: Optional[List[str]] = None
+
+class PasswordResetRequest(BaseModel):
+    temporary_password: Optional[str] = None
+    send_reset_otp: bool = False
 
 @app.post("/api/admin/users")
 async def create_user(request: UserCreate, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
-    from backend.auth_service import hash_password
-    existing = db.query(User).filter((User.employee_id == request.employee_id) | (User.email == request.email)).first()
+    employee_id = request.employee_id.strip().upper()
+    existing = db.query(User).filter(User.employee_id == employee_id).first()
+    if not existing and request.email:
+        existing = db.query(User).filter(User.email == request.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="User already exists")
 
+    role = normalize_role(request.role)
+    permissions = normalize_permissions(role, request.permissions)
+    password_hash = hash_password(request.password) if request.password else None
     new_user = User(
-        employee_id=request.employee_id,
+        employee_id=employee_id,
         name=request.name,
         email=request.email,
-        role=request.role.upper(),
-        hashed_password=hash_password(request.password),
-        is_active=1
+        security_email=request.security_email,
+        role=role,
+        hashed_password=password_hash,
+        password_reset_required=request.password_reset_required,
+        is_active=1 if request.is_active else 0
     )
     db.add(new_user)
+    db.flush()
+    set_setting(db, setting_key("permissions", new_user.employee_id), json.dumps(permissions))
+    log_user_audit(db, owner, new_user, "USER_CREATED", {
+        "employee_id": new_user.employee_id,
+        "name": new_user.name,
+        "email": new_user.email,
+        "security_email": new_user.security_email,
+        "role": new_user.role,
+        "is_active": new_user.is_active == 1,
+        "password_reset_required": bool(new_user.password_reset_required),
+        "permissions": permissions,
+        "temporary_password_set": bool(request.password),
+        "reset_otp_requested": request.send_otp_to_security_email,
+    })
+    if request.send_otp_to_security_email:
+        create_otp(db, new_user.employee_id, is_resend=False)
     db.commit()
-    from backend.reconciliation.logic import log_audit
-    log_audit(db, "User", new_user.id, "USER_CREATED", None, new_user.role, f"Created by {owner.employee_id}")
-    return {"status": "success"}
+    return {"status": "success", "user": safe_user_response(db, new_user)}
+
+@app.patch("/api/admin/users/{employee_id}")
+async def update_user(employee_id: str, request: UserUpdate, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    user = db.query(User).filter(User.employee_id == employee_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    changed_fields: Dict[str, Any] = {}
+    if request.employee_id is not None:
+        new_employee_id = request.employee_id.strip().upper()
+        if new_employee_id != user.employee_id:
+            if user.employee_id == owner.employee_id:
+                raise HTTPException(status_code=400, detail="Cannot change your own employee ID")
+            if db.query(User).filter(User.employee_id == new_employee_id, User.id != user.id).first():
+                raise HTTPException(status_code=400, detail="Employee ID already exists")
+            old_employee_id = user.employee_id
+            permissions = get_user_permissions(db, user)
+            archived = is_user_archived(db, user)
+            user.employee_id = new_employee_id
+            set_setting(db, setting_key("permissions", new_employee_id), json.dumps(permissions))
+            set_setting(db, setting_key("archived", new_employee_id), "true" if archived else "false")
+            changed_fields["employee_id"] = {"old": old_employee_id, "new": new_employee_id}
+
+    for field in ["name", "email", "security_email"]:
+        value = getattr(request, field)
+        if value is not None and getattr(user, field) != value:
+            changed_fields[field] = {"old": getattr(user, field), "new": value}
+            setattr(user, field, value)
+
+    if request.role is not None:
+        role = normalize_role(request.role)
+        if user.role != role:
+            changed_fields["role"] = {"old": user.role, "new": role}
+            user.role = role
+            if request.permissions is None:
+                preset_permissions = ROLE_PERMISSION_PRESETS[role]
+                set_setting(db, setting_key("permissions", user.employee_id), json.dumps(preset_permissions))
+                changed_fields["permissions"] = preset_permissions
+
+    if request.is_active is not None:
+        active_value = 1 if request.is_active else 0
+        if user.is_active != active_value:
+            if user.id == owner.id and active_value == 0:
+                raise HTTPException(status_code=400, detail="Cannot disable yourself")
+            changed_fields["is_active"] = {"old": user.is_active == 1, "new": request.is_active}
+            user.is_active = active_value
+
+    if request.password_reset_required is not None and bool(user.password_reset_required) != request.password_reset_required:
+        changed_fields["password_reset_required"] = {"old": bool(user.password_reset_required), "new": request.password_reset_required}
+        user.password_reset_required = request.password_reset_required
+
+    if request.permissions is not None:
+        permissions = normalize_permissions(normalize_role(user.role), request.permissions)
+        set_setting(db, setting_key("permissions", user.employee_id), json.dumps(permissions))
+        changed_fields["permissions"] = permissions
+        log_user_audit(db, owner, user, "PERMISSIONS_UPDATED", {"permissions": permissions})
+
+    if changed_fields:
+        log_user_audit(db, owner, user, "USER_UPDATED", changed_fields)
+        db.commit()
+
+    return {"status": "success", "user": safe_user_response(db, user)}
 
 @app.post("/api/admin/users/{employee_id}/toggle")
 async def toggle_user(employee_id: str, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
@@ -628,11 +938,53 @@ async def toggle_user(employee_id: str, db: Session = Depends(get_db), owner: Us
     if user.id == owner.id:
         raise HTTPException(status_code=400, detail="Cannot disable yourself")
 
+    old_active = user.is_active == 1
     user.is_active = 0 if user.is_active == 1 else 1
+    action = "USER_ENABLED" if user.is_active == 1 else "USER_DISABLED"
+    log_user_audit(db, owner, user, action, {"is_active": {"old": old_active, "new": user.is_active == 1}})
     db.commit()
-    from backend.reconciliation.logic import log_audit
-    log_audit(db, "User", user.id, "USER_TOGGLED", str(not user.is_active), str(user.is_active), f"Action by {owner.employee_id}")
-    return {"status": "success", "is_active": user.is_active == 1}
+    return {"status": "success", "user": safe_user_response(db, user)}
+
+@app.post("/api/admin/users/{employee_id}/reset-password")
+async def reset_user_password(employee_id: str, request: PasswordResetRequest, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    user = db.query(User).filter(User.employee_id == employee_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    changed_fields: Dict[str, Any] = {"password_reset_required": True}
+    if request.temporary_password:
+        user.hashed_password = hash_password(request.temporary_password)
+        changed_fields["temporary_password_set"] = True
+    user.password_reset_required = True
+    if request.send_reset_otp:
+        create_otp(db, user.employee_id, is_resend=True)
+        changed_fields["reset_otp_requested"] = True
+    log_user_audit(db, owner, user, "PASSWORD_RESET_TRIGGERED", changed_fields)
+    db.commit()
+    return {"status": "success", "password_reset_required": True}
+
+@app.post("/api/admin/users/{employee_id}/archive")
+async def archive_user(employee_id: str, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    user = db.query(User).filter(User.employee_id == employee_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.id == owner.id:
+        raise HTTPException(status_code=400, detail="Cannot archive yourself")
+    set_setting(db, setting_key("archived", user.employee_id), "true")
+    user.is_active = 0
+    log_user_audit(db, owner, user, "USER_ARCHIVED", {"is_archived": True, "is_active": False})
+    db.commit()
+    return {"status": "success", "user": safe_user_response(db, user)}
+
+@app.post("/api/admin/users/{employee_id}/restore")
+async def restore_user(employee_id: str, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    user = db.query(User).filter(User.employee_id == employee_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    set_setting(db, setting_key("archived", user.employee_id), "false")
+    log_user_audit(db, owner, user, "USER_RESTORED", {"is_archived": False})
+    db.commit()
+    return {"status": "success", "user": safe_user_response(db, user)}
 
 # MASTER CONSOLE: Security Dashboard
 @app.get("/api/admin/security/stats")
@@ -663,7 +1015,8 @@ async def get_security_stats(db: Session = Depends(get_db), owner: User = Depend
 async def get_admin_mode(db: Session = Depends(get_db), owner: User = Depends(require_owner)):
     from backend.models import SystemSetting
     mode = db.query(SystemSetting).filter(SystemSetting.key == "system_mode").first()
-    return {"mode": mode.value if mode else "PRODUCTION"}
+    current_mode = mode.value if mode else "PRODUCTION"
+    return {"mode": current_mode, "maintenance": current_mode.upper() == "MAINTENANCE"}
 
 @app.post("/api/admin/system/mode")
 async def set_admin_mode(mode: str, reason: str, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
@@ -696,6 +1049,25 @@ async def force_sync(command: str, db: Session = Depends(get_db), owner: User = 
     log_audit(db, "System", 0, "FORCE_SYNC", None, command, f"Forced by {owner.employee_id}")
     return {"status": "success", "command": command}
 
+# MASTER CONSOLE: Financial Health Dashboard
+@app.get("/api/admin/financial/health")
+async def get_financial_health(db: Session = Depends(get_db), owner: User = Depends(require_owner)):
+    from backend.models import Bill, Cheque
+
+    pending_review = db.query(Bill).filter(Bill.review_required == 1, Bill.is_test_data == False).count()
+    cheques_pending = db.query(Cheque).filter(Cheque.status != "Green").count()
+
+    # Read-only aggregate: no records or payment statuses are modified here.
+    total_invoiced_bank = float(db.query(func.sum(Bill.amount)).filter(Bill.payment_mode.like("%BANK%"), Bill.is_test_data == False).scalar() or 0.0)
+    total_confirmed_bank = float(db.query(func.sum(Bill.bank_received)).filter(Bill.is_test_data == False).scalar() or 0.0)
+
+    return {
+        "pending_review_count": pending_review,
+        "cheques_pending_count": cheques_pending,
+        "bank_variance_amount": total_invoiced_bank - total_confirmed_bank,
+        "reconciliation_accuracy": round((total_confirmed_bank / total_invoiced_bank * 100), 2) if total_invoiced_bank > 0 else 100.0
+    }
+
 # ... rest ...
 
 # Auth Models
@@ -706,6 +1078,11 @@ class LoginRequest(BaseModel):
 class VerifyRequest(BaseModel):
     employee_id: str
     otp_code: str
+
+# Existing routes
+@app.post("/auth/login")
+async def login_alias(request: LoginRequest, db: Session = Depends(get_db)):
+    return await login(request, db)
 
 @app.post("/api/auth/login")
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
@@ -764,6 +1141,10 @@ async def get_otp_status(employee_id: str, db: Session = Depends(get_db), user: 
         "resend_available_in": max(0, int(60 - age)),
         "expired": latest.expires_at < now
     }
+
+@app.post("/auth/verify")
+async def verify_alias(request: VerifyRequest, db: Session = Depends(get_db), req: Request = None):
+    return await verify(request, db, req)
 
 @app.post("/api/auth/verify")
 async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Request = None):
@@ -936,26 +1317,6 @@ if os.path.exists(frontend_dist):
         index_path = os.path.join(frontend_dist, "index.html")
         if os.path.exists(index_path): return FileResponse(index_path)
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
-
-# MASTER CONSOLE: Financial Health Dashboard
-@app.get("/api/admin/financial/health")
-async def get_financial_health(db: Session = Depends(get_db), owner: User = Depends(require_owner)):
-    from backend.models import Bill, Cheque
-    
-    pending_review = db.query(Bill).filter(Bill.review_required == 1, Bill.is_test_data == False).count()
-    cheques_pending = db.query(Cheque).filter(Cheque.status != "Green").count()
-    
-    # Calculate bank variance (simplified)
-    # Variance = (Total Invoiced Bank Amount) - (Total Confirmed Bank Amount)
-    total_invoiced_bank = float(db.query(func.sum(Bill.amount)).filter(Bill.payment_mode.like("%BANK%"), Bill.is_test_data == False).scalar() or 0.0)
-    total_confirmed_bank = float(db.query(func.sum(Bill.bank_received)).filter(Bill.is_test_data == False).scalar() or 0.0)
-    
-    return {
-        "pending_review_count": pending_review,
-        "cheques_pending_count": cheques_pending,
-        "bank_variance_amount": total_invoiced_bank - total_confirmed_bank,
-        "reconciliation_accuracy": round((total_confirmed_bank / total_invoiced_bank * 100), 2) if total_invoiced_bank > 0 else 100.0
-    }
 
 @app.on_event("startup")
 async def startup_event():

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import StatCard from '../components/StatCard';
 import AlertSoundSystem from '../api/AlertSoundSystem';
+import { getSessionToken } from '../api/client';
 import '../Dashboard.css';
 
 interface DashboardStats {
@@ -13,6 +13,13 @@ interface DashboardStats {
   partialPaid: number;
   unverifiedAdvancesCount: number;
   unverifiedAdvancesAmount: number;
+  totalSaleToday: number | null;
+  cashInHandToday: number | null;
+  bankConfirmedToday: number | null;
+  chequesPendingToday: number | null;
+  totalReview: number;
+  financialDataAvailable: boolean;
+  latestOperationalDate: string | null;
   totalCollection: number;
   cashCollection: number;
   bankCollection: number;
@@ -100,6 +107,13 @@ const initialStats: DashboardStats = {
   partialPaid: 0,
   unverifiedAdvancesCount: 0,
   unverifiedAdvancesAmount: 0,
+  totalSaleToday: null,
+  cashInHandToday: null,
+  bankConfirmedToday: null,
+  chequesPendingToday: null,
+  totalReview: 0,
+  financialDataAvailable: false,
+  latestOperationalDate: null,
   totalCollection: 0,
   cashCollection: 0,
   bankCollection: 0,
@@ -120,17 +134,25 @@ const DashboardPage: React.FC = () => {
   const [paymentEvents, setPaymentEvents] = useState<LivePaymentEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [dashboardApiAvailable, setDashboardApiAvailable] = useState(false);
   const [isSyncing, setIsSyncing] = useState({ pdf: false, email: false, sms: false });
   const [selectedEvent, setSelectedEvent] = useState<LivePaymentEvent | null>(null);
+  const [expandedFeedDates, setExpandedFeedDates] = useState<Set<string>>(new Set());
+  const [showFullPipeline, setShowFullPipeline] = useState(false);
 
   const API_BASE = window.location.origin;
 
   // SAFE FORMATTERS
   const money = (v?: number | null) => `₹${Number(v ?? 0).toLocaleString("en-IN")}`;
+  const moneyOrUnavailable = (...values: Array<number | null | undefined>) => {
+    if (!dashboardApiAvailable) return 'Data unavailable';
+    const value = values.find(v => v !== null && v !== undefined);
+    return money(value ?? 0);
+  };
   const num = (v?: number | null) => Number(v ?? 0).toLocaleString("en-IN");
 
   const fetchData = async () => {
-    const token = localStorage.getItem('aradhana_session_token');
+    const token = getSessionToken();
     const headers = {
       'X-Session-Token': token || ''
     };
@@ -138,7 +160,7 @@ const DashboardPage: React.FC = () => {
     try {
       const endpoints = [
         `${API_BASE}/api/dashboard/live`,
-        `${API_BASE}/api/invoices/live-feed`,
+        `${API_BASE}/api/invoices/live-feed?days=7&per_day=20`,
         `${API_BASE}/api/admin/ingestion-status`,
         `${API_BASE}/api/admin/email-status`,
         `${API_BASE}/api/admin/sms-status`,
@@ -152,6 +174,7 @@ const DashboardPage: React.FC = () => {
 
       const dashboardLive = responses[0] && responses[0].ok ? await responses[0].json() : null;
       console.log("DASHBOARD_LIVE_RESPONSE:", dashboardLive);
+      setDashboardApiAvailable(!!dashboardLive);
       if (dashboardLive) setStats(dashboardLive);
 
       const liveFeed = responses[1] && responses[1].ok ? await responses[1].json() : null;
@@ -219,7 +242,7 @@ const DashboardPage: React.FC = () => {
 
   const openPDF = async (bill_id: number) => {
     try {
-      const token = localStorage.getItem('session_token');
+      const token = getSessionToken();
       const response = await fetch(`${API_BASE}/api/invoices/pdf/${bill_id}`, {
         headers: { 'X-Session-Token': token || '' }
       });
@@ -240,9 +263,7 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  // GROUPING LOGIC (Limit to 8 for dashboard compactness)
-  const displayFeed = liveFeed.slice(0, 8);
-  const groupedFeed = displayFeed.reduce((acc: { [key: string]: LiveInvoice[] }, inv) => {
+  const groupedFeed = liveFeed.reduce((acc: { [key: string]: LiveInvoice[] }, inv) => {
     const date = inv.invoice_date || 'Unknown Date';
     if (!acc[date]) acc[date] = [];
     acc[date].push(inv);
@@ -250,12 +271,39 @@ const DashboardPage: React.FC = () => {
   }, {});
 
   const sortedDates = Object.keys(groupedFeed).sort((a, b) => b.localeCompare(a));
+  const latestFeedDate = sortedDates[0];
+  const visibleInvoicesForDate = (date: string) => {
+    const items = groupedFeed[date] || [];
+    if (showFullPipeline || expandedFeedDates.has(date)) return items;
+    const defaultLimit = date === latestFeedDate ? 5 : 10;
+    return items.slice(0, defaultLimit);
+  };
+  const toggleFeedDate = (date: string) => {
+    setExpandedFeedDates(prev => {
+      const next = new Set(prev);
+      if (next.has(date)) {
+        next.delete(date);
+      } else {
+        next.add(date);
+      }
+      return next;
+    });
+  };
 
-  const formatDelay = (seconds: number) => {
-    if (seconds < 0) return '---';
-    if (seconds < 60) return `${Math.round(seconds)}s`;
-    if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
-    return `${Math.round(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
+  const delayInfo = (seconds: number) => {
+    if (seconds < 0) {
+      return { text: '---', label: 'Unknown', className: 'bg-gray-100 text-gray-500 border-gray-200' };
+    }
+    const minutes = seconds / 60;
+    const text = seconds < 60
+      ? `${Math.round(seconds)}s`
+      : seconds < 3600
+        ? `${Math.round(minutes)}m`
+        : `${Math.round(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
+    if (minutes < 15) return { text, label: 'Normal', className: 'bg-green-50 text-green-700 border-green-100' };
+    if (minutes < 120) return { text, label: 'Watch', className: 'bg-yellow-50 text-yellow-700 border-yellow-100' };
+    if (minutes < 1440) return { text, label: 'Review', className: 'bg-orange-50 text-orange-700 border-orange-100' };
+    return { text, label: 'Escalate', className: 'bg-red-50 text-red-700 border-red-100' };
   };
 
   const SkeletonCard = () => (
@@ -274,6 +322,58 @@ const DashboardPage: React.FC = () => {
           .replace('AMBIGUOUS_AMOUNT_MATCH', 'Ambiguous Match')
           .replace('PARTIALLY_PAID', 'Partial Payment');
   };
+
+  const pipelineStatusClass = (status: string, statusText: string | null) => {
+    const normalized = `${status || ''} ${statusText || ''}`.toUpperCase();
+    if (['CLEARED', 'VERIFIED', 'PAID'].some(s => normalized.includes(s)) || normalized.includes('GREEN')) {
+      return 'bg-green-100 text-green-700 border-green-200';
+    }
+    if (['PENDING', 'INITIATED', 'AWAITING_CONFIRMATION'].some(s => normalized.includes(s)) || normalized.includes('YELLOW')) {
+      return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+    }
+    if (['DELIVERY_APPROVED_BEFORE_PAYMENT', 'APPROVAL_DELIVERY'].some(s => normalized.includes(s)) || normalized.includes('PURPLE')) {
+      return 'bg-orange-100 text-orange-700 border-orange-200';
+    }
+    if (['MISMATCH', 'ERROR', 'PAYMENT_TOTAL_MISMATCH', 'FRAUD_RISK'].some(s => normalized.includes(s)) || normalized.includes('RED')) {
+      return 'bg-red-100 text-red-700 border-red-200';
+    }
+    if (['CHEQUE_DEPOSITED', 'CHEQUE_CLEARING', 'REALIZING_CHEQUE'].some(s => normalized.includes(s)) || normalized.includes('BLUE')) {
+      return 'bg-blue-100 text-blue-700 border-blue-200';
+    }
+    if (['ARCHIVED', 'CLOSED'].some(s => normalized.includes(s))) {
+      return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+    return 'bg-gray-100 text-gray-700 border-gray-200';
+  };
+
+  const watcher = (() => {
+    if (!ingestionStatus) {
+      return {
+        label: 'Checking',
+        cardClass: 'bg-gray-50 border-gray-200',
+        dotClass: 'bg-gray-400',
+      };
+    }
+    if (!ingestionStatus.path_exists) {
+      return {
+        label: 'Offline',
+        cardClass: 'bg-red-50 border-red-200',
+        dotClass: 'bg-red-500',
+      };
+    }
+    if (!ingestionStatus.watcher_running) {
+      return {
+        label: 'Share Reachable, Watcher Paused',
+        cardClass: 'bg-yellow-50 border-yellow-200',
+        dotClass: 'bg-yellow-500',
+      };
+    }
+    return {
+      label: 'Online',
+      cardClass: 'bg-green-50 border-green-200',
+      dotClass: 'bg-green-500 animate-pulse',
+    };
+  })();
 
   if (loading) return (
     <div className="p-8 bg-gray-50 min-h-screen">
@@ -308,7 +408,7 @@ const DashboardPage: React.FC = () => {
       {/* Pipeline Status Header */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
          {/* Invoice Watcher Status */}
-         <div className={`p-4 rounded-xl border-2 transition-all ${ingestionStatus?.watcher_running ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+         <div className={`p-4 rounded-xl border-2 transition-all ${watcher.cardClass}`}>
             <div className="flex items-center justify-between mb-2">
                <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Invoice Watcher</span>
                <button 
@@ -319,12 +419,20 @@ const DashboardPage: React.FC = () => {
                  {isSyncing.pdf ? '...' : 'Sync Now'}
                </button>
             </div>
-            <div className="flex items-center">
-               <div className={`w-2 h-2 rounded-full mr-2 ${ingestionStatus?.watcher_running ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-               <span className="font-bold text-xs">{ingestionStatus?.watcher_running ? 'Realtime Online' : 'Offline'}</span>
+            <div className="flex items-center flex-wrap gap-y-1">
+               <div className={`w-2 h-2 rounded-full mr-2 ${watcher.dotClass}`}></div>
+               <span className="font-bold text-xs">{watcher.label}</span>
                <span className="mx-2 text-gray-300 text-xs">|</span>
                <span className="text-xs font-medium text-gray-600">{ingestionStatus?.pdf_files_found || 0} PDFs In Share</span>
             </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] font-bold uppercase tracking-tighter text-gray-500">
+               <div>Last Scan: <span className="text-gray-800">{ingestionStatus?.last_processed_time || 'Never'}</span></div>
+               <div>Processed: <span className="text-gray-800">{num(ingestionStatus?.files_processed)}</span></div>
+               <div>Failed: <span className={ingestionStatus?.failed_files ? 'text-red-600' : 'text-gray-800'}>{num(ingestionStatus?.failed_files)}</span></div>
+            </div>
+            {ingestionStatus?.last_error && (
+              <div className="mt-2 text-[9px] font-bold text-red-600 truncate">Error: {ingestionStatus.last_error}</div>
+            )}
          </div>
 
          {/* Email Poller Status */}
@@ -390,9 +498,9 @@ const DashboardPage: React.FC = () => {
             <StatCard label="Bills Dated Today" value={num(stats?.totalBillsToday)} />
             <StatCard label="Imported Today" value={num(stats?.importedToday)} />
             <StatCard label="Verified Cleared" value={num(stats?.verified)} />
-            <StatCard label="Unverified Adv" value={num(stats?.unverifiedAdvancesCount)} />
-            <StatCard label="Pending Previous" value={num(stats?.pendingPreviousDays)} />
-            <StatCard label="Total Review" value={num(stats?.pendingReview)} />
+            <StatCard label="Advance Verification Queue" value={num(stats?.unverifiedAdvancesCount)} />
+            <StatCard label="Pending Previous Days" value={num(stats?.pendingPreviousDays)} />
+            <StatCard label="Review Queue" value={num(stats?.totalReview ?? stats?.pendingReview)} />
         </div>
       </section>
 
@@ -403,16 +511,19 @@ const DashboardPage: React.FC = () => {
           <div className="grid grid-cols-1 gap-4">
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                  <p className="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-tighter">Total Sale</p>
-                 <p className="text-xl font-black text-gray-900">{money(stats?.totalCollection)}</p>
+                 <p className="text-xl font-black text-gray-900">{moneyOrUnavailable(stats?.totalSaleToday, stats?.totalCollection)}</p>
+                 {!stats?.financialDataAvailable && stats?.latestOperationalDate && (
+                   <p className="mt-1 text-[9px] font-bold text-gray-400 uppercase">Latest invoices: {stats.latestOperationalDate}</p>
+                 )}
               </div>
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm border-l-4 border-l-green-500">
                  <p className="text-[10px] font-black text-green-500 uppercase mb-2 tracking-tighter">Cash In Hand (After opening)</p>
-                 <p className="text-xl font-black text-gray-900">{money(stats?.cashCollection)}</p>
+                 <p className="text-xl font-black text-gray-900">{moneyOrUnavailable(stats?.cashInHandToday, stats?.cashCollection)}</p>
               </div>
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                  <p className="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-tighter">Bank Confirmed (Live)</p>
                  <div className="flex justify-between items-center">
-                    <p className="text-xl font-black text-gray-900">{money(stats?.bankCollection)}</p>
+                    <p className="text-xl font-black text-gray-900">{moneyOrUnavailable(stats?.bankConfirmedToday, stats?.bankCollection)}</p>
                     <div className="text-[9px] text-gray-400 font-bold space-y-1">
                        <div>E: {money(stats?.emailConfirmed)}</div>
                        <div>S: {money(stats?.smsConfirmed)}</div>
@@ -421,7 +532,7 @@ const DashboardPage: React.FC = () => {
               </div>
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm border-l-4 border-l-blue-500">
                  <p className="text-[10px] font-black text-blue-500 uppercase mb-2 tracking-tighter">Cheques Pending</p>
-                 <p className="text-xl font-black text-gray-900">{money(stats?.chequeCollection)}</p>
+                 <p className="text-xl font-black text-gray-900">{moneyOrUnavailable(stats?.chequesPendingToday, stats?.chequeCollection)}</p>
               </div>
           </div>
         </div>
@@ -430,15 +541,39 @@ const DashboardPage: React.FC = () => {
         <div className={stats?.is_owner ? "lg:col-span-2" : "lg:col-span-3"}>
           <div className="flex justify-between items-center mb-6 border-b border-gray-200 pb-2">
              <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Recent Pipeline Activity</h2>
-             <Link to="/reconciliation" className="text-[10px] bg-black text-white px-4 py-2 rounded-lg uppercase font-black tracking-widest hover:bg-gray-800 transition-colors shadow-lg shadow-black/10">
-                 Open Full Pipeline
-             </Link>
+             <button
+               type="button"
+               onClick={() => setShowFullPipeline(prev => !prev)}
+               className="text-[10px] bg-black text-white px-4 py-2 rounded-lg uppercase font-black tracking-widest hover:bg-gray-800 transition-colors shadow-lg shadow-black/10"
+             >
+                 {showFullPipeline ? 'Collapse Pipeline' : 'Open Full Pipeline'}
+             </button>
           </div>
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             {sortedDates.length > 0 ? sortedDates.map(date => (
               <div key={date}>
-                <div className="bg-black text-white px-4 py-2 text-[10px] font-black uppercase tracking-tighter">
-                   {date}
+                <div className="bg-black text-white px-4 py-2 text-[10px] font-black uppercase tracking-tighter flex items-center justify-between">
+                   <span>
+                     {date} — {visibleInvoicesForDate(date).length} of {groupedFeed[date].length} shown
+                   </span>
+                   {visibleInvoicesForDate(date).length < groupedFeed[date].length && (
+                     <button
+                       type="button"
+                       onClick={() => toggleFeedDate(date)}
+                       className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-md uppercase"
+                     >
+                       Expand
+                     </button>
+                   )}
+                   {visibleInvoicesForDate(date).length === groupedFeed[date].length && groupedFeed[date].length > (date === latestFeedDate ? 5 : 10) && !showFullPipeline && (
+                     <button
+                       type="button"
+                       onClick={() => toggleFeedDate(date)}
+                       className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-md uppercase"
+                     >
+                       Collapse
+                     </button>
+                   )}
                 </div>
                 <table className="w-full text-left border-collapse">
                   <thead>
@@ -452,7 +587,7 @@ const DashboardPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {groupedFeed[date].map((inv) => (
+                    {visibleInvoicesForDate(date).map((inv) => (
                       <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="p-4">
                           {inv.pdf_path ? (
@@ -480,18 +615,17 @@ const DashboardPage: React.FC = () => {
                         <td className="p-4 text-sm text-gray-600 truncate max-w-[100px] font-medium">{inv.customer_name}</td>
                         <td className="p-4 font-black text-gray-900 text-right">{money(inv.net_payable)}</td>
                         <td className="p-4 text-right">
-                           <span className={`text-[9px] font-black px-2 py-0.5 rounded ${inv.pipeline_delay_seconds > 600 ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-500'}`}>
-                             {formatDelay(inv.pipeline_delay_seconds || 0)}
-                           </span>
+                           {(() => {
+                             const delay = delayInfo(inv.pipeline_delay_seconds || 0);
+                             return (
+                               <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${delay.className}`}>
+                                 {delay.label}: {delay.text}
+                               </span>
+                             );
+                           })()}
                         </td>
                         <td className="p-4">
-                          <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase ${
-                            inv.status === 'Green' ? 'bg-green-100 text-green-700' : 
-                            inv.status === 'Yellow' ? 'bg-yellow-100 text-yellow-700' :
-                            inv.status === 'Blue' ? 'bg-blue-100 text-blue-700' :
-                            inv.status === 'Purple' ? 'bg-purple-100 text-purple-700' :
-                            'bg-red-100 text-red-700'
-                          }`}>
+                          <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase border ${pipelineStatusClass(inv.status, inv.status_text)}`}>
                             {operatorLabel(inv.status_text || inv.status)}
                           </span>
                         </td>

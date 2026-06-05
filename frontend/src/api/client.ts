@@ -1,7 +1,11 @@
 const BASE_URL = window.location.origin;
 
+export function getSessionToken() {
+  return localStorage.getItem('aradhana_session_token') || localStorage.getItem('session_token') || '';
+}
+
 export function getHeaders() {
-  const token = localStorage.getItem('session_token');
+  const token = getSessionToken();
   return {
     'Content-Type': 'application/json',
     ...(token ? { 'X-Session-Token': token } : {})
@@ -62,6 +66,7 @@ export async function logout() {
         method: 'POST',
         headers: getHeaders()
     });
+    localStorage.removeItem('aradhana_session_token');
     localStorage.removeItem('session_token');
     localStorage.removeItem('user');
     return handleResponse(response, 'Logout failed');
@@ -89,8 +94,13 @@ export async function getOpenEscalations() {
 }
 
 export async function getOwnerReport() {
-  const response = await fetch(`${BASE_URL}/api/reports/owner`, {
+  let response = await fetch(`${BASE_URL}/api/reports/owner`, {
     headers: getHeaders()
   });
+  if (response.status === 404) {
+    response = await fetch(`${BASE_URL}/reports/owner`, {
+      headers: getHeaders()
+    });
+  }
   return handleResponse(response, 'Failed to fetch owner report');
 }

@@ -45,7 +45,7 @@ const ReportsPage = () => {
           fetch(`${API_BASE}/api/reports/payment-bifurcation`).then(res => res.json())
         ]);
         
-        const summary = liveReport.daily_summary;
+        const summary = liveReport.daily_summary || liveReport;
         if (summary.processed_count > 0) {
             const mappedReport = {
               id: `R-LIVE-${summary.generated_at.split('T')[0]}`,
@@ -54,7 +54,7 @@ const ReportsPage = () => {
               totalTransactions: summary.processed_count,
               totalAmount: bifData.reduce((acc: number, curr: any) => acc + curr.total, 0),
               reconciliationRate: summary.processed_count > 0 
-                ? `${((summary.resolved_reviews / summary.processed_count) * 100).toFixed(1)}%`
+                ? `${(((summary.resolved_reviews ?? (summary.processed_count - summary.open_reviews)) / summary.processed_count) * 100).toFixed(1)}%`
                 : '0%'
             };
             setReports([mappedReport]);

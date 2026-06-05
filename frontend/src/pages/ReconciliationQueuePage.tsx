@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReconciliationTable from '../components/ReconciliationTable';
 import InvoiceDetailDrawer from '../components/InvoiceDetailDrawer';
+import { getHeaders } from '../api/client';
 import type { ReconciliationItem } from '../types';
 
 const ReconciliationQueuePage: React.FC = () => {
@@ -10,23 +11,22 @@ const ReconciliationQueuePage: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<ReconciliationItem | null>(null);
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/reconciliations')
+    fetch(`${window.location.origin}/reviews/open`, { headers: getHeaders() })
       .then(res => {
         if (!res.ok) throw new Error('Failed to fetch live reconciliation data.');
         return res.json();
       })
       .then(data => {
-        // Transform backend ReconciliationResult to frontend ReconciliationItem
         const transformed: ReconciliationItem[] = data.map((r: any, idx: number) => ({
-          id: r.invoice_no || `REC_${idx}`,
-          billNo: r.invoice_no || '---',
-          customer: r.details?.customer || 'S.A. JEWELLERS CLIENT',
-          invoiceAmount: r.details?.total || 0.0,
-          bankAmount: r.details?.payments || 0.0,
-          difference: (r.details?.total || 0.0) - (r.details?.payments || 0.0),
-          paymentMode: r.details?.mode || 'BANK',
-          matchConfidence: r.status === 'GREEN' ? 'High' : (r.status === 'YELLOW' ? 'Medium' : 'Low'),
-          status: r.status === 'GREEN' ? 'Verified' : (r.status === 'YELLOW' ? 'Advance Pending' : (r.status === 'ORANGE' ? 'Ambiguous Match' : (r.status === 'BLUE' ? 'Realizing Cheque' : 'Risk / Mismatch')))
+          id: r.review_id || `REC_${idx}`,
+          billNo: String(r.entity_id || '---'),
+          customer: r.entity_type || 'Review Item',
+          invoiceAmount: 0.0,
+          bankAmount: 0.0,
+          difference: 0.0,
+          paymentMode: r.queue_type || 'Review',
+          matchConfidence: r.escalation_required ? 'Low' : 'Medium',
+          status: r.escalation_required ? 'Risk / Mismatch' : 'Pending'
         }));
         setItems(transformed);
       })
