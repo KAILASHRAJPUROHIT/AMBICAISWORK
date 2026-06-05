@@ -1,0 +1,12 @@
+RUNTIME STARTUP FIX REPORT
+
+Issue Addressed: Fix Runtime Startup desynchronization and duplicate process issues.
+
+Changes Applied to `start_aradhana_auditor.bat`:
+1. Removed separate independent launches of `backend/pdf_ingestion.py` and `backend/sms_ingestion.py` to prevent duplicate background processes. `backend/review_api.py` natively initializes these background threads upon successful startup, rendering the separate shell launches redundant.
+2. Set `PYTHONPATH=.` globally in the script to guarantee all module imports inside `backend/review_api.py` resolve correctly.
+3. Added a blocking health check step using `curl` that loops and pings the `127.0.0.1:8000/health` endpoint (testing both HTTP and HTTPS targets). The script securely waits for a 200 OK HTTP code indicating the backend fully initialized, connected to the database, and bound the socket.
+4. Implemented a 30-second timeout. If the backend fails to hit the healthy state (e.g. port 8000 occupied from previous run), the bat file gracefully aborts with an error instead of launching a broken frontend UI.
+5. Delayed the execution of the frontend `npm run dev` start command until the backend is confirmed healthy.
+6. Added a secondary block using `curl` to ping the vite frontend endpoint (`http://localhost:5173`) to verify UI availability before continuing. 
+7. Only triggers `start http://localhost:5173` (browser launch) after both the backend API and frontend Vite server have explicitly confirmed they are ready to accept connections.
