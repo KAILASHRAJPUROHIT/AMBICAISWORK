@@ -1,0 +1,132 @@
+RECONCILIATION AUDIT HARDENING REPORT
+
+Branch
+- feature/reconciliation-audit-hardening
+
+Files changed
+- backend/review_api.py
+- frontend/src/api/client.ts
+- frontend/src/components/InvoiceDetailDrawer.tsx
+- frontend/src/components/ReconciliationTable.tsx
+- frontend/src/pages/ReconciliationQueuePage.tsx
+- frontend/src/types.ts
+- tests/test_reconciliation_real_endpoint.py
+
+Endpoint
+- GET /api/reconciliation/open
+- Frontend uses only /api/reconciliation/open for open reconciliation rows.
+- Response remains an array.
+- Mock /reviews/open data is not used by the reconciliation UI.
+
+Backend read-only fields added/confirmed
+- bill_no
+- customer_name
+- invoice_amount
+- bank_amount
+- total_received
+- difference
+- outstanding
+- overpaid
+- difference_type
+- payment_mode
+- status
+- confidence
+- status_explanation
+- invoice_date
+- invoice_generated_at
+- bank_time
+- verified_at
+- verified_by
+- utr_reference
+- review_age
+- source_system
+- created_at
+- updated_at
+- payment_breakdown[]
+
+Difference logic
+- difference is calculated as invoice_amount - total_received.
+- total_received is calculated from payment rows when present.
+- If payment rows are unavailable, display uses read-only bill receipt summary fields.
+- stale remaining_amount is not used for display difference.
+
+Confidence logic
+- HIGH: invoice_amount == total_received and total_received > 0.
+- MEDIUM: total_received > 0 and total_received < invoice_amount.
+- LOW: total_received == 0, overpaid, mismatch, risk, or ambiguous.
+- Confidence is deterministic and no longer hardcoded across rows.
+
+Payment timeline
+- Drawer shows each payment separately when payment rows exist.
+- Each payment includes amount, mode, timestamp, UTR/reference, source, evidence_link, and evidence availability.
+- Missing evidence displays "No evidence recorded".
+
+Running totals
+- Drawer shows Invoice Amount, Total Received, Outstanding, and Overpaid.
+
+Status explanation
+- Fully matched rows show the fully matched explanation.
+- Partial rows show outstanding balance explanation.
+- Zero-payment rows show pending-bank explanation.
+- Mismatch/overpaid/risk rows show evidence-conflict explanation.
+- Cheque rows show clearance-pending explanation.
+- Unknown status falls back to "Review required."
+
+Audit metadata
+- Drawer shows created_at, updated_at, verified_at, verified_by, source_system, and review_age.
+- Missing values display "Not Recorded".
+
+Filters added
+- date range
+- bill number
+- customer name
+- invoice amount min/max
+- payment mode
+- status
+- confidence
+- difference type
+
+Sorting added
+- Bill No
+- Customer
+- Invoice Date
+- Invoice Amount
+- Bank Amount
+- Difference
+- Mode
+- Confidence
+- Status
+- Default sort is invoice date/generated time descending, with bill number descending fallback.
+
+Safety confirmation
+- No auto-confirming payments.
+- No invoice/payment/reconciliation statuses are updated.
+- No financial records are modified.
+- No mock_review_1, pay_001, or bill_002 are displayed.
+- The old verify/reject drawer controls were removed from this read-only audit view.
+
+Tests run
+- python -m pytest tests/test_reconciliation_real_endpoint.py
+  Result: 3 passed.
+- python -m pytest tests/test_master_console_user_management.py
+  Result: 9 passed.
+- cd frontend && npm run build
+  Result: passed.
+
+Browser verification
+- Backend restarted on port 8000 to load the latest endpoint code.
+- /health returned healthy.
+- /reconciliation renders the queue.
+- Table headers and filters render.
+- Mock IDs are absent.
+- Console errors: none observed.
+- Example visible row after restart:
+  SS-497 shows invoice amount ₹3,412, total received/bank amount ₹3,412, difference ₹0, confidence HIGH.
+- Drawer opens and shows payment timeline, running totals, status explanation, audit metadata.
+- Drawer no longer shows Verify & Clear or Reject / Escalate buttons.
+- Bill number filter smoke test:
+  Filtering SS-497 showed "1 shown" and hid another known bill.
+
+Remaining issues
+- Some live rows have payment evidence sourced from bill/payment summaries with no linked evidence record; those correctly display "No evidence recorded".
+- Existing /reviews/open still exists separately and still returns legacy managed-review mock data, but the reconciliation UI no longer calls it.

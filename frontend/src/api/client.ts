@@ -80,10 +80,14 @@ export async function getPermissions(role: string) {
 }
 
 export async function getOpenReviews() {
-  const response = await fetch(`${BASE_URL}/api/reviews/open`, {
+  const response = await fetch(`${BASE_URL}/api/reconciliation/open`, {
     headers: getHeaders()
   });
-  return handleResponse(response, 'Failed to fetch open reviews');
+  const data = await handleResponse(response, 'Failed to fetch open reviews');
+  if (!Array.isArray(data)) {
+    throw new Error('Reconciliation endpoint returned an invalid response shape.');
+  }
+  return data;
 }
 
 export async function getOpenEscalations() {

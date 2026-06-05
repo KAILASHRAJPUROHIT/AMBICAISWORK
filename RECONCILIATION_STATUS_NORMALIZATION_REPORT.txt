@@ -1,0 +1,62 @@
+RECONCILIATION STATUS NORMALIZATION REPORT
+
+Branch
+- feature/reconciliation-status-normalization
+
+Files changed
+- backend/review_api.py
+- frontend/src/components/ReconciliationTable.tsx
+- frontend/src/pages/ReconciliationQueuePage.tsx
+- frontend/src/types.ts
+
+Display-only status rules implemented
+- CLEAR / GREEN:
+  invoice_amount == bank_amount, bank_amount > 0, confidence == HIGH.
+- PARTIAL PAYMENT / BLUE:
+  0 < bank_amount < invoice_amount.
+- PENDING BANK / YELLOW:
+  bank_amount == 0.
+- RISK / MISMATCH / RED:
+  difference < 0, mismatch status, risk status, error status, or ambiguous match.
+- REALIZING CHEQUE / BLUE:
+  payment mode includes CHEQUE and stored status is not already cleared/verified/paid.
+- ADVANCE PENDING / PURPLE:
+  advance payment exists and invoice is not fully settled.
+
+Status explanations added
+- CLEAR:
+  Invoice amount fully matched by verified payment evidence.
+- PARTIAL PAYMENT:
+  Partial payment received. Outstanding balance remains.
+- PENDING BANK:
+  No verified bank payment received yet.
+- RISK / MISMATCH:
+  Payment evidence conflicts with invoice value.
+- REALIZING CHEQUE:
+  Cheque deposited. Awaiting bank clearance.
+- ADVANCE PENDING:
+  Advance received. Final settlement pending.
+
+Safety confirmation
+- Read-only display normalization only.
+- No database status updates.
+- No payment confirmation.
+- No invoice/payment/reconciliation status mutation.
+- No financial record changes.
+- No auto-confirm logic added.
+
+Verification
+- cd frontend && npm run build
+  Result: passed.
+- python -m pytest tests/test_reconciliation_real_endpoint.py
+  Result: 3 passed.
+- Browser verification on http://127.0.0.1:8000/reconciliation:
+  Result: passed after backend restart.
+  Example row:
+  SS-497 showed invoice amount ₹3,412, bank amount ₹3,412, difference ₹0, confidence HIGH, status CLEAR.
+  Matched HIGH rows no longer showed Pending.
+  Console errors observed: none.
+
+Notes
+- Live status filter options only show statuses present in the current returned dataset.
+- At verification time the live dataset included CLEAR, REALIZING CHEQUE, and RISK / MISMATCH.

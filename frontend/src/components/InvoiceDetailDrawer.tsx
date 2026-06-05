@@ -1,47 +1,44 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { ReconciliationItem } from '../types';
-import ConfirmationDialog from './ConfirmationDialog';
-import AlertSoundSystem from '../api/AlertSoundSystem';
-import '../Reconciliation.css'; 
+import '../Reconciliation.css';
 
 interface InvoiceDetailDrawerProps {
   item: ReconciliationItem;
   onClose: () => void;
 }
 
+const formatMoney = (value: number) => `₹${value.toLocaleString('en-IN')}`;
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return 'Not Recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not Recorded';
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+const textOrMissing = (value?: string | null) => value || 'Not Recorded';
+
 const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose }) => {
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmType, setConfirmType] = useState<'VERIFY' | 'REJECT'>('VERIFY');
-
-  const handleAction = (type: 'VERIFY' | 'REJECT') => {
-    setConfirmType(type);
-    setConfirmOpen(true);
-    if (type === 'REJECT') {
-        AlertSoundSystem.playWarning();
-    }
-  };
-
-  const executeAction = async () => {
-    // API call would go here
-    console.log(`Executing ${confirmType} for ${item.billNo}`);
-    setConfirmOpen(false);
-    onClose();
-  };
-
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
         <div className="drawer-header">
-          <h2>Reconciliation Summary: {item.billNo}</h2>
+          <h2>Reconciliation Audit: {item.billNo}</h2>
           <button className="drawer-close-button" onClick={onClose}>
             &times;
           </button>
         </div>
         <div className="drawer-body">
           <section className="drawer-section">
-            <h3>Prime Record</h3>
+            <h3>Invoice Record</h3>
             <div className="detail-item">
-              <span className="detail-label">Voucher No:</span>
+              <span className="detail-label">Bill No:</span>
               <span className="detail-value font-mono font-bold">{item.billNo}</span>
             </div>
             <div className="detail-item">
@@ -49,31 +46,71 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
               <span className="detail-value">{item.customer}</span>
             </div>
             <div className="detail-item">
+              <span className="detail-label">Invoice Date:</span>
+              <span className="detail-value">{formatDateTime(item.invoiceDate)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Invoice Time:</span>
+              <span className="detail-value">{formatDateTime(item.invoiceGeneratedAt)}</span>
+            </div>
+            <div className="detail-item">
               <span className="detail-label">Invoice Amount:</span>
-              <span className="detail-value font-bold">₹{item.invoiceAmount.toLocaleString()}</span>
+              <span className="detail-value font-bold">{formatMoney(item.invoiceAmount)}</span>
             </div>
           </section>
 
           <section className="drawer-section">
-            <h3>Bank Evidence</h3>
+            <h3>Payment Timeline</h3>
+            {item.paymentBreakdown.length === 0 ? (
+              <div className="p-4 rounded-2xl bg-gray-50 text-gray-500 font-bold text-sm">
+                No evidence recorded
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {item.paymentBreakdown.map((payment, index) => (
+                  <div key={`${payment.reference || payment.utrReference || payment.mode}-${index}`} className="p-4 rounded-2xl border border-gray-100 bg-gray-50">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-black text-gray-900">{formatMoney(payment.amount)}</span>
+                      <span className="text-xs font-black uppercase text-gray-400">{payment.mode}</span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600">
+                      <span>Timestamp: <b>{formatDateTime(payment.timestamp)}</b></span>
+                      <span>Reference: <b>{textOrMissing(payment.utrReference || payment.reference)}</b></span>
+                      <span>Source: <b>{textOrMissing(payment.source)}</b></span>
+                      <span>Evidence: <b>{payment.evidenceLink ? 'Linked' : payment.evidenceAvailable ? 'Recorded' : 'No evidence recorded'}</b></span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="drawer-section">
+            <h3>Running Total</h3>
             <div className="detail-item">
-              <span className="detail-label">Matched Amount:</span>
-              <span className="detail-value font-bold">₹{item.bankAmount.toLocaleString()}</span>
+              <span className="detail-label">Invoice Amount:</span>
+              <span className="detail-value font-bold">{formatMoney(item.invoiceAmount)}</span>
             </div>
             <div className="detail-item">
-              <span className="detail-label">Discrepancy:</span>
-              <span className={`detail-value font-bold ${item.difference !== 0 ? 'text-red-600' : 'text-green-600'}`}>
-                ₹{item.difference.toLocaleString()}
+              <span className="detail-label">Total Received:</span>
+              <span className="detail-value font-bold">{formatMoney(item.totalReceived)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Outstanding:</span>
+              <span className={`detail-value font-bold ${item.outstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {formatMoney(item.outstanding)}
               </span>
             </div>
             <div className="detail-item">
-              <span className="detail-label">Payment Mode:</span>
-              <span className="detail-value uppercase">{item.paymentMode}</span>
+              <span className="detail-label">Overpaid:</span>
+              <span className={`detail-value font-bold ${item.overpaid > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                {formatMoney(item.overpaid)}
+              </span>
             </div>
           </section>
 
           <section className="drawer-section">
-            <h3>System Decision</h3>
+            <h3>Status Explanation</h3>
             <div className="detail-item">
               <span className="detail-label">Status:</span>
               <span className="detail-value font-bold">{item.status}</span>
@@ -82,43 +119,40 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
               <span className="detail-label">Confidence:</span>
               <span className="detail-value">{item.matchConfidence}</span>
             </div>
+            <p className="mt-3 rounded-2xl bg-blue-50 border border-blue-100 p-4 text-sm text-blue-800 font-semibold">
+              {item.statusExplanation || 'Review required.'}
+            </p>
           </section>
-          
-          <div className="mt-8 grid grid-cols-2 gap-4">
-             <button 
-                onClick={() => handleAction('REJECT')}
-                className="p-5 rounded-2xl bg-red-50 text-red-600 font-black uppercase text-xs tracking-widest hover:bg-red-100 transition-all border-2 border-red-100"
-             >
-                Reject / Escalate
-             </button>
-             <button 
-                onClick={() => handleAction('VERIFY')}
-                className="p-5 rounded-2xl bg-green-600 text-white font-black uppercase text-xs tracking-widest hover:bg-green-700 transition-all shadow-lg shadow-green-200"
-             >
-                Verify & Clear
-             </button>
-          </div>
 
-          <div className="mt-8 p-6 bg-blue-50 rounded-2xl border border-blue-100">
-             <p className="text-sm text-blue-700 leading-relaxed text-center italic">
-               Deep-dive view for individual product lines is currently only available via the <b>Prime Extraction Review</b> evidence portal.
-             </p>
-          </div>
+          <section className="drawer-section">
+            <h3>Audit Metadata</h3>
+            <div className="detail-item">
+              <span className="detail-label">Created:</span>
+              <span className="detail-value">{formatDateTime(item.createdAt)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Updated:</span>
+              <span className="detail-value">{formatDateTime(item.updatedAt)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Verified At:</span>
+              <span className="detail-value">{formatDateTime(item.verifiedAt)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Verified By:</span>
+              <span className="detail-value">{textOrMissing(item.verifiedBy)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Source System:</span>
+              <span className="detail-value">{textOrMissing(item.sourceSystem)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Review Age:</span>
+              <span className="detail-value">{textOrMissing(item.reviewAge)}</span>
+            </div>
+          </section>
         </div>
       </div>
-
-      <ConfirmationDialog 
-        isOpen={confirmOpen}
-        title={confirmType === 'VERIFY' ? 'Confirm Clearance' : 'Flag for Review'}
-        message={confirmType === 'VERIFY' 
-            ? `Are you sure you want to verify and clear Voucher ${item.billNo} for ₹${item.invoiceAmount.toLocaleString()}? This action is immutable.`
-            : `Are you sure you want to reject the match for Voucher ${item.billNo}? This will escalate the item to the owner report.`
-        }
-        confirmLabel={confirmType === 'VERIFY' ? 'Yes, Clear it' : 'Flag Item'}
-        onConfirm={executeAction}
-        onCancel={() => setConfirmOpen(false)}
-        type={confirmType === 'VERIFY' ? 'NORMAL' : 'CRITICAL'}
-      />
     </div>
   );
 };
