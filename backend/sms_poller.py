@@ -82,6 +82,11 @@ def process_sms():
                  exists = db.query(SMSAlert).filter(SMSAlert.utr_reference == parsed_data["utr_reference"]).first()
             
             if not exists:
+                confidence = parsed_data.get("parsed_confidence")
+                if confidence is None:
+                    logger.warning(f"SMS confidence missing for SMS ID: {sms.get('sms_id')}. Defaulting to 0.0")
+                    confidence = 0.0
+                
                 new_sms = SMSAlert(
                     sms_id=sms.get("sms_id"),
                     sender=sms["sender"],
@@ -92,7 +97,7 @@ def process_sms():
                     amount=parsed_data["amount"],
                     utr_reference=parsed_data["utr_reference"],
                     raw_body=raw_body,
-                    parsed_confidence=parsed_data["parsed_confidence"]
+                    parsed_confidence=confidence
                 )
                 db.add(new_sms)
                 events_found += 1

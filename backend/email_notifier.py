@@ -92,3 +92,7 @@ def send_financial_alert(event_type: str, invoice_no: str, amount: float):
     </html>
     """
     return send_email(SECURITY_ALERT_EMAIL, subject, body)
+
+def send_red_alert_email(subject: str, body: str):
+    """Backward-compatible wrapper for critical alerts."""
+    return send_security_alert(event_type=subject, details=body)
