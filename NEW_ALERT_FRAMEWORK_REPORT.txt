@@ -1,0 +1,83 @@
+NEW ALERT FRAMEWORK REPORT
+
+Preflight:
+- Current branch confirmed: feature/cheque-delivery-owner-report-hardwalls
+- Git status before changes confirmed clean.
+- Rollback tag confirmed: stable-before-alert-escalation-expansion
+
+Scope:
+- Implemented only the new alert framework.
+- Did not modify reconciliation matching.
+- Did not modify payment status logic.
+- Did not modify PDF watcher.
+- Did not modify auth, OTP, launcher, or autostart.
+- Legacy red alert emails remain disabled by default.
+- OTP/password reset email path remains unaffected.
+
+Files changed:
+- backend/models.py
+- backend/alert_framework.py
+- tests/test_new_alert_framework.py
+- NEW_ALERT_FRAMEWORK_REPORT.txt
+
+Framework behavior:
+- Developer alert subjects always start with:
+  DEVELOPERS ALERT
+- Owner alert subjects always start with:
+  OWNER ALERT
+
+Developer alert categories:
+- login_failures
+- system_failures
+- tamper_alerts
+
+Owner alert categories:
+- accountant_overdue_48h
+- uncleared_payment_7d
+
+Alert safety:
+- Added AlertRecord model/table for alert tracking.
+- AlertRecord tracks:
+  pending
+  sent
+  failed
+  suppressed
+- Dedupe key prevents repeat email spam for the same alert type/category/entity/day.
+- Suppressed duplicate attempts are still tracked as alert records.
+- AuditLog is written for alert generation and send/fail/suppression outcomes.
+- Existing legacy red alert flag behavior remains unchanged.
+- OTP email sends through the existing base sender and does not depend on alert framework flags.
+
+Owner scanners:
+- owner_accountant_overdue_alerts:
+  read-only scan for non-test bills with review_required=1 older than 48 hours.
+- owner_uncleared_payment_alerts:
+  read-only scan for payments older than 7 days whose status is not Green.
+- These scanners do not mutate Bill or Payment rows.
+
+Developer alert helpers:
+- developer_login_failure_alert
+- scan_login_failure_alerts
+- developer_system_failure_alert
+- developer_tamper_alert
+
+Tests added:
+- developer login failure alert
+- login failure scanner alert
+- developer system failure alert
+- developer tamper alert
+- owner 48-hour accountant overdue alert
+- owner 7-day uncleared payment alert
+- deduplication prevents repeat spam
+- audit log written
+- OTP email unaffected
+
+Tests run:
+- python -m pytest tests/test_new_alert_framework.py: 9 passed
+- python -m pytest tests/test_feature_flags.py: 4 passed
+- python -m pytest tests/test_master_console_user_management.py: 6 passed
+- python -m pytest tests/test_invoice_lifecycle.py: 4 passed
+- cd frontend && npm run build: passed
+
+Commit status:
+- No commit made.

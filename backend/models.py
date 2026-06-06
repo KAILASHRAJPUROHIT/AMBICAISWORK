@@ -197,3 +197,20 @@ class AuditLog(Base):
     actor = Column(String, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
     metadata_json = Column(Text, nullable=True)
+
+class AlertRecord(Base):
+    __tablename__ = "alert_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    alert_type = Column(String, nullable=False) # DEVELOPER, OWNER
+    category = Column(String, nullable=False)
+    entity_type = Column(String, nullable=True)
+    entity_id = Column(String, nullable=True)
+    dedupe_key = Column(String, unique=True, index=True, nullable=False)
+    subject = Column(String, nullable=False)
+    recipient = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="pending") # pending, sent, failed, suppressed
+    details_json = Column(Text, nullable=True)
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
