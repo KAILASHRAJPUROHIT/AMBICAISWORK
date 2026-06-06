@@ -1,4 +1,5 @@
 import logging
+from typing import List, Union, Dict, Optional
 from sqlalchemy.orm import Session
 from backend.models import Bill, Payment, BankAlert, AuditLog, Cheque, SMSAlert
 from datetime import datetime, timedelta
@@ -237,6 +238,109 @@ def log_audit(db, entity_type, entity_id, action, old_status, new_status, note="
         })
     )
     db.add(audit)
+
+def calculate_payment_proof_status(payment: Payment, bill: Bill, proofs: List[Union[SMSAlert, BankAlert]]) -> Dict:
+    """
+    Centralized helper to determine payment proof status, confidence, and review requirements.
+    """
+    result = {
+        "proof_status": "no_proof",
+        "proof_type": None,
+        "proof_id": None,
+        "proof_label": "No proof found",
+        "confidence_score": 0,
+        "confidence_reason": "No matching proof found",
+        "requires_accountant_review": True
+    }
+
+    # Determine the effective UTR/reference for the payment based on mode
+    payment_utr = None
+    if payment.mode in ["UPI", "IMPS", "NEFT", "RTGS_OR_CHEQUE", "CARD", "BANK_TRANSFER"]:
+        # For electronic modes, use payment's own UTR only. No fallback to bill.reference_no here.
+        payment_utr = payment.utr_reference
+    # For CASH, ADVANCE, OLD_GOLD_EXCHANGE, payment_utr remains None.
+
+    if payment.mode == "CASH":
+        result.update({
+            "proof_status": "confirmed_received",
+            "proof_type": "Cash",
+            "proof_label": "Cash auto-confirmed",
+            "confidence_score": 100,
+            "confidence_reason": "Auto-confirmed as per policy (CASH payments)",
+            "requires_accountant_review": False
+        })
+    elif payment.mode in ["ADVANCE", "OLD_GOLD_EXCHANGE"]: # OLD_GOLD_EXCHANGE is 'CUST PURCHASE' in prompt
+        result.update({
+            "proof_status": "pending_accountant_review",
+            "proof_type": payment.mode,
+            "proof_label": f"Accountant review required for {payment.mode}",
+            "confidence_score": 0,
+            "confidence_reason": f"Requires manual accountant confirmation for {payment.mode}",
+            "requires_accountant_review": True
+        })
+    elif payment.mode in ["UPI", "IMPS", "NEFT", "RTGS_OR_CHEQUE", "CARD", "BANK_TRANSFER"]: # These are 'UPI/BANK/CARD/ONLINE'
+        found_match = False
+        for proof in proofs:
+            proof_utr = None
+            proof_amount = None
+            proof_type_str = None
+            proof_id = None
+
+            if isinstance(proof, SMSAlert):
+                proof_utr = proof.utr_reference
+                proof_amount = proof.amount
+                proof_type_str = "SMS"
+                proof_id = proof.id
+            elif isinstance(proof, BankAlert):
+                proof_utr = proof.utr_reference
+                proof_amount = proof.amount
+                proof_type_str = "Bank"
+                proof_id = proof.id
+            
+            # Check for exact match: UTR and Amount
+            if (payment_utr and proof_utr and payment_utr == proof_utr and
+                abs(float(payment.amount) - float(proof_amount)) < 0.01):
+                result.update({
+                    "proof_status": "verified_proof",
+                    "proof_type": proof_type_str,
+                    "proof_id": proof_id,
+                    "proof_label": f"Verified by {proof_type_str} Proof (ID: {proof_id})",
+                    "confidence_score": 100,
+                    "confidence_reason": f"Exact UTR and amount match with {proof_type_str} proof.",
+                    "requires_accountant_review": False
+                })
+                found_match = True
+                break # Found exact match, no need to check other proofs
+            
+            # Check for partial match: Amount only (if UTR is missing or mismatched)
+            if (not found_match and abs(float(payment.amount) - float(proof_amount)) < 0.01 and
+                (not payment_utr or not proof_utr or payment_utr != proof_utr)):
+                 # This is a potential match, but with UTR discrepancy
+                 result.update({
+                    "proof_status": "mismatch_proof",
+                    "proof_type": proof_type_str,
+                    "proof_id": proof_id,
+                    "proof_label": f"Partial Proof from {proof_type_str} (ID: {proof_id}): Amount matches, UTR differs/missing",
+                    "confidence_score": 50,
+                    "confidence_reason": f"Amount matches {proof_type_str} proof, but UTR is missing or mismatched.",
+                    "requires_accountant_review": True
+                })
+                 # Don't break, keep looking for exact matches
+                 
+        if found_match:
+            pass # Already updated in the loop
+        elif result["proof_status"] != "mismatch_proof": # If no exact match and no partial match
+            result.update({
+                "proof_status": "no_proof",
+                "proof_type": None,
+                "proof_id": None,
+                "proof_label": "No proof found for bank/online payment",
+                "confidence_score": 0,
+                "confidence_reason": "No matching SMS or Bank proof found for bank/online payment.",
+                "requires_accountant_review": True
+            })
+    
+    return result
 
 def is_store_open(dt: datetime) -> bool:
     day = dt.weekday()

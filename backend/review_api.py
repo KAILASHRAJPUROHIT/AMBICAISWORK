@@ -55,6 +55,7 @@ from backend.models import User, LoginLog, Bill, Payment, BankAlert, SMSAlert, S
 from backend.pdf_ingestion import start_ingestion_thread, perform_scan, ingestion_status, WATCH_PATH
 from backend.email_poller import start_email_poller, process_emails, email_status
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
+from backend.reconciliation.logic import calculate_payment_proof_status
 from backend.api_routes import router as api_router
 from backend.invoice_lifecycle import start_lifecycle_automation
 
@@ -655,69 +656,31 @@ def within_evidence_window(candidate_time: Optional[datetime], evidence_time: Op
         return False
     return abs((candidate_time - evidence_time).total_seconds()) <= hours * 3600
 
-def find_payment_evidence(db: Session, utr_reference: Optional[str], amount: Optional[float] = None, payment_time: Optional[datetime] = None, payment_mode: Optional[str] = None) -> dict:
-    if not utr_reference:
-        exact_sms = None
-        exact_bank = None
-    else:
-        exact_sms = (
-            db.query(SMSAlert)
-            .filter(SMSAlert.utr_reference == utr_reference)
-            .order_by(SMSAlert.transaction_timestamp.desc())
-            .first()
-        )
-        exact_bank = (
-            db.query(BankAlert)
-            .filter(BankAlert.utr_reference == utr_reference)
-            .order_by(BankAlert.received_at.desc())
-            .first()
-        )
+def find_payment_evidence(db: Session, payment: Payment, bill: Bill, proofs: List[Union[SMSAlert, BankAlert]]) -> dict:
+    proof_details = calculate_payment_proof_status(payment, bill, proofs)
 
-    sms_alert = exact_sms
-    if not sms_alert and amount and payment_time:
-        sms_alerts = (
-            db.query(SMSAlert)
-            .filter(SMSAlert.amount == amount)
-            .order_by(SMSAlert.transaction_timestamp.desc())
-            .limit(20)
-            .all()
-        )
-        sms_alert = next((alert for alert in sms_alerts if within_evidence_window(payment_time, alert.transaction_timestamp)), None)
-    if sms_alert:
-        return {
-            "source": "SMS",
-            "timestamp": iso_or_none(sms_alert.transaction_timestamp),
-            "proof_url": f"/api/reconciliation/proof/sms/{sms_alert.id}",
-            "reference": sms_alert.sms_id or sms_alert.utr_reference,
-            "proof_label": "View SMS Proof",
-        }
+    # Determine proof_url based on proof_status and proof_type
+    proof_url = None
+    if proof_details["proof_status"] == "verified_proof" and proof_details["proof_id"] is not None:
+        if proof_details["proof_type"] == "SMS":
+            proof_url = f"/api/reconciliation/proof/sms/{proof_details['proof_id']}"
+        elif proof_details["proof_type"] == "Bank":
+            proof_url = f"/api/reconciliation/proof/bank/{proof_details['proof_id']}"
 
-    bank_alert = exact_bank
-    if not bank_alert and amount and payment_time:
-        bank_alerts = (
-            db.query(BankAlert)
-            .filter(BankAlert.amount == amount)
-            .order_by(BankAlert.received_at.desc())
-            .limit(20)
-            .all()
-        )
-        bank_alert = next((alert for alert in bank_alerts if within_evidence_window(payment_time, alert.received_at)), None)
-    if bank_alert:
-        source = "Email" if "@" in (bank_alert.sender or "") else "Bank"
-        return {
-            "source": source,
-            "timestamp": iso_or_none(bank_alert.received_at),
-            "proof_url": f"/api/reconciliation/proof/bank/{bank_alert.id}",
-            "reference": bank_alert.utr_reference,
-            "proof_label": "View Email Proof" if source == "Email" else "View Bank Alert",
-        }
+    # Determine the reference for display, ensuring non-electronic modes don't show UTR
+    display_reference = None
+    if payment.mode in ["UPI", "IMPS", "NEFT", "RTGS_OR_CHEQUE", "CARD", "BANK_TRANSFER"]:
+        display_reference = payment.utr_reference # Electronic modes show only payment UTR. No fallback to bill.reference_no for display.
 
     return {
-        "source": "Manual" if payment_mode_is_manual(payment_mode) else "Not Recorded",
+        "source": proof_details["proof_type"] or "Not Recorded",
         "timestamp": None,
-        "proof_url": None,
-        "reference": utr_reference,
-        "proof_label": None,
+        "proof_url": proof_url, # Already correctly determined as None if no verified proof
+        "reference": display_reference, # Use the determined display reference
+        "proof_label": proof_details["proof_label"], # Always follows helper result
+        "confidence_score": proof_details["confidence_score"],
+        "confidence_reason": proof_details["confidence_reason"],
+        "requires_accountant_review": proof_details["requires_accountant_review"],
     }
 
 def get_file_timestamp(path: Optional[str]) -> Optional[datetime]:
@@ -820,6 +783,12 @@ async def get_open_reconciliation_real(request: Request, response: Response, db:
     for bill in bills:
         if not is_operational_reconciliation_bill(bill):
             continue
+        
+        # Query all relevant proofs for the current bill
+        all_bank_alerts = db.query(BankAlert).filter(BankAlert.bill_id == bill.id).all()
+        all_sms_alerts = db.query(SMSAlert).filter(SMSAlert.bill_id == bill.id).all()
+        all_proofs = all_bank_alerts + all_sms_alerts
+
         payments = (
             db.query(Payment)
             .filter(Payment.bill_id == bill.id)
@@ -841,14 +810,12 @@ async def get_open_reconciliation_real(request: Request, response: Response, db:
         invoice_timestamp, invoice_timestamp_source, invoice_time_recorded = best_invoice_timestamp(bill)
         payment_breakdown = []
         for payment in payments:
-            payment_utr = payment.utr_reference or bill.reference_no
-            payment_time = payment.payment_date or payment.created_at or bill.invoice_generated_at or bill.created_at
-            evidence = find_payment_evidence(db, payment_utr, float(payment.amount or 0.0), payment_time, payment.mode)
+            evidence = find_payment_evidence(db, payment, bill, all_proofs)
             payment_breakdown.append({
                 "amount": float(payment.amount or 0.0),
                 "mode": payment.mode or "UNKNOWN",
                 "timestamp": iso_or_none(payment.payment_date) or evidence["timestamp"] or iso_or_none(payment.created_at),
-                "utr_reference": payment_utr,
+                "utr_reference": payment.utr_reference,
                 "reference": evidence["reference"] or payment_utr or payment.cheque_number,
                 "source": evidence["source"],
                 "proof_url": evidence["proof_url"],
@@ -857,21 +824,126 @@ async def get_open_reconciliation_real(request: Request, response: Response, db:
         if not payment_breakdown and received_amount > 0:
             for mode, amount in (
                 ("CASH", float(bill.cash_received or 0.0)),
-                ("BANK", float(bill.bank_received or 0.0)),
-                ("CARD", float(bill.card_received or 0.0)),
+                ("BANK", float(bill.bank_received or 0.0)), # Note: 'BANK' here is a placeholder, actual bank payments have Payment objects
+                ("CARD", float(bill.card_received or 0.0)), # Note: 'CARD' here is a placeholder, actual card payments have Payment objects
             ):
                 if amount > 0:
                     fallback_time = bill.invoice_generated_at or bill.created_at or bill.invoice_date
-                    evidence = find_payment_evidence(db, bill.reference_no if mode == "BANK" else None, amount, fallback_time, mode)
+                    
+                    # Manually determine proof details based on mode rules, without Payment object
+                    proof_details = {
+                        "proof_status": "no_proof",
+                        "proof_type": None,
+                        "proof_id": None,
+                        "proof_label": "No proof found",
+                        "confidence_score": 0,
+                        "confidence_reason": "No explicit payment record or proof found",
+                        "requires_accountant_review": True
+                    }
+
+                    current_utr_reference = bill.reference_no if mode == "BANK" else None
+
+                    if mode == "CASH":
+                        proof_details.update({
+                            "proof_status": "confirmed_received",
+                            "proof_type": "Cash",
+                            "proof_label": "Cash auto-confirmed",
+                            "confidence_score": 100,
+                            "confidence_reason": "Auto-confirmed as per policy (CASH payments)",
+                            "requires_accountant_review": False
+                        })
+                    elif mode in ["ADVANCE", "OLD_GOLD_EXCHANGE"]: # Though these shouldn't be here in fallback, good to be explicit
+                        proof_details.update({
+                            "proof_status": "pending_accountant_review",
+                            "proof_type": mode,
+                            "proof_label": f"Accountant review required for {mode}",
+                            "confidence_score": 0,
+                            "confidence_reason": f"Requires manual accountant confirmation for {mode}",
+                            "requires_accountant_review": True
+                        })
+                    elif mode in ["BANK", "CARD"]:
+                        # For implicit bank/card payments, we still check against proofs
+                        # This mimics the calculate_payment_proof_status logic for these implicit entries
+                        found_match = False
+                        for proof in all_proofs:
+                            proof_utr = None
+                            proof_amount = None
+                            proof_type_str = None
+                            proof_id = None
+
+                            if isinstance(proof, SMSAlert):
+                                proof_utr = proof.utr_reference
+                                proof_amount = proof.amount
+                                proof_type_str = "SMS"
+                                proof_id = proof.id
+                            elif isinstance(proof, BankAlert):
+                                proof_utr = proof.utr_reference
+                                proof_amount = proof.amount
+                                proof_type_str = "Bank"
+                                proof_id = proof.id
+                            
+                            # Check for exact match: UTR and Amount
+                            if (current_utr_reference and proof_utr and current_utr_reference == proof_utr and
+                                abs(float(amount) - float(proof_amount)) < 0.01):
+                                proof_details.update({
+                                    "proof_status": "verified_proof",
+                                    "proof_type": proof_type_str,
+                                    "proof_id": proof_id,
+                                    "proof_label": f"Verified by {proof_type_str} Proof (ID: {proof_id})",
+                                    "confidence_score": 100,
+                                    "confidence_reason": f"Exact UTR and amount match with {proof_type_str} proof.",
+                                    "requires_accountant_review": False
+                                })
+                                found_match = True
+                                break # Found exact match, no need to check other proofs
+                            
+                            # Check for partial match: Amount only (if UTR is missing or mismatched)
+                            if (not found_match and abs(float(amount) - float(proof_amount)) < 0.01 and
+                                (not current_utr_reference or not proof_utr or current_utr_reference != proof_utr)):
+                                proof_details.update({
+                                    "proof_status": "mismatch_proof",
+                                    "proof_type": proof_type_str,
+                                    "proof_id": proof_id,
+                                    "proof_label": f"Partial Proof from {proof_type_str} (ID: {proof_id}): Amount matches, UTR differs/missing",
+                                    "confidence_score": 50,
+                                    "confidence_reason": f"Amount matches {proof_type_str} proof, but UTR is missing or mismatched.",
+                                    "requires_accountant_review": True
+                                })
+                                # Don't break, keep looking for exact matches
+                        
+                        if found_match:
+                            pass # Already updated in the loop
+                        elif proof_details["proof_status"] != "mismatch_proof": # If no exact match and no partial match
+                            proof_details.update({
+                                "proof_status": "no_proof",
+                                "proof_type": None,
+                                "proof_id": None,
+                                "proof_label": "No proof found for bank/online payment",
+                                "confidence_score": 0,
+                                "confidence_reason": "No matching SMS or Bank proof found for bank/online payment.",
+                                "requires_accountant_review": True
+                            })
+
+                    # Determine proof_url based on proof_details
+                    proof_url = None
+                    if proof_details["proof_status"] == "verified_proof" and proof_details["proof_id"] is not None:
+                        if proof_details["proof_type"] == "SMS":
+                            proof_url = f"/api/reconciliation/proof/sms/{proof_details['proof_id']}"
+                        elif proof_details["proof_type"] == "Bank":
+                            proof_url = f"/api/reconciliation/proof/bank/{proof_details['proof_id']}"
+
                     payment_breakdown.append({
                         "amount": amount,
                         "mode": mode,
-                        "timestamp": evidence["timestamp"] or iso_or_none(bill.invoice_generated_at) or iso_or_none(bill.created_at),
-                        "utr_reference": bill.reference_no if mode == "BANK" else None,
-                        "reference": evidence["reference"] or (bill.reference_no if mode == "BANK" else None),
-                        "source": evidence["source"] if mode == "BANK" else "Manual",
-                        "proof_url": evidence["proof_url"],
-                        "proof_label": evidence["proof_label"],
+                        "timestamp": iso_or_none(fallback_time),
+                        "utr_reference": current_utr_reference,
+                        "reference": current_utr_reference,
+                        "source": proof_details["proof_type"] or "Manual",
+                        "proof_url": proof_url,
+                        "proof_label": proof_details["proof_label"],
+                        "confidence_score": proof_details["confidence_score"],
+                        "confidence_reason": proof_details["confidence_reason"],
+                        "requires_accountant_review": proof_details["requires_accountant_review"],
                     })
         rows.append({
             "bill_id": bill.id,

@@ -236,36 +236,48 @@ def parse_pdf(file_path):
                 if amt_match:
                     amt = float(amt_match.group(1).replace(",", ""))
                     mode = "UNKNOWN"
-                    pay_date = None
-                    
+                    payment_reference = None # Initialize payment-level reference
+                    extracted_date = None
+
+                    # Try to extract reference from line first
+                    ref_match = re.search(r"(?:Ref(?:erence)?|UTR|TxnID)\s*[:=]?\s*([A-Z0-9]+)", line, re.IGNORECASE)
+                    if ref_match:
+                        payment_reference = ref_match.group(1)
+
                     # Try to extract date from line (e.g. UPI 01/06/2026)
                     date_match = re.search(r"(\d{2}[-/]\d{2}[-/]\d{4})", line)
                     if date_match:
                         try:
-                            pay_date = datetime.strptime(date_match.group(1).replace("/", "-"), "%d-%m-%Y")
+                            extracted_date = datetime.strptime(date_match.group(1).replace("/", "-"), "%d-%m-%Y")
                         except: pass
 
+                    # Determine mode
                     if "CASH" in line_upper: mode = "CASH"
                     elif "UPI" in line_upper: mode = "UPI"
                     elif "IMPS" in line_upper: mode = "IMPS"
                     elif "NEFT" in line_upper: mode = "NEFT"
                     elif any(x in line_upper for x in ["RTGS", "CHEQUE", "CHQ"]): mode = "RTGS_OR_CHEQUE"
-                    elif "ADVANCE" in line_upper: 
+                    elif "ADVANCE" in line_upper:
                         mode = "ADVANCE"
                         advance_total += amt
                     elif "CARD" in line_upper: mode = "CARD"
                     elif "BALANCE" in line_upper: mode = "BALANCE"
-                    elif any(x in line_upper for x in ["OLD GOLD", "CUST PURC", "PURCHASE"]): 
+                    elif any(x in line_upper for x in ["OLD GOLD", "CUST PURC", "PURCHASE"]):
                         mode = "OLD_GOLD_EXCHANGE"
                         cust_purc_total += amt
+                    else: mode = "UNKNOWN" # Ensure mode is set if no keywords found
 
-                    
+                    # Explicitly nullify payment_reference for non-electronic/cheque modes
+                    if mode in ["CASH", "ADVANCE", "OLD_GOLD_EXCHANGE", "BALANCE", "UNKNOWN"]: # BALANCE and UNKNOWN also should not have references
+                        payment_reference = None
+
                     if mode != "UNKNOWN":
                         payments.append({
-                            "mode": mode, 
-                            "amount": amt, 
-                            "date": pay_date,
-                            "raw": line.strip()
+                            "mode": mode,
+                            "amount": amt,
+                            "date": extracted_date, # Use extracted_date here
+                            "raw": line.strip(),
+                            "reference": payment_reference # Add extracted payment-level reference
                         })
         
         data["payments"] = payments
@@ -417,8 +429,8 @@ def process_invoice(file_path):
                 mode=p["mode"],
                 payment_date=p.get("date"),
                 bank_name=new_bill.bank_name,
-                utr_reference=new_bill.reference_no if p["mode"] == "BANK_TRANSFER" else None,
-                cheque_number=new_bill.reference_no if p["mode"] == "CHEQUE" else None,
+                utr_reference=None if p["mode"] in ["CASH", "ADVANCE", "OLD_GOLD_EXCHANGE", "CHEQUE"] else (new_bill.reference_no if p["mode"] == "BANK_TRANSFER" else p.get("reference")),
+                cheque_number=p.get("reference") if p["mode"] == "CHEQUE" else None,
                 status=status
             )
             db.add(payment)
