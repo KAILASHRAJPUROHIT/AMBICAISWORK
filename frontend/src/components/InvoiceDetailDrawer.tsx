@@ -1,47 +1,48 @@
-import React, { useState } from 'react';
-import type { ReconciliationItem } from '../types';
-import ConfirmationDialog from './ConfirmationDialog';
-import AlertSoundSystem from '../api/AlertSoundSystem';
-import '../Reconciliation.css'; 
+import React from 'react';
+import type { ReconciliationItem, ReconciliationPaymentEvidence } from '../types';
+import '../Reconciliation.css';
 
 interface InvoiceDetailDrawerProps {
   item: ReconciliationItem;
   onClose: () => void;
+  onViewInvoice: (item: ReconciliationItem) => void;
+  onViewProof: (payment: ReconciliationPaymentEvidence) => void;
 }
 
-const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose }) => {
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmType, setConfirmType] = useState<'VERIFY' | 'REJECT'>('VERIFY');
+const formatDateTime = (value?: string | null) => {
+  if (!value) return 'Not Recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not Recorded';
+  return date.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
 
-  const handleAction = (type: 'VERIFY' | 'REJECT') => {
-    setConfirmType(type);
-    setConfirmOpen(true);
-    if (type === 'REJECT') {
-        AlertSoundSystem.playWarning();
-    }
-  };
+const missing = (value?: string | null) => value || 'Not Recorded';
 
-  const executeAction = async () => {
-    // API call would go here
-    console.log(`Executing ${confirmType} for ${item.billNo}`);
-    setConfirmOpen(false);
-    onClose();
-  };
+const formatInvoiceTimestamp = (item: ReconciliationItem) => {
+  const value = item.invoiceTimestamp || item.invoiceGeneratedAt || item.invoiceDate;
+  if (!value) return 'Not Recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not Recorded';
+  const dateText = date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  if (!item.invoiceTimeRecorded) return `${dateText}, Time Not Recorded`;
+  return formatDateTime(value);
+};
 
+const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose, onViewInvoice, onViewProof }) => {
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
         <div className="drawer-header">
-          <h2>Reconciliation Summary: {item.billNo}</h2>
+          <h2>Reconciliation Audit: {item.billNo}</h2>
           <button className="drawer-close-button" onClick={onClose}>
             &times;
           </button>
         </div>
         <div className="drawer-body">
           <section className="drawer-section">
-            <h3>Prime Record</h3>
+            <h3>Invoice Record</h3>
             <div className="detail-item">
-              <span className="detail-label">Voucher No:</span>
+              <span className="detail-label">Bill No:</span>
               <span className="detail-value font-mono font-bold">{item.billNo}</span>
             </div>
             <div className="detail-item">
@@ -49,31 +50,78 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
               <span className="detail-value">{item.customer}</span>
             </div>
             <div className="detail-item">
+              <span className="detail-label">Invoice Date:</span>
+              <span className="detail-value pl-2">{item.invoiceDate ? new Date(item.invoiceDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not Recorded'}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Invoice Timestamp:</span>
+              <span className="detail-value pl-2">{formatInvoiceTimestamp(item)}</span>
+            </div>
+            <div className="detail-item">
               <span className="detail-label">Invoice Amount:</span>
-              <span className="detail-value font-bold">₹{item.invoiceAmount.toLocaleString()}</span>
+              <span className="detail-value font-bold">₹{item.invoiceAmount.toLocaleString('en-IN')}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">Invoice Proof:</span>
+              <span className="detail-value">
+                {item.invoicePdfAvailable && item.invoiceProofUrl && item.billId ? (
+                  <button type="button" className="font-bold text-blue-700 underline" onClick={() => onViewInvoice(item)}>
+                    View Invoice PDF
+                  </button>
+                ) : 'Invoice proof not recorded.'}
+              </span>
             </div>
           </section>
 
           <section className="drawer-section">
-            <h3>Bank Evidence</h3>
+            <h3>Payment Proof Timeline</h3>
+            {item.paymentBreakdown.length === 0 ? (
+              <div className="p-4 rounded-2xl bg-gray-50 text-gray-500 font-bold text-sm">
+                Payment proof not recorded.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {item.paymentBreakdown.map((payment, index) => (
+                  <div key={`${payment.reference || payment.utrReference || payment.mode}-${index}`} className="p-4 rounded-2xl border border-gray-100 bg-gray-50">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-black text-gray-900">₹{payment.amount.toLocaleString('en-IN')}</span>
+                      <span className="text-xs font-black uppercase text-gray-400">{payment.mode}</span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600">
+                      <span>Timestamp: <b>{formatDateTime(payment.timestamp)}</b></span>
+                      <span>UTR/Reference: <b>{missing(payment.utrReference || payment.reference)}</b></span>
+                      <span>Evidence Source: <b>{missing(payment.source)}</b></span>
+                      <span>
+                        Proof:{' '}
+                        {payment.proofUrl ? (
+                          <button type="button" className="font-bold text-blue-700 underline" onClick={() => onViewProof(payment)}>
+                            {payment.proofLabel || 'View Proof'}
+                          </button>
+                        ) : <b>Payment proof not recorded</b>}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="drawer-section">
+            <h3>System Decision</h3>
             <div className="detail-item">
               <span className="detail-label">Matched Amount:</span>
-              <span className="detail-value font-bold">₹{item.bankAmount.toLocaleString()}</span>
+              <span className="detail-value font-bold">₹{item.bankAmount.toLocaleString('en-IN')}</span>
             </div>
             <div className="detail-item">
               <span className="detail-label">Discrepancy:</span>
               <span className={`detail-value font-bold ${item.difference !== 0 ? 'text-red-600' : 'text-green-600'}`}>
-                ₹{item.difference.toLocaleString()}
+                ₹{item.difference.toLocaleString('en-IN')}
               </span>
             </div>
             <div className="detail-item">
               <span className="detail-label">Payment Mode:</span>
               <span className="detail-value uppercase">{item.paymentMode}</span>
             </div>
-          </section>
-
-          <section className="drawer-section">
-            <h3>System Decision</h3>
             <div className="detail-item">
               <span className="detail-label">Status:</span>
               <span className="detail-value font-bold">{item.status}</span>
@@ -82,43 +130,14 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
               <span className="detail-label">Confidence:</span>
               <span className="detail-value">{item.matchConfidence}</span>
             </div>
+            {item.hasSpecialPaymentFlag && (
+              <p className="mt-3 rounded-2xl border border-purple-100 bg-purple-50 p-4 text-sm font-semibold text-purple-800">
+                Old gold, advance, customer purchase, or buyback payment requires accountant approval even when amounts match.
+              </p>
+            )}
           </section>
-          
-          <div className="mt-8 grid grid-cols-2 gap-4">
-             <button 
-                onClick={() => handleAction('REJECT')}
-                className="p-5 rounded-2xl bg-red-50 text-red-600 font-black uppercase text-xs tracking-widest hover:bg-red-100 transition-all border-2 border-red-100"
-             >
-                Reject / Escalate
-             </button>
-             <button 
-                onClick={() => handleAction('VERIFY')}
-                className="p-5 rounded-2xl bg-green-600 text-white font-black uppercase text-xs tracking-widest hover:bg-green-700 transition-all shadow-lg shadow-green-200"
-             >
-                Verify & Clear
-             </button>
-          </div>
-
-          <div className="mt-8 p-6 bg-blue-50 rounded-2xl border border-blue-100">
-             <p className="text-sm text-blue-700 leading-relaxed text-center italic">
-               Deep-dive view for individual product lines is currently only available via the <b>Prime Extraction Review</b> evidence portal.
-             </p>
-          </div>
         </div>
       </div>
-
-      <ConfirmationDialog 
-        isOpen={confirmOpen}
-        title={confirmType === 'VERIFY' ? 'Confirm Clearance' : 'Flag for Review'}
-        message={confirmType === 'VERIFY' 
-            ? `Are you sure you want to verify and clear Voucher ${item.billNo} for ₹${item.invoiceAmount.toLocaleString()}? This action is immutable.`
-            : `Are you sure you want to reject the match for Voucher ${item.billNo}? This will escalate the item to the owner report.`
-        }
-        confirmLabel={confirmType === 'VERIFY' ? 'Yes, Clear it' : 'Flag Item'}
-        onConfirm={executeAction}
-        onCancel={() => setConfirmOpen(false)}
-        type={confirmType === 'VERIFY' ? 'NORMAL' : 'CRITICAL'}
-      />
     </div>
   );
 };

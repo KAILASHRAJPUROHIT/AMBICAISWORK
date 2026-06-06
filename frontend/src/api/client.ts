@@ -1,4 +1,5 @@
 const BASE_URL = window.location.origin;
+const RECONCILIATION_TIMEOUT_MS = 15000;
 
 export function getSessionToken() {
   return localStorage.getItem('aradhana_session_token') || localStorage.getItem('session_token') || '';
@@ -98,15 +99,63 @@ export async function getPermissions(role: string) {
   return handleResponse(response, `Failed to fetch permissions for role: ${role}`);
 }
 
-export async function getOpenReviews() {
+export async function getOpenReviews(signal?: AbortSignal) {
   const response = await fetch(`${BASE_URL}/api/reconciliation/open`, {
-    headers: getHeaders()
+    headers: getHeaders(),
+    signal
   });
   const data = await handleJsonResponse(response, 'Failed to fetch open reconciliation items');
   if (!Array.isArray(data)) {
     throw new Error('Failed to fetch open reconciliation items (Invalid response shape: expected an array)');
   }
   return data;
+}
+
+export async function getOpenReviewsWithTimeout(timeoutMs = RECONCILIATION_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await getOpenReviews(controller.signal);
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Reconciliation request timed out. Please retry.');
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+export async function openInvoicePdf(billId: number) {
+  const token = getSessionToken();
+  const response = await fetch(`${BASE_URL}/api/invoices/pdf/${billId}`, {
+    headers: { ...(token ? { 'X-Session-Token': token } : {}) }
+  });
+  if (!response.ok) {
+    if (response.status === 401) {
+      window.location.href = '/login';
+      return;
+    }
+    throw new Error('Failed to load invoice PDF');
+  }
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  window.open(blobUrl, '_blank');
+}
+
+export async function fetchProofPreview(proofUrl: string) {
+  const token = getSessionToken();
+  const response = await fetch(`${BASE_URL}${proofUrl}`, {
+    headers: { ...(token ? { 'X-Session-Token': token } : {}) }
+  });
+  if (!response.ok) {
+    if (response.status === 401) {
+      window.location.href = '/login';
+      return;
+    }
+    throw new Error('Failed to load payment proof');
+  }
+  return response.text();
 }
 
 export async function getOpenEscalations() {

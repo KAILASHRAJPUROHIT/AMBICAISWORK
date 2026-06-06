@@ -26,3 +26,28 @@ def test_frontend_rejects_mock_reconciliation_contract_values():
         assert value in page
     assert "Reconciliation contract rejected" in page
     assert "data.map(normalizeReview)" in page
+
+
+def test_frontend_reconciliation_timeout_and_retry_contract():
+    client = (ROOT / "frontend" / "src" / "api" / "client.ts").read_text(encoding="utf-8")
+    page = (ROOT / "frontend" / "src" / "pages" / "ReconciliationQueuePage.tsx").read_text(encoding="utf-8")
+
+    assert "AbortController" in client
+    assert "RECONCILIATION_TIMEOUT_MS = 15000" in client
+    assert "Reconciliation request timed out. Please retry." in client
+    assert "getOpenReviewsWithTimeout" in page
+    assert "finally(() => setLoading(false))" in page
+    assert "Retry" in page
+    assert "active filters" in page
+
+
+def test_frontend_payment_proof_opens_in_page_modal_not_new_tab():
+    client = (ROOT / "frontend" / "src" / "api" / "client.ts").read_text(encoding="utf-8")
+    page = (ROOT / "frontend" / "src" / "pages" / "ReconciliationQueuePage.tsx").read_text(encoding="utf-8")
+
+    proof_helper = client.split("export async function fetchProofPreview", 1)[1].split("export async function getOpenEscalations", 1)[0]
+    assert "window.open" not in proof_helper
+    assert "return response.text()" in proof_helper
+    assert "proofModal" in page
+    assert "handleCopyProof" in page
+    assert "fetchProofPreview" in page

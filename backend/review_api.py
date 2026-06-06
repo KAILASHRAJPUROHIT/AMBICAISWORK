@@ -7,8 +7,8 @@ from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
-from fastapi import FastAPI, HTTPException, Depends, Request
-from fastapi.responses import RedirectResponse, JSONResponse, FileResponse
+from fastapi import FastAPI, HTTPException, Depends, Request, Response
+from fastapi.responses import RedirectResponse, JSONResponse, FileResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -607,7 +607,19 @@ def is_operational_reconciliation_bill(bill: Bill) -> bool:
         and not bill_no.startswith("HARDENING-")
     )
 
-def reconciliation_confidence(invoice_amount: float, received_amount: float) -> str:
+def requires_accountant_approval(payment_mode: str) -> bool:
+    normalized_mode = (payment_mode or "").upper()
+    return any(token in normalized_mode for token in (
+        "ADVANCE",
+        "OLD_GOLD_EXCHANGE",
+        "OLD GOLD",
+        "CUSTOMER PURCHASE",
+        "BUYBACK",
+    ))
+
+def reconciliation_confidence(invoice_amount: float, received_amount: float, payment_mode: str = "") -> str:
+    if requires_accountant_approval(payment_mode):
+        return "Medium"
     if invoice_amount > 0 and received_amount > 0 and abs(invoice_amount - received_amount) < 0.01:
         return "High"
     if 0 < received_amount < invoice_amount:
@@ -617,6 +629,8 @@ def reconciliation_confidence(invoice_amount: float, received_amount: float) -> 
 def reconciliation_display_status(invoice_amount: float, received_amount: float, difference: float, payment_mode: str, stored_status: str) -> str:
     normalized_status = (stored_status or "").upper()
     normalized_mode = (payment_mode or "").upper()
+    if requires_accountant_approval(payment_mode):
+        return "ACCOUNTANT APPROVAL REQUIRED"
     if difference < -0.01 or normalized_status in {"MISMATCH", "ERROR", "PAYMENT_TOTAL_MISMATCH", "FRAUD_RISK", "RED"}:
         return "Risk / Mismatch"
     if "CHEQUE" in normalized_mode:
@@ -627,13 +641,162 @@ def reconciliation_display_status(invoice_amount: float, received_amount: float,
         return "Pending"
     return "Pending"
 
+def payment_mode_is_manual(payment_mode: Optional[str]) -> bool:
+    normalized_mode = (payment_mode or "").upper()
+    return any(token in normalized_mode for token in ("CASH", "MANUAL", "OLD_GOLD_EXCHANGE", "OLD GOLD", "ADVANCE", "CUSTOMER PURCHASE", "BUYBACK"))
+
+def within_evidence_window(candidate_time: Optional[datetime], evidence_time: Optional[datetime], hours: int = 24) -> bool:
+    if not candidate_time or not evidence_time:
+        return False
+    return abs((candidate_time - evidence_time).total_seconds()) <= hours * 3600
+
+def find_payment_evidence(db: Session, utr_reference: Optional[str], amount: Optional[float] = None, payment_time: Optional[datetime] = None, payment_mode: Optional[str] = None) -> dict:
+    if not utr_reference:
+        exact_sms = None
+        exact_bank = None
+    else:
+        exact_sms = (
+            db.query(SMSAlert)
+            .filter(SMSAlert.utr_reference == utr_reference)
+            .order_by(SMSAlert.transaction_timestamp.desc())
+            .first()
+        )
+        exact_bank = (
+            db.query(BankAlert)
+            .filter(BankAlert.utr_reference == utr_reference)
+            .order_by(BankAlert.received_at.desc())
+            .first()
+        )
+
+    sms_alert = exact_sms
+    if not sms_alert and amount and payment_time:
+        sms_alerts = (
+            db.query(SMSAlert)
+            .filter(SMSAlert.amount == amount)
+            .order_by(SMSAlert.transaction_timestamp.desc())
+            .limit(20)
+            .all()
+        )
+        sms_alert = next((alert for alert in sms_alerts if within_evidence_window(payment_time, alert.transaction_timestamp)), None)
+    if sms_alert:
+        return {
+            "source": "SMS",
+            "timestamp": iso_or_none(sms_alert.transaction_timestamp),
+            "proof_url": f"/api/reconciliation/proof/sms/{sms_alert.id}",
+            "reference": sms_alert.sms_id or sms_alert.utr_reference,
+            "proof_label": "View SMS Proof",
+        }
+
+    bank_alert = exact_bank
+    if not bank_alert and amount and payment_time:
+        bank_alerts = (
+            db.query(BankAlert)
+            .filter(BankAlert.amount == amount)
+            .order_by(BankAlert.received_at.desc())
+            .limit(20)
+            .all()
+        )
+        bank_alert = next((alert for alert in bank_alerts if within_evidence_window(payment_time, alert.received_at)), None)
+    if bank_alert:
+        source = "Email" if "@" in (bank_alert.sender or "") else "Bank"
+        return {
+            "source": source,
+            "timestamp": iso_or_none(bank_alert.received_at),
+            "proof_url": f"/api/reconciliation/proof/bank/{bank_alert.id}",
+            "reference": bank_alert.utr_reference,
+            "proof_label": "View Email Proof" if source == "Email" else "View Bank Alert",
+        }
+
+    return {
+        "source": "Manual" if payment_mode_is_manual(payment_mode) else "Not Recorded",
+        "timestamp": None,
+        "proof_url": None,
+        "reference": utr_reference,
+        "proof_label": None,
+    }
+
+def get_file_timestamp(path: Optional[str]) -> Optional[datetime]:
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        return datetime.fromtimestamp(os.path.getmtime(path))
+    except OSError:
+        return None
+
+def best_invoice_timestamp(bill: Bill) -> tuple[Optional[datetime], str, bool]:
+    pdf_timestamp = get_file_timestamp(bill.pdf_path)
+    candidates = (
+        (bill.invoice_generated_at, "invoice_generated_at", True),
+        (pdf_timestamp, "pdf_mtime", True),
+        (bill.created_at, "created_at", True),
+        (bill.invoice_date, "invoice_date", False),
+    )
+    for value, source, has_time in candidates:
+        if value:
+            return value, source, has_time
+    return None, "not_recorded", False
+
+def require_valid_session(request: Request, db: Session) -> str:
+    token = request.headers.get("X-Session-Token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    employee_id = validate_session(db, token)
+    if not employee_id:
+        raise HTTPException(status_code=401, detail="Session expired")
+    return employee_id
+
+@app.get("/api/reconciliation/proof/{proof_type}/{proof_id}")
+async def get_reconciliation_proof_preview(proof_type: str, proof_id: int, request: Request, db: Session = Depends(get_db)):
+    require_valid_session(request, db)
+    normalized_type = proof_type.lower()
+    if normalized_type == "sms":
+        alert = db.query(SMSAlert).filter(SMSAlert.id == proof_id).first()
+        if not alert:
+            raise HTTPException(status_code=404, detail="SMS proof not found")
+        return PlainTextResponse(
+            "\n".join([
+                "SMS PAYMENT PROOF",
+                f"Timestamp: {iso_or_none(alert.transaction_timestamp) or 'Not Recorded'}",
+                f"Sender: {alert.sender or 'Not Recorded'}",
+                f"Bank: {alert.bank_name or 'Not Recorded'}",
+                f"Amount: {float(alert.amount or 0.0)}",
+                f"UTR/Reference: {alert.utr_reference or alert.sms_id or 'Not Recorded'}",
+                "",
+                alert.raw_body or "Payment proof not recorded.",
+            ])
+        )
+    if normalized_type == "bank":
+        alert = db.query(BankAlert).filter(BankAlert.id == proof_id).first()
+        if not alert:
+            raise HTTPException(status_code=404, detail="Bank proof not found")
+        return PlainTextResponse(
+            "\n".join([
+                "BANK / EMAIL PAYMENT PROOF",
+                f"Timestamp: {iso_or_none(alert.received_at) or 'Not Recorded'}",
+                f"Sender: {alert.sender or 'Not Recorded'}",
+                f"Bank: {alert.bank_name or 'Not Recorded'}",
+                f"Amount: {float(alert.amount or 0.0)}",
+                f"UTR/Reference: {alert.utr_reference or 'Not Recorded'}",
+                "",
+                alert.raw_text or "Payment proof not recorded.",
+            ])
+        )
+    raise HTTPException(status_code=404, detail="Proof type not found")
+
 @app.get("/api/reconciliation/open")
-async def get_open_reconciliation_real(request: Request, db: Session = Depends(get_db)):
+async def get_open_reconciliation_real(request: Request, response: Response, db: Session = Depends(get_db)):
     token = request.headers.get("X-Session-Token")
     if not token:
         raise HTTPException(status_code=401, detail="Authentication required")
     if not validate_session(db, token):
         raise HTTPException(status_code=401, detail="Session expired")
+
+    considered_query = db.query(Bill).filter(Bill.is_test_data == False)
+    total_considered = considered_query.count()
+    excluded_test_prefix = considered_query.filter(Bill.bill_number.ilike("TEST-%")).count()
+    excluded_archive_prefix = considered_query.filter(Bill.bill_number.ilike("ARCH-%")).count()
+    excluded_hardening_prefix = considered_query.filter(Bill.bill_number.ilike("HARDENING-%")).count()
+    excluded_test_data = db.query(Bill).filter(Bill.is_test_data == True).count()
 
     bills = (
         db.query(Bill)
@@ -642,14 +805,9 @@ async def get_open_reconciliation_real(request: Request, db: Session = Depends(g
             ~Bill.bill_number.ilike("TEST-%"),
             ~Bill.bill_number.ilike("ARCH-%"),
             ~Bill.bill_number.ilike("HARDENING-%"),
-            or_(
-                Bill.review_required == 1,
-                Bill.status != "Green",
-                Bill.remaining_amount > 0,
-            ),
         )
         .order_by(Bill.invoice_generated_at.desc().nullslast(), Bill.created_at.desc())
-        .limit(200)
+        .limit(1000)
         .all()
     )
 
@@ -657,7 +815,12 @@ async def get_open_reconciliation_real(request: Request, db: Session = Depends(g
     for bill in bills:
         if not is_operational_reconciliation_bill(bill):
             continue
-        payments = db.query(Payment).filter(Payment.bill_id == bill.id).all()
+        payments = (
+            db.query(Payment)
+            .filter(Payment.bill_id == bill.id)
+            .order_by(Payment.payment_date.asc().nullslast(), Payment.created_at.asc())
+            .all()
+        )
         payment_total = sum(float(payment.amount or 0.0) for payment in payments)
         fallback_total = (
             float(bill.cash_received or 0.0)
@@ -668,9 +831,45 @@ async def get_open_reconciliation_real(request: Request, db: Session = Depends(g
         invoice_amount = float(bill.amount or 0.0)
         difference = round(invoice_amount - received_amount, 2)
         payment_mode = bill.payment_mode or ", ".join(payment.mode for payment in payments if payment.mode) or "UNKNOWN"
-        confidence = reconciliation_confidence(invoice_amount, received_amount)
+        confidence = reconciliation_confidence(invoice_amount, received_amount, payment_mode)
         status = reconciliation_display_status(invoice_amount, received_amount, difference, payment_mode, bill.status)
+        invoice_timestamp, invoice_timestamp_source, invoice_time_recorded = best_invoice_timestamp(bill)
+        payment_breakdown = []
+        for payment in payments:
+            payment_utr = payment.utr_reference or bill.reference_no
+            payment_time = payment.payment_date or payment.created_at or bill.invoice_generated_at or bill.created_at
+            evidence = find_payment_evidence(db, payment_utr, float(payment.amount or 0.0), payment_time, payment.mode)
+            payment_breakdown.append({
+                "amount": float(payment.amount or 0.0),
+                "mode": payment.mode or "UNKNOWN",
+                "timestamp": iso_or_none(payment.payment_date) or evidence["timestamp"] or iso_or_none(payment.created_at),
+                "utr_reference": payment_utr,
+                "reference": evidence["reference"] or payment_utr or payment.cheque_number,
+                "source": evidence["source"],
+                "proof_url": evidence["proof_url"],
+                "proof_label": evidence["proof_label"],
+            })
+        if not payment_breakdown and received_amount > 0:
+            for mode, amount in (
+                ("CASH", float(bill.cash_received or 0.0)),
+                ("BANK", float(bill.bank_received or 0.0)),
+                ("CARD", float(bill.card_received or 0.0)),
+            ):
+                if amount > 0:
+                    fallback_time = bill.invoice_generated_at or bill.created_at or bill.invoice_date
+                    evidence = find_payment_evidence(db, bill.reference_no if mode == "BANK" else None, amount, fallback_time, mode)
+                    payment_breakdown.append({
+                        "amount": amount,
+                        "mode": mode,
+                        "timestamp": evidence["timestamp"] or iso_or_none(bill.invoice_generated_at) or iso_or_none(bill.created_at),
+                        "utr_reference": bill.reference_no if mode == "BANK" else None,
+                        "reference": evidence["reference"] or (bill.reference_no if mode == "BANK" else None),
+                        "source": evidence["source"] if mode == "BANK" else "Manual",
+                        "proof_url": evidence["proof_url"],
+                        "proof_label": evidence["proof_label"],
+                    })
         rows.append({
+            "bill_id": bill.id,
             "bill_no": bill.bill_number,
             "customer_name": bill.customer_name or "",
             "invoice_amount": invoice_amount,
@@ -681,14 +880,28 @@ async def get_open_reconciliation_real(request: Request, db: Session = Depends(g
             "status": status,
             "invoice_date": iso_or_none(bill.invoice_date),
             "invoice_generated_at": iso_or_none(bill.invoice_generated_at),
+            "invoice_timestamp": iso_or_none(invoice_timestamp),
+            "invoice_timestamp_source": invoice_timestamp_source,
+            "invoice_time_recorded": invoice_time_recorded,
+            "pdf_mtime": iso_or_none(get_file_timestamp(bill.pdf_path)),
+            "invoice_pdf_url": f"/api/invoices/pdf/{bill.id}" if bill.pdf_path else None,
+            "invoice_pdf_available": bool(bill.pdf_path),
             "bank_time": None,
             "verified_at": None,
             "verified_by": None,
             "utr_reference": bill.reference_no or next((payment.utr_reference for payment in payments if payment.utr_reference), None),
             "review_age": None,
             "source_system": "ARADHANA_BILLS",
+            "has_special_payment_flag": requires_accountant_approval(payment_mode),
+            "payment_breakdown": payment_breakdown,
         })
 
+    response.headers["X-Reconciliation-Total-Considered"] = str(total_considered)
+    response.headers["X-Reconciliation-Rows-Returned"] = str(len(rows))
+    response.headers["X-Reconciliation-Excluded-Test-Prefix"] = str(excluded_test_prefix)
+    response.headers["X-Reconciliation-Excluded-Archive-Prefix"] = str(excluded_archive_prefix)
+    response.headers["X-Reconciliation-Excluded-Hardening-Prefix"] = str(excluded_hardening_prefix)
+    response.headers["X-Reconciliation-Excluded-Test-Data"] = str(excluded_test_data)
     return rows
 
 @app.get("/status-colors")

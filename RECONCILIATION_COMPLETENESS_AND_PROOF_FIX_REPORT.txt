@@ -1,0 +1,96 @@
+RECONCILIATION COMPLETENESS AND PROOF FIX REPORT
+
+Branch:
+- feature/reconciliation-audit-ui
+
+Scope:
+- Read-only reconciliation display/data enrichment only.
+- No auth, LAN, escalation, dashboard totals, payment confirmation, or financial record mutation logic changed.
+- No auto-confirm or auto-approve behavior added.
+
+Root causes:
+- Loading could remain stuck because reconciliation fetch had no timeout or retryable error state.
+- /api/reconciliation/open excluded verified/Green rows, so fully matched operational bills were hidden from reconciliation visibility.
+- Payment proof matching only used UTR/reference and labeled unmatched payments as Manual too broadly.
+- Frontend had no proof-status indicator separating invoice PDF availability from payment proof availability.
+
+Backend changes:
+- /api/reconciliation/open now includes all operational bills by default.
+- Exclusions remain limited to:
+  - TEST-*
+  - ARCH-*
+  - HARDENING-*
+  - is_test_data=true
+- Verified/Green fully matched rows are included unless the frontend filters hide them.
+- Added count diagnostic headers:
+  - X-Reconciliation-Total-Considered
+  - X-Reconciliation-Rows-Returned
+  - X-Reconciliation-Excluded-Test-Prefix
+  - X-Reconciliation-Excluded-Archive-Prefix
+  - X-Reconciliation-Excluded-Hardening-Prefix
+  - X-Reconciliation-Excluded-Test-Data
+
+Proof matching:
+- Deterministic evidence matching now uses:
+  1. UTR/reference exact match
+  2. exact amount plus 24-hour timestamp proximity
+  3. payment mode classification for Manual vs Not Recorded
+- SMSAlert matches return:
+  - source = SMS
+  - proof_label = View SMS Proof
+  - proof_url = /api/reconciliation/proof/sms/{id}
+- BankAlert matches return:
+  - source = Email when sender contains @
+  - source = Bank otherwise
+  - proof_label = View Email Proof or View Bank Alert
+  - proof_url = /api/reconciliation/proof/bank/{id}
+- No proof links are fabricated.
+
+Frontend changes:
+- Added AbortController timeout via getOpenReviewsWithTimeout.
+- Timeout is 15 seconds.
+- Timeout message: "Reconciliation request timed out. Please retry."
+- Loading is cleared in finally.
+- Error state has Retry button.
+- No fallback to /reviews/open or /api/reviews/open.
+- Main table keeps View PDF behavior and adds proof status:
+  - Invoice PDF available / Payment proof available
+  - Invoice PDF available / Missing payment proof
+  - Payment proof available
+  - Missing payment proof
+- Active filter count is shown with existing Clear Filters control.
+
+Safety:
+- Old gold / advance / customer purchase / buyback rows still display:
+  - confidence = Medium
+  - status = ACCOUNTANT APPROVAL REQUIRED
+- No stored financial status is changed.
+- No auto-clear or approval behavior added.
+- Contract guard remains active for:
+  - ---
+  - Review Item
+  - REVIEW
+  - mock_review_1
+  - pay_001
+  - bill_002
+
+Tests run:
+- python -m pytest tests/test_reconciliation_contract.py
+  - Result: 3 passed
+- python -m pytest tests/test_reconciliation_real_endpoint.py
+  - Result: 3 passed
+- cd frontend && npm run build
+  - Result: passed
+
+Test coverage added:
+- 05 Jun 2026 fixture returns 20 operational bills.
+- Verified rows are included by default.
+- TEST-/ARCH-/HARDENING-/is_test_data rows are excluded.
+- SMS proof matched by UTR.
+- Email/bank proof matched by UTR and by deterministic amount/date proximity.
+- Old gold exact match remains accountant approval required.
+- Frontend timeout/retry contract is enforced by static test.
+
+Browser verification:
+- Pending authenticated OWNER/accountant browser session.
+- No commit has been made.
