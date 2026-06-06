@@ -6,6 +6,11 @@ from email.mime.multipart import MIMEMultipart
 
 logger = logging.getLogger("EmailNotifier")
 
+# Feature Flag for Legacy Alerts
+LEGACY_ALERT_EMAILS_ENABLED = os.getenv("LEGACY_ALERT_EMAILS_ENABLED", "false").lower() in ('true', '1', 't')
+if not LEGACY_ALERT_EMAILS_ENABLED:
+    logger.warning("LEGACY_ALERT_EMAILS_ENABLED is false. All security/red alerts will be suppressed.")
+
 # Mandate: Security alerts destination
 SECURITY_ALERT_EMAIL = "kuldeeprajpurohit309@gmail.com"
 
@@ -57,6 +62,10 @@ def send_otp_email(to_email: str, otp_code: str):
 
 def send_security_alert(event_type: str, details: str):
     """Immediately notifies owner of critical security events."""
+    if not LEGACY_ALERT_EMAILS_ENABLED:
+        logger.warning(f"Legacy alert email suppressed. Event: {event_type}")
+        return True # Return success to prevent crashing the caller
+
     subject = f"CRITICAL SECURITY ALERT: {event_type}"
     body = f"""
     <html>

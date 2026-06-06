@@ -1,0 +1,49 @@
+# Legacy Alert Disable System - Implementation Report
+
+## 1. Objective
+To safely disable all legacy operational and security alert emails (e.g., for parse failures, payment mismatches) without affecting critical user-facing emails, such as OTP and password reset notifications.
+
+## 2. Implementation Details
+
+The solution was implemented by introducing a single, central feature flag that controls all legacy alerts.
+
+### 2.1. Feature Flag Implementation
+- **File Modified:** `backend/email_notifier.py`
+- **Flag Name:** `LEGACY_ALERT_EMAILS_ENABLED`
+- **Mechanism:** The flag is read from an environment variable. It defaults to `False` if not set.
+  ```python
+  LEGACY_ALERT_EMAILS_ENABLED = os.getenv("LEGACY_ALERT_EMAILS_ENABLED", "false").lower() in ('true', '1', 't')
+  ```
+- **Behavior:** On application startup, a warning is logged if the flag is disabled, making the suppressed state clearly visible in the logs.
+
+### 2.2. Alert Suppression Logic
+- **Function Modified:** `send_security_alert(event_type: str, details: str)` in `backend/email_notifier.py`.
+- **Logic:**
+  - This function is the central point for all legacy alerts (including the `send_red_alert_email` wrapper).
+  - It now begins by checking the `LEGACY_ALERT_EMAILS_ENABLED` flag.
+  - If the flag is `False`, the function immediately logs a warning (`Legacy alert email suppressed. Event: {event_type}`) and returns `True`.
+  - Returning `True` ensures that the calling process (e.g., PDF ingestion) does not interpret the suppression as a failure and continues its workflow without crashing.
+  - If the flag is `True`, the original email-sending logic is executed.
+
+### 2.3. Preservation of Critical Emails
+- **Unaffected Functions:** The `send_otp_email()` and the base `send_email()` functions were **not modified**.
+- **Result:** Since `send_otp_email()` calls `send_email()` directly and does not use the `send_security_alert` function, the entire OTP and password reset email workflow is completely unaffected by the new feature flag.
+
+## 3. Test Verification
+A new test suite was created (`tests/test_feature_flags.py`) to validate the new logic, and existing suites were run to check for regressions.
+
+### 3.1. New Tests Added
+- `test_security_alert_suppressed_when_flag_is_false()`: Confirmed that `send_email` is **not** called for security alerts when the flag is off.
+- `test_security_alert_sent_when_flag_is_true()`: Confirmed that `send_email` **is** called for security alerts when the flag is on.
+- `test_otp_email_unaffected_by_flag_disabled_by_default()`: Confirmed that `send_otp_email` successfully calls `send_email` even when the flag is off.
+- `test_red_alert_wrapper_is_suppressed()`: Confirmed that the wrapper function is also correctly suppressed.
+- **Result:** All new tests passed.
+
+### 3.2. Regression Testing
+- `python -m pytest tests/test_invoice_lifecycle.py`: **4 passed**
+- `python -m pytest tests/test_master_console_user_management.py`: **6 passed**
+- `cd frontend && npm run build`: **Success**
+- **Conclusion:** The changes have not introduced any regressions in the tested areas of the application.
+
+## 4. Final State
+The legacy alert system can now be toggled on or off via the `LEGACY_ALERT_EMAILS_ENABLED` environment variable, defaulting to off. This has been achieved without modifying the logic of any core system and while guaranteeing that critical authentication emails remain fully functional.
