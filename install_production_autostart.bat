@@ -23,7 +23,7 @@ echo Command:   %COMMAND_TO_RUN%
 echo.
 
 echo Creating/updating scheduled task...
-schtasks /create /tn "%TASK_NAME%" /tr "%COMMAND_TO_RUN%" /sc ONLOGON /rl HIGHEST /f /v
+schtasks /create /tn "%TASK_NAME%" /tr "%COMMAND_TO_RUN%" /sc ONLOGON /rl HIGHEST /f
 
 rem Check the exit code of schtasks
 if %errorlevel% neq 0 (
