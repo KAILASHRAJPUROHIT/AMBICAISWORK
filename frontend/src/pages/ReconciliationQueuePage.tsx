@@ -1,8 +1,59 @@
 import React, { useState, useEffect } from 'react';
 import ReconciliationTable from '../components/ReconciliationTable';
 import InvoiceDetailDrawer from '../components/InvoiceDetailDrawer';
-import { getHeaders } from '../api/client';
+import { getOpenReviews } from '../api/client';
 import type { ReconciliationItem } from '../types';
+
+const FORBIDDEN_CONTRACT_VALUES = ['---', 'Review Item', 'REVIEW', 'mock_review_1', 'pay_001', 'bill_002'];
+
+const toAmount = (value: unknown): number => {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount : 0;
+};
+
+const toConfidence = (value: unknown): ReconciliationItem['matchConfidence'] => {
+  const confidence = String(value || '').toLowerCase();
+  if (confidence === 'high') return 'High';
+  if (confidence === 'low') return 'Low';
+  return 'Medium';
+};
+
+const toStatus = (value: unknown): ReconciliationItem['status'] => {
+  const status = String(value || '').toUpperCase();
+  if (['CLEARED', 'VERIFIED', 'PAID', 'GREEN'].includes(status) || value === 'Verified') return 'Verified';
+  if (['DELIVERY_APPROVED_BEFORE_PAYMENT', 'APPROVAL_DELIVERY', 'ORANGE'].includes(status) || value === 'Delivered Before Payment') return 'Delivered Before Payment';
+  if (['MISMATCH', 'ERROR', 'PAYMENT_TOTAL_MISMATCH', 'FRAUD_RISK', 'RED'].includes(status) || value === 'Risk / Mismatch') return 'Risk / Mismatch';
+  if (['CHEQUE_DEPOSITED', 'CHEQUE_CLEARING', 'REALIZING_CHEQUE', 'BLUE'].includes(status) || value === 'Realizing Cheque') return 'Realizing Cheque';
+  if (['ADVANCE_PENDING', 'PURPLE'].includes(status) || value === 'Advance Pending') return 'Advance Pending';
+  if (['ARCHIVED', 'CLOSED'].includes(status) || value === 'Archived') return 'Archived';
+  return 'Pending';
+};
+
+const assertRealReviewRow = (row: any) => {
+  const serialized = JSON.stringify(row);
+  const forbidden = FORBIDDEN_CONTRACT_VALUES.find(value => serialized.includes(value));
+  if (forbidden) {
+    throw new Error(`Reconciliation contract rejected placeholder/mock value: ${forbidden}`);
+  }
+  if (!row.bill_no || String(row.bill_no).trim() === '') {
+    throw new Error('Reconciliation contract rejected row without bill_no');
+  }
+};
+
+const normalizeReview = (row: any, idx: number): ReconciliationItem => {
+  assertRealReviewRow(row);
+  return {
+    id: String(row.bill_no || `REC_${idx}`),
+    billNo: String(row.bill_no),
+    customer: row.customer_name || 'Unknown Customer',
+    invoiceAmount: toAmount(row.invoice_amount),
+    bankAmount: toAmount(row.bank_amount),
+    difference: toAmount(row.difference),
+    paymentMode: row.payment_mode || 'UNKNOWN',
+    matchConfidence: toConfidence(row.confidence),
+    status: toStatus(row.status),
+  };
+};
 
 const ReconciliationQueuePage: React.FC = () => {
   const [items, setItems] = useState<ReconciliationItem[]>([]);
@@ -11,28 +62,13 @@ const ReconciliationQueuePage: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<ReconciliationItem | null>(null);
 
   useEffect(() => {
-    fetch(`${window.location.origin}/reviews/open`, { headers: getHeaders() })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch live reconciliation data.');
-        return res.json();
-      })
+    getOpenReviews()
       .then(data => {
-        const transformed: ReconciliationItem[] = data.map((r: any, idx: number) => ({
-          id: r.review_id || `REC_${idx}`,
-          billNo: String(r.entity_id || '---'),
-          customer: r.entity_type || 'Review Item',
-          invoiceAmount: 0.0,
-          bankAmount: 0.0,
-          difference: 0.0,
-          paymentMode: r.queue_type || 'Review',
-          matchConfidence: r.escalation_required ? 'Low' : 'Medium',
-          status: r.escalation_required ? 'Risk / Mismatch' : 'Pending'
-        }));
-        setItems(transformed);
+        setItems(data.map(normalizeReview));
       })
       .catch(err => {
-        console.error("Reconciliation fetch error:", err);
-        setError(err.message);
+        console.error('Reconciliation fetch error:', err);
+        setError(err.message || 'Unable to load reconciliation data.');
       })
       .finally(() => setLoading(false));
   }, []);
@@ -65,7 +101,7 @@ const ReconciliationQueuePage: React.FC = () => {
         </div>
       ) : items.length === 0 ? (
         <div className="p-20 text-center bg-white rounded-3xl shadow-sm border border-gray-100 text-gray-400 font-bold text-xl">
-          Zero pending items found.
+          No open reconciliation items
         </div>
       ) : (
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">

@@ -51,7 +51,7 @@ if not db_integrity_ok:
 
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event, hash_password
 from backend.lan_config import lan_health_check
-from backend.models import User, LoginLog, Bill, BankAlert, SMSAlert, SystemSetting, AuditLog
+from backend.models import User, LoginLog, Bill, Payment, BankAlert, SMSAlert, SystemSetting, AuditLog
 from backend.pdf_ingestion import start_ingestion_thread, perform_scan, ingestion_status, WATCH_PATH
 from backend.email_poller import start_email_poller, process_emails, email_status
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
@@ -594,6 +594,102 @@ async def get_live_payment_events(db: Session = Depends(get_db)):
         combined.append({"id": f"sms_{s.id}", "source": "SMS", "bank": s.bank_name, "account": s.account_suffix, "amount": float(s.amount), "reference": s.utr_reference, "timestamp": s.transaction_timestamp.isoformat(), "confidence": "HIGH" if s.parsed_confidence >= 0.9 else "MEDIUM" if s.parsed_confidence >= 0.6 else "LOW", "payer": s.payer_name, "raw": s.raw_body})
     combined.sort(key=lambda x: x["timestamp"], reverse=True)
     return combined[:50]
+
+def iso_or_none(value):
+    return value.isoformat() if value else None
+
+def is_operational_reconciliation_bill(bill: Bill) -> bool:
+    bill_no = (bill.bill_number or "").upper()
+    return (
+        not bool(bill.is_test_data)
+        and not bill_no.startswith("TEST-")
+        and not bill_no.startswith("ARCH-")
+        and not bill_no.startswith("HARDENING-")
+    )
+
+def reconciliation_confidence(invoice_amount: float, received_amount: float) -> str:
+    if invoice_amount > 0 and received_amount > 0 and abs(invoice_amount - received_amount) < 0.01:
+        return "High"
+    if 0 < received_amount < invoice_amount:
+        return "Medium"
+    return "Low"
+
+def reconciliation_display_status(invoice_amount: float, received_amount: float, difference: float, payment_mode: str, stored_status: str) -> str:
+    normalized_status = (stored_status or "").upper()
+    normalized_mode = (payment_mode or "").upper()
+    if difference < -0.01 or normalized_status in {"MISMATCH", "ERROR", "PAYMENT_TOTAL_MISMATCH", "FRAUD_RISK", "RED"}:
+        return "Risk / Mismatch"
+    if "CHEQUE" in normalized_mode:
+        return "Realizing Cheque"
+    if invoice_amount > 0 and received_amount > 0 and abs(invoice_amount - received_amount) < 0.01:
+        return "Verified"
+    if 0 < received_amount < invoice_amount:
+        return "Pending"
+    return "Pending"
+
+@app.get("/api/reconciliation/open")
+async def get_open_reconciliation_real(request: Request, db: Session = Depends(get_db)):
+    token = request.headers.get("X-Session-Token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not validate_session(db, token):
+        raise HTTPException(status_code=401, detail="Session expired")
+
+    bills = (
+        db.query(Bill)
+        .filter(
+            Bill.is_test_data == False,
+            ~Bill.bill_number.ilike("TEST-%"),
+            ~Bill.bill_number.ilike("ARCH-%"),
+            ~Bill.bill_number.ilike("HARDENING-%"),
+            or_(
+                Bill.review_required == 1,
+                Bill.status != "Green",
+                Bill.remaining_amount > 0,
+            ),
+        )
+        .order_by(Bill.invoice_generated_at.desc().nullslast(), Bill.created_at.desc())
+        .limit(200)
+        .all()
+    )
+
+    rows = []
+    for bill in bills:
+        if not is_operational_reconciliation_bill(bill):
+            continue
+        payments = db.query(Payment).filter(Payment.bill_id == bill.id).all()
+        payment_total = sum(float(payment.amount or 0.0) for payment in payments)
+        fallback_total = (
+            float(bill.cash_received or 0.0)
+            + float(bill.bank_received or 0.0)
+            + float(bill.card_received or 0.0)
+        )
+        received_amount = payment_total if payment_total > 0 else fallback_total
+        invoice_amount = float(bill.amount or 0.0)
+        difference = round(invoice_amount - received_amount, 2)
+        payment_mode = bill.payment_mode or ", ".join(payment.mode for payment in payments if payment.mode) or "UNKNOWN"
+        confidence = reconciliation_confidence(invoice_amount, received_amount)
+        status = reconciliation_display_status(invoice_amount, received_amount, difference, payment_mode, bill.status)
+        rows.append({
+            "bill_no": bill.bill_number,
+            "customer_name": bill.customer_name or "",
+            "invoice_amount": invoice_amount,
+            "bank_amount": received_amount,
+            "difference": difference,
+            "payment_mode": payment_mode,
+            "confidence": confidence,
+            "status": status,
+            "invoice_date": iso_or_none(bill.invoice_date),
+            "invoice_generated_at": iso_or_none(bill.invoice_generated_at),
+            "bank_time": None,
+            "verified_at": None,
+            "verified_by": None,
+            "utr_reference": bill.reference_no or next((payment.utr_reference for payment in payments if payment.utr_reference), None),
+            "review_age": None,
+            "source_system": "ARADHANA_BILLS",
+        })
+
+    return rows
 
 @app.get("/status-colors")
 def status_colors():

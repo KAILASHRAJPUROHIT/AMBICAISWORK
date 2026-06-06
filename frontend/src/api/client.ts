@@ -31,6 +31,25 @@ async function handleResponse(response: Response, errorMessage: string) {
   return response.text();
 }
 
+async function handleJsonResponse(response: Response, errorMessage: string) {
+  const contentType = response.headers.get('content-type') || '';
+  if (!response.ok) {
+    if (contentType.includes('application/json')) {
+      const error = await response.json();
+      throw new Error(error.detail || `${errorMessage} (Server returned ${response.status})`);
+    }
+    const text = await response.text();
+    console.error(`Expected JSON but received ${contentType || 'unknown content type'}:`, text.slice(0, 300));
+    throw new Error(`${errorMessage} (Server returned ${response.status} ${contentType || 'non-JSON response'})`);
+  }
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    console.error(`Expected JSON response, got ${contentType || 'unknown content type'}:`, text.slice(0, 300));
+    throw new Error(`${errorMessage} (Expected JSON but received ${contentType || 'non-JSON response'})`);
+  }
+  return response.json();
+}
+
 export async function getHealth() {
   const response = await fetch(`${BASE_URL}/health`);
   return handleResponse(response, 'Failed to fetch health status');
@@ -80,10 +99,14 @@ export async function getPermissions(role: string) {
 }
 
 export async function getOpenReviews() {
-  const response = await fetch(`${BASE_URL}/api/reviews/open`, {
+  const response = await fetch(`${BASE_URL}/api/reconciliation/open`, {
     headers: getHeaders()
   });
-  return handleResponse(response, 'Failed to fetch open reviews');
+  const data = await handleJsonResponse(response, 'Failed to fetch open reconciliation items');
+  if (!Array.isArray(data)) {
+    throw new Error('Failed to fetch open reconciliation items (Invalid response shape: expected an array)');
+  }
+  return data;
 }
 
 export async function getOpenEscalations() {
