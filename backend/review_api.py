@@ -1265,17 +1265,40 @@ async def reset_user_password(employee_id: str, request: PasswordResetRequest, d
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    changed_fields: Dict[str, Any] = {"password_reset_required": True}
-    if request.temporary_password:
-        user.hashed_password = hash_password(request.temporary_password)
-        changed_fields["temporary_password_set"] = True
+    actions_performed = []
+    
+    # Always require a password reset after this operation
     user.password_reset_required = True
+    log_user_audit(db, owner, user, "PASSWORD_RESET_REQUESTED", {"reset_required": True})
+    actions_performed.append("PASSWORD_RESET_REQUESTED")
+
+    # 1. Set Temporary Password if provided
+    if request.temporary_password:
+        if len(request.temporary_password) < 8:
+            raise HTTPException(status_code=400, detail="Temporary password must be at least 8 characters long")
+        user.hashed_password = hash_password(request.temporary_password)
+        log_user_audit(db, owner, user, "TEMP_PASSWORD_ASSIGNED", {"source": "MasterConsole"})
+        actions_performed.append("TEMP_PASSWORD_ASSIGNED")
+
+    # 2. Send OTP if requested
     if request.send_reset_otp:
-        create_otp(db, user.employee_id, is_resend=True)
-        changed_fields["reset_otp_requested"] = True
-    log_user_audit(db, owner, user, "PASSWORD_RESET_TRIGGERED", changed_fields)
+        log_user_audit(db, owner, user, "OTP_GENERATED", {"source": "MasterConsole"})
+        actions_performed.append("OTP_GENERATED")
+        
+        otp_result = create_otp(db, user.employee_id, is_resend=True)
+        
+        if not otp_result.get("otp_sent"):
+            # Log the failure before committing any changes and raising an error
+            log_user_audit(db, owner, user, "OTP_EMAIL_FAILED", {"reason": otp_result.get("message")})
+            db.commit() # Commit password change even if email fails
+            raise HTTPException(status_code=500, detail=f"OTP Email Failed: {otp_result.get('message', 'Could not send email. Check server logs and .env configuration.')}")
+        
+        log_user_audit(db, owner, user, "OTP_EMAIL_SENT", {"email": otp_result.get("email")})
+        actions_performed.append("OTP_EMAIL_SENT")
+
     db.commit()
-    return {"status": "success", "password_reset_required": True}
+    
+    return {"status": "success", "detail": "Password reset process initiated successfully.", "actions": sorted(list(set(actions_performed)))}
 
 @app.post("/api/admin/users/{employee_id}/archive")
 async def archive_user(employee_id: str, db: Session = Depends(get_db), owner: User = Depends(require_owner)):
