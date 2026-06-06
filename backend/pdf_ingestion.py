@@ -26,7 +26,7 @@ WATCH_PATH = os.getenv("INVOICE_SHARE_PATH", DEFAULT_SHARE)
 if WATCH_PATH.startswith("C:") and DEFAULT_SHARE.startswith("\\\\"):
     logger.warning(f"WATCH_PATH is local ({WATCH_PATH}). Network share ({DEFAULT_SHARE}) is ignored.")
 
-from backend.invoice_lifecycle import handle_duplicate
+from backend.invoice_lifecycle import DUPLICATE_PERMISSION_MESSAGE, handle_duplicate
 
 # OCR Settings
 OCR_ACCELERATION = os.getenv("OCR_ACCELERATION", "auto")
@@ -49,6 +49,8 @@ ingestion_status = {
     "files_processed": 0,
     "invoices_inserted": 0,
     "skipped_duplicates": 0,
+    "duplicate_move_failed_permission": 0,
+    "duplicate_ignored_until_permission_fixed": 0,
     "failed_files": 0,
     "last_file_seen": None,
     "last_processed_time": None,
@@ -68,6 +70,16 @@ def increment_status(key, amount=1):
     with status_lock:
         if key in ingestion_status:
             ingestion_status[key] += amount
+
+def record_duplicate_result(result):
+    if not result:
+        return
+    if result.get("status") == "permission_failed":
+        increment_status("duplicate_move_failed_permission")
+        update_status(last_error=DUPLICATE_PERMISSION_MESSAGE)
+    elif result.get("status") == "ignored_permission":
+        increment_status("duplicate_ignored_until_permission_fixed")
+        update_status(last_error=DUPLICATE_PERMISSION_MESSAGE)
 
 def get_file_hash(file_path):
     sha256_hash = hashlib.sha256()
@@ -300,7 +312,7 @@ def process_invoice(file_path):
         if existing_hash:
             logger.info(f"Duplicate hash detected for {os.path.basename(file_path)}")
             increment_status("skipped_duplicates")
-            handle_duplicate(file_path, db, reason="Duplicate PDF SHA256 hash")
+            record_duplicate_result(handle_duplicate(file_path, db, reason="Duplicate PDF SHA256 hash", file_hash=file_hash))
             return
 
         invoice_data = parse_pdf(file_path)
@@ -331,7 +343,7 @@ def process_invoice(file_path):
         if duplicate_bill:
             logger.info(f"Duplicate 5-point match for {invoice_data['bill_number']}")
             increment_status("skipped_duplicates")
-            handle_duplicate(file_path, db, reason="5-point identity match (Number, Date, Customer, Total)")
+            record_duplicate_result(handle_duplicate(file_path, db, reason="5-point identity match (Number, Date, Customer, Total)", file_hash=file_hash))
             return
 
         # Check for just number match (could be a mistake or update)
@@ -339,7 +351,7 @@ def process_invoice(file_path):
         if duplicate_num:
             logger.warning(f"Duplicate Number Skip: {invoice_data['bill_number']} (Partial identity match)")
             increment_status("skipped_duplicates")
-            handle_duplicate(file_path, db, reason="Duplicate Invoice Number match")
+            record_duplicate_result(handle_duplicate(file_path, db, reason="Duplicate Invoice Number match", file_hash=file_hash))
             return
 
         modes = [p["mode"] for p in invoice_data["payments"]]

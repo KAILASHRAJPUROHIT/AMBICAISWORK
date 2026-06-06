@@ -15,40 +15,121 @@ logging.basicConfig(level=logging.INFO)
 WATCH_PATH = r"C:\Aradhana\InvoicePDFs"
 ARCHIVE_ROOT = r"C:\Aradhana\OLD"
 DUPLICATE_ROOT = r"C:\Aradhana\DUPLICATE"
+DUPLICATE_MOVE_FAILED_PERMISSION = "DUPLICATE_MOVE_FAILED_PERMISSION"
+DUPLICATE_PERMISSION_MESSAGE = "Duplicate PDF detected but archive move failed due to Windows share permission."
 
 # Ensure directories exist
 for path in [WATCH_PATH, ARCHIVE_ROOT, DUPLICATE_ROOT]:
     os.makedirs(path, exist_ok=True)
 
-def handle_duplicate(file_path, db: Session, reason="Duplicate detected"):
+def _today_key():
+    return datetime.now().strftime("%Y-%m-%d")
+
+def _is_access_denied(error: Exception) -> bool:
+    winerror = getattr(error, "winerror", None)
+    errno = getattr(error, "errno", None)
+    message = str(error).lower()
+    return winerror == 5 or errno == 13 or isinstance(error, PermissionError) or "access is denied" in message
+
+def _duplicate_metadata(file_path, reason, file_hash=None, dest_path=None, error=None):
+    metadata = {
+        "original_path": file_path,
+        "filename": os.path.basename(file_path),
+        "reason": reason,
+        "file_hash": file_hash,
+        "duplicate_day": _today_key(),
+        "operator_message": DUPLICATE_PERMISSION_MESSAGE if error else None,
+    }
+    if dest_path:
+        metadata["dest_path"] = dest_path
+    if error:
+        metadata["error"] = str(error)
+    return metadata
+
+def _log_duplicate_event(db: Session, action: str, new_status: str, metadata: dict):
+    log = AuditLog(
+        entity_type="FILE",
+        entity_id=0,
+        action=action,
+        old_status="ACTIVE",
+        new_status=new_status,
+        actor="SYSTEM_LIFECYCLE",
+        metadata_json=json.dumps(metadata)
+    )
+    db.add(log)
+    db.commit()
+    return log
+
+def _metadata_matches(metadata_json, file_path, file_hash=None):
+    try:
+        metadata = json.loads(metadata_json or "{}")
+    except json.JSONDecodeError:
+        return False
+    same_file = metadata.get("original_path") == file_path
+    same_hash = file_hash and metadata.get("file_hash") == file_hash
+    return (same_file or same_hash) and metadata.get("duplicate_day") == _today_key()
+
+def duplicate_permission_ignored_today(db: Session, file_path: str, file_hash=None) -> bool:
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.action == DUPLICATE_MOVE_FAILED_PERMISSION)
+        .order_by(AuditLog.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return any(_metadata_matches(log.metadata_json, file_path, file_hash) for log in logs)
+
+def get_duplicate_quarantine_summary(db: Session):
+    logs = db.query(AuditLog).filter(
+        AuditLog.action.in_(["DUPLICATE_MOVE", DUPLICATE_MOVE_FAILED_PERMISSION])
+    ).all()
+    return {
+        "total_duplicates": len(logs),
+        "failed_moves": sum(1 for log in logs if log.action == DUPLICATE_MOVE_FAILED_PERMISSION),
+        "ignored_until_permission_fixed": sum(1 for log in logs if log.action == DUPLICATE_MOVE_FAILED_PERMISSION),
+        "operator_message": DUPLICATE_PERMISSION_MESSAGE,
+    }
+
+def handle_duplicate(file_path, db: Session, reason="Duplicate detected", file_hash=None):
     """Move a duplicate file to the DUPLICATE folder."""
     filename = os.path.basename(file_path)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dest_name = f"{timestamp}_{filename}"
     dest_path = os.path.join(DUPLICATE_ROOT, dest_name)
     
+    if duplicate_permission_ignored_today(db, file_path, file_hash=file_hash):
+        logger.debug(f"Duplicate move permission failure already logged today. Skipping retry for {file_path}")
+        return {
+            "status": "ignored_permission",
+            "action": DUPLICATE_MOVE_FAILED_PERMISSION,
+            "operator_message": DUPLICATE_PERMISSION_MESSAGE,
+        }
+    
     try:
         shutil.move(file_path, dest_path)
         logger.info(f"Moved duplicate {filename} to {dest_path}")
         
         # Log to audit logs
-        log = AuditLog(
-            entity_type="FILE",
-            entity_id=0,
-            action="DUPLICATE_MOVE",
-            old_status="ACTIVE",
-            new_status="DUPLICATE",
-            actor="SYSTEM_LIFECYCLE",
-            metadata_json=json.dumps({
-                "original_path": file_path,
-                "dest_path": dest_path,
-                "reason": reason
-            })
+        _log_duplicate_event(
+            db,
+            "DUPLICATE_MOVE",
+            "DUPLICATE",
+            _duplicate_metadata(file_path, reason, file_hash=file_hash, dest_path=dest_path)
         )
-        db.add(log)
-        db.commit()
+        return {"status": "moved", "action": "DUPLICATE_MOVE", "dest_path": dest_path}
     except Exception as e:
+        if _is_access_denied(e):
+            metadata = _duplicate_metadata(file_path, reason, file_hash=file_hash, dest_path=dest_path, error=e)
+            _log_duplicate_event(db, DUPLICATE_MOVE_FAILED_PERMISSION, "IGNORED_UNTIL_PERMISSION_FIXED", metadata)
+            logger.error(f"{DUPLICATE_PERMISSION_MESSAGE} File left untouched: {file_path}")
+            return {
+                "status": "permission_failed",
+                "action": DUPLICATE_MOVE_FAILED_PERMISSION,
+                "operator_message": DUPLICATE_PERMISSION_MESSAGE,
+                "error": str(e),
+            }
         logger.error(f"Failed to move duplicate {file_path}: {e}")
+        return {"status": "failed", "action": "DUPLICATE_MOVE_FAILED", "error": str(e)}
 
 def get_store_opening_time():
     """Get today's store opening time based on the rules."""

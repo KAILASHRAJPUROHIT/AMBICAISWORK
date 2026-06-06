@@ -551,6 +551,11 @@ async def review_invoice(action: ReviewAction):
 @app.get("/api/admin/ingestion-status")
 async def get_ingestion_status(): return ingestion_status
 
+@app.get("/api/admin/pdf-duplicate-quarantine")
+async def get_pdf_duplicate_quarantine(db: Session = Depends(get_db)):
+    from backend.invoice_lifecycle import get_duplicate_quarantine_summary
+    return get_duplicate_quarantine_summary(db)
+
 @app.post("/api/scan-now")
 async def trigger_scan():
     import threading
