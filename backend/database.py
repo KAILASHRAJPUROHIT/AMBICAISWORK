@@ -15,7 +15,7 @@ def get_base_dir():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 BASE_DIR = get_base_dir()
-DB_PATH = os.path.abspath(os.path.join(BASE_DIR, "aradhana_dev.db"))
+DB_PATH = os.path.abspath(os.getenv("ARADHANA_DB_PATH", os.path.join(BASE_DIR, "aradhana_dev.db")))
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 # For diagnostic logging

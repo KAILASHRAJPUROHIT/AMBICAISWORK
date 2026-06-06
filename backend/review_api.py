@@ -38,7 +38,7 @@ if not env_found:
     logger.critical(f"FATAL: .env file missing at {ENV_PATH}. Startup aborted.")
     # We allow startup for debug purposes but it will fail later if required
 else:
-    load_dotenv(ENV_PATH, override=True)
+    load_dotenv(ENV_PATH, override=False)
     logger.info(f"STARTUP: ENV_LOADED=true")
 
 # PART A — DATABASE & TABLE VALIDATION

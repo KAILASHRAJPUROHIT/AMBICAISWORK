@@ -1,0 +1,39 @@
+# LAUNCHER ADOPTION FIX REPORT
+
+## 1. Issue
+The launcher script (`start_aradhana_lan_server.bat`) was incorrectly identifying a healthy, running Aradhana backend as "unhealthy/unknown." This was caused by the health check logic prematurely timing out and using the unreliable `localhost` hostname.
+
+## 2. Investigation and Root Cause Analysis
+The user confirmed that the backend services were responsive via manual `GET` requests. This proved the issue was within the launcher's health check logic. The investigation, aided by enhanced diagnostic logging, identified three specific problems in the `Test-AradhanaHealth` function:
+
+1.  **Hostname Resolution:** The script used `localhost`, which can be unreliable or slow to resolve in some Windows environments.
+2.  **Insufficient Timeout:** The `Invoke-WebRequest` timeout was set to 2 seconds, which was too aggressive and led to premature timeouts even for a healthy server.
+3.  **Incomplete Validation:** The original check only verified the HTTP status code, not the content of the `/health` response.
+
+## 3. Fix Details
+The `Test-AradhanaHealth` function in `scripts/aradhana_service_control.ps1` was rewritten to address these issues and make it more robust.
+
+1.  **Use of `127.0.0.1`:** All health check URIs were changed from `localhost` to the explicit loopback IP address `127.0.0.1` to bypass potential DNS/hostname resolution issues.
+
+2.  **Increased Timeout:** The timeout for all `Invoke-WebRequest` calls in the health check was increased from 2 seconds to **10 seconds**.
+
+3.  **Stricter Health Validation:**
+    - The script now parses the JSON response from `GET /health` and verifies that the `status` field is exactly equal to `"healthy"`.
+    - It continues to verify that `GET /api/version` returns a valid JSON object with a non-empty `environment` property.
+
+4.  **Enhanced Diagnostics:**
+    - The function now prints the full URI, status code, and response body for both health check endpoints, providing complete visibility for future debugging.
+    - It explicitly prints its final decision (`Adopt` or `Abort`) and the reason.
+
+## 4. Validation
+The fix was validated by running `.\start_aradhana_lan_server.bat` against the existing healthy backend.
+
+- **Result:** SUCCESS
+- **Observed Behavior:**
+  - The new diagnostic output was displayed, showing successful 200 responses and valid JSON bodies from both `/health` and `/api/version`.
+  - The script made the correct `Decision: Adopt`.
+  - The existing backend process was successfully adopted, and the script proceeded to launch the frontend service without creating a duplicate backend.
+  - A subsequent run of `.\status_production_server.bat` confirmed that both processes are now considered `RUNNING (Managed)` and `(Healthy)`.
+
+## 5. Conclusion
+The launcher adoption bug is resolved. The health check logic is now reliable, robust, and provides sufficient diagnostic information. The launcher correctly adopts existing healthy backends as intended.
