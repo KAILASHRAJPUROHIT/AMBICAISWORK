@@ -20,13 +20,68 @@ logger = logging.getLogger("PDF_Ingestion")
 # PART C — SHARE PATH
 # Prefer network share \\PC2\AradhanaInvoicePDFs as per mandate
 DEFAULT_SHARE = r"\\PC2\AradhanaInvoicePDFs"
-WATCH_PATH = os.getenv("INVOICE_SHARE_PATH", DEFAULT_SHARE)
+PRIMARY_SHARE = os.getenv("INVOICE_SHARE_PATH_PRIMARY") or os.getenv("INVOICE_SHARE_PATH") or DEFAULT_SHARE
+FALLBACK_SHARE = os.getenv("INVOICE_SHARE_PATH_FALLBACK")
+
+def _format_share_error(path, exc):
+    return f"{path}: {type(exc).__name__}: {exc}"
+
+def _probe_share_path(path):
+    if not path:
+        return False, "not configured", 0
+    try:
+        if not os.path.exists(path):
+            try:
+                os.listdir(path)
+            except Exception as exc:
+                return False, _format_share_error(path, exc), 0
+            return False, f"{path}: path does not exist", 0
+        entries = os.listdir(path)
+        pdf_count = len([f for f in entries if f.lower().endswith(".pdf")])
+        return True, None, pdf_count
+    except Exception as exc:
+        return False, _format_share_error(path, exc), 0
+
+def choose_invoice_share_path(primary=None, fallback=None):
+    candidates = [
+        ("primary", primary or PRIMARY_SHARE),
+        ("fallback", fallback if fallback is not None else FALLBACK_SHARE),
+    ]
+    errors = []
+    for label, path in candidates:
+        if not path:
+            continue
+        accessible, error, pdf_count = _probe_share_path(path)
+        if accessible:
+            return {
+                "path": path,
+                "source": label,
+                "accessible": True,
+                "pdf_count": pdf_count,
+                "errors": errors,
+            }
+        errors.append({"source": label, "path": path, "error": error})
+    return {
+        "path": primary or PRIMARY_SHARE,
+        "source": None,
+        "accessible": False,
+        "pdf_count": 0,
+        "errors": errors,
+    }
+
+SHARE_SELECTION = choose_invoice_share_path()
+WATCH_PATH = SHARE_SELECTION["path"]
+logger.info(f"Invoice share selected: {WATCH_PATH} (source={SHARE_SELECTION['source'] or 'none'})")
+if SHARE_SELECTION["errors"]:
+    logger.warning(f"Invoice share selection errors: {SHARE_SELECTION['errors']}")
 
 # If the share is explicitly local but user wants network, we log warning
 if WATCH_PATH.startswith("C:") and DEFAULT_SHARE.startswith("\\\\"):
     logger.warning(f"WATCH_PATH is local ({WATCH_PATH}). Network share ({DEFAULT_SHARE}) is ignored.")
 
-from backend.invoice_lifecycle import DUPLICATE_PERMISSION_MESSAGE, handle_duplicate
+from backend.invoice_lifecycle import DUPLICATE_PERMISSION_OPERATOR_MESSAGE, DUPLICATE_PERMISSION_MESSAGE, handle_duplicate
+
+INVALID_DOCUMENT_TYPE_ORDER = "INVALID_DOCUMENT_TYPE_ORDER"
 
 # OCR Settings
 OCR_ACCELERATION = os.getenv("OCR_ACCELERATION", "auto")
@@ -44,18 +99,40 @@ logger.info(f"OCR Acceleration Setting: {OCR_ACCELERATION}")
 ingestion_status = {
     "watcher_running": False,
     "watch_path": WATCH_PATH,
+    "chosen_watch_path": WATCH_PATH,
+    "watch_path_source": SHARE_SELECTION["source"],
+    "watch_path_primary": PRIMARY_SHARE,
+    "watch_path_fallback": FALLBACK_SHARE,
+    "watch_path_selection_errors": SHARE_SELECTION["errors"],
     "path_exists": False,
-    "pdf_files_found": 0,
+    "pdf_files_found": SHARE_SELECTION["pdf_count"] if SHARE_SELECTION["accessible"] else 0,
+    "total_files_seen": 0,
+    "current_scan_processed": 0,
     "files_processed": 0,
     "invoices_inserted": 0,
+    "inserted_today": 0,
+    "skipped_existing": 0,
     "skipped_duplicates": 0,
+    "invalid_documents": 0,
+    "invalid_document_count": 0,
     "duplicate_move_failed_permission": 0,
+    "duplicate_archive_permission_count": 0,
     "duplicate_ignored_until_permission_fixed": 0,
+    "duplicate_permission_message": None,
+    "parse_failures": 0,
+    "actual_errors": 0,
+    "warnings": 0,
     "failed_files": 0,
     "last_file_seen": None,
     "last_processed_time": None,
-    "last_error": None,
-    "cuda_active": CUDA_AVAILABLE
+    "last_error": None if SHARE_SELECTION["accessible"] else (SHARE_SELECTION["errors"][-1]["error"] if SHARE_SELECTION["errors"] else "Invoice share inaccessible"),
+    "cuda_active": CUDA_AVAILABLE,
+    "last_scan_started_at": None,
+    "last_scan_completed_at": None,
+    "missing_pdf_count": 0,
+    "ingestion_exception_count": 0,
+    "last_ingestion_exception": None,
+    "ingestion_exceptions": []
 }
 
 status_lock = threading.Lock()
@@ -73,13 +150,56 @@ def increment_status(key, amount=1):
 
 def record_duplicate_result(result):
     if not result:
-        return
+        return None
     if result.get("status") == "permission_failed":
         increment_status("duplicate_move_failed_permission")
-        update_status(last_error=DUPLICATE_PERMISSION_MESSAGE)
+        increment_status("duplicate_archive_permission_count")
+        increment_status("warnings")
+        update_status(duplicate_permission_message=DUPLICATE_PERMISSION_OPERATOR_MESSAGE)
+        return "warning"
+    elif result.get("status") == "fallback_copied_permission_failed":
+        increment_status("duplicate_move_failed_permission")
+        increment_status("duplicate_archive_permission_count")
+        increment_status("warnings")
+        update_status(duplicate_permission_message=DUPLICATE_PERMISSION_OPERATOR_MESSAGE)
+        return "warning"
     elif result.get("status") == "ignored_permission":
         increment_status("duplicate_ignored_until_permission_fixed")
-        update_status(last_error=DUPLICATE_PERMISSION_MESSAGE)
+        update_status(duplicate_permission_message=DUPLICATE_PERMISSION_OPERATOR_MESSAGE)
+        return "ignored_warning"
+    return result.get("status")
+
+def record_ingestion_exception(db: Session, file_path: str, file_hash: str, reason: str, details: dict):
+    payload = {
+        "file_path": file_path,
+        "file_name": os.path.basename(file_path),
+        "file_hash": file_hash,
+        "reason": reason,
+        "message": "Invalid document type. Billing team must upload a valid invoice PDF.",
+        "details": details,
+        "recorded_at": datetime.now().isoformat()
+    }
+    db.add(AuditLog(
+        entity_type="INGESTION_EXCEPTION",
+        entity_id=0,
+        action=reason,
+        old_status="DETECTED",
+        new_status="REJECTED",
+        actor="PDF_INGESTION",
+        metadata_json=json.dumps(payload)
+    ))
+    increment_status("ingestion_exception_count")
+    increment_status("invalid_documents")
+    increment_status("invalid_document_count")
+    update_status(last_error=reason, last_ingestion_exception=payload)
+    with status_lock:
+        exceptions = ingestion_status.get("ingestion_exceptions", [])
+        ingestion_status["ingestion_exceptions"] = ([payload] + exceptions)[:50]
+
+def is_order_document_without_invoice(text: str) -> tuple[bool, str | None]:
+    invoice_match = re.search(r"Invoice No\.?\s*:\s*([A-Z0-9/-]+)", text, re.IGNORECASE)
+    order_match = re.search(r"\bOrder\s+No\.?\s*:\s*([A-Z0-9/-]+)", text, re.IGNORECASE)
+    return bool(order_match and not invoice_match), order_match.group(1) if order_match else None
 
 def get_file_hash(file_path):
     sha256_hash = hashlib.sha256()
@@ -101,11 +221,13 @@ def get_file_hash(file_path):
         return None
 
 def check_share_health():
-    exists = os.path.exists(WATCH_PATH)
-    update_status(path_exists=exists)
-    if not exists:
-        logger.error(f"Invoice Share Offline: {WATCH_PATH} is unavailable.")
+    accessible, error, pdf_count = _probe_share_path(WATCH_PATH)
+    update_status(path_exists=accessible, pdf_files_found=pdf_count if accessible else 0)
+    if not accessible:
+        logger.error(f"Invoice Share Offline: {error}")
+        update_status(last_error=error)
         return False
+    update_status(last_error=None)
     return True
 
 def parse_pdf(file_path):
@@ -139,6 +261,8 @@ def parse_pdf(file_path):
         data = {
             "raw_text": text,
             "invoice_generated_at": invoice_gen_at,
+            "ingestion_exception_reason": None,
+            "invalid_document_identifier": None,
             "bill_series": None,
             "bill_number": None,
             "invoice_date": None,
@@ -164,6 +288,11 @@ def parse_pdf(file_path):
             data["bill_number"] = inv_match.group(1)
             if "-" in data["bill_number"]:
                 data["bill_series"] = data["bill_number"].split("-")[0]
+        else:
+            is_order_doc, order_no = is_order_document_without_invoice(text)
+            if is_order_doc:
+                data["ingestion_exception_reason"] = INVALID_DOCUMENT_TYPE_ORDER
+                data["invalid_document_identifier"] = order_no
 
         # 2. Date Parsing (Strict)
         # PART A: Invoice Date (Strictly from "Date: DD/MM/YYYY")
@@ -296,14 +425,15 @@ def parse_pdf(file_path):
 
 def process_invoice(file_path):
     if not file_path.lower().endswith(".pdf"):
-        return
+        return {"status": "ignored", "reason": "NOT_PDF"}
 
     update_status(last_file_seen=os.path.basename(file_path))
     
     file_hash = get_file_hash(file_path)
     if not file_hash:
+        increment_status("actual_errors")
         increment_status("failed_files")
-        return
+        return {"status": "error", "reason": "HASH_FAILED"}
 
     db = SessionLocal()
     try:
@@ -311,20 +441,35 @@ def process_invoice(file_path):
         existing_hash = db.query(Bill).filter(Bill.pdf_hash == file_hash).first()
         if existing_hash:
             logger.info(f"Duplicate hash detected for {os.path.basename(file_path)}")
+            increment_status("skipped_existing")
             increment_status("skipped_duplicates")
-            record_duplicate_result(handle_duplicate(file_path, db, reason="Duplicate PDF SHA256 hash", file_hash=file_hash))
-            return
+            duplicate_result = handle_duplicate(file_path, db, reason="Duplicate PDF SHA256 hash", file_hash=file_hash)
+            duplicate_status = record_duplicate_result(duplicate_result)
+            return {"status": "skipped_existing", "reason": "DUPLICATE_HASH", "warning": duplicate_status == "warning"}
 
         invoice_data = parse_pdf(file_path)
         if not invoice_data or not invoice_data["bill_number"]:
+            if invoice_data and invoice_data.get("ingestion_exception_reason") == INVALID_DOCUMENT_TYPE_ORDER:
+                logger.warning(f"Ingestion Exception: {os.path.basename(file_path)} ({INVALID_DOCUMENT_TYPE_ORDER})")
+                record_ingestion_exception(
+                    db,
+                    file_path,
+                    file_hash,
+                    INVALID_DOCUMENT_TYPE_ORDER,
+                    {"order_no": invoice_data.get("invalid_document_identifier")}
+                )
+                db.commit()
+                return {"status": "invalid_document", "reason": INVALID_DOCUMENT_TYPE_ORDER}
+
             logger.warning(f"Parse Failed: {os.path.basename(file_path)} (No bill number)")
+            increment_status("parse_failures")
             increment_status("failed_files")
             from backend.email_notifier import send_red_alert_email
             send_red_alert_email(
                 subject=f"RED ALERT: Parse Failure - {os.path.basename(file_path)}",
                 body=f"System failed to parse invoice details from file: {file_path}"
             )
-            return
+            return {"status": "parse_failure", "reason": "MISSING_BILL_NUMBER"}
 
         # 2. 5-point identity check
         # - invoice number
@@ -342,17 +487,21 @@ def process_invoice(file_path):
 
         if duplicate_bill:
             logger.info(f"Duplicate 5-point match for {invoice_data['bill_number']}")
+            increment_status("skipped_existing")
             increment_status("skipped_duplicates")
-            record_duplicate_result(handle_duplicate(file_path, db, reason="5-point identity match (Number, Date, Customer, Total)", file_hash=file_hash))
-            return
+            duplicate_result = handle_duplicate(file_path, db, reason="5-point identity match (Number, Date, Customer, Total)", file_hash=file_hash)
+            duplicate_status = record_duplicate_result(duplicate_result)
+            return {"status": "skipped_existing", "reason": "DUPLICATE_IDENTITY", "warning": duplicate_status == "warning"}
 
         # Check for just number match (could be a mistake or update)
         duplicate_num = db.query(Bill).filter(Bill.bill_number == invoice_data["bill_number"]).first()
         if duplicate_num:
             logger.warning(f"Duplicate Number Skip: {invoice_data['bill_number']} (Partial identity match)")
+            increment_status("skipped_existing")
             increment_status("skipped_duplicates")
-            record_duplicate_result(handle_duplicate(file_path, db, reason="Duplicate Invoice Number match", file_hash=file_hash))
-            return
+            duplicate_result = handle_duplicate(file_path, db, reason="Duplicate Invoice Number match", file_hash=file_hash)
+            duplicate_status = record_duplicate_result(duplicate_result)
+            return {"status": "skipped_existing", "reason": "DUPLICATE_NUMBER", "warning": duplicate_status == "warning"}
 
         modes = [p["mode"] for p in invoice_data["payments"]]
         
@@ -455,19 +604,101 @@ def process_invoice(file_path):
         
         increment_status("invoices_inserted")
         update_status(last_processed_time=datetime.now().isoformat())
+        return {"status": "inserted", "bill_number": new_bill.bill_number}
 
     except Exception as e:
         db.rollback()
         logger.error(f"Database Error processing {file_path}: {e}")
         update_status(last_error=f"DB Error: {str(e)}")
+        increment_status("actual_errors")
         increment_status("failed_files")
+        return {"status": "error", "reason": str(e)}
     finally:
         increment_status("files_processed")
         db.close()
 
+def _count_inserted_today():
+    db = SessionLocal()
+    try:
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        return db.query(Bill).filter(Bill.is_test_data == False, Bill.created_at >= today_start).count()
+    except Exception:
+        return ingestion_status.get("inserted_today", 0)
+    finally:
+        db.close()
+
+def _empty_scan_summary(scan_started_at):
+    return {
+        "scan_started_at": scan_started_at,
+        "scan_completed_at": None,
+        "files_seen": 0,
+        "processed": 0,
+        "inserted": 0,
+        "skipped_existing": 0,
+        "invalid_documents": 0,
+        "parse_failures": 0,
+        "warnings": 0,
+        "errors": 0,
+    }
+
+def recover_pdf_file(file_path: str):
+    if not file_path or not file_path.lower().endswith(".pdf"):
+        return {"status": "failed", "reason": "INVALID_PDF_PATH", "message": "Recovery requires a PDF file path."}
+    if not os.path.exists(file_path):
+        return {"status": "failed", "reason": "PDF_FILE_NOT_FOUND", "message": "PDF file not found."}
+
+    file_hash = get_file_hash(file_path)
+    if not file_hash:
+        return {"status": "failed", "reason": "PDF_FILE_UNREADABLE", "message": "PDF file could not be read."}
+
+    invoice_data = parse_pdf(file_path)
+    if invoice_data and invoice_data.get("ingestion_exception_reason") == INVALID_DOCUMENT_TYPE_ORDER:
+        db = SessionLocal()
+        try:
+            record_ingestion_exception(
+                db,
+                file_path,
+                file_hash,
+                INVALID_DOCUMENT_TYPE_ORDER,
+                {"order_no": invoice_data.get("invalid_document_identifier"), "recovery": True}
+            )
+            db.commit()
+        finally:
+            db.close()
+        return {
+            "status": "skipped",
+            "reason": INVALID_DOCUMENT_TYPE_ORDER,
+            "message": "Order document skipped. Upload a valid invoice PDF.",
+        }
+
+    if not invoice_data or not invoice_data.get("bill_number"):
+        return {"status": "failed", "reason": "MISSING_INVOICE_NO", "message": "PDF does not contain a valid Invoice No."}
+
+    process_invoice(file_path)
+    return {"status": "accepted", "bill_number": invoice_data["bill_number"]}
+
 def perform_scan():
+    scan_started_at = datetime.now().isoformat()
+    summary = _empty_scan_summary(scan_started_at)
+    update_status(
+        last_scan_started_at=scan_started_at,
+        current_scan_processed=0,
+        total_files_seen=0,
+        skipped_existing=0,
+        invalid_documents=0,
+        invalid_document_count=0,
+        parse_failures=0,
+        actual_errors=0,
+        warnings=0,
+        failed_files=0,
+    )
+
     if not check_share_health():
-        return
+        scan_completed_at = datetime.now().isoformat()
+        summary["scan_completed_at"] = scan_completed_at
+        summary["errors"] = 1
+        update_status(last_scan_completed_at=scan_completed_at, actual_errors=1, failed_files=1)
+        return summary
     
     logger.info(f"Folder scan started: {WATCH_PATH!r}")
     exists = os.path.exists(WATCH_PATH)
@@ -481,17 +712,54 @@ def perform_scan():
         pdf_files = [f for f in all_files if f.lower().endswith(".pdf")]
         logger.info(f"PDF files count: {len(pdf_files)}")
         
-        update_status(pdf_files_found=len(pdf_files), path_exists=True)
+        update_status(pdf_files_found=len(pdf_files), path_exists=True, total_files_seen=len(pdf_files))
+        summary["files_seen"] = len(pdf_files)
         
         for file in pdf_files:
-            process_invoice(os.path.join(WATCH_PATH, file))
+            result = process_invoice(os.path.join(WATCH_PATH, file)) or {}
+            summary["processed"] += 1
+            status = result.get("status")
+            if status == "inserted":
+                summary["inserted"] += 1
+            elif status == "skipped_existing":
+                summary["skipped_existing"] += 1
+                if result.get("warning"):
+                    summary["warnings"] += 1
+            elif status == "invalid_document":
+                summary["invalid_documents"] += 1
+            elif status == "parse_failure":
+                summary["parse_failures"] += 1
+            elif status == "error":
+                summary["errors"] += 1
         
+        scan_completed_at = datetime.now().isoformat()
+        summary["scan_completed_at"] = scan_completed_at
+        update_status(
+            last_scan_completed_at=scan_completed_at,
+            current_scan_processed=summary["processed"],
+            invoices_inserted=summary["inserted"],
+            inserted_today=_count_inserted_today(),
+            skipped_existing=summary["skipped_existing"],
+            skipped_duplicates=summary["skipped_existing"],
+            invalid_documents=summary["invalid_documents"],
+            invalid_document_count=summary["invalid_documents"],
+            parse_failures=summary["parse_failures"],
+            actual_errors=summary["errors"],
+            warnings=summary["warnings"],
+            failed_files=summary["parse_failures"] + summary["errors"],
+        )
         logger.info(f"Folder scan complete. Total files in folder: {len(all_files)}.")
+        return summary
     except Exception as e:
         logger.error(f"Error scanning folder {WATCH_PATH}: {e}")
         update_status(last_error=f"Scan Error: {str(e)}")
         # Keep watcher_running True if path exists as per instructions
         update_status(path_exists=os.path.exists(WATCH_PATH))
+        scan_completed_at = datetime.now().isoformat()
+        summary["scan_completed_at"] = scan_completed_at
+        summary["errors"] += 1
+        update_status(last_scan_completed_at=scan_completed_at, actual_errors=summary["errors"], failed_files=summary["parse_failures"] + summary["errors"])
+        return summary
 
 
 class InvoiceHandler(FileSystemEventHandler):

@@ -81,6 +81,35 @@ def make_client(monkeypatch):
         invoice_generated_at=datetime(2026, 6, 5, 14, 30),
         created_at=datetime(2026, 6, 5, 14, 35),
     )
+    split_cash_upi_bill = Bill(
+        bill_number="SS-518",
+        customer_name="Bandini D Neware",
+        amount=7380,
+        payment_mode="CASH,UPI",
+        reference_no="524249677405",
+        status="Green",
+        review_required=0,
+        is_test_data=False,
+        cash_received=6780,
+        bank_received=600,
+        sms_confirmed_amount=600,
+        invoice_date=datetime(2026, 6, 6),
+        invoice_generated_at=datetime(2026, 6, 6, 17, 17, 53),
+        created_at=datetime(2026, 6, 6, 11, 47, 52),
+    )
+    mismatched_proof_bill = Bill(
+        bill_number="SG-MISMATCH-PROOF-01",
+        customer_name="Mismatch Proof Customer",
+        amount=6780,
+        payment_mode="UPI",
+        reference_no="UTR-MISMATCH-PROOF",
+        status="Yellow",
+        review_required=1,
+        is_test_data=False,
+        invoice_date=datetime(2026, 6, 5),
+        invoice_generated_at=datetime(2026, 6, 5, 16, 30),
+        created_at=datetime(2026, 6, 5, 16, 35),
+    )
     verified_bills = [
         Bill(
             bill_number=f"SG-VERIFIED-{index:02d}",
@@ -96,13 +125,16 @@ def make_client(monkeypatch):
         )
         for index in range(1, 16)
     ]
-    db.add_all([partial_bill, exact_upi_bill, old_gold_bill, advance_bill, no_utr_bill, *verified_bills])
+    db.add_all([partial_bill, exact_upi_bill, old_gold_bill, advance_bill, no_utr_bill, split_cash_upi_bill, mismatched_proof_bill, *verified_bills])
     db.flush()
     db.add(Payment(bill_id=partial_bill.id, amount=900, mode="UPI", status="Yellow", utr_reference="UTR-REAL-01", payment_date=datetime(2026, 6, 5, 10, 45)))
     db.add(Payment(bill_id=exact_upi_bill.id, amount=1000, mode="UPI", status="Yellow", utr_reference="UTR-UPI-EXACT", payment_date=datetime(2026, 6, 5, 11, 45)))
     db.add(Payment(bill_id=old_gold_bill.id, amount=145542, mode="OLD_GOLD_EXCHANGE,CARD", status="Yellow", utr_reference="UTR-OLDGOLD", payment_date=datetime(2026, 6, 5, 12, 45)))
     db.add(Payment(bill_id=advance_bill.id, amount=25000, mode="ADVANCE,UPI", status="Yellow", utr_reference="UTR-ADVANCE", payment_date=datetime(2026, 6, 5, 13, 45)))
     db.add(Payment(bill_id=no_utr_bill.id, amount=777, mode="BANK_TRANSFER", status="Yellow", payment_date=datetime(2026, 6, 5, 14, 45)))
+    db.add(Payment(bill_id=split_cash_upi_bill.id, amount=6780, mode="CASH", status="Yellow", payment_date=datetime(2026, 6, 6, 17, 17, 53)))
+    db.add(Payment(bill_id=split_cash_upi_bill.id, amount=600, mode="UPI", status="Green", utr_reference="524249677405", payment_date=datetime(2026, 6, 6, 17, 15, 39)))
+    db.add(Payment(bill_id=mismatched_proof_bill.id, amount=6780, mode="UPI", status="Yellow", utr_reference="UTR-MISMATCH-PROOF", payment_date=datetime(2026, 6, 5, 16, 45)))
     for index, bill in enumerate(verified_bills, start=1):
         db.add(Payment(bill_id=bill.id, amount=100 + index, mode="UPI", status="Green", utr_reference=f"UTR-VERIFIED-{index:02d}", payment_date=datetime(2026, 6, 5, 15, index, 45)))
     db.add(SMSAlert(
@@ -130,6 +162,26 @@ def make_client(monkeypatch):
         sender="ICICI",
         received_at=datetime(2026, 6, 5, 14, 46),
         raw_text="Credited INR 777 without invoice UTR",
+    ))
+    db.add(SMSAlert(
+        sms_id="SMS-SS-518-UPI",
+        sender="JX-ICICIT-S",
+        transaction_timestamp=datetime(2026, 6, 6, 17, 15, 39),
+        bank_name="ICICI",
+        amount=600,
+        utr_reference="524249677405",
+        raw_body="Credited INR 600 UTR 524249677405",
+        parsed_confidence=1.0,
+    ))
+    db.add(SMSAlert(
+        sms_id="SMS-MISMATCH-PROOF",
+        sender="ICICIB",
+        transaction_timestamp=datetime(2026, 6, 5, 16, 44),
+        bank_name="ICICI",
+        amount=600,
+        utr_reference="UTR-MISMATCH-PROOF",
+        raw_body="Credited INR 600 UTR UTR-MISMATCH-PROOF",
+        parsed_confidence=1.0,
     ))
     db.add(Bill(bill_number="TEST-REAL-02", customer_name="Test", amount=1, status="Yellow", review_required=1, is_test_data=False))
     db.add(Bill(bill_number="ARCH-REAL-03", customer_name="Archive", amount=1, status="Yellow", review_required=1, is_test_data=False))
@@ -166,9 +218,9 @@ def test_real_reconciliation_endpoint_returns_json_array(monkeypatch):
     assert response.headers["content-type"].startswith("application/json")
     data = response.json()
     assert isinstance(data, list)
-    assert len(data) == 20
-    assert response.headers["x-reconciliation-total-considered"] == "23"
-    assert response.headers["x-reconciliation-rows-returned"] == "20"
+    assert len(data) == 22
+    assert response.headers["x-reconciliation-total-considered"] == "25"
+    assert response.headers["x-reconciliation-rows-returned"] == "22"
     assert response.headers["x-reconciliation-excluded-test-prefix"] == "1"
     assert response.headers["x-reconciliation-excluded-archive-prefix"] == "1"
     assert response.headers["x-reconciliation-excluded-hardening-prefix"] == "1"
@@ -196,6 +248,7 @@ def test_real_reconciliation_endpoint_returns_json_array(monkeypatch):
         "source": "SMS",
         "proof_url": "/api/reconciliation/proof/sms/1",
         "proof_label": "View SMS Proof",
+        "proof_status": "MATCHED",
     }
 
     exact_upi = next(item for item in data if item["bill_no"] == "SG-UPI-EXACT-01")
@@ -207,9 +260,35 @@ def test_real_reconciliation_endpoint_returns_json_array(monkeypatch):
     assert exact_upi["payment_breakdown"][0]["proof_label"] == "View Email Proof"
 
     no_utr = next(item for item in data if item["bill_no"] == "SG-NOUTR-01")
-    assert no_utr["payment_breakdown"][0]["source"] == "Bank"
-    assert no_utr["payment_breakdown"][0]["reference"] == "BANK-NO-UTR-MATCH"
-    assert no_utr["payment_breakdown"][0]["proof_label"] == "View Bank Alert"
+    assert no_utr["payment_breakdown"][0]["source"] == "Not Recorded"
+    assert no_utr["payment_breakdown"][0]["reference"] is None
+    assert no_utr["payment_breakdown"][0]["proof_url"] is None
+    assert no_utr["payment_breakdown"][0]["proof_status"] == "NOT_RECORDED"
+
+    split = next(item for item in data if item["bill_no"] == "SS-518")
+    cash_row = next(payment for payment in split["payment_breakdown"] if payment["mode"] == "CASH")
+    upi_row = next(payment for payment in split["payment_breakdown"] if payment["mode"] == "UPI")
+    assert cash_row["amount"] == 6780.0
+    assert cash_row["utr_reference"] is None
+    assert cash_row["proof_url"] is None
+    assert cash_row["proof_label"] is None
+    assert cash_row["source"] == "No digital proof / manual cash entry"
+    assert cash_row["proof_status"] == "NO_DIGITAL_PROOF"
+    assert upi_row["amount"] == 600.0
+    assert upi_row["utr_reference"] == "524249677405"
+    assert upi_row["proof_url"] == "/api/reconciliation/proof/sms/2"
+    assert upi_row["proof_label"] == "View SMS Proof"
+    assert upi_row["proof_status"] == "MATCHED"
+
+    mismatched = next(item for item in data if item["bill_no"] == "SG-MISMATCH-PROOF-01")
+    mismatch_row = mismatched["payment_breakdown"][0]
+    assert mismatch_row["amount"] == 6780.0
+    assert mismatch_row["utr_reference"] == "UTR-MISMATCH-PROOF"
+    assert mismatch_row["reference"] == "SMS-MISMATCH-PROOF"
+    assert mismatch_row["proof_url"] is None
+    assert mismatch_row["proof_label"] is None
+    assert mismatch_row["source"] == "SMS"
+    assert mismatch_row["proof_status"] == "MISMATCH"
 
     verified = next(item for item in data if item["bill_no"] == "SG-VERIFIED-01")
     assert verified["status"] == "Verified"

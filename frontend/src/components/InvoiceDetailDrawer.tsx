@@ -18,6 +18,13 @@ const formatDateTime = (value?: string | null) => {
 
 const missing = (value?: string | null) => value || 'Not Recorded';
 
+const proofFallbackText = (payment: ReconciliationPaymentEvidence) => {
+  if (payment.proofStatus === 'NO_DIGITAL_PROOF') return 'No digital proof / manual cash entry';
+  if (payment.proofStatus === 'MISMATCH') return 'Proof amount mismatch';
+  if (payment.proofStatus === 'PARTIAL_PROOF') return 'Partial proof';
+  return 'Payment proof not recorded';
+};
+
 const formatInvoiceTimestamp = (item: ReconciliationItem) => {
   const value = item.invoiceTimestamp || item.invoiceGeneratedAt || item.invoiceDate;
   if (!value) return 'Not Recorded';
@@ -97,7 +104,7 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
                           <button type="button" className="font-bold text-blue-700 underline" onClick={() => onViewProof(payment)}>
                             {payment.proofLabel || 'View Proof'}
                           </button>
-                        ) : <b>Payment proof not recorded</b>}
+                        ) : <b>{proofFallbackText(payment)}</b>}
                       </span>
                     </div>
                   </div>

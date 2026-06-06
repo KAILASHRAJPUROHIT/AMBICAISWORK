@@ -1,0 +1,60 @@
+PAYMENT PROOF ATTRIBUTION FIX REPORT
+
+Scope:
+- Fixed payment proof attribution/display only.
+- Reconciliation amount matching was not changed.
+- Payment status logic was not changed.
+- No financial records were modified.
+
+Root cause:
+- Reconciliation payment breakdown used:
+  payment.utr_reference or bill.reference_no
+- For split invoices such as SS-518, the CASH payment had no payment-level UTR.
+- The CASH row inherited bill.reference_no 524249677405 and displayed the SMS proof for the separate UPI payment of 600.
+
+Fix:
+- Real payment rows now use only payment.utr_reference for proof lookup.
+- CASH/manual rows do not inherit bill.reference_no.
+- SMS/Bank proof attaches only when:
+  proof.utr_reference == payment.utr_reference
+  proof.amount == payment.amount
+  payment mode supports digital proof.
+- CASH/manual rows return:
+  source = "No digital proof / manual cash entry"
+  proof_status = "NO_DIGITAL_PROOF"
+  proof_url = null
+- Same-UTR but different amount returns:
+  proof_status = "MISMATCH"
+  proof_url = null
+  proof_label = null
+- Frontend carries proof_status and displays:
+  "No digital proof / manual cash entry"
+  or
+  "Proof amount mismatch"
+  instead of a misleading clickable proof.
+
+Files changed:
+- backend/review_api.py
+- frontend/src/types.ts
+- frontend/src/pages/ReconciliationQueuePage.tsx
+- frontend/src/components/InvoiceDetailDrawer.tsx
+- tests/test_reconciliation_real_endpoint.py
+
+Tests added/updated:
+- SS-518-style split CASH+UPI invoice.
+- CASH row with null UTR does not inherit bill.reference_no.
+- UPI row receives matching SMS proof.
+- Same-UTR mismatched proof amount is not attached as direct proof.
+- Payment without payment-level UTR does not receive amount-only proof attribution.
+
+Verification:
+- python -m pytest tests/test_reconciliation_real_endpoint.py: 3 passed
+- python -m pytest tests/test_invoice_lifecycle.py: 20 passed
+- cd frontend && npm run build: passed
+
+Expected SS-518 display:
+- CASH 6780: No digital proof / manual cash entry
+- UPI 600: View SMS Proof
+
+Commit status:
+- No commit made.

@@ -1,0 +1,107 @@
+STABLE CODEBASE CLEANUP + HARDWALL REPORT
+
+Branch reviewed:
+- Current branch: hotfix/pdf-ingestion-recovery
+- Base status: same head as develop before this cleanup pass.
+- Commit status: no commit made.
+
+Branches reviewed:
+- develop: baseline stable branch; keep.
+- hotfix/pdf-ingestion-recovery: current working branch with PDF ingestion recovery, watcher fallback, duplicate retention, and this cleanup pass; keep until manual verification and commit.
+- main: ahead of origin/main by earlier frontend live-data work; keep.
+- emergency-auth-regression-snapshot: not merged into develop; auth regression snapshot; keep until auth/password-reset consolidation is complete.
+- feature/owner-void-invoice: not merged into develop; owner void work; keep.
+- feature/password-reset-fix: not merged into develop; overlaps password reset recovery; keep until password reset behavior is manually verified, then consider consolidating.
+- feature/reconciliation-audit-hardening: not merged into develop; duplicate/older reconciliation audit branch; candidate delete later after confirming current reconciliation branch contains needed work.
+- feature/reconciliation-real-endpoint: not merged into develop; duplicate/older reconciliation endpoint branch; candidate delete later after confirming stable reconciliation endpoint is in develop/current.
+- feature/reconciliation-safety-rules: not merged into develop; reconciliation safety branch; keep until safety rule coverage is confirmed.
+- feature/reconciliation-status-normalization: not merged into develop; duplicate/older reconciliation display branch; candidate delete later after confirmation.
+- feature/dev-production-separation: merged into develop; candidate delete later after local service work is committed.
+- feature/disable-legacy-alert-system: merged into develop; candidate delete later.
+- feature/escalation-approval-queue: merged into develop; keep if escalation follow-up is active, otherwise candidate delete later.
+- feature/escalations-unverified-queue: merged into develop; duplicate of earlier stable point; candidate delete later.
+- feature/lan-server-launcher: merged into develop; candidate delete later after production launcher verification.
+- feature/local-production-service: merged into develop; keep until this hardwall pass is committed, then candidate delete later.
+- feature/password-reset-recovery: merged into develop; keep until password reset manual verification passes.
+- feature/pdf-ingestion-hardening: merged into develop; duplicate of current PDF hardening lineage; candidate delete later.
+- feature/reconciliation-audit-ui: merged into develop; keep if audit UI work is active.
+- feature/reconciliation-runtime-recovery: merged into develop; candidate delete later after reconciliation stable branch is confirmed.
+- feature/reconciliation-ui-recovery: merged into develop; duplicate of runtime recovery; candidate delete later.
+- feature/reconciliation-ui-restore: merged into develop; older restore branch; candidate delete later.
+- feature/unified-server-control: merged into develop; candidate delete later after launcher verification.
+- feature/user-management: merged into develop; candidate delete later after Master Console verification.
+- rollback/v0.4.0-lan-multiuser-beta: merged into develop; keep as rollback checkpoint.
+
+Untracked files inventory:
+- DUPLICATE_ARCHIVE_PERMISSION_RETENTION_REPORT.txt: report; keep for audit trail; do not delete; commit only if included in final release evidence.
+- LOGIN_OTP_FIRST_SEND_VS_RESEND_REPORT.txt: report; keep for audit trail; do not delete by default.
+- OTP_RUNTIME_FORENSICS_REPORT.txt: report; keep for audit trail; do not delete by default.
+- PARSE_FAILURE_ROOT_CAUSE_REPORT.txt: report; keep for audit trail; do not delete by default.
+- PDF_ROOT_CAUSE_VALIDATION_REPORT.txt: report; keep for audit trail; do not delete by default.
+- PRODUCTION_PDF_REGRESSION_REPORT.txt: report; keep for audit trail; do not delete by default.
+- tests/test_local_service_hardwalls.py: new hardwall test; should commit with this cleanup pass.
+- STABLE_CODEBASE_CLEANUP_HARDWALL_REPORT.txt: this report; should commit after manual verification approval.
+
+Files removed during cleanup:
+- query_db_forensics.py
+- query_fa253.py
+- query_identifiers.py
+- py -3.11 query_db_forensics.py
+- .pytest_cache/
+- aradhana_dev.db-journal
+- available __pycache__/ directories under the workspace
+
+Files kept during cleanup:
+- Existing report files were kept because they are audit artifacts and were not explicitly marked obsolete.
+- logs/production/*.log were kept because production processes have open handles to them. They remain ignored and were not forced closed.
+- config/holidays/holiday_generation_report_2030.json and config/holidays/holidays_2030.json still appear in git status, but git diff shows no content change for them.
+
+.gitignore hardening:
+- Already covered: .env, logs/, *.pid, __pycache__/, node_modules/.
+- Added explicit coverage: *.pyc, .pytest_cache/, frontend/dist/, *.db-journal, *.sqlite-journal.
+
+Hardwalls added or verified:
+- Production launcher hardwall test verifies production ports 8000/5173, strictPort, managed listener checks, healthy unmanaged adoption, and unhealthy unmanaged process abort behavior.
+- Dev isolation hardwall test verifies dev ports 8010/5183, isolated dev DB path, and separate dev PDF folder.
+- Batch launcher hardwall test verifies all BAT files delegate to scripts/aradhana_service_control.ps1.
+- Production safety diagnostic endpoint added at /debug/production-safety.
+- Diagnostic status reports environment, DB path, frontend port, backend port, chosen PDF watch path, watcher status, PDF count, last scan, legacy alert flag, and update channel.
+- PDF viewer tests now cover valid Bill pdf_path, missing Bill invalid/missing invoice record, and missing file on disk.
+- Password reset hardwalls now cover missing token, temporary password assignment audit logging, no plaintext temporary password in audit metadata, and visible/audited OTP send failure.
+- Existing verified hardwalls retained for watcher fallback, access denied error visibility, invalid Order document rejection, recovery endpoint valid-invoice-only behavior, duplicate permission failures, no retry loop, fallback quarantine copy, and 365-day retention guard.
+- Existing legacy alert tests verify security/red alert suppression while OTP email remains unaffected.
+- Existing reconciliation contract tests remain active and passing.
+
+Code streamlined:
+- Removed temporary forensic helper scripts and runtime/test artifacts only.
+- No production code path was removed as dead code because no further duplicate code was proven unused under test coverage during this pass.
+
+Tests run:
+- python -m pytest tests/test_invoice_lifecycle.py: 16 passed
+- python -m pytest tests/test_feature_flags.py: 4 passed
+- python -m pytest tests/test_master_console_user_management.py: 9 passed
+- python -m pytest tests/test_reconciliation_contract.py: 4 passed
+- python -m pytest tests/test_reconciliation_real_endpoint.py: 3 passed
+- python -m pytest tests/test_debug_endpoints.py: 3 passed
+- python -m pytest tests/test_local_service_hardwalls.py: 2 passed
+- cd frontend && npm run build: passed
+
+Remaining known failures or risks:
+- No failures in the requested or newly added targeted tests.
+- Full pytest suite was not run in this cleanup pass.
+- Production log files could not be removed because production processes were actively writing to them; this is expected for live runtime.
+- Manual verification is still required before commit.
+
+Manual verification checklist:
+- Autostart works after reboot.
+- Watcher online.
+- PDFs in share count > 0.
+- View PDF works.
+- Invalid Order document rejected with INVALID_DOCUMENT_TYPE_ORDER.
+- OTP works.
+- Password reset works.
+- Legacy alert emails suppressed.
+
+Commit guidance:
+- Do not commit until manual verification passes.
+- Stage this cleanup pass carefully, excluding old untracked reports unless explicitly included as audit evidence.

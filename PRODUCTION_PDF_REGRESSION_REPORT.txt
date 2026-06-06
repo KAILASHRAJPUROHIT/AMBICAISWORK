@@ -1,0 +1,58 @@
+P0 PRODUCTION PDF REGRESSION INVESTIGATION REPORT
+
+**1. What working directory is used when started through autostart?**
+The working directory for the Python backend, when started through the scheduled task (autostart), is the project root: `C:\Users\kaila\aradhana-payment-auditor\aradhana-payment-auditor`. This is explicitly set by the `scripts\aradhana_service_control.ps1` script using the `-WorkingDirectory $Root` parameter for `Start-Process`.
+
+**2. What directory is used when started manually?**
+When the application is started manually via `start_aradhana_auditor.bat`, the working directory is typically the project root (`C:\Users\kaila\aradhana-payment-auditor\aradhana-payment-auditor`), or the directory from which the batch file is executed.
+
+**3. What path is used by PDF endpoints?**
+The API endpoints (e.g., `/api/invoices/pdf/{bill_id}`) serve PDF files directly from the absolute file path stored in the `bill.pdf_path` field within the database. During the PDF ingestion process (`pdf_ingestion.py`), the `WATCH_PATH` is used to monitor for new PDFs. This `WATCH_PATH` defaults to the network share `\PC2\AradhanaInvoicePDFs` if the `INVOICE_SHARE_PATH` environment variable is not set.
+
+**4. What path is used by Invoice Watcher?**
+The primary Invoice Watcher, implemented in `backend\pdf_ingestion.py`, uses the `WATCH_PATH` variable. In the production environment (where `INVOICE_SHARE_PATH` is not explicitly set by the autostart script), this defaults to the network share `\PC2\AradhanaInvoicePDFs`. A secondary, potentially legacy, `WATCH_PATH` exists in `backend\invoice_lifecycle.py` which points to a local directory `C:\Aradhana\InvoicePDFs`. However, the primary PDF ingestion and monitoring is expected to occur on the network share.
+
+**5. Are any paths relative instead of absolute?**
+All critical paths for PDF storage and watching are configured as absolute paths (either local absolute `C:\...` or UNC `\PC2\...`). The issue is not due to the use of relative paths, but rather a problem with the accessibility of the specified absolute network path (`\PC2\AradhanaInvoicePDFs`) from the context of the autostarted application.
+
+**6. Is the failure caused by Task Scheduler startup context?**
+Yes, the failure is directly related to the Task Scheduler startup context. While the scheduled task runs `ONLOGON` with `HIGHEST` privileges and correctly sets the working directory, network shares often experience a brief delay in becoming fully available or accessible immediately after a system reboot or user login. The Python backend process attempts to access `\PC2\AradhanaInvoicePDFs` too early, leading to failures in `os.listdir()` for the watcher and `os.path.exists()` when serving PDFs.
+
+**7. Provide exact root cause and minimal fix.**
+
+**Exact Root Cause:**
+The Python backend, when launched via Task Scheduler's `ONLOGON` trigger, attempts to access the network share `\PC2\AradhanaInvoicePDFs` before it is fully initialized and accessible on the operating system. This results in the Invoice Watcher failing to start or detect PDFs, and the API being unable to locate PDF files that are stored on this network share.
+
+**Minimal Fix:**
+Modify the `scripts\aradhana_service_control.ps1` PowerShell script to introduce a robust retry mechanism. Before starting the Python backend, the script should explicitly attempt to verify the accessibility of the network share (`\PC2\AradhanaInvoicePDFs`) for a predefined duration (e.g., 30-60 seconds) with retries. This ensures the backend only attempts to start once its required network resources are confirmed to be available.
+
+**Conceptual Implementation for `aradhana_service_control.ps1`:**
+
+```powershell
+function Test-NetworkShareAccessibility($SharePath, $TimeoutSeconds) {
+    Write-Host "Waiting for network share '$SharePath' to become accessible..."
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path $SharePath) {
+            Write-Host "Network share '$SharePath' is now accessible."
+            return $true
+        }
+        Start-Sleep -Seconds 5 # Wait 5 seconds before retrying
+    }
+    Write-Warning "Network share '$SharePath' did not become accessible within $TimeoutSeconds seconds."
+    return $false
+}
+
+# ... (inside Start-Environment function, before starting the backend) ...
+if ($EnvironmentName -eq "production") {
+    # Assuming the production share path is consistently \PC2\AradhanaInvoicePDFs as per pdf_ingestion.py default
+    $prodSharePath = "\PC2\AradhanaInvoicePDFs"
+    if (-not (Test-NetworkShareAccessibility $prodSharePath 60)) {
+        Write-Error "Production PDF share not accessible. Aborting backend startup."
+        exit 1
+    }
+}
+# ... (rest of Start-Environment function) ...
+```
+
+This report is based on the provided context and observed symptoms. No code changes have been made.

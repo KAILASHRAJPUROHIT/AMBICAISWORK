@@ -52,7 +52,7 @@ if not db_integrity_ok:
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event, hash_password
 from backend.lan_config import lan_health_check
 from backend.models import User, LoginLog, Bill, Payment, BankAlert, SMSAlert, SystemSetting, AuditLog
-from backend.pdf_ingestion import start_ingestion_thread, perform_scan, ingestion_status, WATCH_PATH
+from backend.pdf_ingestion import start_ingestion_thread, perform_scan, ingestion_status, WATCH_PATH, recover_pdf_file
 from backend.email_poller import start_email_poller, process_emails, email_status
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
 from backend.api_routes import router as api_router
@@ -249,6 +249,29 @@ async def get_runtime_debug(db: Session = Depends(get_db)):
     except Exception as e: data["pending_previous_days"] = f"ERROR: {str(e)}"
 
     return data
+
+def _flag_enabled(value: Optional[str]) -> bool:
+    return (value or "false").lower() in ("true", "1", "t", "yes")
+
+def build_production_safety_status():
+    return {
+        "environment": os.getenv("ARADHANA_ENV", "production"),
+        "database_path": DB_PATH,
+        "frontend_port": int(os.getenv("FRONTEND_PORT", os.getenv("VITE_DEV_SERVER_PORT", "5173"))),
+        "backend_port": int(os.getenv("BACKEND_PORT", "8000")),
+        "chosen_pdf_watch_path": ingestion_status.get("chosen_watch_path") or WATCH_PATH,
+        "watcher_status": "online" if ingestion_status.get("path_exists") else "offline",
+        "watcher_running": bool(ingestion_status.get("watcher_running")),
+        "pdf_count": ingestion_status.get("pdf_files_found", 0),
+        "last_scan": ingestion_status.get("last_scan_completed_at") or ingestion_status.get("last_processed_time"),
+        "last_error": ingestion_status.get("last_error"),
+        "legacy_alerts_enabled": _flag_enabled(os.getenv("LEGACY_ALERT_EMAILS_ENABLED")),
+        "update_channel": os.getenv("UPDATE_CHANNEL", "STABLE"),
+    }
+
+@app.get("/debug/production-safety")
+async def get_production_safety_status():
+    return build_production_safety_status()
 
 @app.get("/debug/routes")
 async def get_routes():
@@ -510,6 +533,9 @@ class AdvanceVerification(BaseModel):
     is_cleared: Optional[bool] = False
     is_deposited: Optional[bool] = False
 
+class PdfRecoveryRequest(BaseModel):
+    file_path: str
+
 @app.post("/api/advances/verify")
 async def verify_advance(action: AdvanceVerification, db: Session = Depends(get_db)):
     bill = db.query(Bill).filter(Bill.bill_number == action.invoice_no).first()
@@ -534,7 +560,7 @@ async def verify_advance(action: AdvanceVerification, db: Session = Depends(get_
 @app.get("/api/invoices/pdf/{bill_id}")
 async def get_invoice_pdf(bill_id: int, db: Session = Depends(get_db)):
     bill = db.query(Bill).filter(Bill.id == bill_id).first()
-    if not bill or not bill.pdf_path: raise HTTPException(status_code=404, detail="Invoice PDF not found")
+    if not bill or not bill.pdf_path: raise HTTPException(status_code=404, detail="Invalid/missing invoice record")
     if not os.path.exists(bill.pdf_path): raise HTTPException(status_code=404, detail="PDF file missing on disk")
     return FileResponse(bill.pdf_path, media_type="application/pdf")
 
@@ -551,6 +577,10 @@ async def review_invoice(action: ReviewAction):
 @app.get("/api/admin/ingestion-status")
 async def get_ingestion_status(): return ingestion_status
 
+@app.post("/api/admin/recover-pdf")
+async def recover_pdf(request: PdfRecoveryRequest):
+    return recover_pdf_file(request.file_path)
+
 @app.get("/api/admin/pdf-duplicate-quarantine")
 async def get_pdf_duplicate_quarantine(db: Session = Depends(get_db)):
     from backend.invoice_lifecycle import get_duplicate_quarantine_summary
@@ -558,9 +588,7 @@ async def get_pdf_duplicate_quarantine(db: Session = Depends(get_db)):
 
 @app.post("/api/scan-now")
 async def trigger_scan():
-    import threading
-    threading.Thread(target=perform_scan, daemon=True).start()
-    return {"status": "scan_triggered", "message": "PDF rescan started in background"}
+    return perform_scan()
 
 @app.get("/api/admin/email-status")
 async def get_email_status(): return email_status
@@ -650,74 +678,94 @@ def payment_mode_is_manual(payment_mode: Optional[str]) -> bool:
     normalized_mode = (payment_mode or "").upper()
     return any(token in normalized_mode for token in ("CASH", "MANUAL", "OLD_GOLD_EXCHANGE", "OLD GOLD", "ADVANCE", "CUSTOMER PURCHASE", "BUYBACK"))
 
-def within_evidence_window(candidate_time: Optional[datetime], evidence_time: Optional[datetime], hours: int = 24) -> bool:
-    if not candidate_time or not evidence_time:
+def payment_mode_supports_digital_proof(payment_mode: Optional[str]) -> bool:
+    normalized_mode = (payment_mode or "").upper()
+    return any(token in normalized_mode for token in ("UPI", "BANK", "CARD", "NEFT", "IMPS", "RTGS", "CHEQUE"))
+
+def amounts_match(left: Optional[float], right: Optional[float]) -> bool:
+    if left is None or right is None:
         return False
-    return abs((candidate_time - evidence_time).total_seconds()) <= hours * 3600
+    return abs(float(left) - float(right)) < 0.01
 
 def find_payment_evidence(db: Session, utr_reference: Optional[str], amount: Optional[float] = None, payment_time: Optional[datetime] = None, payment_mode: Optional[str] = None) -> dict:
-    if not utr_reference:
-        exact_sms = None
-        exact_bank = None
-    else:
-        exact_sms = (
-            db.query(SMSAlert)
-            .filter(SMSAlert.utr_reference == utr_reference)
-            .order_by(SMSAlert.transaction_timestamp.desc())
-            .first()
-        )
-        exact_bank = (
-            db.query(BankAlert)
-            .filter(BankAlert.utr_reference == utr_reference)
-            .order_by(BankAlert.received_at.desc())
-            .first()
-        )
+    if not payment_mode_supports_digital_proof(payment_mode):
+        return {
+            "source": "No digital proof / manual cash entry" if payment_mode_is_manual(payment_mode) else "Not Recorded",
+            "timestamp": None,
+            "proof_url": None,
+            "reference": None,
+            "proof_label": None,
+            "proof_status": "NO_DIGITAL_PROOF" if payment_mode_is_manual(payment_mode) else "NOT_RECORDED",
+        }
 
-    sms_alert = exact_sms
-    if not sms_alert and amount and payment_time:
-        sms_alerts = (
-            db.query(SMSAlert)
-            .filter(SMSAlert.amount == amount)
-            .order_by(SMSAlert.transaction_timestamp.desc())
-            .limit(20)
-            .all()
-        )
-        sms_alert = next((alert for alert in sms_alerts if within_evidence_window(payment_time, alert.transaction_timestamp)), None)
+    if not utr_reference:
+        return {
+            "source": "Not Recorded",
+            "timestamp": None,
+            "proof_url": None,
+            "reference": None,
+            "proof_label": None,
+            "proof_status": "NOT_RECORDED",
+        }
+
+    sms_alert = (
+        db.query(SMSAlert)
+        .filter(SMSAlert.utr_reference == utr_reference)
+        .order_by(SMSAlert.transaction_timestamp.desc())
+        .first()
+    )
     if sms_alert:
+        if not amounts_match(float(sms_alert.amount or 0.0), amount):
+            return {
+                "source": "SMS",
+                "timestamp": iso_or_none(sms_alert.transaction_timestamp),
+                "proof_url": None,
+                "reference": sms_alert.sms_id or sms_alert.utr_reference,
+                "proof_label": None,
+                "proof_status": "MISMATCH",
+            }
         return {
             "source": "SMS",
             "timestamp": iso_or_none(sms_alert.transaction_timestamp),
             "proof_url": f"/api/reconciliation/proof/sms/{sms_alert.id}",
             "reference": sms_alert.sms_id or sms_alert.utr_reference,
             "proof_label": "View SMS Proof",
+            "proof_status": "MATCHED",
         }
 
-    bank_alert = exact_bank
-    if not bank_alert and amount and payment_time:
-        bank_alerts = (
-            db.query(BankAlert)
-            .filter(BankAlert.amount == amount)
-            .order_by(BankAlert.received_at.desc())
-            .limit(20)
-            .all()
-        )
-        bank_alert = next((alert for alert in bank_alerts if within_evidence_window(payment_time, alert.received_at)), None)
+    bank_alert = (
+        db.query(BankAlert)
+        .filter(BankAlert.utr_reference == utr_reference)
+        .order_by(BankAlert.received_at.desc())
+        .first()
+    )
     if bank_alert:
         source = "Email" if "@" in (bank_alert.sender or "") else "Bank"
+        if not amounts_match(float(bank_alert.amount or 0.0), amount):
+            return {
+                "source": source,
+                "timestamp": iso_or_none(bank_alert.received_at),
+                "proof_url": None,
+                "reference": bank_alert.utr_reference,
+                "proof_label": None,
+                "proof_status": "MISMATCH",
+            }
         return {
             "source": source,
             "timestamp": iso_or_none(bank_alert.received_at),
             "proof_url": f"/api/reconciliation/proof/bank/{bank_alert.id}",
             "reference": bank_alert.utr_reference,
             "proof_label": "View Email Proof" if source == "Email" else "View Bank Alert",
+            "proof_status": "MATCHED",
         }
 
     return {
-        "source": "Manual" if payment_mode_is_manual(payment_mode) else "Not Recorded",
+        "source": "Not Recorded",
         "timestamp": None,
         "proof_url": None,
         "reference": utr_reference,
         "proof_label": None,
+        "proof_status": "NOT_RECORDED",
     }
 
 def get_file_timestamp(path: Optional[str]) -> Optional[datetime]:
@@ -841,7 +889,7 @@ async def get_open_reconciliation_real(request: Request, response: Response, db:
         invoice_timestamp, invoice_timestamp_source, invoice_time_recorded = best_invoice_timestamp(bill)
         payment_breakdown = []
         for payment in payments:
-            payment_utr = payment.utr_reference or bill.reference_no
+            payment_utr = payment.utr_reference
             payment_time = payment.payment_date or payment.created_at or bill.invoice_generated_at or bill.created_at
             evidence = find_payment_evidence(db, payment_utr, float(payment.amount or 0.0), payment_time, payment.mode)
             payment_breakdown.append({
@@ -853,6 +901,7 @@ async def get_open_reconciliation_real(request: Request, response: Response, db:
                 "source": evidence["source"],
                 "proof_url": evidence["proof_url"],
                 "proof_label": evidence["proof_label"],
+                "proof_status": evidence["proof_status"],
             })
         if not payment_breakdown and received_amount > 0:
             for mode, amount in (
@@ -872,6 +921,7 @@ async def get_open_reconciliation_real(request: Request, response: Response, db:
                         "source": evidence["source"] if mode == "BANK" else "Manual",
                         "proof_url": evidence["proof_url"],
                         "proof_label": evidence["proof_label"],
+                        "proof_status": evidence["proof_status"] if mode == "BANK" else "NO_DIGITAL_PROOF",
                     })
         rows.append({
             "bill_id": bill.id,

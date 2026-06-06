@@ -36,12 +36,27 @@ interface IngestionStatus {
   watch_path: string;
   path_exists: boolean;
   pdf_files_found: number;
+  total_files_seen?: number;
+  current_scan_processed?: number;
   files_processed: number;
   invoices_inserted: number;
+  inserted_today?: number;
+  skipped_existing?: number;
   skipped_duplicates: number;
+  invalid_documents?: number;
+  invalid_document_count?: number;
+  duplicate_move_failed_permission?: number;
+  duplicate_archive_permission_count?: number;
+  duplicate_ignored_until_permission_fixed?: number;
+  duplicate_permission_message?: string | null;
+  parse_failures?: number;
+  actual_errors?: number;
+  warnings?: number;
   failed_files: number;
   last_file_seen: string | null;
   last_processed_time: string | null;
+  last_scan_started_at?: string | null;
+  last_scan_completed_at?: string | null;
   last_error: string | null;
   cuda_active: boolean;
 }
@@ -150,6 +165,17 @@ const DashboardPage: React.FC = () => {
     return money(value ?? 0);
   };
   const num = (v?: number | null) => Number(v ?? 0).toLocaleString("en-IN");
+  const formatTimestamp = (value?: string | null) => {
+    if (!value) return 'Never';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   const fetchData = async () => {
     const token = getSessionToken();
@@ -231,7 +257,28 @@ const DashboardPage: React.FC = () => {
                 `${API_BASE}/api/sms-sync-now`;
     
     try {
-      await fetch(url, { method: 'POST' });
+      const response = await fetch(url, { method: 'POST' });
+      if (type === 'pdf' && response.ok) {
+        const scanSummary = await response.json().catch(() => null);
+        if (scanSummary?.scan_completed_at) {
+          setIngestionStatus(prev => prev ? {
+            ...prev,
+            last_scan_started_at: scanSummary.scan_started_at,
+            last_scan_completed_at: scanSummary.scan_completed_at,
+            total_files_seen: scanSummary.files_seen,
+            current_scan_processed: scanSummary.processed,
+            invoices_inserted: scanSummary.inserted,
+            skipped_existing: scanSummary.skipped_existing,
+            skipped_duplicates: scanSummary.skipped_existing,
+            invalid_documents: scanSummary.invalid_documents,
+            invalid_document_count: scanSummary.invalid_documents,
+            parse_failures: scanSummary.parse_failures,
+            warnings: scanSummary.warnings,
+            actual_errors: scanSummary.errors,
+            failed_files: scanSummary.parse_failures + scanSummary.errors,
+          } : prev);
+        }
+      }
       setTimeout(fetchData, 1000); // Refresh after 1s
     } catch (e) {
       console.error(`Sync failed for ${type}:`, e);
@@ -250,7 +297,8 @@ const DashboardPage: React.FC = () => {
         if (response.status === 401) {
           window.location.href = '/login';
         } else {
-          throw new Error('Failed to load PDF');
+          const errorBody = await response.json().catch(() => null);
+          throw new Error(errorBody?.detail || 'Failed to load PDF');
         }
         return;
       }
@@ -259,7 +307,7 @@ const DashboardPage: React.FC = () => {
       window.open(blobUrl, '_blank');
     } catch (e) {
       console.error("Error opening PDF:", e);
-      alert("Error opening PDF. It may not exist on the server.");
+      alert(e instanceof Error ? e.message : "Error opening PDF. It may not exist on the server.");
     }
   };
 
@@ -425,12 +473,16 @@ const DashboardPage: React.FC = () => {
                <span className="mx-2 text-gray-300 text-xs">|</span>
                <span className="text-xs font-medium text-gray-600">{ingestionStatus?.pdf_files_found || 0} PDFs In Share</span>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] font-bold uppercase tracking-tighter text-gray-500">
-               <div>Last Scan: <span className="text-gray-800">{ingestionStatus?.last_processed_time || 'Never'}</span></div>
-               <div>Processed: <span className="text-gray-800">{num(ingestionStatus?.files_processed)}</span></div>
-               <div>Failed: <span className={ingestionStatus?.failed_files ? 'text-red-600' : 'text-gray-800'}>{num(ingestionStatus?.failed_files)}</span></div>
+            <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-2 text-[9px] font-bold uppercase tracking-tighter text-gray-500">
+               <div>Last Scan: <span className="text-gray-800">{formatTimestamp(ingestionStatus?.last_scan_completed_at || ingestionStatus?.last_processed_time)}</span></div>
+               <div>Inserted Today: <span className="text-gray-800">{num(ingestionStatus?.inserted_today ?? ingestionStatus?.invoices_inserted)}</span></div>
+               <div>Skipped Existing: <span className="text-gray-800">{num(ingestionStatus?.skipped_existing ?? ingestionStatus?.skipped_duplicates)}</span></div>
+               <div>Invalid Docs: <span className="text-amber-700">{num(ingestionStatus?.invalid_documents ?? ingestionStatus?.invalid_document_count)}</span></div>
+               <div>Warnings: <span className={ingestionStatus?.warnings ? 'text-amber-700' : 'text-gray-800'}>{num(ingestionStatus?.warnings ?? ingestionStatus?.duplicate_archive_permission_count)}</span></div>
             </div>
-            {ingestionStatus?.last_error && (
+            {ingestionStatus?.duplicate_permission_message ? (
+              <div className="mt-2 text-[9px] font-bold text-amber-700 truncate">{ingestionStatus.duplicate_permission_message}</div>
+            ) : ingestionStatus?.last_error && (
               <div className="mt-2 text-[9px] font-bold text-red-600 truncate">Error: {ingestionStatus.last_error}</div>
             )}
          </div>

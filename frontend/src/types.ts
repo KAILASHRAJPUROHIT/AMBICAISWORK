@@ -7,6 +7,7 @@ export interface ReconciliationPaymentEvidence {
   source?: string | null;
   proofUrl?: string | null;
   proofLabel?: string | null;
+  proofStatus?: string | null;
 }
 
 export interface ReconciliationItem {

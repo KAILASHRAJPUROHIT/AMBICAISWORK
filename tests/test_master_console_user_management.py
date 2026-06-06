@@ -77,6 +77,12 @@ def test_non_owner_cannot_manage_users(monkeypatch):
     assert response.status_code == 403
 
 
+def test_missing_token_cannot_manage_users(monkeypatch):
+    client, _ = make_client(monkeypatch)
+    response = client.get("/api/admin/users")
+    assert response.status_code == 401
+
+
 def test_password_hash_is_never_returned(monkeypatch):
     client, _ = make_client(monkeypatch)
     response = client.post(
@@ -108,6 +114,51 @@ def test_archive_does_not_delete_user(monkeypatch):
     db = SessionLocal()
     try:
         assert db.query(User).filter(User.employee_id == "ACC-01").count() == 1
+    finally:
+        db.close()
+
+
+def test_temp_password_assignment_is_audited(monkeypatch):
+    client, SessionLocal = make_client(monkeypatch)
+    response = client.post(
+        "/api/admin/users/ACC-01/reset-password",
+        headers={"X-Session-Token": "owner-token"},
+        json={"temporary_password": "Temporary123", "send_reset_otp": False},
+    )
+    assert response.status_code == 200
+    assert "TEMP_PASSWORD_ASSIGNED" in response.json()["actions"]
+
+    db = SessionLocal()
+    try:
+        actions = [log.action for log in db.query(AuditLog).all()]
+        assert "PASSWORD_RESET_REQUESTED" in actions
+        assert "TEMP_PASSWORD_ASSIGNED" in actions
+        assert "Temporary123" not in str([log.metadata_json for log in db.query(AuditLog).all()])
+    finally:
+        db.close()
+
+
+def test_password_reset_otp_send_failure_is_visible_and_audited(monkeypatch):
+    client, SessionLocal = make_client(monkeypatch)
+
+    def fail_create_otp(*_args, **_kwargs):
+        return {"otp_sent": False, "message": "SMTP unavailable"}
+
+    monkeypatch.setattr(review_api, "create_otp", fail_create_otp)
+    response = client.post(
+        "/api/admin/users/ACC-01/reset-password",
+        headers={"X-Session-Token": "owner-token"},
+        json={"temporary_password": "Temporary123", "send_reset_otp": True},
+    )
+    assert response.status_code == 500
+    assert "OTP Email Failed" in response.json()["detail"]
+
+    db = SessionLocal()
+    try:
+        actions = [log.action for log in db.query(AuditLog).all()]
+        assert "OTP_EMAIL_FAILED" in actions
+        user = db.query(User).filter(User.employee_id == "ACC-01").first()
+        assert user.password_reset_required is True
     finally:
         db.close()
 

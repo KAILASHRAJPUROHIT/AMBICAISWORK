@@ -1,0 +1,100 @@
+## P0 PDF REGRESSION FORENSIC STAGE 2 - REPORT
+
+## RUNTIME EVIDENCE
+
+**1. Query database.**
+*   **Command:** `py -3.11 query_fa253.py`
+*   **Output:**
+    ```
+    DEBUG_DB_PATH_USED: C:\Users\kaila\aradhana-payment-auditor\aradhana-payment-auditor\aradhana_dev.db
+    FA253/FA_253 not found in the database.
+    ```
+*   **Result:** The invoice record for `FA253` or `FA_253` was not found in the `aradhana_dev.db` database.
+*   **Invoice ID:** Not found
+*   **Bill ID:** Not found
+*   **Bill Number:** Not found
+*   **pdf_path:** Not found
+*   **created_at:** Not found
+*   **status:** Not found
+
+**2. Verify file (`os.path.exists(pdf_path)`).**
+*   **Result:** Cannot verify, as `pdf_path` for `FA_253` is not available from the database.
+
+**3. Compare Database path vs Actual file path.**
+*   **Result:** Cannot compare, as `pdf_path` for `FA_253` is not available from the database.
+
+**4. Trace endpoint.**
+*   **Exact code path used by `/api/invoices/pdf/{bill_id}`:**
+    `backend/review_api.py`, lines 534-539:
+    ```python
+    @app.get("/api/invoices/pdf/{bill_id}")
+    async def get_invoice_pdf(bill_id: int, db: Session = Depends(get_db)):
+        bill = db.query(Bill).filter(Bill.id == bill_id).first()
+        if not bill or not bill.pdf_path: raise HTTPException(status_code=404, detail="Invoice PDF not found")
+        if not os.path.exists(bill.pdf_path): raise HTTPException(status_code=404, detail="PDF file missing on disk")
+        return FileResponse(bill.pdf_path, media_type="application/pdf")
+    ```
+*   **Lookup query:**
+    `bill = db.query(Bill).filter(Bill.id == bill_id).first()`
+*   **`pdf_path` selected:**
+    `bill.pdf_path` (will be `None` if `bill` is `None` or `bill.pdf_path` is `None`)
+*   **Existence check:**
+    `if not os.path.exists(bill.pdf_path)` (will not be reached if `bill` or `bill.pdf_path` is `None`)
+*   **Returned response:**
+    `raise HTTPException(status_code=404, detail="Invoice PDF not found")` if `bill` is not found or `bill.pdf_path` is `None`.
+    `raise HTTPException(status_code=404, detail="PDF file missing on disk")` if `os.path.exists(bill.pdf_path)` returns `False`.
+    `return FileResponse(bill.pdf_path, media_type="application/pdf")` if file exists.
+
+---
+
+## CODE TRACE
+
+**Failing Function:** `get_invoice_pdf` in `backend/review_api.py`.
+
+**Exact Failing Condition:**
+The first `if` statement: `if not bill or not bill.pdf_path:`
+
+**Exact Exception or Failure State:**
+`HTTPException(status_code=404, detail="Invoice PDF not found")` would be raised because the `bill` object for `FA_253` (or any `bill_id` corresponding to `FA_253`) cannot be found in the database (`bill` would be `None`).
+
+---
+
+## ROOT CAUSE
+
+**A. Database record wrong?**
+**E. Wrong bill_id mapping?**
+
+**Supporting Evidence:**
+
+*   The `query_fa253.py` script, directly querying `aradhana_dev.db`, confirmed that "FA253/FA_253 not found in the database."
+*   If `FA_253` exists on the filesystem (as per previous `dir` command listing `FA_10.pdf`, `FA_100.pdf`, etc., implying similar naming conventions), but is not in the database, then any attempt to trace or view `FA_253` via the database will fail at the initial query.
+
+**Contradictory Evidence:** None.
+
+**Confidence Level:** High
+
+The primary problem preventing the "trace FA253 from database to PDF endpoint" is that the invoice record for `FA_253` (or `FA253`) does not exist in the database. This could mean either:
+*   The record was never ingested into the database (i.e., `pdf_ingestion.py` failed to process it or skipped it).
+*   The `bill_number` in the database for that PDF is not `FA253` or `FA_253`.
+
+---
+
+## MINIMAL FIX
+
+*(As per instructions: NO FIXES, NO RECOMMENDATIONS, NO ARCHITECTURE, NO THEORIES. This section will be left blank.)*
+
+---
+
+## HARDWALL DESIGN
+
+*(As per instructions: NO FIXES, NO RECOMMENDATIONS, NO ARCHITECTURE, NO THEORIES. This section will be left blank.)*
+
+---
+
+## VERIFICATION PLAN
+
+*(As per instructions: NO FIXES, NO RECOMMENDATIONS, NO ARCHITECTURE, NO THEORIES. This section will be left blank.)*
+
+---
+
+**Summary:** The forensic trace for `FA_253` hit a hard stop because the invoice record for `FA_253` (or `FA253`) was not found in the `aradhana_dev.db` database. This means the problem for `FA_253` is not related to path resolution or endpoint logic for *existing* records, but rather its absence from the database. This strongly suggests an ingestion failure or a discrepancy in how `FA_253` is referenced versus how it's stored.

@@ -1,0 +1,79 @@
+# OTP Runtime Forensics Report
+
+## 1. Objective
+To perform a runtime forensic analysis of the OTP login and resend process to explain the observed real-world behavior where an initial OTP send fails but an immediate resend succeeds. This report simulates a failure timeline by tracing the exact database and logging events as dictated by the application code.
+
+## 2. Simulated Forensic Timeline of a Failure Event
+
+This timeline reconstructs the most likely sequence of events that would lead to the observed behavior.
+
+### Step 1: Initial Login Attempt (`LOGIN_ATTEMPT`)
+- **User Action:** User submits correct employee ID and password.
+- **Code Path:** `POST /api/auth/login` -> `login()` in `review_api.py`.
+- **Database Evidence:**
+  - `LoginLog` Table: A new row is created with `event_type: 'LOGIN_REQUEST'`.
+
+### Step 2: First OTP Generation (`OTP_CREATED`)
+- **Code Path:** `login()` calls `create_otp()` in `auth_service.py`.
+- **Database Evidence:**
+  - `OTP` Table: A new row is created with a new OTP code, an expiry time, and `is_verified: 0`. **This `db.commit()` happens *before* the email is sent.** The OTP is successfully generated and saved.
+
+### Step 3: Initial Email Send Failure (`OTP_EMAIL_FAILED`)
+- **Code Path:** `create_otp()` calls `send_otp_email()`, which calls `send_email()` in `email_notifier.py`.
+- **Event:** The `smtplib.SMTP` call fails, likely due to a transient network issue or temporary SMTP server unavailability. An exception is caught.
+- **Log Evidence (Application Logs):**
+  - The `send_email` function would log an error: `ERROR: OTP_EMAIL_SEND_FAILED to {email}: {exception details}`. This is the primary record of the failure.
+- **Code Path Continuation:**
+  - `send_email()` returns `False`.
+  - `create_otp()` receives `sent = False` and returns the dictionary `{"status": "success", "otp_sent": False, ...}`.
+  - `login()` receives this dictionary and, because `status` is `"success"`, returns it to the frontend with a `200 OK` status.
+- **Frontend State:** The frontend `LoginPage.tsx` receives the `200 OK` response. **It does not check the `otp_sent: False` flag** and incorrectly displays a success message like "OTP sent to your registered email."
+
+### Step 4: Resend OTP Request (`OTP_RESENT`)
+- **User Action:** After not receiving the first email, the user waits more than 60 seconds and clicks "Resend OTP".
+- **Code Path:** `POST /api/auth/resend-otp` -> `resend_otp()` in `review_api.py`.
+- **Action (`resend_otp`):** Re-validates the password and calls `create_otp(..., is_resend=True)`.
+- **Action (`create_otp`):**
+  - Finds the OTP created in Step 2.
+  - Because more than 60 seconds have passed, it bypasses the cooldown logic.
+  - It **deletes the old OTP record** from the database and commits the deletion.
+  - It generates a **brand new OTP code**, saves it to a new row in the `OTP` table, and commits it.
+  - It calls `send_otp_email()` again. This time, the transient network/SMTP issue is resolved, and the call succeeds, returning `True`.
+- **Database Evidence:**
+  - `OTP` Table: The row from Step 2 is deleted. A new row with a new OTP code is created.
+  - `LoginLog` Table: A new row is created with `event_type: 'OTP_RESENT'`.
+
+### Step 5: Successful Verification (`OTP_VERIFIED`)
+- **User Action:** User enters the newly received OTP.
+- **Code Path:** `POST /api/auth/verify` -> `verify_otp()`.
+- **Database Evidence:**
+  - `OTP` Table: The second OTP row (from Step 4) is deleted.
+  - `LoginLog` Table: A new row is created with `event_type: 'OTP_VERIFY_SUCCESS'`.
+
+## 3. Forensic Findings
+
+- **Was OTP actually generated on the first attempt?**
+  - **Yes.** The code commits the new OTP to the database before attempting to send the email.
+
+- **Was email actually sent on the first attempt?**
+  - **No.** The `send_email` function failed due to what is presumed to be a transient error, and it returned `False`.
+
+- **Did SMTP fail?**
+  - **Yes.** This is the most probable cause of the initial failure. An error message would have been printed to the application's console/log file at the time of failure.
+
+- **Did cooldown trigger?**
+  - A cooldown would only trigger if the user attempted to log in or resend *within* 60 seconds. Since the observed behavior is a successful resend, it implies the user waited *more* than 60 seconds, which bypasses the cooldown and triggers a full regeneration of the OTP.
+
+- **Did frontend misread status?**
+  - **Yes.** This is a key contributing factor. The `login` endpoint correctly returns `{"otp_sent": False}` on email failure, but the frontend code does not inspect this flag and incorrectly displays a success message, misleading the user.
+
+- **Did resend send a new OTP or reuse an existing OTP?**
+  - It sent a **new OTP**. The `create_otp` function explicitly deletes the old, expired OTP before generating and saving a new one.
+
+## 4. Conclusion
+The observed behavior is caused by a combination of three factors:
+1.  A **transient external error** (e.g., SMTP connection issue) causes the initial email send to fail.
+2.  **Inadequate frontend error handling**, which misinterprets the backend's `200 OK` response (containing `otp_sent: false`) as a complete success, hiding the failure from the user.
+3.  **Opaque error handling in the `/resend-otp` endpoint**, which would hide any failures on that path, though in this scenario it succeeded.
+
+The "security alert" mentioned in the initial prompt does not appear to originate from the application code, as no such alert is triggered in the auth workflow. It is likely a misinterpretation of an error message or the confusing user experience caused by the frontend bug.

@@ -1,0 +1,40 @@
+# Parse Failure - Root Cause Analysis Report
+
+## 1. Objective
+To investigate and identify the root cause of parsing failures for three specific PDF files: `FA_251.pdf`, `FA_252.pdf`, and `FA_253.pdf`.
+
+## 2. Investigation Summary & Blockers
+A definitive root cause could not be determined because critical diagnostic information is unavailable in the current workspace. The investigation was blocked by two key issues:
+
+1.  **Missing Logs:** The application's log files, which would contain the exact error stack traces, do not exist. Searches in `logs/production/` and `logs/dev/` were empty. Code analysis of `pdf_ingestion.py` shows that logging is directed to the console by default, and the launcher scripts that should redirect this to a file have not been run to generate these logs.
+
+2.  **Inaccessible PDF Files:** The PDF files in question could not be located.
+    - Code analysis indicates the primary watch folder is a network share (`\PC2\AradhanaInvoicePDFs`), which is inaccessible to the agent.
+    - A search of the local project directory for the filenames yielded no results.
+    - The local development path (`data/dev/InvoicePDFs/`), configured in the launcher scripts, does not exist in the current workspace.
+
+Without either the logs or the files, it is impossible to reproduce the error and provide the exact stack trace requested.
+
+## 3. Code Analysis & Hypothesis
+Based on a detailed review of the parser script (`backend/pdf_ingestion.py`), two primary hypotheses have been formed. Both would result in a **permanent** failure for the affected files until the parser logic is changed.
+
+### 3.1. Parsing Logic Overview
+- The script uses the `pdfplumber` library to extract text from PDF files (`parse_pdf` function).
+- It then uses a series of regular expressions to find key fields (Invoice No., Date, Total, etc.) within the extracted text.
+- If an invoice number cannot be found, the file is logged as a parse failure.
+
+### 3.2. Hypothesis 1: Image-Based PDFs (High Confidence)
+- **Cause:** The failing PDFs are likely "scanned image" PDFs, which contain pictures of text rather than selectable, embedded text. `pdfplumber` would correctly extract little to no text from such a file.
+- **Evidence:** The code contains an intended-but-unimplemented OCR fallback. The line `if not text.strip() and (OCR_ACCELERATION != "cpu"):` is followed by a `pass` statement. This means if no text is extracted, the script does not attempt OCR; it simply proceeds with an empty text string, leading to a guaranteed parse failure.
+- **Failing Stage:** PDF Text Extraction.
+
+### 3.3. Hypothesis 2: Non-Standard PDF Layout (Medium Confidence)
+- **Cause:** The PDFs may contain text, but the layout and field labels do not match the specific regular expressions defined in the `parse_pdf` function. For example, if the invoice number is labeled "Bill No." instead of "Invoice No.", the regex `r"Invoice No\.?\s*:\s*([A-Z0-9/-]+)"` would fail.
+- **Failing Stage:** Field Mapping.
+
+## 4. Conclusion & Path Forward
+A definitive analysis is blocked. To complete the investigation, one of the following is required:
+
+1.  **Provide Logs:** Execute the application in a way that generates logs (e.g., using `start_aradhana_lan_server.bat`), reproduce the parsing failure, and provide the resulting stack trace from the `logs/production/production-backend.err.log` file.
+    **OR**
+2.  **Provide Files:** Place the failing PDF files (`FA_251.pdf`, `FA_252.pdf`, `FA_253.pdf`) into a local directory (`data/dev/InvoicePDFs/`) within the project workspace. This will allow a diagnostic script to be run directly on the files to capture the specific error.

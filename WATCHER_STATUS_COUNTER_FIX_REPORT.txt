@@ -1,0 +1,76 @@
+WATCHER STATUS COUNTER FIX REPORT
+
+Scope:
+- Watcher status/counter correctness only.
+- No reconciliation, payment, or auth logic changed.
+- No financial records modified.
+
+Files changed:
+- backend/pdf_ingestion.py
+- backend/review_api.py
+- frontend/src/pages/DashboardPage.tsx
+- tests/test_invoice_lifecycle.py
+
+Backend changes:
+- perform_scan now always sets last_scan_started_at and last_scan_completed_at, including scans where every PDF is skipped.
+- perform_scan now returns JSON summary:
+  scan_started_at
+  scan_completed_at
+  files_seen
+  processed
+  inserted
+  skipped_existing
+  invalid_documents
+  parse_failures
+  warnings
+  errors
+- /api/scan-now now returns the scan summary from perform_scan instead of only starting a background thread.
+- Added separated watcher status counters:
+  total_files_seen
+  current_scan_processed
+  inserted_today
+  skipped_existing
+  invalid_documents
+  invalid_document_count
+  duplicate_archive_permission_count
+  parse_failures
+  actual_errors
+  warnings
+- Duplicate archive permission failures are counted as warnings, not failed ingestion.
+- duplicate_permission_message remains:
+  Duplicate archive move blocked by permission. Original retained.
+- Duplicate permission warnings do not increment again for ignored same file/hash/day retries.
+- failed_files is now set from current scan parse_failures + actual_errors.
+
+Frontend changes:
+- Watcher card now displays last_scan_completed_at first, with last_processed_time only as fallback.
+- Removed misleading Processed/Failed totals from the watcher card.
+- Watcher card now shows:
+  Online/offline status
+  PDFs in Share
+  Last Scan
+  Inserted Today
+  Skipped Existing
+  Invalid Docs
+  Warnings
+- Duplicate archive permission message is shown as amber warning text.
+
+Tests added:
+- scan updates last_scan when all files are skipped.
+- duplicate archive permission is warning, not failure.
+- duplicate archive warning is deduplicated per file/hash/day.
+- failed_files only counts parse/system errors, not invalid docs or duplicate warnings.
+- Sync Now response contains scan timestamps.
+
+Tests run:
+- python -m pytest tests/test_invoice_lifecycle.py: 20 passed
+- cd frontend && npm run build: passed
+
+Manual verification pending:
+- Dashboard shows actual Last Scan after Sync Now.
+- Watcher remains Online with PDFs in share visible.
+- Inserted Today, Skipped Existing, Invalid Docs, and Warnings are non-misleading.
+- Duplicate archive permission warning does not keep increasing every scan.
+
+Commit status:
+- No commit made.

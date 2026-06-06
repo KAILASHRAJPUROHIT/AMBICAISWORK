@@ -1,0 +1,49 @@
+DUPLICATE ARCHIVE PERMISSION RETENTION REPORT
+
+Scope:
+- Duplicate PDF archive handling only.
+- No reconciliation, payment, auth, or parser logic changed.
+
+Files changed:
+- backend/invoice_lifecycle.py
+- backend/pdf_ingestion.py
+- frontend/src/pages/DashboardPage.tsx
+- tests/test_invoice_lifecycle.py
+
+Retention policy:
+- PDF_RETENTION_DAYS=365
+- AUDIT_RETENTION_DAYS=365
+- PDF deletion is blocked while the DB record or file mtime is younger than 365 days.
+- Audit purge guard blocks purge attempts younger than 365 days.
+
+Duplicate archive behavior:
+- Duplicate PDFs are copied to archive first.
+- Archive copy is verified by existence and size before original removal is considered.
+- Original PDF is never removed unless the verified copy exists and the 365-day retention guard allows removal.
+- If the archive copy fails due to Windows permission, the original PDF remains untouched.
+- The failure is audit logged as DUPLICATE_MOVE_FAILED_PERMISSION.
+- The same file/hash is not retried repeatedly during the same day.
+
+Fallback quarantine:
+- Duplicate archive path is configurable with DUPLICATE_ARCHIVE_PATH.
+- Optional local fallback is configurable with DUPLICATE_ARCHIVE_FALLBACK_PATH.
+- If primary archive copy is blocked by permission and fallback is configured, a verified fallback quarantine copy is attempted.
+- Even when fallback copy succeeds, original PDF remains in place after primary permission failure.
+
+Status behavior:
+- Duplicate archive permission failures are tracked separately from parse failures.
+- Dashboard message:
+  Duplicate archive move blocked by permission. Original retained.
+
+Tests run:
+- python -m pytest tests/test_invoice_lifecycle.py
+  Result: 14 passed.
+
+Manual verification pending:
+- Dashboard watcher remains online.
+- PDFs in share remain visible.
+- Duplicate permission error stops looping for same file/hash/day.
+- Original duplicate PDFs remain untouched when archive permission blocks move.
+
+Commit status:
+- Not committed.

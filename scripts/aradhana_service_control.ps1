@@ -15,6 +15,20 @@ function Ensure-Directory($Path) {
     }
 }
 
+function Get-DotEnvValue($Key) {
+    $envPath = Join-Path $Root ".env"
+    if (-not (Test-Path $envPath)) {
+        return $null
+    }
+    $line = Get-Content $envPath |
+        Where-Object { $_ -match "^\s*$([regex]::Escape($Key))\s*=" } |
+        Select-Object -First 1
+    if (-not $line) {
+        return $null
+    }
+    return (($line -split "=", 2)[1]).Trim()
+}
+
 function Get-ListenerPid($Port) {
     $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
         Select-Object -First 1
@@ -256,7 +270,7 @@ function Start-Environment($EnvironmentName, $BackendPort, $FrontendPort, $LogSu
     Test-ManagedListener $BackendPort $backendPid $true | Out-Null
     Test-ManagedListener $FrontendPort $frontendPid $false | Out-Null
 
-    $backendEnv = "`$env:PYTHONPATH='$Root'; `$env:ARADHANA_ENV='$EnvironmentName'; "
+    $backendEnv = "`$env:PYTHONPATH='$Root'; `$env:ARADHANA_ENV='$EnvironmentName'; `$env:BACKEND_PORT='$BackendPort'; `$env:FRONTEND_PORT='$FrontendPort'; `$env:UPDATE_CHANNEL='STABLE'; "
     if ($DevMode) {
         $devData = Join-Path $Root "data\dev"
         $devPdfPath = Join-Path $devData "InvoicePDFs"
@@ -269,6 +283,19 @@ function Start-Environment($EnvironmentName, $BackendPort, $FrontendPort, $LogSu
             Write-Host "Seeded isolated development DB at $devDb."
         }
         $backendEnv += "`$env:ARADHANA_DB_PATH='$devDb'; `$env:INVOICE_SHARE_PATH='$devPdfPath'; `$env:INVOICE_PDF_PATH='$devPdfPath'; "
+    } else {
+        $configuredShare = Get-DotEnvValue "INVOICE_SHARE_PATH"
+        $configuredPrimary = Get-DotEnvValue "INVOICE_SHARE_PATH_PRIMARY"
+        $configuredFallback = Get-DotEnvValue "INVOICE_SHARE_PATH_FALLBACK"
+        if ($configuredShare) {
+            $backendEnv += "`$env:INVOICE_SHARE_PATH='$configuredShare'; `$env:INVOICE_PDF_PATH='$configuredShare'; "
+        }
+        if ($configuredPrimary) {
+            $backendEnv += "`$env:INVOICE_SHARE_PATH_PRIMARY='$configuredPrimary'; "
+        }
+        if ($configuredFallback) {
+            $backendEnv += "`$env:INVOICE_SHARE_PATH_FALLBACK='$configuredFallback'; "
+        }
     }
 
     $backendArgs = ($PythonArgsPrefix + @("--port", "$BackendPort")) -join " "

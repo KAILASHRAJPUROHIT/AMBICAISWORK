@@ -136,7 +136,8 @@ export async function openInvoicePdf(billId: number) {
       window.location.href = '/login';
       return;
     }
-    throw new Error('Failed to load invoice PDF');
+    const errorBody = await response.json().catch(() => null);
+    throw new Error(errorBody?.detail || 'Failed to load invoice PDF');
   }
   const blob = await response.blob();
   const blobUrl = URL.createObjectURL(blob);
