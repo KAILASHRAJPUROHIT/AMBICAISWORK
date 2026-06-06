@@ -10,3 +10,6 @@ dist/
 .aider*
 AradhanaPaymentAuditor.spec
 build/
+
+logs/
+*.pid
