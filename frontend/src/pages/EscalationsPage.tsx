@@ -3,11 +3,17 @@ import {
   getAccountantVerificationQueue, 
   approveAccountantVerification, 
   rejectAccountantVerification, 
-  furtherReviewAccountantVerification 
+  furtherReviewAccountantVerification,
+  openInvoicePdf,
+  fetchProofPreview,
+  getReconciliationDetail
 } from '../api/client';
+import InvoiceDetailDrawer from '../components/InvoiceDetailDrawer';
+import type { ReconciliationItem, ReconciliationPaymentEvidence } from '../types';
 
 interface AccountantQueueItem {
   id: number;
+  bill_id: number;
   invoice_no: string;
   customer_name?: string;
   amount?: number;
@@ -56,6 +62,11 @@ const EscalationsPage: React.FC = () => {
   const [showNoteModal, setShowNoteModal] = useState<{ id: number; type: 'APPROVE' | 'REJECT' | 'FURTHER_REVIEW' } | null>(null);
   const [actionNote, setActionNote] = useState('');
 
+  // New state for detailed view
+  const [selectedItem, setSelectedItem] = useState<ReconciliationItem | null>(null);
+  const [detailLoading, setDetailLoading] = useState<number | null>(null);
+  const [proofModal, setProofModal] = useState<{ item: ReconciliationItem; payment: ReconciliationPaymentEvidence; rawText: string } | null>(null);
+
   const fetchQueue = () => {
     setLoading(true);
     getAccountantVerificationQueue()
@@ -102,6 +113,45 @@ const EscalationsPage: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const handleOpenDetail = async (billId: number) => {
+    setDetailLoading(billId);
+    try {
+      const detail = await getReconciliationDetail(billId);
+      setSelectedItem(detail);
+    } catch (err: any) {
+      alert(`Failed to load details: ${err.message}`);
+    } finally {
+      setDetailLoading(null);
+    }
+  };
+
+  const handleViewInvoice = (billId: number) => {
+    openInvoicePdf(billId).catch(err => {
+      console.error('Error opening invoice PDF:', err);
+      alert('Error opening PDF. It may not exist on the server.');
+    });
+  };
+
+  const handleViewProof = (payment: ReconciliationPaymentEvidence) => {
+    if (!payment.proofUrl || !selectedItem) {
+      alert('Payment proof not recorded.');
+      return;
+    }
+    fetchProofPreview(payment.proofUrl).then(rawText => {
+      setProofModal({ item: selectedItem, payment, rawText: rawText || '' });
+    }).catch(err => {
+      console.error('Error fetching proof preview:', err);
+      alert('Error loading proof preview.');
+    });
+  };
+
+  const handleCopyProof = () => {
+    if (!proofModal) return;
+    navigator.clipboard.writeText(proofModal.rawText).then(() => {
+      alert('Proof text copied to clipboard.');
+    });
   };
 
   if (loading && items.length === 0) {
@@ -162,8 +212,17 @@ const EscalationsPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {items.map((item) => (
-                  <tr key={item.id} className="align-top hover:bg-gray-50">
-                    <td className="p-4 font-black font-mono text-gray-900">{item.invoice_no}</td>
+                  <tr key={item.id} className="align-top hover:bg-gray-50 cursor-pointer" onClick={() => handleOpenDetail(item.bill_id)}>
+                    <td className="p-4">
+                      <div className="font-black font-mono text-gray-900">{item.invoice_no}</div>
+                      <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleViewInvoice(item.bill_id); }}
+                        className="text-[10px] font-bold text-blue-600 hover:underline"
+                      >
+                        View PDF
+                      </button>
+                    </td>
                     <td className="p-4 font-bold text-gray-700">{item.customer_name || 'Not Recorded'}</td>
                     <td className="p-4 text-right font-black text-gray-900">{formatCurrency(item.amount)}</td>
                     <td className="p-4 font-bold text-gray-700">{item.payment_mode || 'Not Recorded'}</td>
@@ -183,8 +242,11 @@ const EscalationsPage: React.FC = () => {
                           Status: {item.queue_status}
                         </div>
                       )}
+                      {detailLoading === item.bill_id && (
+                        <div className="text-[10px] text-blue-500 font-bold animate-pulse">Loading details...</div>
+                      )}
                     </td>
-                    <td className="p-4">
+                    <td className="p-4" onClick={(e) => e.stopPropagation()}>
                       {item.queue_status === 'OPEN' ? (
                         <div className="flex flex-col gap-2">
                           <button
@@ -257,6 +319,72 @@ const EscalationsPage: React.FC = () => {
                 }`}
               >
                 {actionLoading ? 'Processing...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Detail Drawer */}
+      {selectedItem && (
+        <InvoiceDetailDrawer
+          item={selectedItem}
+          onClose={() => setSelectedItem(null)}
+          onViewInvoice={() => handleViewInvoice(selectedItem.billId!)}
+          onViewProof={handleViewProof}
+        />
+      )}
+
+      {/* Proof Modal */}
+      {proofModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-8 z-[60]" onClick={() => setProofModal(null)}>
+          <div className="bg-white rounded-3xl p-8 max-w-3xl w-full shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex justify-between items-start gap-6 mb-6">
+              <div>
+                <h3 className="text-xl font-black text-gray-900 uppercase">{proofModal.payment.proofLabel || 'Payment Proof'}</h3>
+                <p className="text-sm text-gray-500">
+                  {proofModal.payment.source || 'Not Recorded'} | {proofModal.payment.timestamp || 'Not Recorded'}
+                </p>
+              </div>
+              <button type="button" onClick={() => setProofModal(null)} className="text-gray-400 hover:text-gray-900 font-bold text-2xl">&times;</button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 text-sm">
+              <div className="rounded-2xl bg-gray-50 p-4 border border-gray-100">
+                <p className="text-[10px] font-black uppercase text-gray-400">Source Type</p>
+                <p className="font-bold text-gray-900">{proofModal.payment.source || 'Not Recorded'}</p>
+              </div>
+              <div className="rounded-2xl bg-gray-50 p-4 border border-gray-100">
+                <p className="text-[10px] font-black uppercase text-gray-400">Timestamp</p>
+                <p className="font-bold text-gray-900">{proofModal.payment.timestamp || 'Not Recorded'}</p>
+              </div>
+              <div className="rounded-2xl bg-gray-50 p-4 border border-gray-100">
+                <p className="text-[10px] font-black uppercase text-gray-400">UTR / Reference</p>
+                <p className="font-bold text-gray-900">{proofModal.payment.utrReference || proofModal.payment.reference || 'Not Recorded'}</p>
+              </div>
+              <div className="rounded-2xl bg-gray-50 p-4 border border-gray-100">
+                <p className="text-[10px] font-black uppercase text-gray-400">Amount</p>
+                <p className="font-bold text-gray-900">₹{proofModal.payment.amount.toLocaleString('en-IN')}</p>
+              </div>
+              <div className="rounded-2xl bg-gray-50 p-4 border border-gray-100">
+                <p className="text-[10px] font-black uppercase text-gray-400">Linked Bill</p>
+                <p className="font-bold text-gray-900">{proofModal.item.billNo}</p>
+              </div>
+              <div className="rounded-2xl bg-gray-50 p-4 border border-gray-100">
+                <p className="text-[10px] font-black uppercase text-gray-400">Linked Customer</p>
+                <p className="font-bold text-gray-900">{proofModal.item.customer}</p>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 font-mono text-xs whitespace-pre-wrap max-h-96 overflow-y-auto">
+              {proofModal.rawText || 'Payment proof not recorded.'}
+            </div>
+            <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end gap-3">
+              <button type="button" onClick={handleCopyProof} className="bg-white border border-gray-200 text-gray-700 px-6 py-3 rounded-xl font-black uppercase tracking-widest hover:bg-gray-50 transition-colors">
+                Copy
+              </button>
+              <button type="button" onClick={() => setProofModal(null)} className="bg-gray-900 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest hover:bg-black transition-colors">
+                Close
               </button>
             </div>
           </div>
