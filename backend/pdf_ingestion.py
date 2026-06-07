@@ -2,6 +2,7 @@ import os
 import time
 import hashlib
 import logging
+import shutil
 import pdfplumber
 import re
 import threading
@@ -17,14 +18,25 @@ import json
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("PDF_Ingestion")
 
-# PART C — SHARE PATH
-# Prefer network share \\PC2\AradhanaInvoicePDFs as per mandate
-DEFAULT_SHARE = r"\\PC2\AradhanaInvoicePDFs"
-WATCH_PATH = os.getenv("INVOICE_SHARE_PATH", DEFAULT_SHARE)
+# PART C - INVOICE SOURCE AND LOCAL WATCH PATHS
+# The backend watcher only observes the local inbox. A separate sync loop copies
+# PDFs from the PC2 share into this folder without deleting or modifying source files.
+DEFAULT_SOURCE_SHARE = r"\\PC2\AradhanaInvoicePDFs"
+DEFAULT_LOCAL_INBOX = r"C:\AradhanaAuditor\invoice_inbox"
+DEFAULT_LOCAL_ARCHIVE = r"C:\AradhanaAuditor\invoice_archive"
+DEFAULT_LOCAL_FAILED = r"C:\AradhanaAuditor\invoice_failed"
 
-# If the share is explicitly local but user wants network, we log warning
-if WATCH_PATH.startswith("C:") and DEFAULT_SHARE.startswith("\\\\"):
-    logger.warning(f"WATCH_PATH is local ({WATCH_PATH}). Network share ({DEFAULT_SHARE}) is ignored.")
+SOURCE_SHARE_PATH = os.getenv(
+    "INVOICE_SHARE_PATH_PRIMARY",
+    os.getenv("INVOICE_SOURCE_SHARE_PATH", os.getenv("INVOICE_SHARE_PATH", DEFAULT_SOURCE_SHARE)),
+)
+LOCAL_INBOX_PATH = os.getenv("LOCAL_INVOICE_INBOX_PATH", DEFAULT_LOCAL_INBOX)
+LOCAL_ARCHIVE_PATH = os.getenv("LOCAL_INVOICE_ARCHIVE_PATH", DEFAULT_LOCAL_ARCHIVE)
+LOCAL_FAILED_PATH = os.getenv("LOCAL_INVOICE_FAILED_PATH", DEFAULT_LOCAL_FAILED)
+WATCH_PATH = os.getenv("INVOICE_WATCH_PATH", LOCAL_INBOX_PATH)
+
+if WATCH_PATH != LOCAL_INBOX_PATH:
+    logger.warning(f"WATCH_PATH override is active ({WATCH_PATH}). Local inbox is {LOCAL_INBOX_PATH}.")
 
 from backend.invoice_lifecycle import DUPLICATE_PERMISSION_MESSAGE, handle_duplicate
 
@@ -44,7 +56,23 @@ logger.info(f"OCR Acceleration Setting: {OCR_ACCELERATION}")
 ingestion_status = {
     "watcher_running": False,
     "watch_path": WATCH_PATH,
+    "active_watch_path": WATCH_PATH,
+    "watcher_path": WATCH_PATH,
+    "source_share_path": SOURCE_SHARE_PATH,
+    "local_inbox_path": LOCAL_INBOX_PATH,
+    "local_archive_path": LOCAL_ARCHIVE_PATH,
+    "local_failed_path": LOCAL_FAILED_PATH,
+    "sync_running": False,
+    "source_share_available": False,
+    "last_sync_at": None,
+    "last_sync_error": None,
+    "copied_count": 0,
+    "skipped_count": 0,
+    "local_pdf_count": 0,
     "path_exists": False,
+    "observer_started": False,
+    "watcher_mode": "offline",
+    "observer_error": None,
     "pdf_files_found": 0,
     "files_processed": 0,
     "invoices_inserted": 0,
@@ -59,6 +87,10 @@ ingestion_status = {
 }
 
 status_lock = threading.Lock()
+thread_state_lock = threading.Lock()
+sync_thread_started = False
+watcher_thread_started = False
+SYNC_INTERVAL_SECONDS = 10
 
 def update_status(**kwargs):
     with status_lock:
@@ -70,6 +102,22 @@ def increment_status(key, amount=1):
     with status_lock:
         if key in ingestion_status:
             ingestion_status[key] += amount
+
+def count_local_pdfs():
+    try:
+        files = os.listdir(WATCH_PATH)
+        return len([f for f in files if f.lower().endswith(".pdf")])
+    except Exception:
+        return 0
+
+def refresh_local_pdf_count():
+    pdf_count = count_local_pdfs()
+    update_status(local_pdf_count=pdf_count, pdf_files_found=pdf_count)
+    return pdf_count
+
+def ensure_local_invoice_dirs():
+    for path in (LOCAL_INBOX_PATH, LOCAL_ARCHIVE_PATH, LOCAL_FAILED_PATH, WATCH_PATH):
+        os.makedirs(path, exist_ok=True)
 
 def record_duplicate_result(result):
     if not result:
@@ -101,12 +149,154 @@ def get_file_hash(file_path):
         return None
 
 def check_share_health():
-    exists = os.path.exists(WATCH_PATH)
-    update_status(path_exists=exists)
-    if not exists:
-        logger.error(f"Invoice Share Offline: {WATCH_PATH} is unavailable.")
+    try:
+        ensure_local_invoice_dirs()
+        files = os.listdir(WATCH_PATH)
+        pdf_count = len([f for f in files if f.lower().endswith(".pdf")])
+        update_status(
+            active_watch_path=WATCH_PATH,
+            watcher_path=WATCH_PATH,
+            path_exists=True,
+            pdf_files_found=pdf_count,
+            local_pdf_count=pdf_count,
+        )
+        return True
+    except Exception as e:
+        reason = f"{type(e).__name__}: {str(e)}"
+        update_status(
+            active_watch_path=WATCH_PATH,
+            watcher_path=WATCH_PATH,
+            path_exists=False,
+            last_error=f"Local Watch Path Error: {reason}",
+        )
+        logger.error(f"Invoice local inbox unavailable: {WATCH_PATH} is unavailable. {reason}")
         return False
-    return True
+
+def same_file_already_copied(src_path, dest_path):
+    try:
+        if not os.path.exists(dest_path):
+            return False
+        if os.path.getsize(src_path) != os.path.getsize(dest_path):
+            return False
+        src_hash = get_file_hash(src_path)
+        dest_hash = get_file_hash(dest_path)
+        if src_hash and dest_hash:
+            return src_hash == dest_hash
+        return True
+    except Exception as e:
+        logger.warning(f"Unable to compare source and local PDF {src_path} -> {dest_path}: {e}")
+        return False
+
+def copy_pdf_to_local_inbox(src_path, dest_path):
+    tmp_path = f"{dest_path}.tmp"
+    if os.path.exists(dest_path):
+        return "exists"
+    if os.path.exists(tmp_path):
+        try:
+            os.remove(tmp_path)
+        except Exception as e:
+            logger.warning(f"Unable to remove stale temp PDF {tmp_path}: {e}")
+            return "temp_blocked"
+
+    shutil.copy2(src_path, tmp_path)
+    copied_size = os.path.getsize(tmp_path)
+    if copied_size <= 0:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+        raise ValueError(f"Copied file is empty: {src_path}")
+
+    if os.path.exists(dest_path):
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+        return "exists"
+
+    os.rename(tmp_path, dest_path)
+    return "copied"
+
+def sync_source_to_local_once():
+    copied = 0
+    skipped = 0
+    error = None
+    ensure_local_invoice_dirs()
+
+    try:
+        source_files = os.listdir(SOURCE_SHARE_PATH)
+        update_status(source_share_available=True)
+    except Exception as e:
+        error = f"Source Share Error: {type(e).__name__}: {str(e)}"
+        logger.warning(f"Invoice source sync waiting for share access: {error}")
+        update_status(
+            source_share_available=False,
+            last_sync_at=datetime.now().isoformat(),
+            last_sync_error=error,
+            copied_count=0,
+            skipped_count=0,
+        )
+        refresh_local_pdf_count()
+        return {"copied": copied, "skipped": skipped, "error": error}
+
+    for name in source_files:
+        if not name.lower().endswith(".pdf"):
+            continue
+        src_path = os.path.join(SOURCE_SHARE_PATH, name)
+        dest_path = os.path.join(LOCAL_INBOX_PATH, name)
+        try:
+            if not os.path.isfile(src_path):
+                skipped += 1
+                continue
+            if same_file_already_copied(src_path, dest_path):
+                skipped += 1
+                continue
+            if os.path.exists(dest_path):
+                logger.warning(f"Local inbox already has a different PDF named {name}; skipping to avoid overwrite.")
+                skipped += 1
+                continue
+
+            result = copy_pdf_to_local_inbox(src_path, dest_path)
+            if result == "copied":
+                copied += 1
+                logger.info(f"Copied invoice PDF from source share to local inbox: {name}")
+            else:
+                skipped += 1
+        except Exception as e:
+            error = f"Copy Error for {name}: {type(e).__name__}: {str(e)}"
+            logger.error(error)
+            skipped += 1
+
+    update_status(
+        source_share_available=True,
+        last_sync_at=datetime.now().isoformat(),
+        last_sync_error=error,
+        copied_count=copied,
+        skipped_count=skipped,
+    )
+    refresh_local_pdf_count()
+    return {"copied": copied, "skipped": skipped, "error": error}
+
+def sync_source_to_local_loop():
+    logger.info(
+        f"Invoice source sync loop started. source={SOURCE_SHARE_PATH!r}, local_inbox={LOCAL_INBOX_PATH!r}"
+    )
+    update_status(sync_running=True)
+    while True:
+        try:
+            result = sync_source_to_local_once()
+            if result.get("error"):
+                logger.info(f"Invoice source sync retry scheduled in {SYNC_INTERVAL_SECONDS}s")
+            else:
+                logger.info(
+                    f"Invoice source sync complete. copied={result['copied']}, skipped={result['skipped']}"
+                )
+        except Exception as e:
+            reason = f"Sync Loop Error: {type(e).__name__}: {str(e)}"
+            logger.error(reason)
+            update_status(last_sync_at=datetime.now().isoformat(), last_sync_error=reason)
+            refresh_local_pdf_count()
+        time.sleep(SYNC_INTERVAL_SECONDS)
 
 def parse_pdf(file_path):
     try:
@@ -508,48 +698,94 @@ def perform_scan():
 
 class InvoiceHandler(FileSystemEventHandler):
     def on_created(self, event):
-        if not event.is_directory:
+        if not event.is_directory and event.src_path.lower().endswith(".pdf"):
             process_invoice(event.src_path)
     def on_modified(self, event):
-        if not event.is_directory:
+        if not event.is_directory and event.src_path.lower().endswith(".pdf"):
             process_invoice(event.src_path)
 
 def start_watcher():
-    if not check_share_health():
-        update_status(watcher_running=False)
-        # return # Let it continue to poll health
+    logger.info(f"start_watcher invoked. WATCH_PATH={WATCH_PATH!r}")
+    ensure_local_invoice_dirs()
+    update_status(
+        active_watch_path=WATCH_PATH,
+        watcher_path=WATCH_PATH,
+        watcher_running=False,
+        observer_started=False,
+        watcher_mode="starting",
+        observer_error=None,
+    )
 
-    event_handler = InvoiceHandler()
-    observer = Observer()
-    observer.schedule(event_handler, WATCH_PATH, recursive=False)
-    observer.start()
-    update_status(watcher_running=True)
-    logger.info(f"Realtime watcher/poller active on {WATCH_PATH}")
-    
+    observer = None
+    if check_share_health():
+        event_handler = InvoiceHandler()
+        observer = Observer()
+        try:
+            observer.schedule(event_handler, WATCH_PATH, recursive=False)
+            observer.start()
+            update_status(
+                watcher_running=True,
+                observer_started=True,
+                watcher_mode="observer",
+                observer_error=None,
+            )
+            logger.info(f"Realtime watcher active on {WATCH_PATH}")
+        except Exception as e:
+            reason = f"{type(e).__name__}: {str(e)}"
+            logger.error(f"Realtime watcher observer failed on {WATCH_PATH}: {reason}")
+            update_status(
+                watcher_running=True,
+                observer_started=False,
+                watcher_mode="polling",
+                observer_error=reason,
+                last_error=f"Observer Error: {reason}; polling active",
+            )
+            observer = None
+    else:
+        update_status(watcher_running=False, observer_started=False, watcher_mode="offline")
+
     try:
         while True:
             time.sleep(60) # Re-verify entire list of pdfs in the folder every minute
-            if not os.path.exists(WATCH_PATH):
-                update_status(path_exists=False, watcher_running=False)
-            else:
-                if not ingestion_status["path_exists"]:
+            if check_share_health():
+                if ingestion_status["watcher_mode"] == "offline":
                     logger.info("Invoice share re-connected.")
-                update_status(path_exists=True, watcher_running=True)
+                if not ingestion_status["observer_started"]:
+                    update_status(watcher_running=True, watcher_mode="polling")
+                else:
+                    update_status(watcher_running=True, watcher_mode="observer")
                 # Periodic scan to ensure nothing was missed by watcher
-                perform_scan() 
+                perform_scan()
+            else:
+                update_status(watcher_running=False, observer_started=False, watcher_mode="offline")
     except Exception as e:
         logger.error(f"Watcher thread crashed: {e}")
         update_status(watcher_running=False, last_error=f"Watcher Crash: {str(e)}")
 
 def start_ingestion_thread():
-    # Run scan first
-    scan_thread = threading.Thread(target=perform_scan, daemon=True)
-    scan_thread.start()
-    
-    # Run watcher (which now also performs periodic scans)
-    watcher_thread = threading.Thread(target=start_watcher, daemon=True)
-    watcher_thread.start()
+    global sync_thread_started, watcher_thread_started
+
+    ensure_local_invoice_dirs()
+    refresh_local_pdf_count()
+
+    with thread_state_lock:
+        if not sync_thread_started:
+            sync_thread = threading.Thread(target=sync_source_to_local_loop, daemon=True)
+            sync_thread.start()
+            sync_thread_started = True
+
+        # Run one scan immediately against the local inbox so existing local PDFs
+        # are available even when the PC2 share is temporarily unavailable.
+        scan_thread = threading.Thread(target=perform_scan, daemon=True)
+        scan_thread.start()
+
+        if not watcher_thread_started:
+            watcher_thread = threading.Thread(target=start_watcher, daemon=True)
+            watcher_thread.start()
+            watcher_thread_started = True
 
 if __name__ == "__main__":
+    ensure_local_invoice_dirs()
+    sync_source_to_local_once()
     perform_scan()
     start_watcher()
