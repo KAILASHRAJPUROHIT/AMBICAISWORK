@@ -4,9 +4,7 @@ import logging
 import json
 from datetime import datetime
 from sqlalchemy.orm import Session
-from backend.models import BankDocument
-from backend.audit_service import create_audit_log
-from backend.schemas import AuditLogCreate
+from backend.models import BankDocument, AuditLog
 
 logger = logging.getLogger("BankDocumentIngestion")
 
@@ -124,15 +122,15 @@ def process_email_attachments(db: Session, attachments: list, message_id: str, s
                 db.add(new_doc)
                 db.flush()
                 
-                # Create audit log using standard service
-                audit_payload = AuditLogCreate(
+                # Create audit log inline to avoid internal commits breaking the savepoint
+                audit = AuditLog(
                     entity_type="BankDocument",
                     entity_id=new_doc.id,
                     action="ATTACHMENT_SAVED",
                     actor="SYSTEM",
                     metadata_json=json.dumps({"original_filename": original_filename, "file_type": file_type, "size_bytes": file_size_bytes})
                 )
-                create_audit_log(db, audit_payload)
+                db.add(audit)
                 
                 logger.info(f"Successfully saved and logged attachment: {original_filename}")
         except Exception as e:

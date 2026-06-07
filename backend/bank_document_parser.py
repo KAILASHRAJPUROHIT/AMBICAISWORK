@@ -2,9 +2,7 @@ import os
 import logging
 import json
 from sqlalchemy.orm import Session
-from backend.models import BankDocument, BankDocumentTransaction
-from backend.audit_service import create_audit_log
-from backend.schemas import AuditLogCreate
+from backend.models import BankDocument, BankDocumentTransaction, AuditLog
 
 logger = logging.getLogger("BankDocumentParser")
 
@@ -42,28 +40,28 @@ def parse_document(db: Session, document_id: int) -> bool:
     if existing_rows_count > 0:
         doc.status = "FAILED"
         doc.error_message = "Document already has extracted rows; reparse blocked."
-        audit_payload = AuditLogCreate(
+        audit = AuditLog(
             entity_type="BankDocument",
             entity_id=doc.id,
             action="DOCUMENT_REPARSE_BLOCKED",
             actor="SYSTEM",
             metadata_json=json.dumps({"existing_rows": existing_rows_count})
         )
-        create_audit_log(db, audit_payload)
+        db.add(audit)
         db.commit()
         return False
 
     if doc.file_type == "XLS":
         doc.status = "UNSUPPORTED_FORMAT"
         doc.error_message = "Legacy .xls format is not supported yet."
-        audit_payload = AuditLogCreate(
+        audit = AuditLog(
             entity_type="BankDocument",
             entity_id=doc.id,
             action="DOCUMENT_UNSUPPORTED_FORMAT",
             actor="SYSTEM",
             metadata_json=json.dumps({"file_type": "XLS"})
         )
-        create_audit_log(db, audit_payload)
+        db.add(audit)
         db.commit()
         return False
 
@@ -98,14 +96,14 @@ def parse_document(db: Session, document_id: int) -> bool:
         doc.status = new_status
         
         # Log success before commit
-        audit_payload = AuditLogCreate(
+        audit = AuditLog(
             entity_type="BankDocument",
             entity_id=doc.id,
             action=f"DOCUMENT_{new_status}",
             actor="SYSTEM",
             metadata_json=json.dumps({"rows_extracted": len(extracted_rows)})
         )
-        create_audit_log(db, audit_payload)
+        db.add(audit)
         
         db.commit()
         return True
@@ -113,14 +111,14 @@ def parse_document(db: Session, document_id: int) -> bool:
     except NeedsPasswordException:
         logger.warning(f"Document {document_id} requires a password.")
         doc.status = "NEEDS_PASSWORD"
-        audit_payload = AuditLogCreate(
+        audit = AuditLog(
             entity_type="BankDocument",
             entity_id=doc.id,
             action="DOCUMENT_NEEDS_PASSWORD",
             actor="SYSTEM",
             metadata_json=json.dumps({})
         )
-        create_audit_log(db, audit_payload)
+        db.add(audit)
         db.commit()
         return False
         
@@ -128,13 +126,13 @@ def parse_document(db: Session, document_id: int) -> bool:
         logger.error(f"Failed to parse document {document_id}: {e}")
         doc.status = "FAILED"
         doc.error_message = str(e)
-        audit_payload = AuditLogCreate(
+        audit = AuditLog(
             entity_type="BankDocument",
             entity_id=doc.id,
             action="DOCUMENT_FAILED",
             actor="SYSTEM",
             metadata_json=json.dumps({"error": str(e)})
         )
-        create_audit_log(db, audit_payload)
+        db.add(audit)
         db.commit()
         return False
