@@ -49,6 +49,8 @@ ingestion_status = {
     "observer_started": False,
     "watcher_mode": "offline",
     "observer_error": None,
+    "share_retry_attempts": 0,
+    "last_retry_at": None,
     "pdf_files_found": 0,
     "files_processed": 0,
     "invoices_inserted": 0,
@@ -108,10 +110,15 @@ def check_share_health():
     try:
         files = os.listdir(WATCH_PATH)
         pdf_count = len([f for f in files if f.lower().endswith(".pdf")])
+        status_updates = {
+            "active_watch_path": WATCH_PATH,
+            "path_exists": True,
+            "pdf_files_found": pdf_count,
+        }
+        if str(ingestion_status.get("last_error") or "").startswith("Share Access Error:"):
+            status_updates["last_error"] = None
         update_status(
-            active_watch_path=WATCH_PATH,
-            path_exists=True,
-            pdf_files_found=pdf_count,
+            **status_updates,
         )
         return True
     except Exception as e:
@@ -541,7 +548,22 @@ def start_watcher():
     )
 
     observer = None
-    if check_share_health():
+
+    def stop_observer():
+        nonlocal observer
+        if observer:
+            try:
+                observer.stop()
+                observer.join(timeout=5)
+                logger.info(f"Observer stopped for {WATCH_PATH}")
+            except Exception as e:
+                logger.error(f"Observer stop failed on {WATCH_PATH}: {type(e).__name__}: {str(e)}")
+            finally:
+                observer = None
+                update_status(observer_started=False)
+
+    def start_observer():
+        nonlocal observer
         event_handler = InvoiceHandler()
         observer = Observer()
         try:
@@ -553,7 +575,8 @@ def start_watcher():
                 watcher_mode="observer",
                 observer_error=None,
             )
-            logger.info(f"Realtime watcher active on {WATCH_PATH}")
+            logger.info(f"Observer started for {WATCH_PATH}")
+            return True
         except Exception as e:
             reason = f"{type(e).__name__}: {str(e)}"
             logger.error(f"Realtime watcher observer failed on {WATCH_PATH}: {reason}")
@@ -565,23 +588,42 @@ def start_watcher():
                 last_error=f"Observer Error: {reason}; polling active",
             )
             observer = None
+            return False
+
+    if check_share_health():
+        start_observer()
     else:
         update_status(watcher_running=False, observer_started=False, watcher_mode="offline")
 
     try:
+        retry_attempt = 0
         while True:
             time.sleep(60) # Re-verify entire list of pdfs in the folder every minute
             if check_share_health():
+                if retry_attempt:
+                    logger.info(f"Invoice share recovered on retry attempt {retry_attempt}: {WATCH_PATH}")
+                    retry_attempt = 0
                 if ingestion_status["watcher_mode"] == "offline":
                     logger.info("Invoice share re-connected.")
                 if not ingestion_status["observer_started"]:
-                    update_status(watcher_running=True, watcher_mode="polling")
-                else:
+                    start_observer()
+                if ingestion_status["observer_started"]:
                     update_status(watcher_running=True, watcher_mode="observer")
+                else:
+                    update_status(watcher_running=True, watcher_mode="polling")
                 # Periodic scan to ensure nothing was missed by watcher
                 perform_scan()
             else:
-                update_status(watcher_running=False, observer_started=False, watcher_mode="offline")
+                retry_attempt += 1
+                logger.warning(f"Watcher share access retry attempt {retry_attempt} failed for {WATCH_PATH}: {ingestion_status.get('last_error')}")
+                stop_observer()
+                update_status(
+                    watcher_running=False,
+                    observer_started=False,
+                    watcher_mode="offline",
+                    share_retry_attempts=retry_attempt,
+                    last_retry_at=datetime.now().isoformat(),
+                )
     except Exception as e:
         logger.error(f"Watcher thread crashed: {e}")
         update_status(watcher_running=False, last_error=f"Watcher Crash: {str(e)}")
