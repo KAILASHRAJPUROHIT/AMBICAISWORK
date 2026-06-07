@@ -29,6 +29,15 @@ email_status = {
 
 status_lock = threading.Lock()
 
+def get_email_poll_interval_seconds():
+    raw_value = os.getenv("EMAIL_POLL_INTERVAL_SECONDS", "60")
+    try:
+        interval = int(raw_value)
+    except (TypeError, ValueError):
+        logger.warning(f"Invalid EMAIL_POLL_INTERVAL_SECONDS={raw_value!r}; defaulting to 60 seconds.")
+        interval = 60
+    return max(interval, 30)
+
 def update_email_status(**kwargs):
     with status_lock:
         for key, value in kwargs.items():
@@ -368,9 +377,10 @@ def process_emails():
         reconcile_unreconciled_alerts(db)
 
         db.commit()
+        interval_seconds = get_email_poll_interval_seconds()
         update_email_status(
             last_sync=datetime.now().isoformat(),
-            next_sync=(datetime.now().timestamp() + 300),
+            next_sync=(datetime.now().timestamp() + interval_seconds),
             events_found=events_found
         )
     except Exception as e:
@@ -382,10 +392,13 @@ def process_emails():
         update_email_status(is_running=False)
 
 def start_email_poller():
+    interval_seconds = get_email_poll_interval_seconds()
+    logger.info(f"Email poller interval configured: {interval_seconds} seconds.")
+
     def run():
         while True:
             process_emails()
-            time.sleep(300) 
+            time.sleep(interval_seconds)
             
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
