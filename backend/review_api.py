@@ -52,7 +52,14 @@ if not db_integrity_ok:
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event, hash_password
 from backend.lan_config import lan_health_check
 from backend.models import User, LoginLog, Bill, Payment, BankAlert, SMSAlert, SystemSetting, AuditLog
-from backend.pdf_ingestion import start_ingestion_thread, perform_scan, ingestion_status, WATCH_PATH
+from backend.pdf_ingestion import (
+    start_ingestion_thread,
+    perform_scan,
+    ingestion_status,
+    WATCH_PATH,
+    SOURCE_SHARE_PATH,
+    LOCAL_INBOX_PATH,
+)
 from backend.email_poller import start_email_poller, process_emails, email_status
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
 from backend.reconciliation.logic import calculate_payment_proof_status
@@ -188,6 +195,8 @@ async def get_startup_debug():
         "env_file_found": env_found,
         "env_loaded": os.getenv("EMAIL_USERNAME") is not None,
         "invoice_path": WATCH_PATH,
+        "invoice_source_share_path": SOURCE_SHARE_PATH,
+        "local_invoice_inbox_path": LOCAL_INBOX_PATH,
         "bills_table_exists": "bills" in tables,
         "bank_alerts_table_exists": "bank_alerts" in tables,
         "sms_alerts_table_exists": "sms_alerts" in tables,
@@ -208,16 +217,17 @@ async def get_runtime_debug(db: Session = Depends(get_db)):
     data["env_loaded"] = os.getenv("EMAIL_USERNAME") is not None
     
     try:
-        data["invoice_share_path"] = WATCH_PATH
+        data["invoice_share_path"] = SOURCE_SHARE_PATH
+        data["local_invoice_inbox_path"] = LOCAL_INBOX_PATH
         exists = os.path.exists(WATCH_PATH)
-        data["invoice_share_reachable"] = exists
+        data["invoice_watcher_path_reachable"] = exists
         if exists:
-            data["pdf_count_in_share"] = len([f for f in os.listdir(WATCH_PATH) if f.lower().endswith(".pdf")])
+            data["pdf_count_in_local_inbox"] = len([f for f in os.listdir(WATCH_PATH) if f.lower().endswith(".pdf")])
         else:
-            data["pdf_count_in_share"] = 0
+            data["pdf_count_in_local_inbox"] = 0
     except Exception as e:
-        data["invoice_share_reachable"] = False
-        data["pdf_count_in_share"] = f"ERROR: {str(e)}"
+        data["invoice_watcher_path_reachable"] = False
+        data["pdf_count_in_local_inbox"] = f"ERROR: {str(e)}"
 
     now = datetime.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -326,7 +336,17 @@ async def get_share_status():
         try: pdf_count = len([f for f in os.listdir(WATCH_PATH) if f.lower().endswith(".pdf")])
         except: pass
             
-    return {"online": online, "path": WATCH_PATH, "label": "Invoice PDF Share (PC2)", "status_color": "Green" if online else "Red", "pdf_count": pdf_count}
+    return {
+        "online": online,
+        "path": WATCH_PATH,
+        "source_share_path": SOURCE_SHARE_PATH,
+        "local_inbox_path": LOCAL_INBOX_PATH,
+        "label": "Local Invoice Inbox",
+        "status_color": "Green" if online else "Red",
+        "pdf_count": pdf_count,
+        "source_share_available": ingestion_status.get("source_share_available", False),
+        "last_sync_error": ingestion_status.get("last_sync_error"),
+    }
 
 @app.get("/api/invoices/live-feed")
 async def get_live_feed(days: int = 7, per_day: int = 20, db: Session = Depends(get_db)):
