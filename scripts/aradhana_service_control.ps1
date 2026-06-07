@@ -6,13 +6,21 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$PythonExe = "py"
-$PythonArgsPrefix = @("-3.11", "-m", "uvicorn", "backend.review_api:app", "--host", "0.0.0.0")
+$PythonExe = "python"
+$PythonArgsPrefix = @("-m", "uvicorn", "backend.review_api:app", "--host", "0.0.0.0")
 
 function Ensure-Directory($Path) {
     if (-not (Test-Path $Path)) {
         New-Item -ItemType Directory -Path $Path | Out-Null
     }
+}
+
+function Write-StartupLog($LogDirectory, $Message) {
+    Ensure-Directory $LogDirectory
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    $line = "[$timestamp] $Message"
+    Add-Content -Encoding UTF8 -Path (Join-Path $LogDirectory "startup-verification.log") -Value $line
+    Write-Host $line
 }
 
 function Get-ListenerPid($Port) {
@@ -21,6 +29,14 @@ function Get-ListenerPid($Port) {
     if ($listener) {
         return [int]$listener.OwningProcess
     }
+
+    $netstatLine = netstat -ano -p tcp |
+        Select-String -Pattern "^\s*TCP\s+\S+:$Port\s+\S+\s+LISTENING\s+(\d+)\s*$" |
+        Select-Object -First 1
+    if ($netstatLine -and $netstatLine.Matches[0].Groups.Count -gt 1) {
+        return [int]$netstatLine.Matches[0].Groups[1].Value
+    }
+
     return $null
 }
 
@@ -138,29 +154,49 @@ function Test-ManagedListener($Port, $PidPath, $IsBackend) {
     throw "Port $Port is already owned by unmanaged and unhealthy/unknown PID $listenerPid. Aborting."
 }
 
-function Wait-ForListener($Port, $TimeoutSeconds) {
+function Wait-ForListener($Port, $TimeoutSeconds, $LogDirectory, $Name, $Process = $null) {
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $nextLogAt = Get-Date
     while ((Get-Date) -lt $deadline) {
         $foundPid = Get-ListenerPid $Port
         if ($foundPid) {
+            Write-StartupLog $LogDirectory "$Name listener detected on port $Port (PID $foundPid)."
             return $foundPid
+        }
+        if ($Process -and $Process.HasExited) {
+            Write-StartupLog $LogDirectory "$Name wrapper process exited before port $Port listened. ExitCode=$($Process.ExitCode)."
+            return $null
+        }
+        if ((Get-Date) -ge $nextLogAt) {
+            Write-StartupLog $LogDirectory "$Name waiting for port $Port to listen..."
+            $nextLogAt = (Get-Date).AddSeconds(5)
         }
         Start-Sleep -Milliseconds 500
     }
+    Write-StartupLog $LogDirectory "$Name timed out waiting for port $Port after $TimeoutSeconds seconds."
     return $null
+}
+
+function Get-LogTail($Path) {
+    if (Test-Path $Path) {
+        return ((Get-Content $Path -Tail 20 -ErrorAction SilentlyContinue) -join "`n")
+    }
+    return ""
 }
 
 function Start-ManagedProcess($Name, $Port, $PidPath, $WorkingDirectory, $Command, $LogDirectory, $IsBackend) {
     $alreadyRunning = Test-ManagedListener $Port $PidPath $IsBackend
     if ($alreadyRunning) {
-        Write-Host "$Name already running on port $Port. No duplicate started."
+        Write-StartupLog $LogDirectory "$Name already running on port $Port. No duplicate started."
         return
     }
 
     $outLog = Join-Path $LogDirectory "$Name.out.log"
     $errLog = Join-Path $LogDirectory "$Name.err.log"
 
-    Write-Host "Starting $Name on port $Port..."
+    Write-StartupLog $LogDirectory "Starting $Name on port $Port."
+    Write-StartupLog $LogDirectory "$Name working directory: $WorkingDirectory"
+    Write-StartupLog $LogDirectory "$Name command: $Command"
     $process = Start-Process -FilePath "powershell.exe" `
         -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $Command) `
         -WorkingDirectory $WorkingDirectory `
@@ -169,16 +205,52 @@ function Start-ManagedProcess($Name, $Port, $PidPath, $WorkingDirectory, $Comman
         -RedirectStandardError $errLog `
         -PassThru
 
-    $listenerPid = Wait-ForListener $Port 20
+    Write-StartupLog $LogDirectory "$Name wrapper PID: $($process.Id)."
+    $timeoutSeconds = 60
+    if (-not $IsBackend) {
+        $timeoutSeconds = 90
+    }
+    $listenerPid = Wait-ForListener $Port $timeoutSeconds $LogDirectory $Name $process
     if (-not $listenerPid) {
         if (-not $process.HasExited) {
             Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
         }
+        $errTail = Get-LogTail $errLog
+        $outTail = Get-LogTail $outLog
+        Write-StartupLog $LogDirectory "$Name stdout tail:`n$outTail"
+        Write-StartupLog $LogDirectory "$Name stderr tail:`n$errTail"
         throw "$Name did not start listening on port $Port. Check $errLog."
     }
 
-    Set-Content -Encoding ASCII -Path $PidPath -Value $listenerPid
-    Write-Host "$Name running on port $Port (PID $listenerPid). Logs: $LogDirectory"
+    Start-Sleep -Seconds 2
+    $sustainedPid = Get-ListenerPid $Port
+    if (-not $sustainedPid) {
+        $errTail = Get-LogTail $errLog
+        $outTail = Get-LogTail $outLog
+        Write-StartupLog $LogDirectory "$Name listener disappeared after startup detection."
+        Write-StartupLog $LogDirectory "$Name stdout tail:`n$outTail"
+        Write-StartupLog $LogDirectory "$Name stderr tail:`n$errTail"
+        throw "$Name started but did not remain listening on port $Port."
+    }
+
+    Set-Content -Encoding ASCII -Path $PidPath -Value $sustainedPid
+    Write-StartupLog $LogDirectory "$Name running on port $Port (PID $sustainedPid). Logs: $LogDirectory"
+}
+
+function Assert-EnvironmentListening($EnvironmentName, $BackendPort, $FrontendPort, $LogDirectory) {
+    $backendPid = Get-ListenerPid $BackendPort
+    $frontendPid = Get-ListenerPid $FrontendPort
+
+    Write-StartupLog $LogDirectory "$EnvironmentName final verification: backend port $BackendPort PID=$backendPid; frontend port $FrontendPort PID=$frontendPid."
+
+    if (-not $backendPid) {
+        throw "$EnvironmentName backend is not listening on port $BackendPort."
+    }
+    if (-not $frontendPid) {
+        throw "$EnvironmentName frontend is not listening on port $FrontendPort."
+    }
+
+    Write-StartupLog $LogDirectory "$EnvironmentName startup verified: ports $BackendPort and $FrontendPort are listening."
 }
 
 function Stop-ManagedProcess($Name, $Port, $PidPath) {
@@ -279,6 +351,7 @@ function Start-Environment($EnvironmentName, $BackendPort, $FrontendPort, $LogSu
 
     Start-ManagedProcess "$EnvironmentName-backend" $BackendPort $backendPid $Root $backendCommand $logDirectory $true
     Start-ManagedProcess "$EnvironmentName-frontend" $FrontendPort $frontendPid $frontendRoot $frontendCommand $logDirectory $false
+    Assert-EnvironmentListening $EnvironmentName $BackendPort $FrontendPort $logDirectory
 
     if ($EnvironmentName -eq "production") {
         Write-Host "Production client URL: $(Get-LanUrl)"
