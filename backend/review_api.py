@@ -65,6 +65,7 @@ from backend.sms_poller import start_sms_poller, process_sms, sms_status
 from backend.reconciliation.logic import calculate_payment_proof_status
 from backend.api_routes import router as api_router
 from backend.invoice_lifecycle import start_lifecycle_automation
+from backend.payment_signature_scheduler import start_payment_signature_scheduler
 
 # Initialize FastAPI app
 app = FastAPI(title="Aradhana Review API")
@@ -1776,6 +1777,7 @@ async def startup_event():
     start_email_poller()
     start_sms_poller()
     start_lifecycle_automation()
+    start_payment_signature_scheduler()
 
 if __name__ == "__main__":
     import uvicorn
