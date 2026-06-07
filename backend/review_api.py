@@ -1733,6 +1733,7 @@ async def startup_event():
     if not integrity: logger.critical(f"SHUTDOWN: Database integrity failure: {err}")
     logger.info("Starting Backend Services...")
     start_ingestion_thread()
+    logger.info(f"Watcher startup status: {ingestion_status}")
     start_email_poller()
     start_sms_poller()
     start_lifecycle_automation()

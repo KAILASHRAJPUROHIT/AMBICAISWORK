@@ -34,7 +34,11 @@ interface DashboardStats {
 interface IngestionStatus {
   watcher_running: boolean;
   watch_path: string;
+  active_watch_path?: string;
   path_exists: boolean;
+  observer_started?: boolean;
+  watcher_mode?: string;
+  observer_error?: string | null;
   pdf_files_found: number;
   files_processed: number;
   invoices_inserted: number;
@@ -354,6 +358,13 @@ const DashboardPage: React.FC = () => {
         dotClass: 'bg-gray-400',
       };
     }
+    if (ingestionStatus.watcher_running) {
+      return {
+        label: ingestionStatus.watcher_mode === 'polling' ? 'Online (Polling)' : 'Online',
+        cardClass: 'bg-green-50 border-green-200',
+        dotClass: 'bg-green-500 animate-pulse',
+      };
+    }
     if (!ingestionStatus.path_exists) {
       return {
         label: 'Offline',
@@ -361,17 +372,10 @@ const DashboardPage: React.FC = () => {
         dotClass: 'bg-red-500',
       };
     }
-    if (!ingestionStatus.watcher_running) {
-      return {
-        label: 'Share Reachable, Watcher Paused',
-        cardClass: 'bg-yellow-50 border-yellow-200',
-        dotClass: 'bg-yellow-500',
-      };
-    }
     return {
-      label: 'Online',
-      cardClass: 'bg-green-50 border-green-200',
-      dotClass: 'bg-green-500 animate-pulse',
+      label: 'Share Reachable, Watcher Paused',
+      cardClass: 'bg-yellow-50 border-yellow-200',
+      dotClass: 'bg-yellow-500',
     };
   })();
 
@@ -432,6 +436,9 @@ const DashboardPage: React.FC = () => {
             </div>
             {ingestionStatus?.last_error && (
               <div className="mt-2 text-[9px] font-bold text-red-600 truncate">Error: {ingestionStatus.last_error}</div>
+            )}
+            {ingestionStatus?.observer_error && (
+              <div className="mt-1 text-[9px] font-bold text-yellow-700 truncate">Observer: {ingestionStatus.observer_error}</div>
             )}
          </div>
 

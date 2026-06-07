@@ -44,7 +44,11 @@ logger.info(f"OCR Acceleration Setting: {OCR_ACCELERATION}")
 ingestion_status = {
     "watcher_running": False,
     "watch_path": WATCH_PATH,
+    "active_watch_path": WATCH_PATH,
     "path_exists": False,
+    "observer_started": False,
+    "watcher_mode": "offline",
+    "observer_error": None,
     "pdf_files_found": 0,
     "files_processed": 0,
     "invoices_inserted": 0,
@@ -101,12 +105,24 @@ def get_file_hash(file_path):
         return None
 
 def check_share_health():
-    exists = os.path.exists(WATCH_PATH)
-    update_status(path_exists=exists)
-    if not exists:
-        logger.error(f"Invoice Share Offline: {WATCH_PATH} is unavailable.")
+    try:
+        files = os.listdir(WATCH_PATH)
+        pdf_count = len([f for f in files if f.lower().endswith(".pdf")])
+        update_status(
+            active_watch_path=WATCH_PATH,
+            path_exists=True,
+            pdf_files_found=pdf_count,
+        )
+        return True
+    except Exception as e:
+        reason = f"{type(e).__name__}: {str(e)}"
+        update_status(
+            active_watch_path=WATCH_PATH,
+            path_exists=False,
+            last_error=f"Share Access Error: {reason}",
+        )
+        logger.error(f"Invoice Share Offline: {WATCH_PATH} is unavailable. {reason}")
         return False
-    return True
 
 def parse_pdf(file_path):
     try:
@@ -515,28 +531,57 @@ class InvoiceHandler(FileSystemEventHandler):
             process_invoice(event.src_path)
 
 def start_watcher():
-    if not check_share_health():
-        update_status(watcher_running=False)
-        # return # Let it continue to poll health
+    logger.info(f"start_watcher invoked. WATCH_PATH={WATCH_PATH!r}")
+    update_status(
+        active_watch_path=WATCH_PATH,
+        watcher_running=False,
+        observer_started=False,
+        watcher_mode="starting",
+        observer_error=None,
+    )
 
-    event_handler = InvoiceHandler()
-    observer = Observer()
-    observer.schedule(event_handler, WATCH_PATH, recursive=False)
-    observer.start()
-    update_status(watcher_running=True)
-    logger.info(f"Realtime watcher/poller active on {WATCH_PATH}")
-    
+    observer = None
+    if check_share_health():
+        event_handler = InvoiceHandler()
+        observer = Observer()
+        try:
+            observer.schedule(event_handler, WATCH_PATH, recursive=False)
+            observer.start()
+            update_status(
+                watcher_running=True,
+                observer_started=True,
+                watcher_mode="observer",
+                observer_error=None,
+            )
+            logger.info(f"Realtime watcher active on {WATCH_PATH}")
+        except Exception as e:
+            reason = f"{type(e).__name__}: {str(e)}"
+            logger.error(f"Realtime watcher observer failed on {WATCH_PATH}: {reason}")
+            update_status(
+                watcher_running=True,
+                observer_started=False,
+                watcher_mode="polling",
+                observer_error=reason,
+                last_error=f"Observer Error: {reason}; polling active",
+            )
+            observer = None
+    else:
+        update_status(watcher_running=False, observer_started=False, watcher_mode="offline")
+
     try:
         while True:
             time.sleep(60) # Re-verify entire list of pdfs in the folder every minute
-            if not os.path.exists(WATCH_PATH):
-                update_status(path_exists=False, watcher_running=False)
-            else:
-                if not ingestion_status["path_exists"]:
+            if check_share_health():
+                if ingestion_status["watcher_mode"] == "offline":
                     logger.info("Invoice share re-connected.")
-                update_status(path_exists=True, watcher_running=True)
+                if not ingestion_status["observer_started"]:
+                    update_status(watcher_running=True, watcher_mode="polling")
+                else:
+                    update_status(watcher_running=True, watcher_mode="observer")
                 # Periodic scan to ensure nothing was missed by watcher
-                perform_scan() 
+                perform_scan()
+            else:
+                update_status(watcher_running=False, observer_started=False, watcher_mode="offline")
     except Exception as e:
         logger.error(f"Watcher thread crashed: {e}")
         update_status(watcher_running=False, last_error=f"Watcher Crash: {str(e)}")
