@@ -106,7 +106,7 @@ function App() {
                         Reconciliation
                       </NavLink>
                     )}
-                    {['admin', 'owner'].includes(role) && (
+                    {['admin', 'owner', 'accountant'].includes(role) && (
                       <NavLink to="/escalations" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
                         Escalations
                       </NavLink>
@@ -158,7 +158,7 @@ function App() {
                         <ProtectedRoute roles={['admin', 'accountant', 'owner']}><ReconciliationQueuePage /></ProtectedRoute>
                     } />
                     <Route path="/escalations" element={
-                        <ProtectedRoute roles={['admin', 'owner']}><EscalationsPage /></ProtectedRoute>
+                        <ProtectedRoute roles={['admin', 'owner', 'accountant']}><EscalationsPage /></ProtectedRoute>
                     } />
                     <Route path="/reports" element={
                         <ProtectedRoute roles={['admin', 'owner', 'accountant']}><ReportsPage /></ProtectedRoute>

@@ -1,80 +1,147 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { getAccountantVerificationQueue } from '../api/client';
+
+interface AccountantQueueItem {
+  id: number;
+  invoice_no: string;
+  customer_name?: string;
+  amount?: number;
+  payment_mode?: string;
+  proof_status?: string;
+  payment_status?: string;
+  confidence_level?: string;
+  due_at?: string;
+  remaining_seconds?: number;
+  reason?: string;
+}
+
+const formatCurrency = (value?: number) => {
+  if (value === undefined || value === null) return '₹0';
+  return `₹${value.toLocaleString('en-IN')}`;
+};
+
+const formatDueAt = (value?: string) => {
+  if (!value) return 'Not Recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not Recorded';
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const formatRemaining = (seconds?: number) => {
+  if (seconds === undefined || seconds === null) return 'Not Recorded';
+  const overdue = seconds < 0;
+  const absolute = Math.abs(seconds);
+  const hours = Math.floor(absolute / 3600);
+  const minutes = Math.floor((absolute % 3600) / 60);
+  const label = `${hours}h ${minutes}m`;
+  return overdue ? `${label} overdue` : `${label} left`;
+};
 
 const EscalationsPage: React.FC = () => {
-  const [escalations, setEscalations] = useState<any[]>([]);
+  const [items, setItems] = useState<AccountantQueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/prime/manual-report-import/latest')
-      .then(res => {
-        if (!res.ok) throw new Error('API Unavailable: Could not fetch escalation records.');
-        return res.json();
+    let mounted = true;
+    getAccountantVerificationQueue()
+      .then((data) => {
+        if (!mounted) return;
+        setItems(Array.isArray(data) ? data : []);
+        setError(null);
       })
-      .then(data => {
-        const records = data.records || [];
-        const filtered = records.filter((r: any) => r.validation_status === 'NEEDS_REVIEW');
-        setEscalations(filtered);
+      .catch((err) => {
+        if (!mounted) return;
+        console.error('Accountant verification queue fetch error:', err);
+        setError(err.message || 'Unable to load accountant verification queue.');
       })
-      .catch(err => {
-        console.error("Escalations fetch error:", err);
-        setError(err.message);
-      })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  if (loading) return <div className="p-12 text-center text-gray-500 font-bold text-xl uppercase tracking-widest animate-pulse">Scanning for exceptions...</div>;
+  if (loading) {
+    return (
+      <div className="p-12 text-center text-gray-500 font-bold text-xl uppercase tracking-widest animate-pulse">
+        Loading accountant verification queue...
+      </div>
+    );
+  }
 
-  if (error) return (
-    <div className="m-8 p-12 bg-red-50 border-2 border-red-200 rounded-3xl text-center">
-      <h2 className="text-2xl font-black text-red-600 mb-2">Escalation Engine Offline</h2>
-      <p className="text-red-500 font-bold">{error}</p>
-    </div>
-  );
+  if (error) {
+    return (
+      <div className="m-8 p-10 bg-red-50 border border-red-200 rounded-2xl">
+        <h2 className="text-2xl font-black text-red-600 mb-2">Unable to load accountant verification queue.</h2>
+        <p className="text-red-500 font-bold">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen font-sans">
-      <header className="mb-12">
+      <header className="mb-8">
         <h1 className="text-4xl font-black text-red-600 tracking-tight">Accountant Escalations</h1>
-        <p className="mt-2 text-lg text-gray-600">Critical mismatches and missing fields identified from Prime reports.</p>
+        <p className="mt-2 text-lg text-gray-600">Payments requiring accountant verification before closure.</p>
       </header>
-      
-      <div className="max-w-5xl space-y-6">
-        {escalations.length === 0 ? (
-          <div className="bg-white p-16 text-center rounded-3xl border border-gray-100 shadow-sm">
-            <p className="text-green-600 text-2xl font-black mb-2">Clean Slate</p>
-            <p className="text-gray-400 font-medium">All imported records are currently validated. No escalations found.</p>
+
+      {items.length === 0 ? (
+        <div className="bg-white p-12 text-center rounded-2xl border border-gray-100 shadow-sm">
+          <p className="text-green-600 text-2xl font-black mb-2">No accountant verification items.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+            <p className="text-xs font-black uppercase tracking-widest text-gray-500">Open Queue</p>
+            <p className="text-sm font-black text-gray-900">{items.length} items</p>
           </div>
-        ) : (
-          escalations.map((item, idx) => (
-            <div key={idx} className="bg-white p-8 rounded-2xl shadow-sm border-l-[12px] border-red-500 flex justify-between items-center group hover:shadow-md transition-all duration-300">
-              <div>
-                <div className="flex items-center gap-4 mb-2">
-                  <h3 className="text-2xl font-black text-gray-900 font-mono tracking-tighter">
-                     {item.invoice_no || 'MANUAL_MATCH_REQUIRED'}
-                  </h3>
-                  <span className="bg-red-50 text-red-600 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border border-red-100">
-                    {item.unresolved_fields?.[0] || 'CRITICAL_ERROR'}
-                  </span>
-                </div>
-                <p className="text-gray-500 font-bold uppercase text-[11px] tracking-widest mb-4">{item.customer_name}</p>
-                
-                <div className="bg-gray-50 px-4 py-3 rounded-xl border border-gray-100 max-w-xl">
-                   <p className="text-xs text-gray-600 leading-relaxed">
-                     <strong>Alert:</strong> Total Sale <b>₹{item.sale_amount?.toLocaleString()}</b> does not match the sum of extracted payment rows. 
-                     Audit trail indicates missing or conflicting settlement data in Prime.
-                   </p>
-                </div>
-              </div>
-              
-              <div className="text-right">
-                 <p className="text-[10px] font-black text-gray-400 uppercase mb-1">Mismatch Amount</p>
-                 <p className="text-3xl font-black text-red-600">₹{(item.sale_amount || 0).toLocaleString()}</p>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-100 text-gray-500 uppercase text-[11px] tracking-widest">
+                <tr>
+                  <th className="text-left p-4">Invoice</th>
+                  <th className="text-left p-4">Customer</th>
+                  <th className="text-right p-4">Amount</th>
+                  <th className="text-left p-4">Mode</th>
+                  <th className="text-left p-4">Proof</th>
+                  <th className="text-left p-4">Payment</th>
+                  <th className="text-left p-4">Confidence</th>
+                  <th className="text-left p-4">Due</th>
+                  <th className="text-left p-4">Timer</th>
+                  <th className="text-left p-4">Reason</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {items.map((item) => (
+                  <tr key={item.id} className="align-top hover:bg-gray-50">
+                    <td className="p-4 font-black font-mono text-gray-900">{item.invoice_no}</td>
+                    <td className="p-4 font-bold text-gray-700">{item.customer_name || 'Not Recorded'}</td>
+                    <td className="p-4 text-right font-black text-gray-900">{formatCurrency(item.amount)}</td>
+                    <td className="p-4 font-bold text-gray-700">{item.payment_mode || 'Not Recorded'}</td>
+                    <td className="p-4">
+                      <span className="px-2 py-1 rounded bg-amber-50 text-amber-700 text-[11px] font-black uppercase">
+                        {item.proof_status || 'UNKNOWN'}
+                      </span>
+                    </td>
+                    <td className="p-4 font-black text-gray-800">{item.payment_status || 'UNKNOWN'}</td>
+                    <td className="p-4 font-black text-gray-800">{item.confidence_level || 'UNKNOWN'}</td>
+                    <td className="p-4 font-bold text-gray-700">{formatDueAt(item.due_at)}</td>
+                    <td className="p-4 font-black text-gray-800">{formatRemaining(item.remaining_seconds)}</td>
+                    <td className="p-4 text-gray-600 max-w-sm">{item.reason || 'Review required.'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

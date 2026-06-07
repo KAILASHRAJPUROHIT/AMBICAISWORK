@@ -165,6 +165,13 @@ export async function getOpenEscalations() {
   return handleResponse(response, 'Failed to fetch open escalations');
 }
 
+export async function getAccountantVerificationQueue() {
+  const response = await fetch(`${BASE_URL}/api/escalations/accountant-verification`, {
+    headers: getHeaders()
+  });
+  return handleResponse(response, 'Failed to fetch accountant verification queue');
+}
+
 export async function getOwnerReport() {
   let response = await fetch(`${BASE_URL}/api/reports/owner`, {
     headers: getHeaders()
