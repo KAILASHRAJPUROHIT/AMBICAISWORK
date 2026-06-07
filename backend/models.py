@@ -232,6 +232,29 @@ class BankDocument(Base):
     sender = Column(String, nullable=True)
     subject = Column(String, nullable=True)
     received_at = Column(DateTime, nullable=True)
-    status = Column(String, default="SAVED") # SAVED, DUPLICATE, FAILED
+    status = Column(String, default="SAVED") # SAVED, TEXT_EXTRACTED, PARSED, NEEDS_PASSWORD, UNSUPPORTED_FORMAT, DUPLICATE, FAILED
     error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+class BankDocumentTransaction(Base):
+    __tablename__ = "bank_document_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("bank_documents.id"), nullable=False)
+    
+    # Extracted Data (Nullable for raw text lines)
+    transaction_date = Column(DateTime, nullable=True)
+    description = Column(Text, nullable=True)
+    amount = Column(Numeric(12, 2), nullable=True)
+    dr_cr = Column(String, nullable=True) # "CREDIT", "DEBIT"
+    balance = Column(Numeric(12, 2), nullable=True)
+    reference_number = Column(String, nullable=True)
+    
+    # Auditing / Metadata
+    line_number = Column(Integer, nullable=True)
+    raw_text = Column(Text, nullable=True) # The raw extracted line or row JSON
+    
+    status = Column(String, default="EXTRACTED") # EXTRACTED, ERROR
+    error_message = Column(Text, nullable=True)
+    
     created_at = Column(DateTime, server_default=func.now())
