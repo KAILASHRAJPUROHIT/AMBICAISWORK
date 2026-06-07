@@ -126,6 +126,34 @@ class Payment(Base):
     status = Column(String, default="Yellow")
     created_at = Column(DateTime, server_default=func.now())
 
+class PaymentConfirmationSignature(Base):
+    __tablename__ = "payment_confirmation_signatures"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bill_id = Column(Integer, ForeignKey("bills.id"), nullable=False, unique=True, index=True)
+    invoice_no = Column(String, nullable=False, index=True)
+    signature_version = Column(String, nullable=False, default="PCS_V1")
+    signature_hash = Column(String, nullable=False, index=True)
+    invoice_amount = Column(Numeric(12, 2), nullable=False)
+    matched_amount = Column(Numeric(12, 2), nullable=False)
+    difference_amount = Column(Numeric(12, 2), nullable=False)
+    payment_mode = Column(String, nullable=True)
+    payment_status = Column(String, nullable=False)
+    confidence_level = Column(String, nullable=False)
+    confidence_score = Column(Integer, nullable=False, default=0)
+    confidence_reason = Column(Text, nullable=False)
+    proof_status = Column(String, nullable=False)
+    proof_source = Column(String, nullable=True)
+    proof_id = Column(Integer, nullable=True)
+    proof_reference = Column(String, nullable=True, index=True)
+    proof_timestamp = Column(DateTime, nullable=True)
+    proof_amount = Column(Numeric(12, 2), nullable=True)
+    requires_accountant_review = Column(Boolean, default=True)
+    requires_owner_review = Column(Boolean, default=False)
+    verification_state = Column(String, nullable=False)
+    generated_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
 class BankAlert(Base):
     __tablename__ = "bank_alerts"
 
