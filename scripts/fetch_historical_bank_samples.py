@@ -1,6 +1,7 @@
 import os
 import sys
 import email
+import argparse
 from datetime import datetime
 
 # Add project root to sys.path
@@ -19,10 +20,21 @@ from backend.models import BankDocument
 from email.utils import parsedate_to_datetime
 
 def run_historical_fetch():
+    parser = argparse.ArgumentParser(description="Fetch historical bank samples securely without parsing or alerting.")
+    parser.add_argument('--limit', type=int, default=10, help="Emails to fetch per label (max 100)")
+    parser.add_argument('--label', action='append', help="Label to search (can repeat). Defaults to INBOX if none provided.")
+    parser.add_argument('--subject-keyword', type=str, help="Optional case-insensitive keyword filter for email subject")
+    args = parser.parse_args()
+
+    limit = min(args.limit, 100)
+    labels = args.label if args.label else ["INBOX"]
+    keyword = args.subject_keyword.lower() if args.subject_keyword else None
+
     print(f"[{datetime.now()}] Starting Historical Bank Sample Fetch...")
-    
-    # Optional label from command line, default to INBOX
-    labels = sys.argv[1:] if len(sys.argv) > 1 else ["INBOX"]
+    print(f"Labels to search: {labels}")
+    print(f"Limit per label: {limit}")
+    if keyword:
+        print(f"Subject keyword filter: '{args.subject_keyword}'")
     
     db = SessionLocal()
     try:
@@ -32,6 +44,7 @@ def run_historical_fetch():
         
         stats = {
             "emails_scanned": 0,
+            "emails_matched_keyword": 0,
             "attachments_found": 0,
             "documents_saved_estimated": 0,
             "duplicates_or_existing_estimated": 0,
@@ -42,8 +55,8 @@ def run_historical_fetch():
         docs_before = db.query(BankDocument).count()
         
         for label in labels:
-            print(f"Fetching last 10 emails from label: '{label}' (Read-Only)...")
-            raw_msgs = fetch_labeled_emails(mail, label, limit=10)
+            print(f"Fetching last {limit} emails from label: '{label}' (Read-Only)...")
+            raw_msgs = fetch_labeled_emails(mail, label, limit=limit)
             
             for raw_msg in raw_msgs:
                 stats["emails_scanned"] += 1
@@ -54,6 +67,13 @@ def run_historical_fetch():
                     sender = decode_mime_header(msg.get('From', ''))
                     subject = decode_mime_header(msg.get('Subject', ''))
                     date_str = msg.get('Date', '')
+                    
+                    # SUBJECT KEYWORD FILTER
+                    if keyword and keyword not in subject.lower():
+                        continue
+                        
+                    if keyword:
+                        stats["emails_matched_keyword"] += 1
                     
                     try:
                         received_at = parsedate_to_datetime(date_str)
