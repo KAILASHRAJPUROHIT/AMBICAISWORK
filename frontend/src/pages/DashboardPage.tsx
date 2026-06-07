@@ -40,6 +40,12 @@ interface IngestionStatus {
   watcher_mode?: string;
   observer_error?: string | null;
   pdf_files_found: number;
+  processed_count?: number;
+  failed_count?: number;
+  duplicate_count?: number;
+  last_scan_time?: string | null;
+  last_status_message?: string | null;
+  duplicate_warning?: string | null;
   files_processed: number;
   invoices_inserted: number;
   skipped_duplicates: number;
@@ -429,11 +435,18 @@ const DashboardPage: React.FC = () => {
                <span className="mx-2 text-gray-300 text-xs">|</span>
                <span className="text-xs font-medium text-gray-600">{ingestionStatus?.pdf_files_found || 0} PDFs In Share</span>
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] font-bold uppercase tracking-tighter text-gray-500">
-               <div>Last Scan: <span className="text-gray-800">{ingestionStatus?.last_processed_time || 'Never'}</span></div>
-               <div>Processed: <span className="text-gray-800">{num(ingestionStatus?.files_processed)}</span></div>
-               <div>Failed: <span className={ingestionStatus?.failed_files ? 'text-red-600' : 'text-gray-800'}>{num(ingestionStatus?.failed_files)}</span></div>
+            <div className="mt-3 grid grid-cols-4 gap-2 text-[9px] font-bold uppercase tracking-tighter text-gray-500">
+               <div>Last Scan: <span className="text-gray-800">{ingestionStatus?.last_scan_time || ingestionStatus?.last_processed_time || 'Never'}</span></div>
+               <div>Processed: <span className="text-gray-800">{num(ingestionStatus?.processed_count ?? ingestionStatus?.files_processed)}</span></div>
+               <div>Duplicates: <span className="text-gray-800">{num(ingestionStatus?.duplicate_count ?? ingestionStatus?.skipped_duplicates)}</span></div>
+               <div>Failed: <span className={(ingestionStatus?.failed_count ?? ingestionStatus?.failed_files) ? 'text-red-600' : 'text-gray-800'}>{num(ingestionStatus?.failed_count ?? ingestionStatus?.failed_files)}</span></div>
             </div>
+            {ingestionStatus?.last_status_message && (
+              <div className="mt-2 text-[9px] font-bold text-gray-700 truncate">Status: {ingestionStatus.last_status_message}</div>
+            )}
+            {ingestionStatus?.duplicate_warning && (
+              <div className="mt-1 text-[9px] font-bold text-yellow-700 truncate">Warning: {ingestionStatus.duplicate_warning}</div>
+            )}
             {ingestionStatus?.last_error && (
               <div className="mt-2 text-[9px] font-bold text-red-600 truncate">Error: {ingestionStatus.last_error}</div>
             )}

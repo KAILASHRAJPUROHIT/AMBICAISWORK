@@ -74,6 +74,12 @@ ingestion_status = {
     "watcher_mode": "offline",
     "observer_error": None,
     "pdf_files_found": 0,
+    "processed_count": 0,
+    "failed_count": 0,
+    "duplicate_count": 0,
+    "last_scan_time": None,
+    "last_status_message": None,
+    "duplicate_warning": None,
     "files_processed": 0,
     "invoices_inserted": 0,
     "skipped_duplicates": 0,
@@ -103,6 +109,28 @@ def increment_status(key, amount=1):
         if key in ingestion_status:
             ingestion_status[key] += amount
 
+def touch_scan_time(message=None):
+    timestamp = datetime.now().isoformat()
+    updates = {
+        "last_scan_time": timestamp,
+        "last_processed_time": timestamp,
+    }
+    if message:
+        updates["last_status_message"] = message
+    update_status(**updates)
+
+def increment_processed_count(amount=1):
+    increment_status("processed_count", amount)
+    increment_status("files_processed", amount)
+
+def increment_failed_count(amount=1):
+    increment_status("failed_count", amount)
+    increment_status("failed_files", amount)
+
+def increment_duplicate_count(amount=1):
+    increment_status("duplicate_count", amount)
+    increment_status("skipped_duplicates", amount)
+
 def count_local_pdfs():
     try:
         files = os.listdir(WATCH_PATH)
@@ -122,12 +150,23 @@ def ensure_local_invoice_dirs():
 def record_duplicate_result(result):
     if not result:
         return
+    touch_scan_time("Skipped Duplicate")
     if result.get("status") == "permission_failed":
         increment_status("duplicate_move_failed_permission")
-        update_status(last_error=DUPLICATE_PERMISSION_MESSAGE)
+        update_status(
+            duplicate_warning=DUPLICATE_PERMISSION_MESSAGE,
+            last_status_message="Skipped Duplicate",
+            last_error=None,
+        )
     elif result.get("status") == "ignored_permission":
         increment_status("duplicate_ignored_until_permission_fixed")
-        update_status(last_error=DUPLICATE_PERMISSION_MESSAGE)
+        update_status(
+            duplicate_warning=DUPLICATE_PERMISSION_MESSAGE,
+            last_status_message="Skipped Duplicate",
+            last_error=None,
+        )
+    elif result.get("status") == "failed":
+        update_status(last_error=f"Duplicate Archive Error: {result.get('error')}")
 
 def get_file_hash(file_path):
     sha256_hash = hashlib.sha256()
@@ -236,6 +275,7 @@ def sync_source_to_local_once():
             copied_count=0,
             skipped_count=0,
         )
+        touch_scan_time("Sync Retrying")
         refresh_local_pdf_count()
         return {"copied": copied, "skipped": skipped, "error": error}
 
@@ -274,6 +314,7 @@ def sync_source_to_local_once():
         copied_count=copied,
         skipped_count=skipped,
     )
+    touch_scan_time("Sync Complete")
     refresh_local_pdf_count()
     return {"copied": copied, "skipped": skipped, "error": error}
 
@@ -504,7 +545,8 @@ def process_invoice(file_path):
     
     file_hash = get_file_hash(file_path)
     if not file_hash:
-        increment_status("failed_files")
+        increment_failed_count()
+        touch_scan_time("Failed")
         return
 
     db = SessionLocal()
@@ -513,14 +555,15 @@ def process_invoice(file_path):
         existing_hash = db.query(Bill).filter(Bill.pdf_hash == file_hash).first()
         if existing_hash:
             logger.info(f"Duplicate hash detected for {os.path.basename(file_path)}")
-            increment_status("skipped_duplicates")
+            increment_duplicate_count()
             record_duplicate_result(handle_duplicate(file_path, db, reason="Duplicate PDF SHA256 hash", file_hash=file_hash))
             return
 
         invoice_data = parse_pdf(file_path)
         if not invoice_data or not invoice_data["bill_number"]:
             logger.warning(f"Parse Failed: {os.path.basename(file_path)} (No bill number)")
-            increment_status("failed_files")
+            increment_failed_count()
+            touch_scan_time("Failed")
             from backend.email_notifier import send_red_alert_email
             send_red_alert_email(
                 subject=f"RED ALERT: Parse Failure - {os.path.basename(file_path)}",
@@ -544,7 +587,7 @@ def process_invoice(file_path):
 
         if duplicate_bill:
             logger.info(f"Duplicate 5-point match for {invoice_data['bill_number']}")
-            increment_status("skipped_duplicates")
+            increment_duplicate_count()
             record_duplicate_result(handle_duplicate(file_path, db, reason="5-point identity match (Number, Date, Customer, Total)", file_hash=file_hash))
             return
 
@@ -552,7 +595,7 @@ def process_invoice(file_path):
         duplicate_num = db.query(Bill).filter(Bill.bill_number == invoice_data["bill_number"]).first()
         if duplicate_num:
             logger.warning(f"Duplicate Number Skip: {invoice_data['bill_number']} (Partial identity match)")
-            increment_status("skipped_duplicates")
+            increment_duplicate_count()
             record_duplicate_result(handle_duplicate(file_path, db, reason="Duplicate Invoice Number match", file_hash=file_hash))
             return
 
@@ -656,15 +699,16 @@ def process_invoice(file_path):
         reconcile_unreconciled_alerts(db)
         
         increment_status("invoices_inserted")
-        update_status(last_processed_time=datetime.now().isoformat())
+        increment_processed_count()
+        touch_scan_time("Processed")
 
     except Exception as e:
         db.rollback()
         logger.error(f"Database Error processing {file_path}: {e}")
         update_status(last_error=f"DB Error: {str(e)}")
-        increment_status("failed_files")
+        increment_failed_count()
+        touch_scan_time("Failed")
     finally:
-        increment_status("files_processed")
         db.close()
 
 def perform_scan():

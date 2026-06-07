@@ -121,7 +121,7 @@ def handle_duplicate(file_path, db: Session, reason="Duplicate detected", file_h
         if _is_access_denied(e):
             metadata = _duplicate_metadata(file_path, reason, file_hash=file_hash, dest_path=dest_path, error=e)
             _log_duplicate_event(db, DUPLICATE_MOVE_FAILED_PERMISSION, "IGNORED_UNTIL_PERMISSION_FIXED", metadata)
-            logger.error(f"{DUPLICATE_PERMISSION_MESSAGE} File left untouched: {file_path}")
+            logger.warning(f"{DUPLICATE_PERMISSION_MESSAGE} File left untouched: {file_path}")
             return {
                 "status": "permission_failed",
                 "action": DUPLICATE_MOVE_FAILED_PERMISSION,
