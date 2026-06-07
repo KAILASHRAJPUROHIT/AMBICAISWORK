@@ -154,6 +154,31 @@ class PaymentConfirmationSignature(Base):
     generated_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
+class AccountantVerificationQueue(Base):
+    __tablename__ = "accountant_verification_queue"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bill_id = Column(Integer, ForeignKey("bills.id"), nullable=False, index=True)
+    payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True, index=True)
+    signature_id = Column(Integer, ForeignKey("payment_confirmation_signatures.id"), nullable=True, index=True)
+    invoice_no = Column(String, nullable=False, index=True)
+    queue_status = Column(String, nullable=False, default="OPEN", index=True)
+    verification_day = Column(DateTime, nullable=False)
+    due_at = Column(DateTime, nullable=False)
+    deferred_until = Column(DateTime, nullable=True)
+    owner_alert_after = Column(DateTime, nullable=True)
+    reason = Column(Text, nullable=False)
+    proof_status = Column(String, nullable=True)
+    payment_status = Column(String, nullable=True)
+    confidence_level = Column(String, nullable=True)
+    assigned_role = Column(String, nullable=False, default="ACCOUNTANT")
+    created_by = Column(String, nullable=False, default="SYSTEM_BACKFILL")
+    acted_by = Column(String, nullable=True)
+    acted_at = Column(DateTime, nullable=True)
+    action_note = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
 class BankAlert(Base):
     __tablename__ = "bank_alerts"
 

@@ -51,7 +51,7 @@ if not db_integrity_ok:
 
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event, hash_password
 from backend.lan_config import lan_health_check
-from backend.models import User, LoginLog, Bill, Payment, BankAlert, SMSAlert, SystemSetting, AuditLog
+from backend.models import User, LoginLog, Bill, Payment, BankAlert, SMSAlert, SystemSetting, AuditLog, AccountantVerificationQueue
 from backend.pdf_ingestion import (
     start_ingestion_thread,
     perform_scan,
@@ -1044,6 +1044,59 @@ async def require_role(roles: List[str], request: Request, db: Session = Depends
 
 async def require_owner(request: Request, db: Session = Depends(get_db)):
     return await require_role(["OWNER", "ADMIN"], request, db)
+
+async def require_accountant_verification_user(request: Request, db: Session = Depends(get_db)):
+    return await require_role(["ACCOUNTANT", "OWNER", "ADMIN"], request, db)
+
+@app.get("/api/escalations/accountant-verification")
+async def get_accountant_verification_queue(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_accountant_verification_user),
+):
+    AccountantVerificationQueue.__table__.create(bind=db.get_bind(), checkfirst=True)
+    now = datetime.now()
+    rows = (
+        db.query(AccountantVerificationQueue, Bill)
+        .join(Bill, AccountantVerificationQueue.bill_id == Bill.id)
+        .filter(
+            AccountantVerificationQueue.queue_status.in_(["OPEN", "FURTHER_REVIEW", "OWNER_ESCALATION_PENDING"]),
+            Bill.is_test_data == False,  # noqa: E712
+            ~Bill.bill_number.ilike("TEST-%"),
+            ~Bill.bill_number.ilike("ARCH-%"),
+            ~Bill.bill_number.ilike("HARDENING-%"),
+        )
+        .order_by(AccountantVerificationQueue.due_at.asc(), AccountantVerificationQueue.id.asc())
+        .all()
+    )
+    payload = []
+    for item, bill in rows:
+        remaining_seconds = int((item.due_at - now).total_seconds()) if item.due_at else None
+        payload.append({
+            "id": item.id,
+            "bill_id": item.bill_id,
+            "payment_id": item.payment_id,
+            "signature_id": item.signature_id,
+            "invoice_no": item.invoice_no,
+            "customer_name": bill.customer_name,
+            "amount": float(bill.amount or 0),
+            "payment_mode": bill.payment_mode,
+            "bill_status": bill.status,
+            "review_required": bool(bill.review_required),
+            "queue_status": item.queue_status,
+            "verification_day": item.verification_day.isoformat() if item.verification_day else None,
+            "due_at": item.due_at.isoformat() if item.due_at else None,
+            "remaining_seconds": remaining_seconds,
+            "overdue": remaining_seconds is not None and remaining_seconds < 0,
+            "reason": item.reason,
+            "proof_status": item.proof_status,
+            "payment_status": item.payment_status,
+            "confidence_level": item.confidence_level,
+            "assigned_role": item.assigned_role,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+        })
+    return payload
 
 PERMISSION_GROUPS = [
     "dashboard_access",
