@@ -784,17 +784,36 @@ async def get_open_reconciliation_real(request: Request, response: Response, db:
         if not is_operational_reconciliation_bill(bill):
             continue
         
-        # Query all relevant proofs for the current bill
-        all_bank_alerts = db.query(BankAlert).filter(BankAlert.bill_id == bill.id).all()
-        all_sms_alerts = db.query(SMSAlert).filter(SMSAlert.bill_id == bill.id).all()
-        all_proofs = all_bank_alerts + all_sms_alerts
-
         payments = (
             db.query(Payment)
             .filter(Payment.bill_id == bill.id)
             .order_by(Payment.payment_date.asc().nullslast(), Payment.created_at.asc())
             .all()
         )
+
+        proof_eligible_modes = {"UPI", "BANK_TRANSFER", "CARD", "RTGS_OR_CHEQUE"}
+        proof_utr_values = {
+            payment.utr_reference
+            for payment in payments
+            if payment.mode in proof_eligible_modes and payment.utr_reference
+        }
+        proof_amount_values = {
+            payment.amount
+            for payment in payments
+            if payment.mode in proof_eligible_modes and payment.amount is not None
+        }
+        bank_proof_filters = []
+        sms_proof_filters = []
+        if proof_utr_values:
+            bank_proof_filters.append(BankAlert.utr_reference.in_(proof_utr_values))
+            sms_proof_filters.append(SMSAlert.utr_reference.in_(proof_utr_values))
+        if proof_amount_values:
+            bank_proof_filters.append(BankAlert.amount.in_(proof_amount_values))
+            sms_proof_filters.append(SMSAlert.amount.in_(proof_amount_values))
+
+        all_bank_alerts = db.query(BankAlert).filter(or_(*bank_proof_filters)).all() if bank_proof_filters else []
+        all_sms_alerts = db.query(SMSAlert).filter(or_(*sms_proof_filters)).all() if sms_proof_filters else []
+        all_proofs = all_bank_alerts + all_sms_alerts
         payment_total = sum(float(payment.amount or 0.0) for payment in payments)
         fallback_total = (
             float(bill.cash_received or 0.0)
@@ -816,7 +835,7 @@ async def get_open_reconciliation_real(request: Request, response: Response, db:
                 "mode": payment.mode or "UNKNOWN",
                 "timestamp": iso_or_none(payment.payment_date) or evidence["timestamp"] or iso_or_none(payment.created_at),
                 "utr_reference": payment.utr_reference,
-                "reference": evidence["reference"] or payment_utr or payment.cheque_number,
+                "reference": evidence["reference"] or payment.utr_reference or payment.cheque_number,
                 "source": evidence["source"],
                 "proof_url": evidence["proof_url"],
                 "proof_label": evidence["proof_label"],
