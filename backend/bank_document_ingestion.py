@@ -25,40 +25,61 @@ def get_file_hash_from_bytes(byte_content: bytes) -> str:
     sha256_hash.update(byte_content)
     return sha256_hash.hexdigest()
 
-def classify_document(sender: str, subject: str, filename: str) -> tuple[str, str, str, str]:
-    combined = f"{sender} {subject} {filename}".upper()
+def classify_document(sender: str, subject: str, filename: str) -> tuple[str, str, str, str, str]:
+    """
+    Classifies a document based strictly on metadata (sender, subject, filename).
+    Returns: (bank_name, classification, file_type, classification_reason, password_profile)
+    """
+    sender = (sender or "").lower()
+    subject = (subject or "").lower()
+    filename = (filename or "").lower()
+    combined = f"{sender} {subject} {filename}"
     
     bank_name = "UNKNOWN"
-    if "HDFC" in combined:
+    if "hdfc" in combined:
         bank_name = "HDFC"
-    elif "ICICI" in combined:
+    elif "icici" in combined:
         bank_name = "ICICI"
 
     classification = "UNKNOWN_BANK_DOCUMENT"
     classification_reason = f"Fallback. Bank: {bank_name}"
-    
+    password_profile = None
+
+    # HDFC Rules
     if bank_name == "HDFC":
-        if "STATEMENT" in combined:
-            classification = "HDFC_ACCOUNT_STATEMENT"
-            classification_reason = "HDFC + STATEMENT keywords"
-        elif "MERCHANT" in combined or "MPR" in combined or "SETTLEMENT" in combined:
+        if any(k in combined for k in ["gst invoice", "monthly gst invoice", "tax invoice"]) or "payoutreport" in sender or "map" in sender:
+            classification = "HDFC_MERCHANT_GST_INVOICE"
+            classification_reason = "HDFC + GST Invoice keywords or payoutreport sender"
+            password_profile = "HDFC_MERCHANT_PDF"
+        elif "mpr" in combined or "merchant payment report" in combined:
             classification = "HDFC_MERCHANT_SETTLEMENT"
-            classification_reason = "HDFC + MERCHANT/MPR/SETTLEMENT keywords"
+            classification_reason = "HDFC + MPR/Merchant Payment Report keywords"
+            password_profile = "HDFC_MERCHANT_PDF"
+        elif "combined account statement" in combined or "combined email statement" in combined or ("statement" in combined and filename.endswith(".pdf")):
+            classification = "HDFC_BANK_STATEMENT"
+            classification_reason = "HDFC + Statement keywords"
+            password_profile = "HDFC_BANK_STATEMENT"
+
+    # ICICI Rules
     elif bank_name == "ICICI":
-        if "MERCHANT" in combined or "SETTLEMENT" in combined or "STATEMENT" in combined:
+        if any(k in combined for k in ["merchantstatement", "pos", "icici_pos"]):
             classification = "ICICI_MERCHANT_SETTLEMENT"
-            classification_reason = "ICICI + MERCHANT/SETTLEMENT/STATEMENT keywords"
+            classification_reason = "ICICI + Merchant/POS keywords"
+            password_profile = None # Usually XLSX, no password
+        elif any(k in combined for k in ["icici bank statement", "account statement", "bank statement", "estatement"]) or "statement_" in filename or "xxxxxxxx" in combined:
+            classification = "ICICI_ACCOUNT_STATEMENT"
+            classification_reason = "ICICI + Account Statement keywords or pattern"
+            password_profile = "ICICI_STATEMENT"
 
     file_type = "UNKNOWN"
-    fname_upper = filename.upper()
-    if fname_upper.endswith(".PDF"):
+    if filename.endswith(".pdf"):
         file_type = "PDF"
-    elif fname_upper.endswith(".XLS"):
-        file_type = "XLS"
-    elif fname_upper.endswith(".XLSX"):
+    elif filename.endswith(".xlsx"):
         file_type = "XLSX"
+    elif filename.endswith(".xls"):
+        file_type = "XLS"
 
-    return bank_name, classification, file_type, classification_reason
+    return bank_name, classification, file_type, classification_reason, password_profile
 
 def process_email_attachments(db: Session, attachments: list, message_id: str, sender: str, subject: str, received_at: datetime):
     ensure_directories()
@@ -73,7 +94,7 @@ def process_email_attachments(db: Session, attachments: list, message_id: str, s
                 if not content:
                     continue
                     
-                bank_name, classification, file_type, classification_reason = classify_document(sender, subject, original_filename)
+                bank_name, classification, file_type, classification_reason, password_profile = classify_document(sender, subject, original_filename)
                 
                 # Accept only .pdf, .xls, .xlsx
                 if file_type not in ["PDF", "XLS", "XLSX"]:
@@ -117,7 +138,8 @@ def process_email_attachments(db: Session, attachments: list, message_id: str, s
                     sender=sender,
                     subject=subject,
                     received_at=received_at,
-                    status="SAVED"
+                    status="SAVED",
+                    password_profile=password_profile
                 )
                 db.add(new_doc)
                 db.flush()

@@ -233,6 +233,7 @@ class BankDocument(Base):
     subject = Column(String, nullable=True)
     received_at = Column(DateTime, nullable=True)
     status = Column(String, default="SAVED") # SAVED, TEXT_EXTRACTED, PARSED, NEEDS_PASSWORD, UNSUPPORTED_FORMAT, DUPLICATE, FAILED
+    password_profile = Column(String, nullable=True) # ICICI_STATEMENT, HDFC_BANK_STATEMENT, HDFC_MERCHANT_PDF, NULL
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
