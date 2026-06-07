@@ -214,3 +214,24 @@ class AlertRecord(Base):
     last_error = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+class BankDocument(Base):
+    __tablename__ = "bank_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bank_name = Column(String, nullable=True)
+    classification = Column(String, default="UNKNOWN_BANK_DOCUMENT")
+    classification_reason = Column(String, nullable=True)
+    file_type = Column(String, nullable=True) # PDF, XLS, XLSX, UNKNOWN
+    original_filename = Column(String, nullable=False)
+    stored_filename = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    file_size_bytes = Column(Integer, default=0)
+    file_hash = Column(String, unique=True, index=True, nullable=False)
+    source_email_id = Column(String, nullable=True)
+    sender = Column(String, nullable=True)
+    subject = Column(String, nullable=True)
+    received_at = Column(DateTime, nullable=True)
+    status = Column(String, default="SAVED") # SAVED, DUPLICATE, FAILED
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())

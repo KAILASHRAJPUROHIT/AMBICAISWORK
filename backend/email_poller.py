@@ -162,9 +162,23 @@ def fetch_real_emails(since_date: datetime):
                             continue
 
                         body = ""
+                        attachments = []
                         if msg.is_multipart():
                             for part in msg.walk():
                                 content_type = part.get_content_type()
+                                content_disposition = str(part.get("Content-Disposition"))
+                                
+                                if "attachment" in content_disposition:
+                                    filename = part.get_filename()
+                                    if filename:
+                                        filename = get_decoded_header(filename)
+                                        payload = part.get_payload(decode=True)
+                                        if payload:
+                                            attachments.append({
+                                                "filename": filename,
+                                                "content": payload
+                                            })
+                                
                                 if content_type in ["text/plain", "text/html"]:
                                     try:
                                         part_body = part.get_payload(decode=True).decode(errors="ignore")
@@ -186,7 +200,8 @@ def fetch_real_emails(since_date: datetime):
                             "subject": subject,
                             "sender": sender,
                             "date": local_date,
-                            "body": " ".join(body.split())
+                            "body": " ".join(body.split()),
+                            "attachments": attachments
                         })
         mail.logout()
     except Exception as e:
