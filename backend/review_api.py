@@ -63,6 +63,7 @@ from backend.pdf_ingestion import (
 from backend.email_poller import start_email_poller, process_emails, email_status
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
 from backend.reconciliation.logic import calculate_payment_proof_status
+from backend.schemas import ActionNoteRequest, FurtherReviewRequest
 from backend.api_routes import router as api_router
 from backend.invoice_lifecycle import start_lifecycle_automation
 from backend.payment_signature_scheduler import start_payment_signature_scheduler
@@ -1097,6 +1098,114 @@ async def get_accountant_verification_queue(
             "updated_at": item.updated_at.isoformat() if item.updated_at else None,
         })
     return payload
+
+@app.post("/api/escalations/accountant-verification/{queue_id}/approve")
+async def approve_accountant_verification_item(
+    queue_id: int,
+    request: Optional[ActionNoteRequest] = None, # Make action_note optional
+    db: Session = Depends(get_db),
+    user: User = Depends(require_accountant_verification_user),
+):
+    item = db.query(AccountantVerificationQueue).filter(AccountantVerificationQueue.id == queue_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+    if item.queue_status != "OPEN":
+        raise HTTPException(status_code=400, detail=f"Queue item is already {item.queue_status}. Only OPEN items can be approved.")
+
+    old_status = item.queue_status
+    item.queue_status = "APPROVED"
+    item.acted_by = user.employee_id
+    item.acted_at = datetime.now()
+    item.action_note = request.action_note if request and request.action_note else "Approved by accountant." # Use provided note or default
+    
+    from backend.reconciliation.logic import log_audit
+    log_audit(
+        db,
+        "AccountantVerificationQueue",
+        item.id,
+        "ACCOUNTANT_VERIFICATION_APPROVED",
+        old_status,
+        item.queue_status,
+        f"Approved by {user.employee_id}. Note: {item.action_note}",
+        actor=user.employee_id
+    )
+    db.commit()
+    return {"status": "success", "message": f"Queue item {queue_id} approved."}
+
+@app.post("/api/escalations/accountant-verification/{queue_id}/reject")
+async def reject_accountant_verification_item(
+    queue_id: int,
+    request: ActionNoteRequest, # Requires action_note
+    db: Session = Depends(get_db),
+    user: User = Depends(require_accountant_verification_user),
+):
+    item = db.query(AccountantVerificationQueue).filter(AccountantVerificationQueue.id == queue_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+    if item.queue_status != "OPEN":
+        raise HTTPException(status_code=400, detail=f"Queue item is already {item.queue_status}. Only OPEN items can be rejected.")
+    if not request.action_note:
+        raise HTTPException(status_code=400, detail="Rejection requires an action note.")
+
+    old_status = item.queue_status
+    item.queue_status = "REJECTED"
+    item.acted_by = user.employee_id
+    item.acted_at = datetime.now()
+    item.action_note = request.action_note
+    
+    from backend.reconciliation.logic import log_audit
+    log_audit(
+        db,
+        "AccountantVerificationQueue",
+        item.id,
+        "ACCOUNTANT_VERIFICATION_REJECTED",
+        old_status,
+        item.queue_status,
+        f"Rejected by {user.employee_id}. Note: {request.action_note}",
+        actor=user.employee_id
+    )
+    db.commit()
+    return {"status": "success", "message": f"Queue item {queue_id} rejected."}
+
+@app.post("/api/escalations/accountant-verification/{queue_id}/further-review")
+async def further_review_accountant_verification_item(
+    queue_id: int,
+    request: FurtherReviewRequest, # Requires action_note and deferral details
+    db: Session = Depends(get_db),
+    user: User = Depends(require_accountant_verification_user),
+):
+    item = db.query(AccountantVerificationQueue).filter(AccountantVerificationQueue.id == queue_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+    if item.queue_status != "OPEN":
+        raise HTTPException(status_code=400, detail=f"Queue item is already {item.queue_status}. Only OPEN items can be sent for further review.")
+    if not request.action_note:
+        raise HTTPException(status_code=400, detail="Further review requires an action note.")
+
+    old_status = item.queue_status
+    item.queue_status = "FURTHER_REVIEW"
+    item.acted_by = user.employee_id
+    item.acted_at = datetime.now()
+    item.action_note = request.action_note
+    
+    # Calculate deferred_until and owner_alert_after based on current time
+    now = datetime.now()
+    item.deferred_until = now + timedelta(hours=request.deferred_until_hours)
+    item.owner_alert_after = now + timedelta(hours=request.owner_alert_after_hours)
+    
+    from backend.reconciliation.logic import log_audit
+    log_audit(
+        db,
+        "AccountantVerificationQueue",
+        item.id,
+        "ACCOUNTANT_VERIFICATION_FURTHER_REVIEW",
+        old_status,
+        item.queue_status,
+        f"Sent for further review by {user.employee_id}. Note: {request.action_note}",
+        actor=user.employee_id
+    )
+    db.commit()
+    return {"status": "success", "message": f"Queue item {queue_id} sent for further review."}
 
 PERMISSION_GROUPS = [
     "dashboard_access",

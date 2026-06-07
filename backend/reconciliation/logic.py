@@ -223,14 +223,14 @@ def reconcile_unreconciled_alerts(db: Session):
     for alert in unreconciled:
         verify_payment_event(db, alert, source="RETRY_LOGIC")
 
-def log_audit(db, entity_type, entity_id, action, old_status, new_status, note=""):
+def log_audit(db, entity_type, entity_id, action, old_status, new_status, note="", actor="SYSTEM"):
     audit = AuditLog(
         entity_type=entity_type,
         entity_id=entity_id,
         action=action,
         old_status=old_status,
         new_status=new_status,
-        actor="SYSTEM",
+        actor=actor,
         metadata_json=json.dumps({
             "note": note, 
             "timestamp": datetime.now().isoformat(),

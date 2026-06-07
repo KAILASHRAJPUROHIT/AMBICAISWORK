@@ -104,3 +104,11 @@ class RawEmail(BaseModel):
     date: datetime
     raw_body: str
     label: str
+
+class ActionNoteRequest(BaseModel):
+    action_note: str = Field(..., description="Note from the accountant explaining the action.")
+
+class FurtherReviewRequest(ActionNoteRequest):
+    deferred_until_hours: Optional[int] = Field(24, description="Defer until current time + hours.")
+    owner_alert_after_hours: Optional[int] = Field(24, description="Alert owner after current time + hours.")
+
