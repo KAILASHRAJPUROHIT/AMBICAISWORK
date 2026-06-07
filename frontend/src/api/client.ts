@@ -172,6 +172,37 @@ export async function getAccountantVerificationQueue() {
   return handleResponse(response, 'Failed to fetch accountant verification queue');
 }
 
+export async function approveAccountantVerification(queueId: number, actionNote?: string) {
+  const response = await fetch(`${BASE_URL}/api/escalations/accountant-verification/${queueId}/approve`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ action_note: actionNote })
+  });
+  return handleResponse(response, 'Failed to approve accountant verification');
+}
+
+export async function rejectAccountantVerification(queueId: number, actionNote: string) {
+  const response = await fetch(`${BASE_URL}/api/escalations/accountant-verification/${queueId}/reject`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ action_note: actionNote })
+  });
+  return handleResponse(response, 'Failed to reject accountant verification');
+}
+
+export async function furtherReviewAccountantVerification(queueId: number, actionNote: string, deferredUntilHours = 24, ownerAlertAfterHours = 24) {
+  const response = await fetch(`${BASE_URL}/api/escalations/accountant-verification/${queueId}/further-review`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({
+      action_note: actionNote,
+      deferred_until_hours: deferredUntilHours,
+      owner_alert_after_hours: ownerAlertAfterHours
+    })
+  });
+  return handleResponse(response, 'Failed to send for further review');
+}
+
 export async function getOwnerReport() {
   let response = await fetch(`${BASE_URL}/api/reports/owner`, {
     headers: getHeaders()
