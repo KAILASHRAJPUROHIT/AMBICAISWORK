@@ -2,7 +2,7 @@ from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from .database import engine, SessionLocal, Base
-from .models import User, Bill, Payment, BankAlert, SMSAlert, Cheque, AuditLog
+from .models import User, Bill, Payment, BankAlert, SMSAlert, Cheque, AuditLog, BankDocument
 from .schemas import ReconciliationDecision, ReviewQueueItem, RoutingResult 
 from reconciliation_engine import reconcile_transactions 
 from review_queue import route_review 
