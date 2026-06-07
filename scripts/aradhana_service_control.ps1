@@ -6,8 +6,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$PythonExe = "python"
+$PythonExe = "C:\Users\kaila\AppData\Local\Programs\Python\Python311\python.exe"
 $PythonArgsPrefix = @("-m", "uvicorn", "backend.review_api:app", "--host", "0.0.0.0")
+$NodeExe = (Get-Command "node.exe" -ErrorAction Stop).Source
 
 function Ensure-Directory($Path) {
     if (-not (Test-Path $Path)) {
@@ -17,9 +18,13 @@ function Ensure-Directory($Path) {
 
 function Write-StartupLog($LogDirectory, $Message) {
     Ensure-Directory $LogDirectory
+    $logPath = Join-Path $LogDirectory "startup_verification.log"
+    if (-not (Test-Path $logPath)) {
+        New-Item -ItemType File -Path $logPath | Out-Null
+    }
     $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
     $line = "[$timestamp] $Message"
-    Add-Content -Encoding UTF8 -Path (Join-Path $LogDirectory "startup-verification.log") -Value $line
+    Add-Content -Encoding UTF8 -Path $logPath -Value $line
     Write-Host $line
 }
 
@@ -184,7 +189,7 @@ function Get-LogTail($Path) {
     return ""
 }
 
-function Start-ManagedProcess($Name, $Port, $PidPath, $WorkingDirectory, $Command, $LogDirectory, $IsBackend) {
+function Start-ManagedProcess($Name, $Port, $PidPath, $WorkingDirectory, $FilePath, $ArgumentList, $EnvironmentVariables, $LogDirectory, $IsBackend) {
     $alreadyRunning = Test-ManagedListener $Port $PidPath $IsBackend
     if ($alreadyRunning) {
         Write-StartupLog $LogDirectory "$Name already running on port $Port. No duplicate started."
@@ -196,14 +201,28 @@ function Start-ManagedProcess($Name, $Port, $PidPath, $WorkingDirectory, $Comman
 
     Write-StartupLog $LogDirectory "Starting $Name on port $Port."
     Write-StartupLog $LogDirectory "$Name working directory: $WorkingDirectory"
-    Write-StartupLog $LogDirectory "$Name command: $Command"
-    $process = Start-Process -FilePath "powershell.exe" `
-        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $Command) `
-        -WorkingDirectory $WorkingDirectory `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput $outLog `
-        -RedirectStandardError $errLog `
-        -PassThru
+    Write-StartupLog $LogDirectory "$Name command: $FilePath $($ArgumentList -join ' ')"
+
+    $previousEnvironment = @{}
+    foreach ($key in $EnvironmentVariables.Keys) {
+        $previousEnvironment[$key] = [Environment]::GetEnvironmentVariable($key, "Process")
+        [Environment]::SetEnvironmentVariable($key, [string]$EnvironmentVariables[$key], "Process")
+    }
+
+    try {
+        $process = Start-Process -FilePath $FilePath `
+            -ArgumentList $ArgumentList `
+            -WorkingDirectory $WorkingDirectory `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $outLog `
+            -RedirectStandardError $errLog `
+            -PassThru
+    }
+    finally {
+        foreach ($key in $EnvironmentVariables.Keys) {
+            [Environment]::SetEnvironmentVariable($key, $previousEnvironment[$key], "Process")
+        }
+    }
 
     Write-StartupLog $LogDirectory "$Name wrapper PID: $($process.Id)."
     $timeoutSeconds = 60
@@ -328,7 +347,10 @@ function Start-Environment($EnvironmentName, $BackendPort, $FrontendPort, $LogSu
     Test-ManagedListener $BackendPort $backendPid $true | Out-Null
     Test-ManagedListener $FrontendPort $frontendPid $false | Out-Null
 
-    $backendEnv = "`$env:PYTHONPATH='$Root'; `$env:ARADHANA_ENV='$EnvironmentName'; "
+    $backendEnvVars = @{
+        PYTHONPATH = "$Root"
+        ARADHANA_ENV = "$EnvironmentName"
+    }
     if ($DevMode) {
         $devData = Join-Path $Root "data\dev"
         $devPdfPath = Join-Path $devData "InvoicePDFs"
@@ -340,17 +362,27 @@ function Start-Environment($EnvironmentName, $BackendPort, $FrontendPort, $LogSu
             Copy-Item -Path $productionDb -Destination $devDb
             Write-Host "Seeded isolated development DB at $devDb."
         }
-        $backendEnv += "`$env:ARADHANA_DB_PATH='$devDb'; `$env:INVOICE_SHARE_PATH='$devPdfPath'; `$env:INVOICE_PDF_PATH='$devPdfPath'; "
+        $backendEnvVars["ARADHANA_DB_PATH"] = "$devDb"
+        $backendEnvVars["INVOICE_SHARE_PATH"] = "$devPdfPath"
+        $backendEnvVars["INVOICE_PDF_PATH"] = "$devPdfPath"
     }
 
-    $backendArgs = ($PythonArgsPrefix + @("--port", "$BackendPort")) -join " "
-    $backendCommand = "$backendEnv Set-Location '$Root'; & $PythonExe $backendArgs"
+    $backendArgs = $PythonArgsPrefix + @("--port", "$BackendPort")
 
     $frontendRoot = Join-Path $Root "frontend"
-    $frontendCommand = "`$env:VITE_DEV_SERVER_PORT='$FrontendPort'; `$env:VITE_BACKEND_PORT='$BackendPort'; `$env:ARADHANA_ENV='$EnvironmentName'; Set-Location '$frontendRoot'; & npm.cmd run dev -- --host 0.0.0.0 --port $FrontendPort --strictPort"
+    $viteEntry = Join-Path $frontendRoot "node_modules\vite\bin\vite.js"
+    if (-not (Test-Path $viteEntry)) {
+        throw "Vite entrypoint not found at $viteEntry. Run npm install in frontend first."
+    }
+    $frontendArgs = @($viteEntry, "--host", "0.0.0.0", "--port", "$FrontendPort", "--strictPort")
+    $frontendEnvVars = @{
+        VITE_DEV_SERVER_PORT = "$FrontendPort"
+        VITE_BACKEND_PORT = "$BackendPort"
+        ARADHANA_ENV = "$EnvironmentName"
+    }
 
-    Start-ManagedProcess "$EnvironmentName-backend" $BackendPort $backendPid $Root $backendCommand $logDirectory $true
-    Start-ManagedProcess "$EnvironmentName-frontend" $FrontendPort $frontendPid $frontendRoot $frontendCommand $logDirectory $false
+    Start-ManagedProcess "$EnvironmentName-backend" $BackendPort $backendPid $Root $PythonExe $backendArgs $backendEnvVars $logDirectory $true
+    Start-ManagedProcess "$EnvironmentName-frontend" $FrontendPort $frontendPid $frontendRoot $NodeExe $frontendArgs $frontendEnvVars $logDirectory $false
     Assert-EnvironmentListening $EnvironmentName $BackendPort $FrontendPort $logDirectory
 
     if ($EnvironmentName -eq "production") {
