@@ -58,13 +58,25 @@ export interface DashboardTodayKPIs {
   billsCreated: number;
   paymentsReceived: number;
   autoVerified: number;
-  awaitingReview: number;
   pendingProof: number;
-  escalations: number;
+  paymentTotals: Record<string, number>;
+}
+
+export interface PaymentBreakdown {
+  payment_id: number;
+  amount: number;
+  mode: string;
+  proof_label: string;
+  proof_url: string;
+  proof_source: string;
+  utr_reference: string;
+  timestamp: string;
+  sources: Array<{type: string; details: string; status: string; url: string}>;
 }
 
 export interface DashboardTodayEvent {
   id: number;
+  bill_id?: number;
   time: string;
   invoice_no: string;
   customer: string;
@@ -73,6 +85,11 @@ export interface DashboardTodayEvent {
   proof: string;
   confidence: string;
   state: string;
+  pdfUrl?: string;
+  proofUrls?: string[];
+  unifiedProofLabel?: string;
+  sources?: Array<{type: string; details: string; status: string; url?: string}>;
+  paymentBreakdown?: PaymentBreakdown[];
 }
 
 export interface DashboardTodayResponse {

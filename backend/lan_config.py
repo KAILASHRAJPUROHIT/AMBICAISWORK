@@ -6,20 +6,13 @@ from fastapi import Request, HTTPException
 
 logger = logging.getLogger("LAN_Check")
 
-# Approved Subnets for Aradhana LAN
-APPROVED_SUBNETS = ["192.168.1.", "10.0.0.", "172.16.0."] 
+import ipaddress
 
 def is_physical_lan_connected() -> bool:
-    """
-    Checks if the system has an active Ethernet (physical) connection.
-    On Windows, uses 'netsh interface show interface'.
-    """
     if os.name != 'nt':
-        # Fallback for non-windows (though production is win32)
         return True 
         
     try:
-        # Check for interfaces that are 'Ethernet' and 'Connected'
         output = subprocess.check_output("netsh interface show interface", shell=True).decode()
         lines = output.splitlines()
         
@@ -32,7 +25,6 @@ def is_physical_lan_connected() -> bool:
             if "Wi-Fi" in line and "Connected" in line:
                 wifi_connected = True
                 
-        # Mandate: Physical LAN REQUIRED, WiFi NOT ALLOWED
         if wifi_connected and not has_ethernet:
              logger.warning("WiFi detected without Ethernet. Production Actions Blocked.")
              return False
@@ -40,16 +32,49 @@ def is_physical_lan_connected() -> bool:
         return has_ethernet
     except Exception as e:
         logger.error(f"Error checking LAN status: {e}")
-        return True # Default to allow if check fails to avoid total lockout
+        return True
 
 def is_on_approved_lan(ip_address: str) -> bool:
     if ip_address == "127.0.0.1" or ip_address == "::1":
-        return True # Allow localhost for dev
+        return True
         
-    for subnet in APPROVED_SUBNETS:
-        if ip_address.startswith(subnet):
-            return True
-    return False
+    shop_cidr = os.getenv("SHOP_LAN_ALLOWED_CIDRS")
+    if not shop_cidr:
+        return False
+        
+    try:
+        client_ip_obj = ipaddress.ip_address(ip_address)
+        cidrs = [c.strip() for c in shop_cidr.split(',')]
+        for c in cidrs:
+            network_obj = ipaddress.ip_network(c, strict=False)
+            if client_ip_obj in network_obj:
+                return True
+        return False
+    except ValueError:
+        return False
+
+def check_owner_wifi_access(request: Request, db, token: str):
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+        
+    client_ip = request.client.host
+    if not is_on_approved_lan(client_ip):
+        raise HTTPException(status_code=403, detail="Network access denied. Must be on Shop LAN.")
+        
+    from backend.auth_service import validate_session
+    from backend.models import User
+    try:
+        employee_id = validate_session(db, token)
+        if not employee_id:
+            raise Exception("Invalid session")
+        user = db.query(User).filter(User.employee_id == employee_id).first()
+        if not user or user.role.upper() != "OWNER":
+            raise HTTPException(status_code=403, detail="Owner privileges required")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    return True
 
 async def lan_health_check(request: Request):
     client_ip = request.client.host
