@@ -172,6 +172,13 @@ export async function getAccountantVerificationQueue() {
   return handleResponse(response, 'Failed to fetch accountant verification queue');
 }
 
+export async function getEscalationExceptions() {
+  const response = await fetch(`${BASE_URL}/api/escalations/exceptions`, {
+    headers: getHeaders()
+  });
+  return handleResponse(response, 'Failed to fetch escalation exceptions');
+}
+
 export async function getReconciliationDetail(billId: number) {
   const response = await fetch(`${BASE_URL}/api/reconciliation/detail/${billId}`, {
     headers: getHeaders()

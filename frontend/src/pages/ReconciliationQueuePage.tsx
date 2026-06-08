@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import ReconciliationTable from '../components/ReconciliationTable';
 import InvoiceDetailDrawer from '../components/InvoiceDetailDrawer';
-import { getOpenReviewsWithTimeout, openInvoicePdf, fetchProofPreview } from '../api/client';
+import { getOpenReviewsWithTimeout, openInvoicePdf, fetchProofPreview, approveAccountantVerification, rejectAccountantVerification, furtherReviewAccountantVerification } from '../api/client';
 import type { ReconciliationItem, ReconciliationPaymentEvidence } from '../types';
 
 const FORBIDDEN_CONTRACT_VALUES = ['---', 'Review Item', 'REVIEW', 'mock_review_1', 'pay_001', 'bill_002'];
@@ -33,6 +33,12 @@ interface ProofModalState {
   item: ReconciliationItem;
   payment: ReconciliationPaymentEvidence;
   rawText: string;
+}
+
+interface ActionModalState {
+  queueId: number;
+  billNo: string;
+  type: 'APPROVE' | 'REJECT' | 'FURTHER_REVIEW';
 }
 
 const defaultFilters: ReconciliationFilters = {
@@ -171,6 +177,10 @@ const ReconciliationQueuePage: React.FC = () => {
   const [sortKey, setSortKey] = useState<ReconciliationSortKey>('invoiceDate');
   const [sortDirection, setSortDirection] = useState<ReconciliationSortDirection>('desc');
   const [proofModal, setProofModal] = useState<ProofModalState | null>(null);
+  const [actionModal, setActionModal] = useState<ActionModalState | null>(null);
+  const [actionNote, setActionNote] = useState('');
+  const [deferHours, setDeferHours] = useState(24);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const fetchReviews = useCallback(() => {
     setLoading(true);
@@ -238,6 +248,36 @@ const ReconciliationQueuePage: React.FC = () => {
 
   const handleCloseDrawer = () => {
     setSelectedItem(null);
+  };
+
+  const handleAction = (type: 'APPROVE' | 'REJECT' | 'FURTHER_REVIEW', queueId: number) => {
+    setActionModal({ type, queueId, billNo: selectedItem?.billNo || 'Unknown' });
+    setActionNote('');
+    setDeferHours(24);
+  };
+
+  const submitAction = async () => {
+    if (!actionModal) return;
+    setActionLoading(true);
+    try {
+      if (actionModal.type === 'APPROVE') {
+        await approveAccountantVerification(actionModal.queueId, actionNote);
+      } else if (actionModal.type === 'REJECT') {
+        if (!actionNote.trim()) throw new Error('Note is required for rejection');
+        await rejectAccountantVerification(actionModal.queueId, actionNote);
+      } else {
+        if (!actionNote.trim()) throw new Error('Note is required for further review');
+        await furtherReviewAccountantVerification(actionModal.queueId, actionNote, deferHours, deferHours);
+      }
+      setActionModal(null);
+      setSelectedItem(null); // Close drawer to refresh view cleanly
+      fetchReviews();
+    } catch (err: any) {
+      console.error('Action failed:', err);
+      window.alert(err.message || 'Action failed');
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const updateFilter = (key: keyof ReconciliationFilters, value: string) => {
@@ -391,6 +431,7 @@ const ReconciliationQueuePage: React.FC = () => {
           onClose={handleCloseDrawer}
           onViewInvoice={handleViewInvoice}
           onViewProof={handleViewProof}
+          onAction={handleAction}
         />
       )}
 
@@ -443,6 +484,68 @@ const ReconciliationQueuePage: React.FC = () => {
               </button>
               <button type="button" onClick={() => setProofModal(null)} className="bg-gray-900 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest hover:bg-black transition-colors">
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {actionModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4" onClick={() => !actionLoading && setActionModal(null)}>
+          <div className="w-full max-w-lg rounded-3xl bg-white p-8 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-2 text-2xl font-black uppercase text-gray-900">
+              {actionModal.type === 'APPROVE' && 'Approve Resolution'}
+              {actionModal.type === 'REJECT' && 'Reject Resolution'}
+              {actionModal.type === 'FURTHER_REVIEW' && 'Request Further Review'}
+            </h3>
+            <p className="mb-6 font-semibold text-gray-500">Bill No: {actionModal.billNo}</p>
+
+            <label className="mb-4 block">
+              <span className="mb-2 block text-sm font-black uppercase tracking-widest text-gray-500">
+                Action Note {actionModal.type !== 'APPROVE' && <span className="text-red-500">*</span>}
+              </span>
+              <textarea
+                value={actionNote}
+                onChange={(e) => setActionNote(e.target.value)}
+                placeholder={actionModal.type === 'APPROVE' ? "Optional: Enter approval note..." : "Required: Explain why..."}
+                className="h-32 w-full rounded-2xl border-2 border-gray-100 bg-gray-50 p-4 font-semibold text-gray-900 outline-none focus:border-blue-500 focus:bg-white"
+              />
+            </label>
+
+            {actionModal.type === 'FURTHER_REVIEW' && (
+              <label className="mb-6 block">
+                <span className="mb-2 block text-sm font-black uppercase tracking-widest text-gray-500">Defer Reminders For (Hours)</span>
+                <input
+                  type="number"
+                  value={deferHours}
+                  onChange={(e) => setDeferHours(Number(e.target.value))}
+                  min={1}
+                  max={72}
+                  className="w-full rounded-2xl border-2 border-gray-100 bg-gray-50 p-4 font-semibold text-gray-900 outline-none focus:border-blue-500 focus:bg-white"
+                />
+              </label>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+              <button
+                type="button"
+                disabled={actionLoading}
+                onClick={() => setActionModal(null)}
+                className="rounded-xl border border-gray-200 px-6 py-3 font-black uppercase tracking-widest text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionLoading || (actionModal.type !== 'APPROVE' && !actionNote.trim())}
+                onClick={submitAction}
+                className={`rounded-xl px-8 py-3 font-black uppercase tracking-widest text-white disabled:opacity-50 ${
+                  actionModal.type === 'APPROVE' ? 'bg-green-600 hover:bg-green-700' :
+                  actionModal.type === 'REJECT' ? 'bg-red-600 hover:bg-red-700' :
+                  'bg-orange-600 hover:bg-orange-700'
+                }`}
+              >
+                {actionLoading ? 'Saving...' : 'Confirm'}
               </button>
             </div>
           </div>

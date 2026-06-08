@@ -773,7 +773,7 @@ async def get_reconciliation_proof_preview(proof_type: str, proof_id: int, reque
         )
     raise HTTPException(status_code=404, detail="Proof type not found")
 
-def build_reconciliation_row(db: Session, bill: Bill) -> dict:
+def build_reconciliation_row(db: Session, bill: Bill, queue_item: Optional[AccountantVerificationQueue] = None) -> dict:
     payments = (
         db.query(Payment)
         .filter(Payment.bill_id == bill.id)
@@ -974,6 +974,8 @@ def build_reconciliation_row(db: Session, bill: Bill) -> dict:
         "source_system": "ARADHANA_BILLS",
         "has_special_payment_flag": requires_accountant_approval(payment_mode),
         "payment_breakdown": payment_breakdown,
+        "queue_id": queue_item.id if queue_item else None,
+        "queue_status": queue_item.queue_status if queue_item else None,
     }
 
 @app.get("/api/reconciliation/open")
@@ -1004,11 +1006,21 @@ async def get_open_reconciliation_real(request: Request, response: Response, db:
         .all()
     )
 
+    bill_ids = [b.id for b in bills if is_operational_reconciliation_bill(b)]
+    queue_items = (
+        db.query(AccountantVerificationQueue)
+        .filter(AccountantVerificationQueue.bill_id.in_(bill_ids))
+        .filter(AccountantVerificationQueue.queue_status.in_(["OPEN", "FURTHER_REVIEW", "OWNER_ESCALATION_PENDING"]))
+        .all()
+    ) if bill_ids else []
+    
+    queue_lookup = {item.bill_id: item for item in queue_items}
+
     rows = []
     for bill in bills:
         if not is_operational_reconciliation_bill(bill):
             continue
-        rows.append(build_reconciliation_row(db, bill))
+        rows.append(build_reconciliation_row(db, bill, queue_lookup.get(bill.id)))
 
     response.headers["X-Reconciliation-Total-Considered"] = str(total_considered)
     response.headers["X-Reconciliation-Rows-Returned"] = str(len(rows))
@@ -1024,7 +1036,13 @@ async def get_reconciliation_detail(bill_id: int, request: Request, db: Session 
     bill = db.query(Bill).filter(Bill.id == bill_id).first()
     if not bill:
         raise HTTPException(status_code=404, detail="Bill not found")
-    return build_reconciliation_row(db, bill)
+        
+    queue_item = db.query(AccountantVerificationQueue).filter(
+        AccountantVerificationQueue.bill_id == bill_id,
+        AccountantVerificationQueue.queue_status.in_(["OPEN", "FURTHER_REVIEW", "OWNER_ESCALATION_PENDING"])
+    ).first()
+
+    return build_reconciliation_row(db, bill, queue_item)
 
 @app.get("/status-colors")
 def status_colors():
@@ -1102,6 +1120,115 @@ async def get_accountant_verification_queue(
             "updated_at": item.updated_at.isoformat() if item.updated_at else None,
         })
     return payload
+
+@app.get("/api/escalations/exceptions")
+async def get_escalation_exceptions(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_accountant_verification_user),
+):
+    now = datetime.now()
+    exceptions = []
+
+    # A. Accountant Reviews Overdue >24h
+    overdue_24h = db.query(AccountantVerificationQueue, Bill).join(Bill, AccountantVerificationQueue.bill_id == Bill.id).filter(
+        AccountantVerificationQueue.queue_status == "OPEN",
+        AccountantVerificationQueue.acted_at == None,
+        AccountantVerificationQueue.created_at < now - timedelta(hours=24),
+        AccountantVerificationQueue.created_at >= now - timedelta(hours=48),
+        Bill.is_test_data == False
+    ).all()
+    for item, bill in overdue_24h:
+        exceptions.append({
+            "id": f"queue_{item.id}",
+            "bill_id": bill.id,
+            "invoice_no": bill.bill_number,
+            "category": "Accountant Reviews Overdue >24h",
+            "reason": f"Accountant review overdue by {int((now - item.created_at).total_seconds() / 3600)} hours",
+            "amount": float(bill.amount or 0),
+            "payment_mode": bill.payment_mode,
+            "status": bill.status,
+            "age_days": (now - item.created_at).days
+        })
+
+    # B. Accountant Reviews Critical >48h
+    overdue_48h = db.query(AccountantVerificationQueue, Bill).join(Bill, AccountantVerificationQueue.bill_id == Bill.id).filter(
+        AccountantVerificationQueue.queue_status == "OPEN",
+        AccountantVerificationQueue.acted_at == None,
+        AccountantVerificationQueue.created_at < now - timedelta(hours=48),
+        Bill.is_test_data == False
+    ).all()
+    for item, bill in overdue_48h:
+        exceptions.append({
+            "id": f"queue_{item.id}",
+            "bill_id": bill.id,
+            "invoice_no": bill.bill_number,
+            "category": "Accountant Reviews Critical >48h",
+            "reason": f"Critical: Accountant review overdue by {int((now - item.created_at).total_seconds() / 3600)} hours",
+            "amount": float(bill.amount or 0),
+            "payment_mode": bill.payment_mode,
+            "status": bill.status,
+            "age_days": (now - item.created_at).days
+        })
+
+    # C. Uncleared Payments >7 days
+    uncleared_payments = db.query(Payment, Bill).join(Bill, Payment.bill_id == Bill.id).filter(
+        Payment.status.in_(["Yellow", "Blue"]),
+        Payment.created_at < now - timedelta(days=7),
+        Bill.is_test_data == False
+    ).all()
+    for payment, bill in uncleared_payments:
+        exceptions.append({
+            "id": f"payment_{payment.id}",
+            "bill_id": bill.id,
+            "invoice_no": bill.bill_number,
+            "category": "Uncleared Payments >7 days",
+            "reason": f"Payment of {float(payment.amount or 0)} uncleared for {(now - payment.created_at).days} days",
+            "amount": float(payment.amount or 0),
+            "payment_mode": payment.mode,
+            "status": payment.status,
+            "age_days": (now - payment.created_at).days
+        })
+
+    # D. Cheque Ageing >7 days
+    ageing_cheques = db.query(Cheque, Bill).join(Bill, Cheque.bill_id == Bill.id).filter(
+        Cheque.status == "Blue",
+        Cheque.created_at < now - timedelta(days=7),
+        Bill.is_test_data == False
+    ).all()
+    for cheque, bill in ageing_cheques:
+        exceptions.append({
+            "id": f"cheque_{cheque.id}",
+            "bill_id": bill.id,
+            "invoice_no": bill.bill_number,
+            "category": "Cheque Ageing >7 days",
+            "reason": f"Cheque {cheque.cheque_number} ageing for {(now - cheque.created_at).days} days",
+            "amount": float(cheque.amount or 0),
+            "payment_mode": "CHEQUE",
+            "status": cheque.status,
+            "age_days": (now - cheque.created_at).days
+        })
+
+    # E. Owner Attention Required
+    owner_attention = db.query(AccountantVerificationQueue, Bill).join(Bill, AccountantVerificationQueue.bill_id == Bill.id).filter(
+        AccountantVerificationQueue.queue_status == "OWNER_ESCALATION_PENDING",
+        Bill.is_test_data == False
+    ).all()
+    for item, bill in owner_attention:
+        exceptions.append({
+            "id": f"queue_{item.id}",
+            "bill_id": bill.id,
+            "invoice_no": bill.bill_number,
+            "category": "Owner Attention Required",
+            "reason": item.reason or "Owner attention requested",
+            "amount": float(bill.amount or 0),
+            "payment_mode": bill.payment_mode,
+            "status": bill.status,
+            "age_days": (now - item.created_at).days if item.created_at else 0
+        })
+
+    exceptions.sort(key=lambda x: x["age_days"], reverse=True)
+    return exceptions
 
 @app.post("/api/escalations/accountant-verification/{queue_id}/approve")
 async def approve_accountant_verification_item(

@@ -29,6 +29,8 @@ export interface ReconciliationItem {
   invoicePdfAvailable?: boolean;
   hasSpecialPaymentFlag?: boolean;
   paymentBreakdown: ReconciliationPaymentEvidence[];
+  queueId?: number | null;
+  queueStatus?: string | null;
 }
 
 export interface AuditLogItem {
