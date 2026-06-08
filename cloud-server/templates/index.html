@@ -3,159 +3,258 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Aradhana Jewellers | Menu</title>
+    <title>Aradhana Jewellers | Boisar</title>
+    <!-- Premium Luxury Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --navy: #06142E;
-            --navy-light: #112244;
-            --gold: #D4AF37;
-            --gold-light: #F3E5AB;
-            --bg-color: #F7F5F0;
+            /* Official Aradhana Design System Colors */
+            --brand-blue: #23519D;
+            --primary-gold: #CCA137;
+            --accent-gold: #F7CA5B;
+            --ivory: #FDFCF0;
+            --white: #FFFFFF;
         }
 
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'Montserrat', sans-serif;
             -webkit-tap-highlight-color: transparent;
         }
 
         body {
-            background: var(--bg-color);
-            background-image: radial-gradient(circle at top right, rgba(212, 175, 55, 0.05), transparent),
-                              radial-gradient(circle at bottom left, rgba(6, 20, 46, 0.05), transparent);
+            background-color: var(--brand-blue);
+            /* Subtle jewellery-inspired pattern */
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(247, 202, 91, 0.08) 0%, transparent 70%),
+                url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M40 0l3 12h12l-10 8 4 12-9-8-9 8 4-12-10-8h12z' fill='%23CCA137' fill-opacity='0.03'/%3E%3C/svg%3E");
+            color: var(--white);
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
             min-height: 100vh;
-            padding: 40px 20px;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 420px;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* 25% Ivory Breathing Space - Header & Top Section */
+        header {
+            background-color: var(--ivory);
+            padding: 45px 20px 35px;
             text-align: center;
+            border-bottom: 4px solid var(--primary-gold);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            z-index: 10;
         }
 
-        .logo-container {
-            margin-bottom: 30px;
-        }
-
-        .brand-name {
-            color: var(--navy);
-            font-family: Georgia, serif;
-            font-size: 32px;
-            letter-spacing: 3px;
+        .brand-title {
+            font-family: 'Cinzel', serif;
+            font-size: 28px;
+            letter-spacing: 4px;
+            color: var(--brand-blue);
+            font-weight: 700;
             text-transform: uppercase;
-            margin-bottom: 5px;
-            font-weight: normal;
+            margin-bottom: 6px;
         }
 
-        .brand-subtitle {
-            color: var(--gold);
+        .brand-location {
+            font-family: 'Montserrat', sans-serif;
             font-size: 14px;
-            letter-spacing: 6px;
+            letter-spacing: 10px;
             text-transform: uppercase;
-            margin-bottom: 40px;
-            font-weight: bold;
+            color: var(--primary-gold);
+            font-weight: 600;
+            margin-left: 10px; /* Counter-balance tracking */
         }
 
-        .welcome-section h2 {
-            color: var(--navy);
-            font-family: Georgia, serif;
+        .gold-divider {
+            width: 80px;
+            height: 1.5px;
+            background: linear-gradient(90deg, transparent, var(--primary-gold), transparent);
+            margin: 20px auto 0;
+        }
+
+        /* 60% Blue dominance for Main Content */
+        main {
+            flex: 1;
+            padding: 50px 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .hero-section {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .hero-title {
+            font-family: 'Cinzel', serif;
             font-size: 24px;
-            margin-bottom: 10px;
-            font-weight: normal;
+            line-height: 1.4;
+            color: var(--white);
+            margin-bottom: 15px;
+            font-weight: 700;
         }
 
-        .welcome-section p {
-            color: var(--navy-light);
-            font-size: 16px;
-            margin-bottom: 40px;
+        .hero-subtitle {
+            font-size: 15px;
+            color: rgba(255, 255, 255, 0.85);
+            line-height: 1.6;
+            font-weight: 300;
+            max-width: 320px;
+            margin: 0 auto;
             font-style: italic;
-            opacity: 0.8;
         }
 
         .menu-container {
             width: 100%;
-            max-width: 340px;
             display: flex;
             flex-direction: column;
-            gap: 16px;
+            gap: 20px;
         }
 
         .menu-btn {
-            background: var(--navy);
-            border: 1px solid var(--gold);
+            background-color: var(--brand-blue);
+            border: 2px solid var(--primary-gold);
             border-radius: 4px;
-            padding: 20px;
-            color: var(--gold-light);
+            min-height: 64px;
+            padding: 0 24px;
+            color: var(--white);
             text-decoration: none;
+            display: flex;
+            align-items: center;
             font-size: 13px;
-            text-transform: uppercase;
+            font-weight: 600;
             letter-spacing: 2px;
-            box-shadow: 0 10px 20px rgba(6, 20, 46, 0.15);
-            transition: all 0.3s ease;
+            text-transform: uppercase;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             position: relative;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.2);
         }
 
         .menu-btn:active {
             transform: translateY(2px);
-            box-shadow: 0 5px 10px rgba(6, 20, 46, 0.1);
-            background: var(--navy-light);
+            background-color: #1a4080;
+            border-color: var(--accent-gold);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
-        .menu-btn.primary {
-            background: var(--gold);
-            color: var(--navy);
-            border: 1px solid var(--navy);
-            font-weight: bold;
-            margin-top: 10px;
+        .menu-btn .icon {
+            font-size: 22px;
+            margin-right: 20px;
+            color: var(--accent-gold);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
         }
 
-        .footer {
-            margin-top: auto;
-            padding-top: 60px;
-            font-size: 10px;
-            color: var(--navy);
+        /* Button Shine Effect */
+        .btn-shine {
+            position: absolute;
+            top: 0; left: -100%;
+            width: 50%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+            transition: 0.6s;
+        }
+        .menu-btn:hover .btn-shine {
+            left: 100%;
+        }
+
+        /* Footer Section */
+        footer {
+            padding: 60px 20px 45px;
+            text-align: center;
+            background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.2));
+        }
+
+        .footer-text {
+            font-family: 'Cinzel', serif;
+            color: var(--accent-gold);
+            font-size: 14px;
+            letter-spacing: 2.5px;
             text-transform: uppercase;
-            letter-spacing: 3px;
-            opacity: 0.4;
+            margin-bottom: 12px;
+            font-weight: 700;
         }
 
-        @media (max-width: 380px) {
-            .brand-name { font-size: 28px; }
-            .brand-subtitle { font-size: 12px; }
-            .welcome-section h2 { font-size: 20px; }
-            .menu-btn { padding: 18px; }
+        .footer-sub {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            font-weight: 400;
+        }
+
+        /* Mobile Optimization */
+        @media (max-width: 360px) {
+            .brand-title { font-size: 24px; }
+            .hero-title { font-size: 20px; }
+            .menu-btn { padding: 0 16px; min-height: 60px; }
+            .menu-btn .icon { margin-right: 12px; }
         }
     </style>
 </head>
 <body>
-    <div class="logo-container">
-        <h1 class="brand-name">Aradhana</h1>
-        <div class="brand-subtitle">Jewellers</div>
+
+    <div class="container">
+        <header>
+            <h1 class="brand-title">Aradhana Jewellers</h1>
+            <div class="brand-location">Boisar</div>
+            <div class="gold-divider"></div>
+        </header>
+
+        <main>
+            <div class="hero-section">
+                <h2 class="hero-title">Welcome to Aradhana Jewellers</h2>
+                <p class="hero-subtitle">Serving Boisar with trust, purity and craftsmanship.</p>
+            </div>
+
+            <div class="menu-container">
+                <a href="https://g.page/r/CZSjxdw4AdaxEBM/review" class="menu-btn" target="_blank">
+                    <span class="icon">⭐</span>
+                    <span>Review Us on Google</span>
+                    <div class="btn-shine"></div>
+                </a>
+                
+                <a href="/print" class="menu-btn">
+                    <span class="icon">📄</span>
+                    <span>Print Documents</span>
+                    <div class="btn-shine"></div>
+                </a>
+                
+                <a href="https://www.instagram.com/aradhanajewellers.boisar/" class="menu-btn" target="_blank">
+                    <span class="icon">📸</span>
+                    <span>Visit Instagram</span>
+                    <div class="btn-shine"></div>
+                </a>
+                
+                <a href="https://www.facebook.com/people/Aradhana-Jewellers-Boisar/61573284677105/" class="menu-btn" target="_blank">
+                    <span class="icon">👍</span>
+                    <span>Visit Facebook</span>
+                    <div class="btn-shine"></div>
+                </a>
+            </div>
+        </main>
+
+        <footer>
+            <div class="footer-text">Trusted Jewellery Store in Boisar</div>
+            <div class="footer-sub">Jewellery • Gold • Silver • Custom Orders</div>
+        </footer>
     </div>
 
-    <div class="welcome-section">
-        <h2>Welcome to Aradhana Jewellers</h2>
-        <p>What would you like to do today?</p>
-    </div>
-
-    <div class="menu-container">
-        <a href="https://www.instagram.com/aradhanajewellers.boisar/" class="menu-btn" target="_blank">
-            Visit us on Instagram
-        </a>
-        <a href="https://www.facebook.com/people/Aradhana-Jewellers-Boisar/61573284677105/" class="menu-btn" target="_blank">
-            Visit us on Facebook
-        </a>
-        <a href="https://g.page/r/CZSjxdw4AdaxEBM/review" class="menu-btn" target="_blank">
-            Review us on Google
-        </a>
-        <a href="/print" class="menu-btn primary">
-            Print Documents
-        </a>
-    </div>
-
-    <div class="footer">
-        Experience Luxury
-    </div>
 </body>
 </html>
