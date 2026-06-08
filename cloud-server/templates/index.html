@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aradhana Jewellers | Menu</title>
+    <style>
+        :root {
+            --navy: #06142E;
+            --navy-light: #112244;
+            --gold: #D4AF37;
+            --gold-light: #F3E5AB;
+            --bg-color: #F7F5F0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: var(--bg-color);
+            background-image: radial-gradient(circle at top right, rgba(212, 175, 55, 0.05), transparent),
+                              radial-gradient(circle at bottom left, rgba(6, 20, 46, 0.05), transparent);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .logo-container {
+            margin-bottom: 30px;
+        }
+
+        .brand-name {
+            color: var(--navy);
+            font-family: Georgia, serif;
+            font-size: 32px;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            font-weight: normal;
+        }
+
+        .brand-subtitle {
+            color: var(--gold);
+            font-size: 14px;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            margin-bottom: 40px;
+            font-weight: bold;
+        }
+
+        .welcome-section h2 {
+            color: var(--navy);
+            font-family: Georgia, serif;
+            font-size: 24px;
+            margin-bottom: 10px;
+            font-weight: normal;
+        }
+
+        .welcome-section p {
+            color: var(--navy-light);
+            font-size: 16px;
+            margin-bottom: 40px;
+            font-style: italic;
+            opacity: 0.8;
+        }
+
+        .menu-container {
+            width: 100%;
+            max-width: 340px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .menu-btn {
+            background: var(--navy);
+            border: 1px solid var(--gold);
+            border-radius: 4px;
+            padding: 20px;
+            color: var(--gold-light);
+            text-decoration: none;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            box-shadow: 0 10px 20px rgba(6, 20, 46, 0.15);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .menu-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 5px 10px rgba(6, 20, 46, 0.1);
+            background: var(--navy-light);
+        }
+
+        .menu-btn.primary {
+            background: var(--gold);
+            color: var(--navy);
+            border: 1px solid var(--navy);
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .footer {
+            margin-top: auto;
+            padding-top: 60px;
+            font-size: 10px;
+            color: var(--navy);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            opacity: 0.4;
+        }
+
+        @media (max-width: 380px) {
+            .brand-name { font-size: 28px; }
+            .brand-subtitle { font-size: 12px; }
+            .welcome-section h2 { font-size: 20px; }
+            .menu-btn { padding: 18px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="logo-container">
+        <h1 class="brand-name">Aradhana</h1>
+        <div class="brand-subtitle">Jewellers</div>
+    </div>
+
+    <div class="welcome-section">
+        <h2>Welcome to Aradhana Jewellers</h2>
+        <p>What would you like to do today?</p>
+    </div>
+
+    <div class="menu-container">
+        <a href="https://www.instagram.com/aradhanajewellery/" class="menu-btn" target="_blank">
+            Visit us on Instagram
+        </a>
+        <a href="https://www.facebook.com/aradhanajewellerykannur/" class="menu-btn" target="_blank">
+            Visit us on Facebook
+        </a>
+        <a href="https://www.google.com/search?q=Aradhana+Jewellery+Kannur+reviews" class="menu-btn" target="_blank">
+            Review us on Google
+        </a>
+        <a href="/print" class="menu-btn primary">
+            Print Documents
+        </a>
+    </div>
+
+    <div class="footer">
+        Experience Luxury
+    </div>
+</body>
+</html>

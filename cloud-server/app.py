@@ -63,6 +63,11 @@ def generate_queue_id():
 
 @app.route("/", methods=["GET"])
 def index():
+    return render_template("index.html")
+
+
+@app.route("/print", methods=["GET"])
+def print_page():
     production_mode = os.environ.get("PRODUCTION_MODE", "false").lower() == "true"
     return render_template("upload.html", production_mode=production_mode)
 
