@@ -51,38 +51,32 @@
         /* 25% Ivory Breathing Space - Header & Top Section */
         header {
             background-color: var(--ivory);
-            padding: 45px 20px 35px;
+            padding: 30px 20px 25px;
             text-align: center;
             border-bottom: 4px solid var(--primary-gold);
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             z-index: 10;
         }
 
-        .brand-title {
-            font-family: 'Cinzel', serif;
-            font-size: 28px;
-            letter-spacing: 4px;
-            color: var(--brand-blue);
-            font-weight: 700;
-            text-transform: uppercase;
-            margin-bottom: 6px;
+        .logo-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 5px;
         }
 
-        .brand-location {
-            font-family: 'Montserrat', sans-serif;
-            font-size: 14px;
-            letter-spacing: 10px;
-            text-transform: uppercase;
-            color: var(--primary-gold);
-            font-weight: 600;
-            margin-left: 10px; /* Counter-balance tracking */
+        .brand-logo {
+            width: 160px; /* Mobile width */
+            height: auto;
+            display: block;
+            object-fit: contain;
         }
 
         .gold-divider {
             width: 80px;
             height: 1.5px;
             background: linear-gradient(90deg, transparent, var(--primary-gold), transparent);
-            margin: 20px auto 0;
+            margin: 15px auto 0;
         }
 
         /* 60% Blue dominance for Main Content */
@@ -199,9 +193,14 @@
             font-weight: 400;
         }
 
-        /* Mobile Optimization */
+        /* Responsive Optimization */
+        @media (min-width: 421px) {
+            .brand-logo {
+                width: 240px; /* Desktop width */
+            }
+        }
+
         @media (max-width: 360px) {
-            .brand-title { font-size: 24px; }
             .hero-title { font-size: 20px; }
             .menu-btn { padding: 0 16px; min-height: 60px; }
             .menu-btn .icon { margin-right: 12px; }
@@ -212,8 +211,9 @@
 
     <div class="container">
         <header>
-            <h1 class="brand-title">Aradhana Jewellers</h1>
-            <div class="brand-location">Boisar</div>
+            <div class="logo-wrapper">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Aradhana Jewellers Logo" class="brand-logo">
+            </div>
             <div class="gold-divider"></div>
         </header>
 
