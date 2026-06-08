@@ -29,6 +29,8 @@ export interface ReconciliationItem {
   invoicePdfAvailable?: boolean;
   hasSpecialPaymentFlag?: boolean;
   paymentBreakdown: ReconciliationPaymentEvidence[];
+  queueId?: number | string | null;
+  queueStatus?: string | null;
 }
 
 export interface AuditLogItem {
@@ -50,4 +52,30 @@ export interface DashboardStats {
   cardCollection: number;
   advanceCollection: number;
   matchAccuracy: number;
+}
+
+export interface DashboardTodayKPIs {
+  billsCreated: number;
+  paymentsReceived: number;
+  autoVerified: number;
+  awaitingReview: number;
+  pendingProof: number;
+  escalations: number;
+}
+
+export interface DashboardTodayEvent {
+  id: number;
+  time: string;
+  invoice_no: string;
+  customer: string;
+  amount: number;
+  mode: string;
+  proof: string;
+  confidence: string;
+  state: string;
+}
+
+export interface DashboardTodayResponse {
+  kpis: DashboardTodayKPIs;
+  recentEvents: DashboardTodayEvent[];
 }

@@ -7,6 +7,9 @@ interface InvoiceDetailDrawerProps {
   onClose: () => void;
   onViewInvoice: (item: ReconciliationItem) => void;
   onViewProof: (payment: ReconciliationPaymentEvidence) => void;
+  showIncorrectDetailsFeedback?: boolean;
+  systemReason?: string;
+  onAction?: (action: 'APPROVE' | 'REJECT' | 'FURTHER_REVIEW', queueId: number | string) => void;
 }
 
 const formatDateTime = (value?: string | null) => {
@@ -28,7 +31,7 @@ const formatInvoiceTimestamp = (item: ReconciliationItem) => {
   return formatDateTime(value);
 };
 
-const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose, onViewInvoice, onViewProof }) => {
+const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose, onViewInvoice, onViewProof, showIncorrectDetailsFeedback = false, systemReason, onAction }) => {
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
@@ -130,12 +133,85 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
               <span className="detail-label">Confidence:</span>
               <span className="detail-value">{item.matchConfidence}</span>
             </div>
+            {systemReason && (
+              <div className="detail-item mt-2">
+                <span className="detail-label">System Detail:</span>
+                <span className="detail-value text-xs text-gray-500 font-mono break-words">{systemReason}</span>
+              </div>
+            )}
             {item.hasSpecialPaymentFlag && (
               <p className="mt-3 rounded-2xl border border-purple-100 bg-purple-50 p-4 text-sm font-semibold text-purple-800">
                 Old gold, advance, customer purchase, or buyback payment requires accountant approval even when amounts match.
               </p>
             )}
           </section>
+
+          {item.queueId != null && item.queueStatus === 'OPEN' && onAction && (
+            <section className="drawer-section border-t-4 border-orange-200 pt-6 mt-6">
+              <h3 className="text-orange-800 font-black mb-4">Accountant Review Required</h3>
+              <div className="flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => onAction('APPROVE', item.queueId!)}
+                  className="rounded-xl bg-green-600 px-5 py-3 text-sm font-black uppercase tracking-widest text-white hover:bg-green-700 w-full"
+                >
+                  Approve
+                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onAction('REJECT', item.queueId!)}
+                    className="rounded-xl bg-red-100 px-5 py-3 text-sm font-black uppercase tracking-widest text-red-700 hover:bg-red-200 flex-1"
+                  >
+                    Reject
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onAction('FURTHER_REVIEW', item.queueId!)}
+                    className="rounded-xl bg-orange-100 px-5 py-3 text-sm font-black uppercase tracking-widest text-orange-700 hover:bg-orange-200 flex-1"
+                  >
+                    Further Review
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {showIncorrectDetailsFeedback && (
+            <section className="drawer-section">
+              <h3>Report Incorrect Details</h3>
+              <p className="mb-4 text-sm font-semibold text-gray-600">
+                Flag display or evidence issues for software review. This does not edit payment, bill, UTR, date, or reconciliation status.
+              </p>
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="detail-label block mb-2">Issue Type</span>
+                  <select className="w-full rounded-xl border border-gray-200 bg-white p-3 text-sm font-bold text-gray-700">
+                    <option>Wrong UTR shown</option>
+                    <option>Wrong timestamp</option>
+                    <option>Wrong proof status</option>
+                    <option>Wrong payment mode</option>
+                    <option>Missing PDF</option>
+                    <option>Other</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="detail-label block mb-2">Note</span>
+                  <textarea
+                    className="h-24 w-full rounded-xl border border-gray-200 bg-white p-3 text-sm font-semibold text-gray-700"
+                    placeholder="Describe what looks incorrect for software review."
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled
+                  className="rounded-xl bg-gray-200 px-4 py-3 text-xs font-black uppercase tracking-widest text-gray-500"
+                >
+                  Feedback capture endpoint pending
+                </button>
+              </div>
+            </section>
+          )}
         </div>
       </div>
     </div>

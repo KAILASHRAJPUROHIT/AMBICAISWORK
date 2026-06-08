@@ -51,7 +51,7 @@ if not db_integrity_ok:
 
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event, hash_password
 from backend.lan_config import lan_health_check
-from backend.models import User, LoginLog, Bill, Payment, BankAlert, SMSAlert, SystemSetting, AuditLog, AccountantVerificationQueue
+from backend.models import User, LoginLog, Bill, Payment, BankAlert, SMSAlert, SystemSetting, AuditLog, AccountantVerificationQueue, PaymentConfirmationSignature
 from backend.pdf_ingestion import (
     start_ingestion_thread,
     perform_scan,
@@ -63,6 +63,7 @@ from backend.pdf_ingestion import (
 from backend.email_poller import start_email_poller, process_emails, email_status
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
 from backend.reconciliation.logic import calculate_payment_proof_status
+from backend.schemas import ActionNoteRequest, FurtherReviewRequest, AskExplanationRequest
 from backend.api_routes import router as api_router
 from backend.invoice_lifecycle import start_lifecycle_automation
 from backend.payment_signature_scheduler import start_payment_signature_scheduler
@@ -419,6 +420,96 @@ async def get_live_feed(days: int = 7, per_day: int = 20, db: Session = Depends(
         })
     return results
 
+@app.get("/api/dashboard/today")
+async def get_dashboard_today(request: Request, db: Session = Depends(get_db)):
+    # Authenticate for financial data check
+    token = request.headers.get("X-Session-Token")
+    if token:
+        validate_session(db, token)
+        
+    now_local = datetime.now()
+    utc_now = datetime.utcnow()
+    offset = now_local - utc_now
+    
+    today_start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start_utc = today_start_local - offset
+    
+    today_str = now_local.strftime("%Y-%m-%d")
+    
+    # KPIs
+    bills_created = db.query(Bill).filter(
+        Bill.invoice_date >= today_start_local, 
+        Bill.is_test_data == False
+    ).count()
+    
+    payments_received = db.query(Payment).join(Bill, Payment.bill_id == Bill.id).filter(
+        Payment.created_at >= today_start_utc, 
+        Bill.is_test_data == False
+    ).count()
+    
+    auto_verified = db.query(Bill).filter(
+        Bill.invoice_date >= today_start_local, 
+        Bill.is_test_data == False,
+        Bill.status.in_(["Green", "Verified"])
+    ).count()
+    
+    awaiting_review = db.query(AccountantVerificationQueue).filter(
+        AccountantVerificationQueue.created_at >= today_start_utc,
+        AccountantVerificationQueue.queue_status == "OPEN"
+    ).count()
+    
+    # We derive pending bank proof directly from PaymentConfirmationSignature
+    pending_proof = db.query(PaymentConfirmationSignature).join(
+        Bill, PaymentConfirmationSignature.bill_id == Bill.id
+    ).filter(
+        Bill.invoice_date >= today_start_local,
+        Bill.is_test_data == False,
+        PaymentConfirmationSignature.proof_status.in_(["no_proof", "mismatch_proof"])
+    ).count()
+    
+    escalations = db.query(AccountantVerificationQueue).filter(
+        AccountantVerificationQueue.created_at >= today_start_utc,
+        AccountantVerificationQueue.queue_status.in_(["FURTHER_REVIEW", "OWNER_ESCALATION_PENDING"])
+    ).count()
+    
+    # Recent Payment Events (Today)
+    recent_payments = db.query(Payment).join(Bill, Payment.bill_id == Bill.id).filter(
+        Payment.created_at >= today_start_utc,
+        Bill.is_test_data == False
+    ).order_by(Payment.created_at.desc()).limit(50).all()
+    
+    events = []
+    for p in recent_payments:
+        bill = db.query(Bill).filter(Bill.id == p.bill_id).first()
+        if not bill:
+            continue
+            
+        pcs = db.query(PaymentConfirmationSignature).filter(PaymentConfirmationSignature.bill_id == bill.id).first()
+            
+        events.append({
+            "id": p.id,
+            "time": p.created_at.strftime("%H:%M %p") if p.created_at else "",
+            "invoice_no": bill.bill_number,
+            "customer": bill.customer_name or "Unknown",
+            "amount": float(p.amount) if p.amount else 0.0,
+            "mode": p.mode,
+            "proof": pcs.proof_status if pcs else "no_proof",
+            "confidence": "High" if bill.status in ("Green", "Verified") else "Low",
+            "state": bill.status
+        })
+
+    return {
+        "kpis": {
+            "billsCreated": bills_created,
+            "paymentsReceived": payments_received,
+            "autoVerified": auto_verified,
+            "awaitingReview": awaiting_review,
+            "pendingProof": pending_proof,
+            "escalations": escalations
+        },
+        "recentEvents": events
+    }
+
 @app.get("/api/dashboard/live")
 @app.get("/api/prime/dashboard/stats")
 async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
@@ -772,6 +863,323 @@ async def get_reconciliation_proof_preview(proof_type: str, proof_id: int, reque
         )
     raise HTTPException(status_code=404, detail="Proof type not found")
 
+def build_reconciliation_row(db: Session, bill: Bill, queue_item: Optional[AccountantVerificationQueue] = None) -> dict:
+    payments = (
+        db.query(Payment)
+        .filter(Payment.bill_id == bill.id)
+        .order_by(Payment.payment_date.asc().nullslast(), Payment.created_at.asc())
+        .all()
+    )
+
+    proof_eligible_modes = {"UPI", "BANK_TRANSFER", "CARD", "RTGS_OR_CHEQUE"}
+    proof_utr_values = {
+        payment.utr_reference
+        for payment in payments
+        if payment.mode in proof_eligible_modes and payment.utr_reference
+    }
+    proof_amount_values = {
+        payment.amount
+        for payment in payments
+        if payment.mode in proof_eligible_modes and payment.amount is not None
+    }
+    bank_proof_filters = []
+    sms_proof_filters = []
+    if proof_utr_values:
+        bank_proof_filters.append(BankAlert.utr_reference.in_(proof_utr_values))
+        sms_proof_filters.append(SMSAlert.utr_reference.in_(proof_utr_values))
+    if proof_amount_values:
+        bank_proof_filters.append(BankAlert.amount.in_(proof_amount_values))
+        sms_proof_filters.append(SMSAlert.amount.in_(proof_amount_values))
+
+    all_bank_alerts = db.query(BankAlert).filter(or_(*bank_proof_filters)).all() if bank_proof_filters else []
+    all_sms_alerts = db.query(SMSAlert).filter(or_(*sms_proof_filters)).all() if sms_proof_filters else []
+    all_proofs = all_bank_alerts + all_sms_alerts
+    payment_total = sum(float(payment.amount or 0.0) for payment in payments)
+    fallback_total = (
+        float(bill.cash_received or 0.0)
+        + float(bill.bank_received or 0.0)
+        + float(bill.card_received or 0.0)
+    )
+    received_amount = payment_total if payment_total > 0 else fallback_total
+    invoice_amount = float(bill.amount or 0.0)
+    difference = round(invoice_amount - received_amount, 2)
+    payment_mode = bill.payment_mode or ", ".join(payment.mode for payment in payments if payment.mode) or "UNKNOWN"
+    confidence = reconciliation_confidence(invoice_amount, received_amount, payment_mode)
+    status = reconciliation_display_status(invoice_amount, received_amount, difference, payment_mode, bill.status)
+    invoice_timestamp, invoice_timestamp_source, invoice_time_recorded = best_invoice_timestamp(bill)
+    payment_breakdown = []
+    for payment in payments:
+        evidence = find_payment_evidence(db, payment, bill, all_proofs)
+        payment_breakdown.append({
+            "amount": float(payment.amount or 0.0),
+            "mode": payment.mode or "UNKNOWN",
+            "timestamp": iso_or_none(payment.payment_date) or evidence["timestamp"] or iso_or_none(payment.created_at),
+            "utr_reference": payment.utr_reference,
+            "reference": evidence["reference"] or payment.utr_reference or payment.cheque_number,
+            "source": evidence["source"],
+            "proof_url": evidence["proof_url"],
+            "proof_label": evidence["proof_label"],
+        })
+    if not payment_breakdown and received_amount > 0:
+        for mode, amount in (
+            ("CASH", float(bill.cash_received or 0.0)),
+            ("BANK", float(bill.bank_received or 0.0)),
+            ("CARD", float(bill.card_received or 0.0)),
+        ):
+            if amount > 0:
+                fallback_time = bill.invoice_generated_at or bill.created_at or bill.invoice_date
+                
+                proof_details = {
+                    "proof_status": "no_proof",
+                    "proof_type": None,
+                    "proof_id": None,
+                    "proof_label": "No proof found",
+                    "confidence_score": 0,
+                    "confidence_reason": "No explicit payment record or proof found",
+                    "requires_accountant_review": True
+                }
+
+                current_utr_reference = bill.reference_no if mode == "BANK" else None
+
+                if mode == "CASH":
+                    proof_details.update({
+                        "proof_status": "confirmed_received",
+                        "proof_type": "Cash",
+                        "proof_label": "Cash auto-confirmed",
+                        "confidence_score": 100,
+                        "confidence_reason": "Auto-confirmed as per policy (CASH payments)",
+                        "requires_accountant_review": False
+                    })
+                elif mode in ["ADVANCE", "OLD_GOLD_EXCHANGE"]:
+                    proof_details.update({
+                        "proof_status": "pending_accountant_review",
+                        "proof_type": mode,
+                        "proof_label": f"Accountant review required for {mode}",
+                        "confidence_score": 0,
+                        "confidence_reason": f"Requires manual accountant confirmation for {mode}",
+                        "requires_accountant_review": True
+                    })
+                elif mode in ["BANK", "CARD"]:
+                    found_match = False
+                    for proof in all_proofs:
+                        proof_utr = None
+                        proof_amount = None
+                        proof_type_str = None
+                        proof_id = None
+
+                        if isinstance(proof, SMSAlert):
+                            proof_utr = proof.utr_reference
+                            proof_amount = proof.amount
+                            proof_type_str = "SMS"
+                            proof_id = proof.id
+                        elif isinstance(proof, BankAlert):
+                            proof_utr = proof.utr_reference
+                            proof_amount = proof.amount
+                            proof_type_str = "Bank"
+                            proof_id = proof.id
+                        
+                        if (current_utr_reference and proof_utr and current_utr_reference == proof_utr and
+                            abs(float(amount) - float(proof_amount)) < 0.01):
+                            proof_details.update({
+                                "proof_status": "verified_proof",
+                                "proof_type": proof_type_str,
+                                "proof_id": proof_id,
+                                "proof_label": f"Verified by {proof_type_str} Proof (ID: {proof_id})",
+                                "confidence_score": 100,
+                                "confidence_reason": f"Exact UTR and amount match with {proof_type_str} proof.",
+                                "requires_accountant_review": False
+                            })
+                            found_match = True
+                            break
+                        
+                        if (not found_match and abs(float(amount) - float(proof_amount)) < 0.01 and
+                            (not current_utr_reference or not proof_utr or current_utr_reference != proof_utr)):
+                            proof_details.update({
+                                "proof_status": "mismatch_proof",
+                                "proof_type": proof_type_str,
+                                "proof_id": proof_id,
+                                "proof_label": f"Partial Proof from {proof_type_str} (ID: {proof_id}): Amount matches, UTR differs/missing",
+                                "confidence_score": 50,
+                                "confidence_reason": f"Amount matches {proof_type_str} proof, but UTR is missing or mismatched.",
+                                "requires_accountant_review": True
+                            })
+                    
+                    if found_match:
+                        pass
+                    elif proof_details["proof_status"] != "mismatch_proof":
+                        proof_details.update({
+                            "proof_status": "no_proof",
+                            "proof_type": None,
+                            "proof_id": None,
+                            "proof_label": "No proof found for bank/online payment",
+                            "confidence_score": 0,
+                            "confidence_reason": "No matching SMS or Bank proof found for bank/online payment.",
+                            "requires_accountant_review": True
+                        })
+
+                proof_url = None
+                if proof_details["proof_status"] == "verified_proof" and proof_details["proof_id"] is not None:
+                    if proof_details["proof_type"] == "SMS":
+                        proof_url = f"/api/reconciliation/proof/sms/{proof_details['proof_id']}"
+                    elif proof_details["proof_type"] == "Bank":
+                        proof_url = f"/api/reconciliation/proof/bank/{proof_details['proof_id']}"
+
+                payment_breakdown.append({
+                    "amount": amount,
+                    "mode": mode,
+                    "timestamp": iso_or_none(fallback_time),
+                    "utr_reference": current_utr_reference,
+                    "reference": current_utr_reference,
+                    "source": proof_details["proof_type"] or "Manual",
+                    "proof_url": proof_url,
+                    "proof_label": proof_details["proof_label"],
+                    "confidence_score": proof_details["confidence_score"],
+                    "confidence_reason": proof_details["confidence_reason"],
+                    "requires_accountant_review": proof_details["requires_accountant_review"],
+                })
+
+    return {
+        "bill_id": bill.id,
+        "bill_no": bill.bill_number,
+        "customer_name": bill.customer_name or "",
+        "invoice_amount": invoice_amount,
+        "bank_amount": received_amount,
+        "difference": difference,
+        "payment_mode": payment_mode,
+        "confidence": confidence,
+        "status": status,
+        "invoice_date": iso_or_none(bill.invoice_date),
+        "invoice_generated_at": iso_or_none(bill.invoice_generated_at),
+        "invoice_timestamp": iso_or_none(invoice_timestamp),
+        "invoice_timestamp_source": invoice_timestamp_source,
+        "invoice_time_recorded": invoice_time_recorded,
+        "pdf_mtime": iso_or_none(get_file_timestamp(bill.pdf_path)),
+        "invoice_pdf_url": f"/api/invoices/pdf/{bill.id}" if bill.pdf_path else None,
+        "invoice_pdf_available": bool(bill.pdf_path),
+        "bank_time": None,
+        "verified_at": None,
+        "verified_by": None,
+        "utr_reference": bill.reference_no or next((payment.utr_reference for payment in payments if payment.utr_reference), None),
+        "review_age": None,
+        "source_system": "ARADHANA_BILLS",
+        "has_special_payment_flag": requires_accountant_approval(payment_mode),
+        "payment_breakdown": payment_breakdown,
+        "queue_id": queue_item.id if queue_item else None,
+        "queue_status": queue_item.queue_status if queue_item else None,
+    }
+
+@app.post("/api/accountant-verification/ensure-open-items")
+async def ensure_open_items(request: Request, db: Session = Depends(get_db)):
+    require_valid_session(request, db)
+    
+    bills = (
+        db.query(Bill)
+        .filter(
+            Bill.is_test_data == False,
+            ~Bill.bill_number.ilike("TEST-%"),
+            ~Bill.bill_number.ilike("ARCH-%"),
+            ~Bill.bill_number.ilike("HARDENING-%"),
+        )
+        .order_by(Bill.invoice_generated_at.desc().nullslast(), Bill.created_at.desc())
+        .limit(1000)
+        .all()
+    )
+    
+    import json
+    from datetime import datetime
+    from scripts.backfill_accountant_verification_queue import build_queue_payload, active_queue_item
+    
+    processed = 0
+    created = 0
+    skipped_existing = 0
+    errors = 0
+    
+    now = datetime.now()
+    
+    for bill in bills:
+        if not is_operational_reconciliation_bill(bill):
+            continue
+            
+        processed += 1
+        try:
+            row_dict = build_reconciliation_row(db, bill)
+            
+            has_proof_issue = any(
+                p.get("proof_status") in ("mismatch_proof", "no_proof")
+                for p in row_dict.get("payment_breakdown", [])
+            )
+            
+            needs_review = (
+                row_dict.get("status") not in ("Green", "Verified") or
+                "ACCOUNTANT APPROVAL REQUIRED" in (row_dict.get("status") or "") or
+                row_dict.get("confidence") != "High" or
+                row_dict.get("has_special_payment_flag") or
+                has_proof_issue
+            )
+            
+            if not needs_review:
+                continue
+                
+            if active_queue_item(db, bill.id):
+                skipped_existing += 1
+                continue
+                
+            payload = build_queue_payload(db, bill, now)
+            
+            queue_item = AccountantVerificationQueue(
+                bill_id=payload["bill_id"],
+                payment_id=payload["payment_id"],
+                signature_id=payload["signature_id"],
+                invoice_no=payload["invoice_no"],
+                queue_status=payload["queue_status"],
+                verification_day=payload["verification_day"],
+                due_at=payload["due_at"],
+                reason=payload["reason"],
+                proof_status=payload["proof_status"],
+                payment_status=payload["payment_status"],
+                confidence_level=payload["confidence_level"],
+                assigned_role=payload["assigned_role"],
+                created_by="SYSTEM_ENSURE_API",
+            )
+            db.add(queue_item)
+            db.flush()
+            
+            row_summary = {
+                "bill_id": payload["bill_id"],
+                "invoice_no": payload["invoice_no"],
+                "bill_status": bill.status,
+                "payment_status": payload["payment_status"],
+                "confidence_level": payload["confidence_level"],
+                "proof_status": payload["proof_status"],
+                "due_at": payload["due_at"].isoformat() if payload["due_at"] else None,
+            }
+            db.add(AuditLog(
+                entity_type="AccountantVerificationQueue",
+                entity_id=queue_item.id,
+                action="ACCOUNTANT_QUEUE_ENSURED_FROM_RECONCILIATION",
+                new_status=queue_item.queue_status,
+                actor="SYSTEM_ENSURE_API",
+                metadata_json=json.dumps(row_summary),
+            ))
+            created += 1
+            
+        except Exception as e:
+            logger.error(f"Error ensuring queue item for bill {bill.id}: {e}")
+            errors += 1
+            
+    if created > 0:
+        db.commit()
+    else:
+        db.rollback()
+        
+    return {
+        "status": "success",
+        "processed": processed,
+        "created": created,
+        "skipped_existing": skipped_existing,
+        "errors": errors
+    }
+
 @app.get("/api/reconciliation/open")
 async def get_open_reconciliation_real(request: Request, response: Response, db: Session = Depends(get_db)):
     token = request.headers.get("X-Session-Token")
@@ -800,218 +1208,21 @@ async def get_open_reconciliation_real(request: Request, response: Response, db:
         .all()
     )
 
+    bill_ids = [b.id for b in bills if is_operational_reconciliation_bill(b)]
+    queue_items = (
+        db.query(AccountantVerificationQueue)
+        .filter(AccountantVerificationQueue.bill_id.in_(bill_ids))
+        .filter(AccountantVerificationQueue.queue_status.in_(["OPEN", "FURTHER_REVIEW", "OWNER_ESCALATION_PENDING"]))
+        .all()
+    ) if bill_ids else []
+    
+    queue_lookup = {item.bill_id: item for item in queue_items}
+
     rows = []
     for bill in bills:
         if not is_operational_reconciliation_bill(bill):
             continue
-        
-        payments = (
-            db.query(Payment)
-            .filter(Payment.bill_id == bill.id)
-            .order_by(Payment.payment_date.asc().nullslast(), Payment.created_at.asc())
-            .all()
-        )
-
-        proof_eligible_modes = {"UPI", "BANK_TRANSFER", "CARD", "RTGS_OR_CHEQUE"}
-        proof_utr_values = {
-            payment.utr_reference
-            for payment in payments
-            if payment.mode in proof_eligible_modes and payment.utr_reference
-        }
-        proof_amount_values = {
-            payment.amount
-            for payment in payments
-            if payment.mode in proof_eligible_modes and payment.amount is not None
-        }
-        bank_proof_filters = []
-        sms_proof_filters = []
-        if proof_utr_values:
-            bank_proof_filters.append(BankAlert.utr_reference.in_(proof_utr_values))
-            sms_proof_filters.append(SMSAlert.utr_reference.in_(proof_utr_values))
-        if proof_amount_values:
-            bank_proof_filters.append(BankAlert.amount.in_(proof_amount_values))
-            sms_proof_filters.append(SMSAlert.amount.in_(proof_amount_values))
-
-        all_bank_alerts = db.query(BankAlert).filter(or_(*bank_proof_filters)).all() if bank_proof_filters else []
-        all_sms_alerts = db.query(SMSAlert).filter(or_(*sms_proof_filters)).all() if sms_proof_filters else []
-        all_proofs = all_bank_alerts + all_sms_alerts
-        payment_total = sum(float(payment.amount or 0.0) for payment in payments)
-        fallback_total = (
-            float(bill.cash_received or 0.0)
-            + float(bill.bank_received or 0.0)
-            + float(bill.card_received or 0.0)
-        )
-        received_amount = payment_total if payment_total > 0 else fallback_total
-        invoice_amount = float(bill.amount or 0.0)
-        difference = round(invoice_amount - received_amount, 2)
-        payment_mode = bill.payment_mode or ", ".join(payment.mode for payment in payments if payment.mode) or "UNKNOWN"
-        confidence = reconciliation_confidence(invoice_amount, received_amount, payment_mode)
-        status = reconciliation_display_status(invoice_amount, received_amount, difference, payment_mode, bill.status)
-        invoice_timestamp, invoice_timestamp_source, invoice_time_recorded = best_invoice_timestamp(bill)
-        payment_breakdown = []
-        for payment in payments:
-            evidence = find_payment_evidence(db, payment, bill, all_proofs)
-            payment_breakdown.append({
-                "amount": float(payment.amount or 0.0),
-                "mode": payment.mode or "UNKNOWN",
-                "timestamp": iso_or_none(payment.payment_date) or evidence["timestamp"] or iso_or_none(payment.created_at),
-                "utr_reference": payment.utr_reference,
-                "reference": evidence["reference"] or payment.utr_reference or payment.cheque_number,
-                "source": evidence["source"],
-                "proof_url": evidence["proof_url"],
-                "proof_label": evidence["proof_label"],
-            })
-        if not payment_breakdown and received_amount > 0:
-            for mode, amount in (
-                ("CASH", float(bill.cash_received or 0.0)),
-                ("BANK", float(bill.bank_received or 0.0)), # Note: 'BANK' here is a placeholder, actual bank payments have Payment objects
-                ("CARD", float(bill.card_received or 0.0)), # Note: 'CARD' here is a placeholder, actual card payments have Payment objects
-            ):
-                if amount > 0:
-                    fallback_time = bill.invoice_generated_at or bill.created_at or bill.invoice_date
-                    
-                    # Manually determine proof details based on mode rules, without Payment object
-                    proof_details = {
-                        "proof_status": "no_proof",
-                        "proof_type": None,
-                        "proof_id": None,
-                        "proof_label": "No proof found",
-                        "confidence_score": 0,
-                        "confidence_reason": "No explicit payment record or proof found",
-                        "requires_accountant_review": True
-                    }
-
-                    current_utr_reference = bill.reference_no if mode == "BANK" else None
-
-                    if mode == "CASH":
-                        proof_details.update({
-                            "proof_status": "confirmed_received",
-                            "proof_type": "Cash",
-                            "proof_label": "Cash auto-confirmed",
-                            "confidence_score": 100,
-                            "confidence_reason": "Auto-confirmed as per policy (CASH payments)",
-                            "requires_accountant_review": False
-                        })
-                    elif mode in ["ADVANCE", "OLD_GOLD_EXCHANGE"]: # Though these shouldn't be here in fallback, good to be explicit
-                        proof_details.update({
-                            "proof_status": "pending_accountant_review",
-                            "proof_type": mode,
-                            "proof_label": f"Accountant review required for {mode}",
-                            "confidence_score": 0,
-                            "confidence_reason": f"Requires manual accountant confirmation for {mode}",
-                            "requires_accountant_review": True
-                        })
-                    elif mode in ["BANK", "CARD"]:
-                        # For implicit bank/card payments, we still check against proofs
-                        # This mimics the calculate_payment_proof_status logic for these implicit entries
-                        found_match = False
-                        for proof in all_proofs:
-                            proof_utr = None
-                            proof_amount = None
-                            proof_type_str = None
-                            proof_id = None
-
-                            if isinstance(proof, SMSAlert):
-                                proof_utr = proof.utr_reference
-                                proof_amount = proof.amount
-                                proof_type_str = "SMS"
-                                proof_id = proof.id
-                            elif isinstance(proof, BankAlert):
-                                proof_utr = proof.utr_reference
-                                proof_amount = proof.amount
-                                proof_type_str = "Bank"
-                                proof_id = proof.id
-                            
-                            # Check for exact match: UTR and Amount
-                            if (current_utr_reference and proof_utr and current_utr_reference == proof_utr and
-                                abs(float(amount) - float(proof_amount)) < 0.01):
-                                proof_details.update({
-                                    "proof_status": "verified_proof",
-                                    "proof_type": proof_type_str,
-                                    "proof_id": proof_id,
-                                    "proof_label": f"Verified by {proof_type_str} Proof (ID: {proof_id})",
-                                    "confidence_score": 100,
-                                    "confidence_reason": f"Exact UTR and amount match with {proof_type_str} proof.",
-                                    "requires_accountant_review": False
-                                })
-                                found_match = True
-                                break # Found exact match, no need to check other proofs
-                            
-                            # Check for partial match: Amount only (if UTR is missing or mismatched)
-                            if (not found_match and abs(float(amount) - float(proof_amount)) < 0.01 and
-                                (not current_utr_reference or not proof_utr or current_utr_reference != proof_utr)):
-                                proof_details.update({
-                                    "proof_status": "mismatch_proof",
-                                    "proof_type": proof_type_str,
-                                    "proof_id": proof_id,
-                                    "proof_label": f"Partial Proof from {proof_type_str} (ID: {proof_id}): Amount matches, UTR differs/missing",
-                                    "confidence_score": 50,
-                                    "confidence_reason": f"Amount matches {proof_type_str} proof, but UTR is missing or mismatched.",
-                                    "requires_accountant_review": True
-                                })
-                                # Don't break, keep looking for exact matches
-                        
-                        if found_match:
-                            pass # Already updated in the loop
-                        elif proof_details["proof_status"] != "mismatch_proof": # If no exact match and no partial match
-                            proof_details.update({
-                                "proof_status": "no_proof",
-                                "proof_type": None,
-                                "proof_id": None,
-                                "proof_label": "No proof found for bank/online payment",
-                                "confidence_score": 0,
-                                "confidence_reason": "No matching SMS or Bank proof found for bank/online payment.",
-                                "requires_accountant_review": True
-                            })
-
-                    # Determine proof_url based on proof_details
-                    proof_url = None
-                    if proof_details["proof_status"] == "verified_proof" and proof_details["proof_id"] is not None:
-                        if proof_details["proof_type"] == "SMS":
-                            proof_url = f"/api/reconciliation/proof/sms/{proof_details['proof_id']}"
-                        elif proof_details["proof_type"] == "Bank":
-                            proof_url = f"/api/reconciliation/proof/bank/{proof_details['proof_id']}"
-
-                    payment_breakdown.append({
-                        "amount": amount,
-                        "mode": mode,
-                        "timestamp": iso_or_none(fallback_time),
-                        "utr_reference": current_utr_reference,
-                        "reference": current_utr_reference,
-                        "source": proof_details["proof_type"] or "Manual",
-                        "proof_url": proof_url,
-                        "proof_label": proof_details["proof_label"],
-                        "confidence_score": proof_details["confidence_score"],
-                        "confidence_reason": proof_details["confidence_reason"],
-                        "requires_accountant_review": proof_details["requires_accountant_review"],
-                    })
-        rows.append({
-            "bill_id": bill.id,
-            "bill_no": bill.bill_number,
-            "customer_name": bill.customer_name or "",
-            "invoice_amount": invoice_amount,
-            "bank_amount": received_amount,
-            "difference": difference,
-            "payment_mode": payment_mode,
-            "confidence": confidence,
-            "status": status,
-            "invoice_date": iso_or_none(bill.invoice_date),
-            "invoice_generated_at": iso_or_none(bill.invoice_generated_at),
-            "invoice_timestamp": iso_or_none(invoice_timestamp),
-            "invoice_timestamp_source": invoice_timestamp_source,
-            "invoice_time_recorded": invoice_time_recorded,
-            "pdf_mtime": iso_or_none(get_file_timestamp(bill.pdf_path)),
-            "invoice_pdf_url": f"/api/invoices/pdf/{bill.id}" if bill.pdf_path else None,
-            "invoice_pdf_available": bool(bill.pdf_path),
-            "bank_time": None,
-            "verified_at": None,
-            "verified_by": None,
-            "utr_reference": bill.reference_no or next((payment.utr_reference for payment in payments if payment.utr_reference), None),
-            "review_age": None,
-            "source_system": "ARADHANA_BILLS",
-            "has_special_payment_flag": requires_accountant_approval(payment_mode),
-            "payment_breakdown": payment_breakdown,
-        })
+        rows.append(build_reconciliation_row(db, bill, queue_lookup.get(bill.id)))
 
     response.headers["X-Reconciliation-Total-Considered"] = str(total_considered)
     response.headers["X-Reconciliation-Rows-Returned"] = str(len(rows))
@@ -1020,6 +1231,20 @@ async def get_open_reconciliation_real(request: Request, response: Response, db:
     response.headers["X-Reconciliation-Excluded-Hardening-Prefix"] = str(excluded_hardening_prefix)
     response.headers["X-Reconciliation-Excluded-Test-Data"] = str(excluded_test_data)
     return rows
+
+@app.get("/api/reconciliation/detail/{bill_id}")
+async def get_reconciliation_detail(bill_id: int, request: Request, db: Session = Depends(get_db)):
+    require_valid_session(request, db)
+    bill = db.query(Bill).filter(Bill.id == bill_id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+        
+    queue_item = db.query(AccountantVerificationQueue).filter(
+        AccountantVerificationQueue.bill_id == bill_id,
+        AccountantVerificationQueue.queue_status.in_(["OPEN", "FURTHER_REVIEW", "OWNER_ESCALATION_PENDING"])
+    ).first()
+
+    return build_reconciliation_row(db, bill, queue_item)
 
 @app.get("/status-colors")
 def status_colors():
@@ -1097,6 +1322,339 @@ async def get_accountant_verification_queue(
             "updated_at": item.updated_at.isoformat() if item.updated_at else None,
         })
     return payload
+
+@app.get("/api/escalations/exceptions")
+async def get_escalation_exceptions(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_accountant_verification_user),
+):
+    now = datetime.now()
+    exceptions = []
+
+    # A. Accountant Reviews Overdue >24h
+    overdue_24h = db.query(AccountantVerificationQueue, Bill).join(Bill, AccountantVerificationQueue.bill_id == Bill.id).filter(
+        AccountantVerificationQueue.queue_status == "OPEN",
+        AccountantVerificationQueue.acted_at == None,
+        AccountantVerificationQueue.created_at < now - timedelta(hours=24),
+        AccountantVerificationQueue.created_at >= now - timedelta(hours=48),
+        Bill.is_test_data == False
+    ).all()
+    for item, bill in overdue_24h:
+        exceptions.append({
+            "id": f"queue_{item.id}",
+            "bill_id": bill.id,
+            "invoice_no": bill.bill_number,
+            "category": "Accountant Reviews Overdue >24h",
+            "reason": f"Accountant review overdue by {int((now - item.created_at).total_seconds() / 3600)} hours",
+            "amount": float(bill.amount or 0),
+            "payment_mode": bill.payment_mode,
+            "status": bill.status,
+            "age_days": (now - item.created_at).days
+        })
+
+    # B. Accountant Reviews Critical >48h
+    overdue_48h = db.query(AccountantVerificationQueue, Bill).join(Bill, AccountantVerificationQueue.bill_id == Bill.id).filter(
+        AccountantVerificationQueue.queue_status == "OPEN",
+        AccountantVerificationQueue.acted_at == None,
+        AccountantVerificationQueue.created_at < now - timedelta(hours=48),
+        Bill.is_test_data == False
+    ).all()
+    for item, bill in overdue_48h:
+        exceptions.append({
+            "id": f"queue_{item.id}",
+            "bill_id": bill.id,
+            "invoice_no": bill.bill_number,
+            "category": "Accountant Reviews Critical >48h",
+            "reason": f"Critical: Accountant review overdue by {int((now - item.created_at).total_seconds() / 3600)} hours",
+            "amount": float(bill.amount or 0),
+            "payment_mode": bill.payment_mode,
+            "status": bill.status,
+            "age_days": (now - item.created_at).days
+        })
+
+    # C. Uncleared Payments >7 days
+    uncleared_payments = db.query(Payment, Bill).join(Bill, Payment.bill_id == Bill.id).filter(
+        Payment.status.in_(["Yellow", "Blue"]),
+        Payment.created_at < now - timedelta(days=7),
+        Bill.is_test_data == False
+    ).all()
+    for payment, bill in uncleared_payments:
+        exceptions.append({
+            "id": f"payment_{payment.id}",
+            "bill_id": bill.id,
+            "invoice_no": bill.bill_number,
+            "category": "Uncleared Payments >7 days",
+            "reason": f"Payment of {float(payment.amount or 0)} uncleared for {(now - payment.created_at).days} days",
+            "amount": float(payment.amount or 0),
+            "payment_mode": payment.mode,
+            "status": payment.status,
+            "age_days": (now - payment.created_at).days
+        })
+
+    # D. Cheque Ageing >7 days
+    from backend.models import Cheque
+    ageing_cheques = db.query(Cheque, Bill).join(Bill, Cheque.bill_id == Bill.id).filter(
+        Cheque.status == "Blue",
+        Cheque.created_at < now - timedelta(days=7),
+        Bill.is_test_data == False
+    ).all()
+    for cheque, bill in ageing_cheques:
+        exceptions.append({
+            "id": f"cheque_{cheque.id}",
+            "bill_id": bill.id,
+            "invoice_no": bill.bill_number,
+            "category": "Cheque Ageing >7 days",
+            "reason": f"Cheque {cheque.cheque_number} ageing for {(now - cheque.created_at).days} days",
+            "amount": float(cheque.amount or 0),
+            "payment_mode": "CHEQUE",
+            "status": cheque.status,
+            "age_days": (now - cheque.created_at).days
+        })
+
+    # E. Owner Attention Required
+    owner_attention = db.query(AccountantVerificationQueue, Bill).join(Bill, AccountantVerificationQueue.bill_id == Bill.id).filter(
+        AccountantVerificationQueue.queue_status == "OWNER_ESCALATION_PENDING",
+        Bill.is_test_data == False
+    ).all()
+    for item, bill in owner_attention:
+        exceptions.append({
+            "id": f"queue_{item.id}",
+            "bill_id": bill.id,
+            "invoice_no": bill.bill_number,
+            "category": "Owner Attention Required",
+            "reason": item.reason or "Owner attention requested",
+            "amount": float(bill.amount or 0),
+            "payment_mode": bill.payment_mode,
+            "status": bill.status,
+            "age_days": (now - item.created_at).days if item.created_at else 0
+        })
+
+    exceptions.sort(key=lambda x: x["age_days"], reverse=True)
+    return exceptions
+
+@app.post("/api/escalations/accountant-verification/{queue_id}/approve")
+async def approve_accountant_verification_item(
+    queue_id: int,
+    request: Optional[ActionNoteRequest] = None, # Make action_note optional
+    db: Session = Depends(get_db),
+    user: User = Depends(require_accountant_verification_user),
+):
+    item = db.query(AccountantVerificationQueue).filter(AccountantVerificationQueue.id == queue_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+    if item.queue_status != "OPEN":
+        raise HTTPException(status_code=400, detail=f"Queue item is already {item.queue_status}. Only OPEN items can be approved.")
+
+    old_status = item.queue_status
+    item.queue_status = "APPROVED"
+    item.acted_by = user.employee_id
+    item.acted_at = datetime.now()
+    item.action_note = request.action_note if request and request.action_note else "Approved by accountant." # Use provided note or default
+    
+    from backend.reconciliation.logic import log_audit
+    log_audit(
+        db,
+        "AccountantVerificationQueue",
+        item.id,
+        "ACCOUNTANT_VERIFICATION_APPROVED",
+        old_status,
+        item.queue_status,
+        f"Approved by {user.employee_id}. Note: {item.action_note}",
+        actor=user.employee_id
+    )
+    db.commit()
+    return {"status": "success", "message": f"Queue item {queue_id} approved."}
+
+@app.post("/api/escalations/accountant-verification/{queue_id}/reject")
+async def reject_accountant_verification_item(
+    queue_id: int,
+    request: ActionNoteRequest, # Requires action_note
+    db: Session = Depends(get_db),
+    user: User = Depends(require_accountant_verification_user),
+):
+    item = db.query(AccountantVerificationQueue).filter(AccountantVerificationQueue.id == queue_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+    if item.queue_status != "OPEN":
+        raise HTTPException(status_code=400, detail=f"Queue item is already {item.queue_status}. Only OPEN items can be rejected.")
+    if not request.action_note:
+        raise HTTPException(status_code=400, detail="Rejection requires an action note.")
+
+    old_status = item.queue_status
+    item.queue_status = "REJECTED"
+    item.acted_by = user.employee_id
+    item.acted_at = datetime.now()
+    item.action_note = request.action_note
+    
+    from backend.reconciliation.logic import log_audit
+    log_audit(
+        db,
+        "AccountantVerificationQueue",
+        item.id,
+        "ACCOUNTANT_VERIFICATION_REJECTED",
+        old_status,
+        item.queue_status,
+        f"Rejected by {user.employee_id}. Note: {request.action_note}",
+        actor=user.employee_id
+    )
+    db.commit()
+    return {"status": "success", "message": f"Queue item {queue_id} rejected."}
+
+@app.post("/api/escalations/accountant-verification/{queue_id}/further-review")
+async def further_review_accountant_verification_item(
+    queue_id: int,
+    request: FurtherReviewRequest, # Requires action_note and deferral details
+    db: Session = Depends(get_db),
+    user: User = Depends(require_accountant_verification_user),
+):
+    item = db.query(AccountantVerificationQueue).filter(AccountantVerificationQueue.id == queue_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Queue item not found.")
+    if item.queue_status != "OPEN":
+        raise HTTPException(status_code=400, detail=f"Queue item is already {item.queue_status}. Only OPEN items can be sent for further review.")
+    if not request.action_note:
+        raise HTTPException(status_code=400, detail="Further review requires an action note.")
+
+    old_status = item.queue_status
+    item.queue_status = "FURTHER_REVIEW"
+    item.acted_by = user.employee_id
+    item.acted_at = datetime.now()
+    item.action_note = request.action_note
+    
+    # Calculate deferred_until and owner_alert_after based on current time
+    now = datetime.now()
+    item.deferred_until = now + timedelta(hours=request.deferred_until_hours)
+    item.owner_alert_after = now + timedelta(hours=request.owner_alert_after_hours)
+    
+    from backend.reconciliation.logic import log_audit
+    log_audit(
+        db,
+        "AccountantVerificationQueue",
+        item.id,
+        "ACCOUNTANT_VERIFICATION_FURTHER_REVIEW",
+        old_status,
+        item.queue_status,
+        f"Sent for further review by {user.employee_id}. Note: {request.action_note}",
+        actor=user.employee_id
+    )
+    db.commit()
+    return {"status": "success", "message": f"Queue item {queue_id} sent for further review."}
+
+@app.post("/api/escalations/ask-explanation")
+async def ask_accountant_explanation(
+    request_data: AskExplanationRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
+):
+    from backend.email_notifier import send_email
+    import os
+    from backend.reconciliation.logic import calculate_payment_proof_status
+    
+    if not request_data.queue_ids:
+        raise HTTPException(status_code=400, detail="No queue items selected.")
+        
+    queue_items = db.query(AccountantVerificationQueue).filter(
+        AccountantVerificationQueue.id.in_(request_data.queue_ids)
+    ).all()
+    
+    if not queue_items:
+        raise HTTPException(status_code=404, detail="Selected queue items not found.")
+        
+    html_rows = []
+    affected_invoices = []
+    
+    for item in queue_items:
+        bill = db.query(Bill).filter(Bill.id == item.bill_id).first()
+        if not bill:
+            continue
+        
+        payments = db.query(Payment).filter(Payment.bill_id == bill.id).all()
+        payment_modes = ",".join(list(set([p.mode for p in payments if p.mode]))) or "UNKNOWN"
+        
+        signature = db.query(PaymentConfirmationSignature).filter(PaymentConfirmationSignature.bill_id == bill.id).first()
+        confidence = signature.confidence_level if signature else "Low"
+        proof_status = signature.proof_status if signature else "UNKNOWN"
+        
+        affected_invoices.append(bill.bill_number)
+        
+        row_dict = {
+            "invoice_no": bill.bill_number,
+            "bill_date": bill.invoice_date,
+            "net_payable": float(bill.amount or 0),
+            "payment_mode": payment_modes,
+            "proof_status": proof_status,
+            "confidence": confidence,
+            "queue_status": item.queue_status,
+            "reason": item.reason or "No specific reason provided",
+        }
+        
+        html_rows.append(f"""
+        <tr>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">{bill.bill_number}<br/><small>{bill.invoice_date}</small></td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">₹{float(bill.amount or 0):.2f}<br/><small>{payment_modes}</small></td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">{confidence}<br/><small>{proof_status}</small></td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;">{item.queue_status}</td>
+            <td style="padding: 8px; border-bottom: 1px solid #eee;"><a href="http://localhost:5173/reconciliation?bill_id={bill.id}" style="background-color: #f97316; color: white; padding: 4px 8px; text-decoration: none; border-radius: 4px; font-size: 12px;">Review Payment</a></td>
+        </tr>
+        """)
+        
+    recipient = os.getenv("ACCOUNTANT_EXPLANATION_EMAIL", "shreearadhana1001@gmail.com")
+    subject = f"Action Required: Explanation Requested for Payment Reviews - {datetime.now().strftime('%Y-%m-%d')}"
+    
+    message_text = request_data.message_context or "Please provide an explanation for the following unverified payments."
+    
+    body = f"""
+    <div style="font-family: sans-serif; max-width: 800px; margin: 0 auto; color: #333;">
+        <h2 style="color: #f97316;">Payment Review Explanation Required</h2>
+        <p>Hello Accountant,</p>
+        <p>An Owner/Admin has requested an explanation for the following unverified payment(s).</p>
+        <p style="background-color: #fff7ed; padding: 12px; border-left: 4px solid #f97316;">
+            <strong>Message from Owner/Admin:</strong><br/>
+            {message_text}
+        </p>
+        <table style="width: 100%; border-collapse: collapse; text-align: left; margin-top: 20px;">
+            <thead>
+                <tr style="background-color: #f8fafc; color: #475569; font-size: 14px;">
+                    <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">Invoice & Date</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">Amount & Mode</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">Confidence & Proof</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">Queue Status</th>
+                    <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(html_rows)}
+            </tbody>
+        </table>
+        <p style="margin-top: 30px; font-size: 12px; color: #94a3b8;">Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+    """
+    
+    try:
+        send_email(recipient, subject, body)
+    except Exception as e:
+        logger.error(f"Failed to send ask-explanation email: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send email.")
+        
+    # Write audit logs without mutating records
+    for item in queue_items:
+        db.add(AuditLog(
+            entity_type="AccountantVerificationQueue",
+            entity_id=item.id,
+            action="EXPLANATION_REQUEST_SENT",
+            new_status=item.queue_status,
+            actor=user.employee_id,
+            metadata_json=json.dumps({
+                "affected_invoices": affected_invoices,
+                "queue_ids": request_data.queue_ids,
+                "recipient": recipient,
+                "message_context": request_data.message_context
+            }),
+        ))
+        
+    db.commit()
+    return {"status": "success", "message": "Explanation request sent successfully."}
 
 PERMISSION_GROUPS = [
     "dashboard_access",

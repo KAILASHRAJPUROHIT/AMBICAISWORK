@@ -162,7 +162,7 @@ class AccountantVerificationQueue(Base):
     payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True, index=True)
     signature_id = Column(Integer, ForeignKey("payment_confirmation_signatures.id"), nullable=True, index=True)
     invoice_no = Column(String, nullable=False, index=True)
-    queue_status = Column(String, nullable=False, default="OPEN", index=True)
+    queue_status = Column(String, nullable=False, default="OPEN", index=True) # OPEN, APPROVED, REJECTED, FURTHER_REVIEW
     verification_day = Column(DateTime, nullable=False)
     due_at = Column(DateTime, nullable=False)
     deferred_until = Column(DateTime, nullable=True)
