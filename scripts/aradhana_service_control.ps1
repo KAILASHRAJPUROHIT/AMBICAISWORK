@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("start-prod", "stop-prod", "status-prod", "start-dev", "stop-dev")]
+    [ValidateSet("start-prod", "stop-prod", "status-prod", "start-dev", "stop-dev", "restart-prod", "restart-dev")]
     [string]$Mode
 )
 
@@ -416,5 +416,19 @@ switch ($Mode) {
         $logDirectory = Join-Path $Root "logs\dev"
         Stop-ManagedProcess "dev-frontend" 5183 (Join-Path $logDirectory "frontend.pid")
         Stop-ManagedProcess "dev-backend" 8010 (Join-Path $logDirectory "backend.pid")
+    }
+    "restart-prod" {
+        $logDirectory = Join-Path $Root "logs\production"
+        Stop-ManagedProcess "production-frontend" 5173 (Join-Path $logDirectory "frontend.pid")
+        Stop-ManagedProcess "production-backend" 8000 (Join-Path $logDirectory "backend.pid")
+        Start-Sleep -Seconds 2
+        Start-Environment "production" 8000 5173 "production" $false
+    }
+    "restart-dev" {
+        $logDirectory = Join-Path $Root "logs\dev"
+        Stop-ManagedProcess "dev-frontend" 5183 (Join-Path $logDirectory "frontend.pid")
+        Stop-ManagedProcess "dev-backend" 8010 (Join-Path $logDirectory "backend.pid")
+        Start-Sleep -Seconds 2
+        Start-Environment "dev" 8010 5183 "dev" $true
     }
 }
