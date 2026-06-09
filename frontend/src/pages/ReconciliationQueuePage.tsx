@@ -110,6 +110,7 @@ const normalizePaymentBreakdown = (value: unknown): ReconciliationPaymentEvidenc
     source: payment.source || payment.evidence_source || null,
     proofUrl: payment.proof_url || payment.proofUrl || null,
     proofLabel: payment.proof_label || payment.proofLabel || null,
+    proofExists: Boolean(payment.proof_exists || payment.proofExists),
   })).filter(payment => payment.amount > 0 || payment.mode !== 'UNKNOWN' || Boolean(payment.reference || payment.utrReference));
 };
 

@@ -507,8 +507,8 @@ async def get_dashboard_today(request: Request, db: Session = Depends(get_db)):
             "amount": bill_amount,
             "mode": merged_mode,
             "proof": signature["proof_status"],
-            "confidence": signature["dashboard_confidence"],
-            "state": signature["dashboard_state"],
+            "confidence": signature["confidence"],
+            "state": signature["state"],
             "pdfUrl": f"/api/invoices/pdf/{bill.id}",
             "proofUrls": [],
             "unifiedProofLabel": signature["proof_status"],
@@ -517,7 +517,10 @@ async def get_dashboard_today(request: Request, db: Session = Depends(get_db)):
             "stored_bill_status": signature["stored_bill_status"],
             "integrity_status": signature["integrity_status"],
             "verification_source": signature["verification_source"],
-            "dashboard_warning_reason": signature["warning_reason"]
+            "dashboard_warning_reason": signature["warning_reason"],
+            "proof_exists": signature["proof_exists"],
+            "review_required": signature["review_required"],
+            "vetoes": signature["vetoes"]
         }
 
     events = list(bill_events.values())
