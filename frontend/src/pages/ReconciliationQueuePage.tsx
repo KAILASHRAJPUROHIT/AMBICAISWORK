@@ -4,7 +4,7 @@ import InvoiceDetailDrawer from '../components/InvoiceDetailDrawer';
 import { getOpenReviewsWithTimeout, openInvoicePdf, fetchProofPreview, approveAccountantVerification, rejectAccountantVerification, furtherReviewAccountantVerification, ensureAccountantVerificationItems } from '../api/client';
 import type { ReconciliationItem, ReconciliationPaymentEvidence } from '../types';
 
-const FORBIDDEN_CONTRACT_VALUES = ['---', 'Review Item', 'REVIEW', 'mock_review_1', 'pay_001', 'bill_002'];
+const FORBIDDEN_CONTRACT_VALUES = ['---', 'Review Item', 'mock_review_1', 'pay_001', 'bill_002'];
 const SPECIAL_PAYMENT_TOKENS = ['ADVANCE', 'OLD_GOLD_EXCHANGE', 'OLD GOLD', 'CUSTOMER PURCHASE', 'BUYBACK'];
 
 export type ReconciliationSortKey = 'billNo' | 'customer' | 'invoiceDate' | 'invoiceAmount' | 'bankAmount' | 'difference' | 'paymentMode' | 'matchConfidence' | 'status';
