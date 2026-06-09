@@ -1,10 +1,11 @@
 import logging
 from typing import List, Union, Dict, Optional
 from sqlalchemy.orm import Session
-from backend.models import Bill, Payment, BankAlert, AuditLog, Cheque, SMSAlert
+from backend.models import Bill, Payment, BankAlert, AuditLog, Cheque, SMSAlert, AccountantVerificationQueue
 from datetime import datetime, timedelta
 import json
 import hashlib
+from sqlalchemy import or_, and_, func
 
 logger = logging.getLogger("Reconciliation_Logic")
 
@@ -13,12 +14,9 @@ def get_event_fingerprint(bank, amount, utr, received_at, direction="CREDIT"):
     raw = f"{bank}|{amount:.2f}|{utr}|{date_str}|{direction}"
     return hashlib.sha256(raw.encode()).hexdigest()
 
-from sqlalchemy import or_, and_, func
-
 def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN"):
     """
-    Financial Hardening Edition: Centralized foolproof verification logic.
-    Primary Principle: Never auto-confirm uncertain payments.
+    Super Strict Hardening Edition: Deterministic rules with 150-point threshold and hard vetoes.
     """
     if alert.reconciled:
         logger.info(f"Alert {alert.id} already reconciled. Skipping.")
@@ -27,8 +25,13 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
     amount = float(alert.amount)
     utr = alert.utr_reference
     received_at = alert.received_at
+    raw_text = alert.raw_text.lower() if alert.raw_text else ""
     
-    # 1. Check for ambiguous matches (Multiple invoices with same amount)
+    # 1. Proof Classification Layer
+    failure_keywords = ["failed", "failure", "declined", "reversed", "reversal", "returned", "chargeback", "cancelled", "timeout", "unsuccessful", "not processed"]
+    is_failed_or_reversed = any(kw in raw_text for kw in failure_keywords)
+    
+    # Candidate Search
     matching_bills = db.query(Bill).filter(
         Bill.is_test_data == False,
         or_(
@@ -46,55 +49,126 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
     if not matching_bills:
         return
 
-    # 2. Multi-Point Scoring for each candidate
+    # Pre-calculate Today candidates to enforce Today-First priority
+    today_bills = [b for b in matching_bills if b.invoice_date and b.invoice_date.date() == received_at.date()]
+    has_today_candidate = len(today_bills) > 0
+
     best_bill = None
     best_score = -1
-    scored_candidates = []
+    best_vetoes = []
+    best_queue_reason = None
 
     for bill in matching_bills:
-        score = 0
+        vetoes = []
+        queue_reason = None
         
-        # A. UTR Match (+100)
-        if utr and bill.reference_no and utr == bill.reference_no:
-            score += 100
-
-        # B. Exact Remaining Amount Match (+100)
-        # Mandate: If alert matches exactly what's left after CASH/ADV/GOLD
-        if abs(float(bill.remaining_amount or 0) - amount) < 0.01:
-            score += 100
+        # Determine mode (using Payments attached to the bill, or default)
+        payment_mode_query = db.query(Payment.mode).filter(Payment.bill_id == bill.id).first()
+        invoice_mode = payment_mode_query[0] if payment_mode_query else "UNKNOWN"
+        
+        # --- HARD VETOES ---
+        
+        # Hard Veto 1: FAILURE_OR_REVERSAL_BLOCK
+        if is_failed_or_reversed:
+            vetoes.append("FAILURE_OR_REVERSAL_BLOCK")
+            queue_reason = queue_reason or "FAILED_OR_REVERSED_PROOF"
             
-        # C. Customer Name Match (+50)
-        if bill.customer_name and bill.customer_name.lower() != "unknown":
+        # Hard Veto 2: OPEN_QUEUE_VETO
+        open_queue = db.query(AccountantVerificationQueue).filter(
+            AccountantVerificationQueue.bill_id == bill.id,
+            AccountantVerificationQueue.queue_status == 'OPEN'
+        ).first()
+        if open_queue:
+            vetoes.append("OPEN_QUEUE_VETO")
+            queue_reason = queue_reason or "OPEN_QUEUE_VETO"
+            
+        # Hard Veto 3: NAME_MISMATCH_BLOCK
+        name_score = 0
+        if bill.customer_name and bill.customer_name.lower() != "unknown" and raw_text:
             name_tokens = [t for t in bill.customer_name.lower().replace("(", " ").replace(")", " ").split() if len(t) > 2]
-            raw_text = alert.raw_text.lower()
-            matches = sum(1 for t in name_tokens if t in raw_text)
-            if len(name_tokens) > 0 and (matches / len(name_tokens)) >= 0.5:
-                score += 50
-                
-        # D. Date Proximity (+30)
+            if len(name_tokens) > 0:
+                matches = sum(1 for t in name_tokens if t in raw_text)
+                if (matches / len(name_tokens)) >= 0.5:
+                    name_score = 25
+                else:
+                    vetoes.append("NAME_MISMATCH_BLOCK")
+                    queue_reason = queue_reason or "CUSTOMER_NAME_MISMATCH"
+
+        # Hard Veto 4: PAYMENT_MODE_MISMATCH_BLOCK
+        is_bank_source = source in ["SMS_ALERT", "BANK_ALERT", "BANK", "SMS", "RETRY_LOGIC"] or isinstance(alert, BankAlert) or isinstance(alert, SMSAlert)
+        mode_score = 0
+        if invoice_mode in ["UPI", "IMPS", "NEFT", "RTGS_OR_CHEQUE", "BANK_TRANSFER", "CARD", "UNKNOWN"] and is_bank_source:
+            mode_score = 25
+        elif invoice_mode == "CASH" and is_bank_source:
+            vetoes.append("PAYMENT_MODE_MISMATCH_BLOCK")
+            queue_reason = queue_reason or "PAYMENT_MODE_MISMATCH"
+
+        # Hard Veto 5: TIME_WINDOW_BLOCK & HISTORICAL_MATCH_VETO
+        time_score = 0
+        is_past_bill = False
         if bill.invoice_date:
             days_diff = (received_at.date() - bill.invoice_date.date()).days
             if 0 <= days_diff <= 3:
-                score += 30
-            elif -2 <= days_diff <= 7:
-                score += 10
-        
-        # E. Bank Name Match (+20)
-        if bill.bank_name and alert.bank_name and bill.bank_name.lower() == alert.bank_name.lower():
-            score += 20
+                time_score = 25
+            elif days_diff < 0 or days_diff > 3:
+                if days_diff > 3:
+                    is_past_bill = True
+                vetoes.append("TIME_WINDOW_BLOCK")
+                queue_reason = queue_reason or "PAYMENT_TIME_MISMATCH"
+                
+        if is_past_bill:
+            vetoes.append("HISTORICAL_MATCH_VETO")
+            queue_reason = queue_reason or "SUGGESTED_HISTORICAL_MATCH"
             
-        scored_candidates.append((bill, score))
+        # Hard Veto 6: TODAY-FIRST PRIORITY RULE
+        if is_past_bill and has_today_candidate:
+            vetoes.append("TODAY_FIRST_PRIORITY_BLOCK")
+            queue_reason = queue_reason or "TODAY_BILL_PRIORITY_CONFLICT"
+
+        # Check for multiple today candidates
+        if has_today_candidate and len(today_bills) > 1 and bill in today_bills:
+            vetoes.append("MULTIPLE_TODAY_CANDIDATES_BLOCK")
+            queue_reason = queue_reason or "DUPLICATE_SAME_AMOUNT_TODAY"
+
+        # --- PROBABILITY SCORING (Max ~225) ---
+        score = 0
+        
+        # Amount match (+25)
+        if abs(float(bill.remaining_amount or 0) - amount) < 0.01 or abs(float(bill.total_amount) - amount) < 0.01:
+            score += 25
+            
+        # UTR Match (+50)
+        utr_match = False
+        if utr and bill.reference_no and utr == bill.reference_no:
+            score += 50
+            utr_match = True
+            
+        # Success proof (+50)
+        if not is_failed_or_reversed:
+            score += 50
+            
+        # Mode match (+25)
+        score += mode_score
+        
+        # Time match (+25)
+        score += time_score
+        
+        # Customer match (+25)
+        score += name_score
+        
+        # Invoice reference match (+25)
+        if bill.bill_number and bill.bill_number.lower() in raw_text:
+            score += 25
+            
         if score > best_score:
             best_score = score
             best_bill = bill
+            best_vetoes = vetoes
+            best_queue_reason = queue_reason
 
-    # 3. Decision Logic with Failsafes
+    # --- DECISION LOGIC ---
     if best_bill:
-        # Rule 4: Ambiguity Control
-        # If multiple candidates have high scores, it's ambiguous.
-        is_ambiguous = (len(matching_bills) > 1 and best_score < 100)
-        
-        # Rule 3: Duplicate UTR Detection
+        # Check duplicate UTR rule
         is_duplicate_utr = False
         if utr:
             existing_cleared_payment = db.query(Payment).filter(
@@ -103,83 +177,54 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
             ).first()
             if existing_cleared_payment and existing_cleared_payment.bill_id != best_bill.id:
                 is_duplicate_utr = True
-
-        # Rule: Historical Payment Claim Detection
-        is_historical_claim = False
-        historical_payment = db.query(Payment).filter(
-            Payment.bill_id == best_bill.id,
-            Payment.payment_date != None,
-            func.date(Payment.payment_date) < func.date(best_bill.invoice_date)
-        ).first()
-        if historical_payment:
-            is_historical_claim = True
-        
-        logger.info(f"Recon Decision for {best_bill.bill_number}: Score={best_score}, Ambiguous={is_ambiguous}, DuplicateUTR={is_duplicate_utr}, HistClaim={is_historical_claim}")
-        
-        # Rule 1: Advance Verification Failsafe
+                best_vetoes.append("DUPLICATE_UTR_BLOCK")
+                best_queue_reason = best_queue_reason or "DUPLICATE_UTR"
+                
+        # Advance Failsafe
         has_advance = float(best_bill.advance_amount or 0.0) > 0
         advance_unclassified = has_advance and (not best_bill.advance_source or best_bill.advance_source == "UNKNOWN")
+        if advance_unclassified or (has_advance and best_bill.advance_verification_status != "VERIFIED"):
+            best_vetoes.append("ADVANCE_FAILSAFE_BLOCK")
+            
+        logger.info(f"Recon Decision for {best_bill.bill_number}: Score={best_score}, Vetoes={best_vetoes}")
         
-        # Decision
-        if best_score >= 80 and not is_ambiguous and not is_duplicate_utr and not is_historical_claim:
-            # Check if this payment fully covers the remaining amount
-            current_bank = float(best_bill.bank_received or 0.0)
-            new_bank = current_bank + amount
-            
-            # total_received = confirmed_cash + new_bank + card
-            # Mandate 2: Treat cash amount as ERP-confirmed cash receipt.
+        is_fully_paid = False
+        total_credits = 0.0
+        new_bank = float(best_bill.bank_received or 0.0) + amount
+        
+        if best_score >= 150 and not best_vetoes:
+            # AUTO_VERIFY_ALLOWED
             total_received = float(best_bill.cash_received or 0.0) + new_bank + float(best_bill.card_received or 0.0)
-            
-            # Plus credits (advance and purchase)
             total_credits = total_received + float(best_bill.advance_amount or 0.0) + float(best_bill.customer_purchase_amount or 0.0)
-            
             is_fully_paid = abs(total_credits - float(best_bill.total_amount)) < 1.0
-            
             old_status = best_bill.status
             
-            # FINAL CLEARANCE CHECK
             if is_fully_paid:
-                if advance_unclassified:
-                    best_bill.status = "Purple"
-                    best_bill.status_text = "ADVANCE_PAYMENT_TYPE_UNKNOWN"
-                    best_bill.review_required = 1
-                elif has_advance and best_bill.advance_verification_status != "VERIFIED":
-                    best_bill.status = "Blue"
-                    best_bill.status_text = "ADVANCE_REQUIRES_VERIFICATION"
-                    best_bill.review_required = 1
+                best_bill.status = "Green"
+                if float(best_bill.cash_received or 0) > 0:
+                    best_bill.status_text = "Cleared (CASH_PLUS_BANK_CONFIRMED)"
                 else:
-                    best_bill.status = "Green"
-                    # Rule 4: CASH_PLUS_BANK_CONFIRMED
-                    if float(best_bill.cash_received or 0) > 0:
-                        best_bill.status_text = "Cleared (CASH_PLUS_BANK_CONFIRMED)"
-                    else:
-                        best_bill.status_text = f"Cleared (Auto-Verified via {source})"
-                    best_bill.review_required = 0
+                    best_bill.status_text = f"Cleared (Auto-Verified via {source})"
+                best_bill.review_required = 0
             else:
-                if advance_unclassified:
-                    best_bill.status = "Purple"
-                    best_bill.status_text = "ADVANCE_PAYMENT_TYPE_UNKNOWN"
-                else:
-                    best_bill.status = "Blue"
-                    best_bill.status_text = f"PARTIALLY_PAID (via {source}): Pending ₹{float(best_bill.total_amount) - total_credits:.2f}"
+                best_bill.status = "Blue"
+                best_bill.status_text = f"PARTIALLY_PAID (via {source}): Pending ₹{float(best_bill.total_amount) - total_credits:.2f}"
                 best_bill.review_required = 1
 
-            # Rule 6: Delivery Before Payment Control
             if best_bill.is_delivered and not is_fully_paid:
                 best_bill.status = "Orange"
                 best_bill.status_text = "DELIVERED_BEFORE_PAYMENT"
                 best_bill.review_required = 1
-
+                
             # Update specific tracking fields
             if "EMAIL" in source:
                 best_bill.email_confirmed_amount = float(best_bill.email_confirmed_amount or 0.0) + amount
             elif "SMS" in source:
                 best_bill.sms_confirmed_amount = float(best_bill.sms_confirmed_amount or 0.0) + amount
-            
+                
             best_bill.bank_received = new_bank
             best_bill.remaining_amount = float(best_bill.total_amount) - total_credits
             if best_bill.remaining_amount < 0: best_bill.remaining_amount = 0
-            
             best_bill.reference_no = utr or best_bill.reference_no
             
             # Update Payments table
@@ -191,25 +236,25 @@ def verify_payment_event(db: Session, alert: BankAlert, source: str = "UNKNOWN")
 
             log_audit(db, "Bill", best_bill.id, "AUTO_VERIFICATION" if best_bill.status == "Green" else "SAFE_MATCH", old_status, best_bill.status, f"Match score: {best_score}")
         else:
-            # FAILSAFE PATH: RED or BLUE or PURPLE
+            # ACCOUNTANT_REVIEW (Hard Veto or Low Score)
             old_status = best_bill.status
-            reason = "AMBIGUOUS_AMOUNT_MATCH" if is_ambiguous else "LOW_CONFIDENCE_MATCH"
-            if not utr: reason = "MISSING_UTR"
+            reason = best_queue_reason or "LOW_CONFIDENCE_MATCH"
+            if not utr and not best_queue_reason: reason = "MISSING_UTR"
             
-            if is_duplicate_utr:
+            if "DUPLICATE_UTR_BLOCK" in best_vetoes:
                 best_bill.status = "Red"
-                reason = "DUPLICATE_UTR"
-            elif is_historical_claim:
+            elif "SUGGESTED_HISTORICAL_MATCH" in best_vetoes or "TODAY_BILL_PRIORITY_CONFLICT" in best_vetoes:
                 best_bill.status = "Purple"
-                reason = "HISTORICAL_PAYMENT_VERIFICATION"
-                if float(historical_payment.amount) >= 50000.0:
-                    reason += " [HIGH_VALUE_ESCALATION]"
             else:
                 best_bill.status = "Blue"
-            
+                
+            if "OPEN_QUEUE_VETO" in best_vetoes:
+                # Do not mutate the status to Blue/Purple/Red if there's already an open queue. Keep existing or rely on queue.
+                pass
+                
             best_bill.status_text = f"Review Required: {reason} (Score: {best_score})"
             best_bill.review_required = 1
-            log_audit(db, "Bill", best_bill.id, "FLAGGED_FOR_REVIEW", old_status, best_bill.status, f"{reason}, score: {best_score}")
+            log_audit(db, "Bill", best_bill.id, "FLAGGED_FOR_REVIEW", old_status, best_bill.status, f"{reason}, score: {best_score}, vetoes: {best_vetoes}")
             
         alert.reconciled = True
         db.commit()
@@ -253,12 +298,9 @@ def calculate_payment_proof_status(payment: Payment, bill: Bill, proofs: List[Un
         "requires_accountant_review": True
     }
 
-    # Determine the effective UTR/reference for the payment based on mode
     payment_utr = None
     if payment.mode in ["UPI", "IMPS", "NEFT", "RTGS_OR_CHEQUE", "CARD", "BANK_TRANSFER"]:
-        # For electronic modes, use payment's own UTR only. No fallback to bill.reference_no here.
         payment_utr = payment.utr_reference
-    # For CASH, ADVANCE, OLD_GOLD_EXCHANGE, payment_utr remains None.
 
     if payment.mode == "CASH":
         result.update({
@@ -269,7 +311,7 @@ def calculate_payment_proof_status(payment: Payment, bill: Bill, proofs: List[Un
             "confidence_reason": "Auto-confirmed as per policy (CASH payments)",
             "requires_accountant_review": False
         })
-    elif payment.mode in ["ADVANCE", "OLD_GOLD_EXCHANGE"]: # OLD_GOLD_EXCHANGE is 'CUST PURCHASE' in prompt
+    elif payment.mode in ["ADVANCE", "OLD_GOLD_EXCHANGE"]:
         result.update({
             "proof_status": "pending_accountant_review",
             "proof_type": payment.mode,
@@ -278,7 +320,7 @@ def calculate_payment_proof_status(payment: Payment, bill: Bill, proofs: List[Un
             "confidence_reason": f"Requires manual accountant confirmation for {payment.mode}",
             "requires_accountant_review": True
         })
-    elif payment.mode in ["UPI", "IMPS", "NEFT", "RTGS_OR_CHEQUE", "CARD", "BANK_TRANSFER"]: # These are 'UPI/BANK/CARD/ONLINE'
+    elif payment.mode in ["UPI", "IMPS", "NEFT", "RTGS_OR_CHEQUE", "CARD", "BANK_TRANSFER"]:
         found_match = False
         for proof in proofs:
             proof_utr = None
@@ -297,7 +339,6 @@ def calculate_payment_proof_status(payment: Payment, bill: Bill, proofs: List[Un
                 proof_type_str = "Bank"
                 proof_id = proof.id
             
-            # Check for exact match: UTR and Amount
             if (payment_utr and proof_utr and payment_utr == proof_utr and
                 abs(float(payment.amount) - float(proof_amount)) < 0.01):
                 result.update({
@@ -310,12 +351,10 @@ def calculate_payment_proof_status(payment: Payment, bill: Bill, proofs: List[Un
                     "requires_accountant_review": False
                 })
                 found_match = True
-                break # Found exact match, no need to check other proofs
+                break
             
-            # Check for partial match: Amount only (if UTR is missing or mismatched)
             if (not found_match and abs(float(payment.amount) - float(proof_amount)) < 0.01 and
                 (not payment_utr or not proof_utr or payment_utr != proof_utr)):
-                 # This is a potential match, but with UTR discrepancy
                  result.update({
                     "proof_status": "mismatch_proof",
                     "proof_type": proof_type_str,
@@ -325,11 +364,10 @@ def calculate_payment_proof_status(payment: Payment, bill: Bill, proofs: List[Un
                     "confidence_reason": f"Amount matches {proof_type_str} proof, but UTR is missing or mismatched.",
                     "requires_accountant_review": True
                 })
-                 # Don't break, keep looking for exact matches
                  
         if found_match:
-            pass # Already updated in the loop
-        elif result["proof_status"] != "mismatch_proof": # If no exact match and no partial match
+            pass
+        elif result["proof_status"] != "mismatch_proof":
             result.update({
                 "proof_status": "no_proof",
                 "proof_type": None,
