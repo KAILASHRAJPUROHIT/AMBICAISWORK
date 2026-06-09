@@ -1782,3 +1782,44 @@ if __name__ == "__main__":
     cert_path, key_path = r"C:\Aradhana\SSL\cert.pem", r"C:\Aradhana\SSL\key.pem"
     if os.path.exists(cert_path) and os.path.exists(key_path): uvicorn.run("backend.review_api:app", host="0.0.0.0", port=8000, ssl_keyfile=key_path, ssl_certfile=cert_path)
     else: uvicorn.run("backend.review_api:app", host="0.0.0.0", port=8000)
+
+class AccountantVerificationAction(BaseModel):
+    bill_id: int
+    note: str
+
+@app.post("/api/accountant-verification/approve")
+async def approve_accountant_verification(action: AccountantVerificationAction, request: Request, db: Session = Depends(get_db)):
+    require_valid_session(request, db)
+    from backend.reconciliation.logic import log_audit
+    bill = db.query(Bill).filter(Bill.id == action.bill_id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    log_audit(db, "Bill", action.bill_id, "ACCOUNTANT_APPROVE", bill.status, bill.status, action.note)
+    db.commit()
+    return {"status": "success"}
+
+@app.post("/api/accountant-verification/reject")
+async def reject_accountant_verification(action: AccountantVerificationAction, request: Request, db: Session = Depends(get_db)):
+    require_valid_session(request, db)
+    if not action.note or not action.note.strip():
+        raise HTTPException(status_code=400, detail="Action note is required for rejection")
+    from backend.reconciliation.logic import log_audit
+    bill = db.query(Bill).filter(Bill.id == action.bill_id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    log_audit(db, "Bill", action.bill_id, "ACCOUNTANT_REJECT", bill.status, bill.status, action.note)
+    db.commit()
+    return {"status": "success"}
+
+@app.post("/api/accountant-verification/further-review")
+async def further_review_accountant_verification(action: AccountantVerificationAction, request: Request, db: Session = Depends(get_db)):
+    require_valid_session(request, db)
+    if not action.note or not action.note.strip():
+        raise HTTPException(status_code=400, detail="Action note is required for further review")
+    from backend.reconciliation.logic import log_audit
+    bill = db.query(Bill).filter(Bill.id == action.bill_id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    log_audit(db, "Bill", action.bill_id, "ACCOUNTANT_FURTHER_REVIEW", bill.status, bill.status, action.note)
+    db.commit()
+    return {"status": "success"}

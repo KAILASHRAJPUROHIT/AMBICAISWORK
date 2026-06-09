@@ -176,3 +176,30 @@ export async function getOwnerReport() {
   }
   return handleResponse(response, 'Failed to fetch owner report');
 }
+
+export async function approveAccountantVerification(billId: number, note: string = '') {
+  const response = await fetch(`${BASE_URL}/api/accountant-verification/approve`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ bill_id: billId, note })
+  });
+  return handleJsonResponse(response, 'Failed to approve item');
+}
+
+export async function rejectAccountantVerification(billId: number, note: string) {
+  const response = await fetch(`${BASE_URL}/api/accountant-verification/reject`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ bill_id: billId, note })
+  });
+  return handleJsonResponse(response, 'Failed to reject item');
+}
+
+export async function furtherReviewAccountantVerification(billId: number, note: string) {
+  const response = await fetch(`${BASE_URL}/api/accountant-verification/further-review`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ bill_id: billId, note })
+  });
+  return handleJsonResponse(response, 'Failed to flag for further review');
+}

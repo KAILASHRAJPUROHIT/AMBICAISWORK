@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { ReconciliationItem, ReconciliationPaymentEvidence } from '../types';
+import { approveAccountantVerification, rejectAccountantVerification, furtherReviewAccountantVerification } from '../api/client';
 import '../Reconciliation.css';
 
 interface InvoiceDetailDrawerProps {
@@ -29,6 +30,48 @@ const formatInvoiceTimestamp = (item: ReconciliationItem) => {
 };
 
 const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose, onViewInvoice, onViewProof }) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionNote, setActionNote] = useState('');
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const needsAccountantReview = item.status === 'ACCOUNTANT APPROVAL REQUIRED';
+
+  const handleAction = async (actionType: 'approve' | 'reject' | 'furtherReview') => {
+    if ((actionType === 'reject' || actionType === 'furtherReview') && !actionNote.trim()) {
+      setActionError('Action note is required for Reject and Further Review.');
+      setActionMessage(null);
+      return;
+    }
+    
+    if (!item.billId) {
+      setActionError('Cannot perform action: Bill ID is missing.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setActionError(null);
+    setActionMessage(null);
+
+    try {
+      if (actionType === 'approve') {
+        await approveAccountantVerification(item.billId, actionNote);
+        setActionMessage('Item approved successfully.');
+      } else if (actionType === 'reject') {
+        await rejectAccountantVerification(item.billId, actionNote);
+        setActionMessage('Item rejected successfully.');
+      } else if (actionType === 'furtherReview') {
+        await furtherReviewAccountantVerification(item.billId, actionNote);
+        setActionMessage('Item flagged for further review.');
+      }
+      setActionNote('');
+    } catch (error: any) {
+      setActionError(error.message || 'An error occurred while performing the action.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="drawer-overlay" onClick={onClose}>
       <div className="drawer-content" onClick={(e) => e.stopPropagation()}>
@@ -136,6 +179,66 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
               </p>
             )}
           </section>
+
+          {needsAccountantReview && (
+            <section className="drawer-section border-t-2 border-dashed border-gray-200 pt-4 mt-4">
+              <h3 className="text-lg font-bold text-gray-800 mb-3">Accountant Review Actions</h3>
+              
+              {actionError && (
+                <div className="mb-3 p-3 bg-red-50 text-red-700 rounded border border-red-200 text-sm font-semibold">
+                  {actionError}
+                </div>
+              )}
+              {actionMessage && (
+                <div className="mb-3 p-3 bg-green-50 text-green-700 rounded border border-green-200 text-sm font-semibold">
+                  {actionMessage}
+                </div>
+              )}
+
+              <div className="mb-4">
+                <label htmlFor="actionNote" className="block text-sm font-medium text-gray-700 mb-1">
+                  Action Note (Required for Reject / Further Review)
+                </label>
+                <textarea
+                  id="actionNote"
+                  rows={2}
+                  className="w-full p-2 border border-gray-300 rounded focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter reason or comments here..."
+                  value={actionNote}
+                  onChange={(e) => setActionNote(e.target.value)}
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleAction('approve')}
+                  disabled={isSubmitting}
+                  className="flex-1 bg-green-600 text-white font-bold py-2 px-4 rounded hover:bg-green-700 disabled:opacity-50"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAction('reject')}
+                  disabled={isSubmitting}
+                  className="flex-1 bg-red-600 text-white font-bold py-2 px-4 rounded hover:bg-red-700 disabled:opacity-50"
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAction('furtherReview')}
+                  disabled={isSubmitting}
+                  className="flex-1 bg-yellow-500 text-white font-bold py-2 px-4 rounded hover:bg-yellow-600 disabled:opacity-50"
+                >
+                  Further Review
+                </button>
+              </div>
+            </section>
+          )}
+
         </div>
       </div>
     </div>
