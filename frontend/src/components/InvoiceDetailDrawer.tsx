@@ -35,7 +35,7 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const needsAccountantReview = item.status === 'ACCOUNTANT APPROVAL REQUIRED';
+  const needsAccountantReview = item.hasSpecialPaymentFlag || (item.status && typeof item.status === 'string' && item.status.toUpperCase().includes('ACCOUNTANT'));
 
   const handleAction = async (actionType: 'approve' | 'reject' | 'furtherReview') => {
     if ((actionType === 'reject' || actionType === 'furtherReview') && !actionNote.trim()) {
