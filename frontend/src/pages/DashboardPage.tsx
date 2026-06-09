@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import StatCard from '../components/StatCard';
 import AlertSoundSystem from '../api/AlertSoundSystem';
-import { getDashboardToday } from '../api/client';
+import { getDashboardToday, openAuthenticatedBlob } from '../api/client';
 import type { DashboardTodayResponse } from '../types';
 import '../Dashboard.css';
+const allowedProofModes = ['UPI', 'IMPS', 'NEFT', 'RTGS', 'CARD', 'CHEQUE'];
+const canOpenProof = (pb: any) => {
+  const modeUpper = (pb.mode || '').toUpperCase();
+  return (
+    allowedProofModes.includes(modeUpper) &&
+    pb.proof_url &&
+    pb.proof_url.length > 0 &&
+    pb.proof_exists === true
+  );
+};
 
 const DashboardPage: React.FC = () => {
   const [data, setData] = useState<DashboardTodayResponse | null>(null);
@@ -132,9 +142,9 @@ const DashboardPage: React.FC = () => {
                     <div className="flex flex-col">
                         <span>{event.invoice_no}</span>
                         {event.pdfUrl && (
-                            <a href={event.pdfUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:text-blue-800 font-medium mt-1 inline-flex items-center gap-1">
+                            <button onClick={() => openAuthenticatedBlob(event.pdfUrl!)} className="text-xs text-blue-600 hover:text-blue-800 font-medium mt-1 inline-flex items-center gap-1">
                                 View Invoice PDF
-                            </a>
+                            </button>
                         )}
                     </div>
                   </td>
@@ -157,10 +167,10 @@ const DashboardPage: React.FC = () => {
                               <div key={pidx} className="border border-gray-100 rounded-md p-2 bg-gray-50">
                                 <div className="flex justify-between items-center mb-1">
                                   <span className="text-[10px] font-bold text-gray-700">{pb.mode} • {money(pb.amount)}</span>
-                                  {pb.proof_url && (
-                                    <a href={pb.proof_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 hover:text-blue-800 font-bold">
+                                  {canOpenProof(pb) && (
+                                    <button onClick={() => openAuthenticatedBlob(pb.proof_url!)} className="text-[10px] text-blue-600 hover:text-blue-800 font-bold">
                                       View Payment Proof
-                                    </a>
+                                    </button>
                                   )}
                                 </div>
                                 {pb.sources && pb.sources.length > 0 && (
@@ -199,6 +209,11 @@ const DashboardPage: React.FC = () => {
                     <span className="text-xs font-bold text-gray-600 uppercase">
                       {event.state || 'PENDING'}
                     </span>
+                    {event.integrity_status === 'CONTRADICTORY_STATE' && event.dashboard_warning_reason && (
+                      <div className="mt-2 text-[10px] text-red-600 font-bold leading-tight max-w-[150px]">
+                        ⚠️ {event.dashboard_warning_reason}
+                      </div>
+                    )}
                   </td>
                   <td className="p-5 text-right">
                   </td>

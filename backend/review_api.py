@@ -471,6 +471,8 @@ async def get_dashboard_today(request: Request, db: Session = Depends(get_db)):
         "CASH": 0, "UPI": 0, "IMPS": 0, "NEFT": 0, "RTGS": 0, "CHEQUE": 0, "CARD": 0
     }
     
+    from backend.reconciliation.signature import compute_payment_signature
+
     bill_events = {}
     for p in recent_payments:
         mode_upper = p.mode.upper() if p.mode else "UNKNOWN"
@@ -480,101 +482,44 @@ async def get_dashboard_today(request: Request, db: Session = Depends(get_db)):
         if not bill:
             continue
             
-        pcs = db.query(PaymentConfirmationSignature).filter(PaymentConfirmationSignature.bill_id == bill.id).first()
+        if bill.id in bill_events:
+            continue
+            
+        bill_payments = db.query(Payment).filter(Payment.bill_id == bill.id).all()
+        signature = compute_payment_signature(db, bill, bill_payments)
         
-        sources = []
-        unified_proof_label = pcs.proof_status if pcs else "no_proof"
+        modes_set = {(bp.mode or "UNKNOWN").upper() for bp in bill_payments}
+        merged_mode = " + ".join(sorted(list(modes_set)))
         
-        if p.mode and p.mode.upper() in ["UPI", "IMPS", "NEFT", "RTGS", "BANK"]:
-            p_time = p.created_at
-            if p_time:
-                time_min = p_time - timedelta(minutes=5)
-                time_max = p_time + timedelta(minutes=5)
-                
-                # Fetch Bank Alerts
-                bank_alerts = db.query(BankAlert).filter(
-                    BankAlert.amount == p.amount,
-                    BankAlert.received_at >= time_min,
-                    BankAlert.received_at <= time_max
-                ).all()
-                
-                # Fetch SMS Alerts
-                sms_alerts = db.query(SMSAlert).filter(
-                    SMSAlert.amount == p.amount,
-                    SMSAlert.transaction_timestamp >= time_min,
-                    SMSAlert.transaction_timestamp <= time_max
-                ).all()
-                
-                valid_bank_alerts = bank_alerts
-                valid_sms_alerts = sms_alerts
-                
-                if p.utr_reference and valid_bank_alerts and valid_sms_alerts:
-                    # Require exact UTR match for both
-                    ba_match = any(ba.utr_reference == p.utr_reference for ba in valid_bank_alerts)
-                    sa_match = any(sa.utr_reference == p.utr_reference for sa in valid_sms_alerts)
-                    if ba_match and sa_match:
-                        unified_proof_label = "2+ proofs for same transaction"
-                        for ba in valid_bank_alerts:
-                            if ba.utr_reference == p.utr_reference:
-                                sources.append({"type": "Bank Alert", "details": ba.raw_text, "status": "unified", "url": ""})
-                        for sa in valid_sms_alerts:
-                            if sa.utr_reference == p.utr_reference:
-                                sources.append({"type": "SMS Alert", "details": sa.raw_body, "status": "unified", "url": ""})
-                    else:
-                        for ba in valid_bank_alerts:
-                            sources.append({"type": "Bank Alert", "details": ba.raw_text, "status": "Possible related proof - Requires review", "url": ""})
-                        for sa in valid_sms_alerts:
-                            sources.append({"type": "SMS Alert", "details": sa.raw_body, "status": "Possible related proof - Requires review", "url": ""})
-                elif valid_bank_alerts or valid_sms_alerts:
-                    for ba in valid_bank_alerts:
-                        sources.append({"type": "Bank Alert", "details": ba.raw_text, "status": "Possible related proof - Requires review", "url": ""})
-                    for sa in valid_sms_alerts:
-                        sources.append({"type": "SMS Alert", "details": sa.raw_body, "status": "Possible related proof - Requires review", "url": ""})
+        bill_amount = sum(float(bp.amount) if bp.amount else 0.0 for bp in bill_payments)
+        
+        all_sources = []
+        for brk in signature.get("payment_breakdown", []):
+            all_sources.extend(brk.get("sources", []))
 
-        breakdown_item = {
-            "payment_id": p.id,
-            "amount": float(p.amount) if p.amount else 0.0,
-            "mode": p.mode or "UNKNOWN",
-            "proof_label": unified_proof_label,
-            "proof_url": f"/api/payments/proof/{p.id}",
-            "proof_source": "",
-            "utr_reference": p.utr_reference or "",
-            "timestamp": p.created_at.strftime("%H:%M %p") if p.created_at else "",
-            "sources": sources
+        bill_events[bill.id] = {
+            "id": bill.id,
+            "bill_id": bill.id,
+            "time": bill_payments[-1].created_at.strftime("%H:%M %p") if bill_payments and bill_payments[-1].created_at else "",
+            "invoice_no": bill.bill_number,
+            "customer": bill.customer_name or "Unknown",
+            "amount": bill_amount,
+            "mode": merged_mode,
+            "proof": signature["proof_status"],
+            "confidence": signature["dashboard_confidence"],
+            "state": signature["dashboard_state"],
+            "pdfUrl": f"/api/invoices/pdf/{bill.id}",
+            "proofUrls": [],
+            "unifiedProofLabel": signature["proof_status"],
+            "sources": all_sources,
+            "paymentBreakdown": signature["payment_breakdown"],
+            "stored_bill_status": signature["stored_bill_status"],
+            "integrity_status": signature["integrity_status"],
+            "verification_source": signature["verification_source"],
+            "dashboard_warning_reason": signature["warning_reason"]
         }
-        
-        if bill.id not in bill_events:
-            bill_events[bill.id] = {
-                "id": bill.id,
-                "bill_id": bill.id,
-                "time": p.created_at.strftime("%H:%M %p") if p.created_at else "",
-                "invoice_no": bill.bill_number,
-                "customer": bill.customer_name or "Unknown",
-                "amount": float(p.amount) if p.amount else 0.0,
-                "mode": (p.mode or "UNKNOWN").upper(),
-                "proof": unified_proof_label,
-                "confidence": "High" if bill.status in ("Green", "Verified") else "Low",
-                "state": bill.status,
-                "pdfUrl": f"/api/invoices/pdf/{bill.id}",
-                "proofUrls": [],
-                "unifiedProofLabel": unified_proof_label,
-                "sources": list(sources),
-                "paymentBreakdown": [breakdown_item],
-                "modes_set": {(p.mode or "UNKNOWN").upper()}
-            }
-        else:
-            bill_events[bill.id]["amount"] += float(p.amount) if p.amount else 0.0
-            bill_events[bill.id]["modes_set"].add((p.mode or "UNKNOWN").upper())
-            bill_events[bill.id]["mode"] = " + ".join(sorted(list(bill_events[bill.id]["modes_set"])))
-            bill_events[bill.id]["paymentBreakdown"].append(breakdown_item)
-            bill_events[bill.id]["sources"].extend(sources)
-            if unified_proof_label == "2+ proofs for same transaction":
-                bill_events[bill.id]["unifiedProofLabel"] = unified_proof_label
-                bill_events[bill.id]["proof"] = unified_proof_label
 
     events = list(bill_events.values())
-    for e in events:
-        e.pop("modes_set", None)
 
     return {
         "kpis": {

@@ -68,6 +68,7 @@ export interface PaymentBreakdown {
   mode: string;
   proof_label: string;
   proof_url: string;
+  proof_exists: boolean;
   proof_source: string;
   utr_reference: string;
   timestamp: string;
@@ -90,6 +91,10 @@ export interface DashboardTodayEvent {
   unifiedProofLabel?: string;
   sources?: Array<{type: string; details: string; status: string; url?: string}>;
   paymentBreakdown?: PaymentBreakdown[];
+  stored_bill_status?: string;
+  integrity_status?: string;
+  verification_source?: string;
+  dashboard_warning_reason?: string;
 }
 
 export interface DashboardTodayResponse {
