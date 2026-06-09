@@ -55,7 +55,7 @@ def test_green_high_no_proof_is_blocked():
     payment = MockPayment(1, "UPI", 100, "123", datetime.utcnow())
     sig = compute_payment_signature(db, bill, [payment])
     
-    assert sig["dashboard_confidence"] == "Low"
+    assert sig["confidence"] == "Low"
     assert sig["integrity_status"] == "CONTRADICTORY_STATE"
     assert "Green bill has missing required UPI proof" in sig["warning_reason"]
 
@@ -65,9 +65,9 @@ def test_advance_no_approval_cannot_be_high():
     payment = MockPayment(1, "ADVANCE", 500, None, datetime.utcnow())
     sig = compute_payment_signature(db, bill, [payment])
     
-    assert sig["dashboard_confidence"] == "Low"
+    assert sig["confidence"] == "Low"
     assert sig["integrity_status"] == "REVIEW_REQUIRED"
-    assert sig["dashboard_state"] == "Accountant Review Required"
+    assert sig["state"] == "Accountant Review Required"
 
 def test_cash_only_proof_not_needed():
     db = MockDB()
@@ -76,8 +76,8 @@ def test_cash_only_proof_not_needed():
     sig = compute_payment_signature(db, bill, [payment])
     
     assert sig["proof_status"] == "Payment proof not needed"
-    assert sig["dashboard_confidence"] == "Medium"
-    assert sig["dashboard_state"] == "Green"
+    assert sig["confidence"] == "Medium"
+    assert sig["state"] == "Green"
 
 def test_open_queue_forces_low_review():
     q = MockQueue("OPEN")
@@ -87,8 +87,8 @@ def test_open_queue_forces_low_review():
     sig = compute_payment_signature(db, bill, [payment])
     
     assert sig["review_required"] is True
-    assert sig["dashboard_confidence"] == "Low"
-    assert sig["dashboard_state"] == "Accountant Review Required"
+    assert sig["confidence"] == "Low"
+    assert sig["state"] == "Accountant Review Required"
     assert sig["integrity_status"] == "CONTRADICTORY_STATE"
 
 def test_verified_upi_is_high_when_green():
@@ -105,6 +105,6 @@ def test_verified_upi_is_high_when_green():
     sig = compute_payment_signature(db, bill, [payment])
     
     assert sig["proof_status"] == "Proof verified"
-    assert sig["dashboard_confidence"] == "High"
-    assert sig["dashboard_state"] == "Green"
+    assert sig["confidence"] == "High"
+    assert sig["state"] == "Green"
     assert sig["integrity_status"] == "CONSISTENT"

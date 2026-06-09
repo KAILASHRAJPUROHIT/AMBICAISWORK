@@ -96,7 +96,7 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
                       <span>Evidence Source: <b>{missing(payment.source)}</b></span>
                       <span>
                         Proof:{' '}
-                        {payment.proofUrl ? (
+                        {['UPI', 'IMPS', 'NEFT', 'RTGS', 'CARD', 'CHEQUE'].includes((payment.mode || '').toUpperCase()) && payment.proofUrl && payment.proofExists ? (
                           <button type="button" className="font-bold text-blue-700 underline" onClick={() => onViewProof(payment)}>
                             {payment.proofLabel || 'View Proof'}
                           </button>

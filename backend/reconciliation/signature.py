@@ -196,15 +196,35 @@ def compute_payment_signature(db: Session, bill: Bill, payments: List[Payment]) 
         else:
             integrity_status = "REVIEW_REQUIRED"
 
+    proof_exists = False
+    proof_url = None
+    for p in payment_breakdown:
+        if p["proof_exists"] and p["mode"] in ["UPI", "IMPS", "NEFT", "RTGS", "CARD", "CHEQUE"]:
+            proof_exists = True
+            if not proof_url:
+                proof_url = p["proof_url"]
+
+    # Enforce strict vetoes per Single Truth Engine Law
+    if dashboard_state == "Green" and overall_proof_status == "no_proof" and not is_cash_only:
+        review_required = True
+        dashboard_confidence = "Low"
+        vetoes.append("GREEN_WITHOUT_PROOF")
+
+    if review_required and dashboard_confidence == "High":
+        integrity_status = "CONTRADICTORY_STATE"
+        vetoes.append("HIGH_CONFIDENCE_REVIEW_REQUIRED")
+
     return {
         "stored_bill_status": stored_bill_status,
         "proof_status": overall_proof_status,
-        "dashboard_state": dashboard_state,
-        "dashboard_confidence": dashboard_confidence,
+        "proof_exists": proof_exists,
+        "proof_url": proof_url,
+        "payment_breakdown": payment_breakdown,
+        "review_required": review_required,
         "integrity_status": integrity_status,
         "verification_source": verification_source,
-        "review_required": review_required,
+        "confidence": dashboard_confidence,
+        "state": dashboard_state,
         "warning_reason": warning_reason,
-        "vetoes": vetoes,
-        "payment_breakdown": payment_breakdown
+        "vetoes": vetoes
     }
