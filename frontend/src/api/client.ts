@@ -256,3 +256,22 @@ export async function getOwnerReport() {
   }
   return handleResponse(response, 'Failed to fetch owner report');
 }
+
+export async function openAuthenticatedBlob(url: string) {
+  const response = await fetch(url, {
+    headers: getHeaders(),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to open file: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const blobUrl = window.URL.createObjectURL(blob);
+
+  window.open(blobUrl, "_blank", "noopener,noreferrer");
+
+  setTimeout(() => {
+    window.URL.revokeObjectURL(blobUrl);
+  }, 60000);
+}
