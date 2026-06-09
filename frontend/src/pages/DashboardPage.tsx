@@ -27,7 +27,12 @@ const DashboardPage: React.FC = () => {
       setError(null);
     } catch (err: any) {
       console.error("Fetch error:", err);
-      setError('Backend Unreachable');
+      const msg = err.message || '';
+      if (['Login Required', 'Access Denied', 'Resource Missing', 'System Error'].includes(msg)) {
+        setError(msg);
+      } else {
+        setError('Backend Unreachable');
+      }
       AlertSoundSystem.playCritical();
     } finally {
       setLoading(false);

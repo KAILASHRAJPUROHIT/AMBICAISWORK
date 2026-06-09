@@ -13,9 +13,22 @@ export function getHeaders() {
   };
 }
 
+function handleHttpError(status: number) {
+  if (status === 401) {
+    localStorage.removeItem('aradhana_session_token');
+    localStorage.removeItem('session_token');
+    window.location.href = '/login';
+    throw new Error('Login Required');
+  }
+  if (status === 403) throw new Error('Access Denied');
+  if (status === 404) throw new Error('Resource Missing');
+  if (status >= 500) throw new Error('System Error');
+}
+
 async function handleResponse(response: Response, errorMessage: string) {
   const contentType = response.headers.get('content-type');
   if (!response.ok) {
+    handleHttpError(response.status);
     if (contentType && contentType.includes('application/json')) {
       const error = await response.json();
       throw new Error(error.detail || errorMessage);
@@ -35,6 +48,7 @@ async function handleResponse(response: Response, errorMessage: string) {
 async function handleJsonResponse(response: Response, errorMessage: string) {
   const contentType = response.headers.get('content-type') || '';
   if (!response.ok) {
+    handleHttpError(response.status);
     if (contentType.includes('application/json')) {
       const error = await response.json();
       throw new Error(error.detail || `${errorMessage} (Server returned ${response.status})`);
@@ -255,4 +269,18 @@ export async function getOwnerReport() {
     });
   }
   return handleResponse(response, 'Failed to fetch owner report');
+}
+
+export async function openAuthenticatedBlob(url: string) {
+  try {
+    const response = await fetch(url, { headers: getHeaders() });
+    if (!response.ok) throw new Error('Failed to fetch file');
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    window.open(objectUrl, '_blank', 'noopener,noreferrer');
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+  } catch (error) {
+    console.error('Error opening secure blob:', error);
+    alert('Authentication required or file not found. Please try logging in again.');
+  }
 }
