@@ -5,7 +5,7 @@ import { getOpenReviewsWithTimeout, openInvoicePdf, fetchProofPreview } from '..
 import type { ReconciliationItem, ReconciliationPaymentEvidence } from '../types';
 
 const FORBIDDEN_CONTRACT_VALUES = ['---', 'Review Item', 'REVIEW', 'mock_review_1', 'pay_001', 'bill_002'];
-const SPECIAL_PAYMENT_TOKENS = ['ADVANCE', 'OLD_GOLD_EXCHANGE', 'OLD GOLD', 'CUSTOMER PURCHASE', 'BUYBACK'];
+const SPECIAL_PAYMENT_TOKENS = ['ADVANCE', 'OLD_GOLD_EXCHANGE', 'OLD GOLD', 'CUSTOMER PURCHASE', 'BUYBACK', 'CASH'];
 
 export type ReconciliationSortKey = 'billNo' | 'customer' | 'invoiceDate' | 'invoiceAmount' | 'bankAmount' | 'difference' | 'paymentMode' | 'matchConfidence' | 'status';
 export type ReconciliationSortDirection = 'asc' | 'desc';
@@ -72,7 +72,7 @@ const toConfidence = (value: unknown, paymentMode: unknown): ReconciliationItem[
 const toStatus = (value: unknown, paymentMode: unknown): ReconciliationItem['status'] => {
   if (hasSpecialPaymentMode(paymentMode)) return 'ACCOUNTANT APPROVAL REQUIRED';
   const status = String(value || '').toUpperCase();
-  if (status === 'ACCOUNTANT APPROVAL REQUIRED') return 'ACCOUNTANT APPROVAL REQUIRED';
+  if (status === 'ACCOUNTANT APPROVAL REQUIRED' || status === 'ACCOUNTANT_APPROVAL_REQUIRED') return 'ACCOUNTANT APPROVAL REQUIRED';
   if (['CLEARED', 'VERIFIED', 'PAID', 'GREEN'].includes(status) || value === 'Verified') return 'Verified';
   if (['DELIVERY_APPROVED_BEFORE_PAYMENT', 'APPROVAL_DELIVERY', 'ORANGE'].includes(status) || value === 'Delivered Before Payment') return 'Delivered Before Payment';
   if (['MISMATCH', 'ERROR', 'PAYMENT_TOTAL_MISMATCH', 'FRAUD_RISK', 'RED'].includes(status) || value === 'Risk / Mismatch') return 'Risk / Mismatch';

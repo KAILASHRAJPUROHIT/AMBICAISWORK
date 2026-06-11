@@ -35,7 +35,10 @@ const InvoiceDetailDrawer: React.FC<InvoiceDetailDrawerProps> = ({ item, onClose
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const needsAccountantReview = item.hasSpecialPaymentFlag || (item.status && typeof item.status === 'string' && item.status.toUpperCase().includes('ACCOUNTANT'));
+  const paymentModeStr = String(item.paymentMode || '').toUpperCase();
+  const hasSpecialOrCash = item.hasSpecialPaymentFlag || ['ADVANCE', 'CASH', 'OLD_GOLD_EXCHANGE', 'OLD GOLD', 'CUSTOMER PURCHASE', 'BUYBACK'].some(token => paymentModeStr.includes(token));
+  const isAccountantStatus = String(item.status || '').toUpperCase().includes('ACCOUNTANT');
+  const needsAccountantReview = hasSpecialOrCash || isAccountantStatus;
 
   const handleAction = async (actionType: 'approve' | 'reject' | 'furtherReview') => {
     if ((actionType === 'reject' || actionType === 'furtherReview') && !actionNote.trim()) {
