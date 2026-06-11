@@ -65,6 +65,16 @@ export async function login(employee_id: string, password: string) {
   return handleResponse(response, 'Login failed');
 }
 
+
+export async function enrollTOTP(employee_id: string, otp_code: string) {
+  const response = await fetch(`${BASE_URL}/api/auth/totp-enroll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employee_id, otp_code })
+  });
+  return handleResponse(response, 'TOTP Enrollment failed');
+}
+
 export async function verifyOTP(employee_id: string, otp_code: string) {
   const response = await fetch(`${BASE_URL}/api/auth/verify`, {
     method: 'POST',

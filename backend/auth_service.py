@@ -5,7 +5,13 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
-from backend.models import User, OTP, Session as SessionModel, LoginLog
+import pyotp
+import qrcode
+import base64
+import io
+from backend.models import User, OTP, Session as SessionModel, LoginLog, SystemSetting
+from backend.security import encrypt_secret, decrypt_secret
+
 from backend.email_notifier import send_otp_email
 
 logger = logging.getLogger("AuthService")
@@ -167,3 +173,60 @@ def log_event(db: Session, employee_id: str, event: str, ip: str = None):
     )
     db.add(log)
     db.commit()
+
+def get_totp_secret(db: Session, employee_id: str) -> Optional[str]:
+    setting = db.query(SystemSetting).filter(SystemSetting.key == f"totp_secret_{employee_id}").first()
+    if setting and setting.value:
+        return decrypt_secret(setting.value)
+    return None
+
+def set_totp_secret(db: Session, employee_id: str, secret: str):
+    key = f"totp_secret_{employee_id}"
+    setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+    encrypted = encrypt_secret(secret)
+    if setting:
+        setting.value = encrypted
+    else:
+        setting = SystemSetting(key=key, value=encrypted)
+        db.add(setting)
+    db.commit()
+
+def generate_totp_setup(employee_id: str) -> Dict[str, str]:
+    secret = pyotp.random_base32()
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=employee_id, issuer_name="Aradhana Auditor")
+    
+    qr = qrcode.QRCode(version=1, box_size=5, border=2)
+    qr.add_data(uri)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    
+    return {
+        "secret": secret,
+        "qr_b64": f"data:image/png;base64,{b64}"
+    }
+
+def get_pending_totp_secret(db: Session, employee_id: str) -> Optional[str]:
+    setting = db.query(SystemSetting).filter(SystemSetting.key == f"pending_totp_secret_{employee_id}").first()
+    if setting and setting.value:
+        return decrypt_secret(setting.value)
+    return None
+
+def set_pending_totp_secret(db: Session, employee_id: str, secret: str):
+    key = f"pending_totp_secret_{employee_id}"
+    setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+    encrypted = encrypt_secret(secret)
+    if setting:
+        setting.value = encrypted
+    else:
+        setting = SystemSetting(key=key, value=encrypted)
+        db.add(setting)
+    db.commit()
+
+def verify_totp_code(secret: str, code: str) -> bool:
+    totp = pyotp.TOTP(secret)
+    return totp.verify(code)
+

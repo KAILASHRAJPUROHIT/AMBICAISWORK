@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { login, verifyOTP } from '../api/client';
+import { login, verifyOTP, enrollTOTP } from '../api/client';
 import './LoginPage.css';
 
 const LoginPage: React.FC = () => {
@@ -8,13 +8,16 @@ const LoginPage: React.FC = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [otp, setOtp] = useState('');
     const [email, setEmail] = useState('');
-    const [step, setStep] = useState<'LOGIN' | 'OTP' | 'FORGOT'>('LOGIN');
+    const [step, setStep] = useState<'LOGIN' | 'OTP' | 'SETUP_TOTP' | 'FORGOT'>('LOGIN');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
     // Dynamic Data from Login Response
     const [maskedEmail, setMaskedEmail] = useState('');
+    const [totpSecret, setTotpSecret] = useState('');
+    const [qrCode, setQrCode] = useState('');
+    const [totpVerifyMode, setTotpVerifyMode] = useState(false);
 
     // Timers
     const [resendTimer, setResendTimer] = useState(0);
@@ -89,13 +92,16 @@ const LoginPage: React.FC = () => {
             console.log("LOGIN_RESPONSE_RECEIVED:", res);
             updateDiag(200, JSON.stringify(res));
 
-            // Extract email for masking if available (we might need backend to return it)
-            // For now use a placeholder or update backend to return email hint
-            setMaskedEmail(res.email_hint || 'registered email');
-
-            console.log("TRANSITIONING TO OTP STEP...");
-            setSuccess("OTP sent to your registered email.");
-            setStep('OTP');
+            if (res.status === 'totp_verify') {
+                setTotpVerifyMode(true);
+                setSuccess("Please enter your Authenticator code.");
+                setStep('OTP');
+            } else {
+                setTotpVerifyMode(false);
+                setMaskedEmail(res.masked_email || 'registered email');
+                setSuccess("OTP sent to your registered email.");
+                setStep('OTP');
+            }
         } catch (err: any) {
             console.error("LOGIN ERROR:", err);
             const msg = err.message || '';
@@ -138,11 +144,27 @@ const LoginPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            const data = await verifyOTP(employeeId, otp.trim());
-            localStorage.setItem('aradhana_session_token', data.token);
-            localStorage.setItem('session_token', data.token);
-            localStorage.setItem('user', JSON.stringify(data.user));
-            window.location.href = '/';
+            if (step === 'SETUP_TOTP') {
+                const data = await enrollTOTP(employeeId, otp.trim());
+                localStorage.setItem('aradhana_session_token', data.token);
+                localStorage.setItem('session_token', data.token);
+                localStorage.setItem('user', JSON.stringify(data.user));
+                window.location.href = '/';
+            } else {
+                const data = await verifyOTP(employeeId, otp.trim());
+                if (data.status === 'totp_setup') {
+                    setTotpSecret(data.secret);
+                    setQrCode(data.qr_b64);
+                    setStep('SETUP_TOTP');
+                    setOtp('');
+                    setSuccess("Email verified. Please setup Authenticator.");
+                } else {
+                    localStorage.setItem('aradhana_session_token', data.token);
+                    localStorage.setItem('session_token', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    window.location.href = '/';
+                }
+            }
         } catch (err: any) {
             setError(err.message);
         } finally {
@@ -256,8 +278,14 @@ const LoginPage: React.FC = () => {
                     (() => { console.log("OTP_FORM_MOUNTED_IN_DOM"); return (
                     <div className="login-form">
                         <div className="mb-6 text-center">
-                            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">OTP sent to:</p>
-                            <p className="font-black text-gray-900 text-sm">{maskedEmail}</p>
+                            {totpVerifyMode ? (
+                                <p className="font-black text-gray-900 text-sm">Enter Authenticator Code</p>
+                            ) : (
+                                <>
+                                    <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">OTP sent to:</p>
+                                    <p className="font-black text-gray-900 text-sm">{maskedEmail}</p>
+                                </>
+                            )}
                         </div>
 
                         <form onSubmit={handleVerify}>
@@ -271,33 +299,63 @@ const LoginPage: React.FC = () => {
                                     maxLength={6}
                                     required
                                 />
-                                <div className="flex justify-between mt-2">
-                                    <span className="text-[9px] font-bold text-gray-400 uppercase">Expires in {formatTime(expiryTimer)}</span>
-                                    {expiryTimer === 0 && <span className="text-[9px] font-bold text-red-500 uppercase tracking-tighter animate-pulse">OTP Expired</span>}
-                                </div>
+                                {!totpVerifyMode && (
+                                    <div className="flex justify-between mt-2">
+                                        <span className="text-[9px] font-bold text-gray-400 uppercase">Expires in {formatTime(expiryTimer)}</span>
+                                        {expiryTimer === 0 && <span className="text-[9px] font-bold text-red-500 uppercase tracking-tighter animate-pulse">OTP Expired</span>}
+                                    </div>
+                                )}
                             </div>
 
-                            <button type="submit" disabled={loading || expiryTimer === 0} className="login-btn">
+                            <button type="submit" disabled={loading || (!totpVerifyMode && expiryTimer === 0)} className="login-btn">
                                 {loading ? 'Verifying...' : 'Complete Login'}
                             </button>
                         </form>
 
                         <div className="mt-6 space-y-4 text-center">
-                            <button 
-                                type="button" 
-                                disabled={resendTimer > 0 || loading}
-                                onClick={handleResend}
-                                className={`text-[10px] font-black uppercase tracking-widest ${resendTimer > 0 ? 'text-gray-300' : 'text-blue-600 hover:underline'}`}
-                            >
-                                {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : 'Resend OTP Now'}
-                            </button>
+                            {!totpVerifyMode && (
+                                <button 
+                                    type="button" 
+                                    disabled={resendTimer > 0 || loading}
+                                    onClick={handleResend}
+                                    className={`text-[10px] font-black uppercase tracking-widest ${resendTimer > 0 ? 'text-gray-300' : 'text-blue-600 hover:underline'}`}
+                                >
+                                    {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : 'Resend OTP Now'}
+                                </button>
+                            )}
                             <br/>
-                            <button type="button" className="btn-link" onClick={() => { setStep('LOGIN'); setSuccess(null); }}>
+                            <button type="button" className="btn-link" onClick={() => { setStep('LOGIN'); setSuccess(null); setOtp(''); }}>
                                 Back to Login
                             </button>
                         </div>
                     </div>
                     )})()
+                ) : step === 'SETUP_TOTP' ? (
+                    <div className="login-form">
+                        <div className="mb-6 text-center">
+                            <h2 className="text-lg font-black text-gray-900 mb-2">Secure Your Account</h2>
+                            <p className="text-xs text-gray-500 font-medium mb-4">Scan this QR code with Google Authenticator or Authy to enroll.</p>
+                            {qrCode && <img src={qrCode} alt="TOTP QR Code" className="mx-auto w-48 h-48 border-4 border-gray-100 rounded-xl mb-4 shadow-sm" />}
+                            <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Manual Setup Key:</p>
+                            <p className="font-mono font-bold text-sm text-gray-900 bg-gray-50 py-2 rounded border border-gray-100 mb-6">{totpSecret}</p>
+                        </div>
+                        <form onSubmit={handleVerify}>
+                            <div className="form-group">
+                                <label>Authenticator Code</label>
+                                <input 
+                                    type="text" 
+                                    value={otp} 
+                                    onChange={(e) => setOtp(e.target.value)}
+                                    placeholder="6-digit code"
+                                    maxLength={6}
+                                    required
+                                />
+                            </div>
+                            <button type="submit" disabled={loading} className="login-btn">
+                                {loading ? 'Enrolling...' : 'Verify & Complete Setup'}
+                            </button>
+                        </form>
+                    </div>
                 ) : (
                     <form onSubmit={handleForgot} className="login-form">
                          <p className="recovery-hint">Password recovery requires access to your private security mailbox.</p>

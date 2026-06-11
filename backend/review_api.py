@@ -1551,22 +1551,33 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     
     log_event(db, user.employee_id, "LOGIN_REQUEST")
     
-    # Get/Create OTP with cooldown
+    from backend.auth_service import get_totp_secret
+    # Check if TOTP is enrolled
+    if get_totp_secret(db, user.employee_id):
+        return {
+            "status": "totp_verify",
+            "message": "Enter authenticator code"
+        }
+        
+    # Get/Create OTP with cooldown (Legacy email bridge)
     otp_res = create_otp(db, user.employee_id)
     if otp_res.get("status") == "error":
         raise HTTPException(status_code=500, detail=otp_res["message"])
     
     # Email hint for masking
     email = user.security_email if user.security_email else user.email
-    user_part, domain_part = email.split('@')
-    masked_email = f"{user_part[0]}***{user_part[-1]}@{domain_part}"
+    if email and '@' in email:
+        user_part, domain_part = email.split('@')
+        masked_email = f"{user_part[0]}***{user_part[-1]}@{domain_part}"
+    else:
+        masked_email = "your email"
     
     return {
-        "status": otp_res["status"],
-        "otp_sent": otp_res["otp_sent"],
-        "message": otp_res["message"],
-        "resend_available_in": otp_res["resend_available_in"],
-        "expires_in": otp_res["expires_in"],
+        "status": "email_otp",
+        "otp_sent": otp_res.get("otp_sent", True),
+        "message": otp_res.get("message", ""),
+        "resend_available_in": otp_res.get("resend_available_in", 60),
+        "expires_in": otp_res.get("expires_in", 300),
         "masked_email": masked_email
     }
 
@@ -1602,24 +1613,39 @@ async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Req
     user = db.query(User).filter(func.lower(User.employee_id) == request.employee_id.lower()).first()
     target_id = user.employee_id if user else request.employee_id
 
-    # Verify OTP
-    if verify_otp(db, target_id, request.otp_code):
-        token = create_user_session(db, target_id)
-        
-        log_event(db, target_id, "LOGIN_SUCCESS", ip=req.client.host if req else None)
-        return {
-            "status": "success",
-            "token": token,
-            "user": {
-                "name": user.name,
-                "role": user.role,
-                "employee_id": user.employee_id,
-                "reset_required": user.password_reset_required == 1
-            }
-        }
+    from backend.auth_service import get_totp_secret, verify_totp_code, generate_totp_setup, set_pending_totp_secret
+    totp_secret = get_totp_secret(db, target_id)
     
-    log_event(db, target_id, "LOGIN_FAILED", ip=req.client.host if req else None)
-    raise HTTPException(status_code=401, detail="Invalid or expired OTP")
+    if totp_secret:
+        # Enrolled: Verify TOTP code
+        if verify_totp_code(totp_secret, request.otp_code):
+            token = create_user_session(db, target_id)
+            log_event(db, target_id, "LOGIN_SUCCESS", ip=req.client.host if req else None)
+            return {
+                "status": "success",
+                "token": token,
+                "user": {
+                    "name": user.name,
+                    "role": user.role,
+                    "employee_id": user.employee_id,
+                    "reset_required": user.password_reset_required == 1
+                }
+            }
+        log_event(db, target_id, "LOGIN_FAILED", ip=req.client.host if req else None)
+        raise HTTPException(status_code=401, detail="Invalid Authenticator code")
+    else:
+        # Not enrolled: Verify Email OTP, then generate TOTP setup
+        if verify_otp(db, target_id, request.otp_code):
+            setup_data = generate_totp_setup(target_id)
+            set_pending_totp_secret(db, target_id, setup_data["secret"])
+            return {
+                "status": "totp_setup",
+                "secret": setup_data["secret"],
+                "qr_b64": setup_data["qr_b64"]
+            }
+        
+        log_event(db, target_id, "LOGIN_FAILED", ip=req.client.host if req else None)
+        raise HTTPException(status_code=401, detail="Invalid or expired Email OTP")
 
 @app.post("/api/auth/resend-otp")
 async def resend_otp(request: LoginRequest, db: Session = Depends(get_db)):
@@ -1634,6 +1660,10 @@ async def resend_otp(request: LoginRequest, db: Session = Depends(get_db)):
     if not verify_password(request.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid password")
     
+    from backend.auth_service import get_totp_secret
+    if get_totp_secret(db, user.employee_id):
+        raise HTTPException(status_code=400, detail="Resend disabled for TOTP users")
+        
     # Generate new OTP (create_otp handles invalidation of old ones)
     otp = create_otp(db, user.employee_id, is_resend=True)
     if not otp:
@@ -1782,3 +1812,32 @@ if __name__ == "__main__":
     cert_path, key_path = r"C:\Aradhana\SSL\cert.pem", r"C:\Aradhana\SSL\key.pem"
     if os.path.exists(cert_path) and os.path.exists(key_path): uvicorn.run("backend.review_api:app", host="0.0.0.0", port=8000, ssl_keyfile=key_path, ssl_certfile=cert_path)
     else: uvicorn.run("backend.review_api:app", host="0.0.0.0", port=8000)
+
+@app.post("/api/auth/totp-enroll")
+async def totp_enroll(request: VerifyRequest, db: Session = Depends(get_db), req: Request = None):
+    from backend.auth_service import get_pending_totp_secret, verify_totp_code, set_totp_secret, create_user_session, log_event
+    user = db.query(User).filter(func.lower(User.employee_id) == request.employee_id.lower()).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid user")
+    target_id = user.employee_id
+    
+    pending_secret = get_pending_totp_secret(db, target_id)
+    if not pending_secret:
+        raise HTTPException(status_code=400, detail="No pending TOTP setup found")
+        
+    if verify_totp_code(pending_secret, request.otp_code):
+        set_totp_secret(db, target_id, pending_secret)
+        token = create_user_session(db, target_id)
+        log_event(db, target_id, "LOGIN_SUCCESS", ip=req.client.host if req else None)
+        return {
+            "status": "success",
+            "token": token,
+            "user": {
+                "name": user.name,
+                "role": user.role,
+                "employee_id": user.employee_id,
+                "reset_required": user.password_reset_required == 1
+            }
+        }
+    
+    raise HTTPException(status_code=401, detail="Invalid Authenticator code")
