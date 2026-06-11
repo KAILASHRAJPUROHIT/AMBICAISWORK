@@ -1607,7 +1607,7 @@ async def verify_alias(request: VerifyRequest, db: Session = Depends(get_db), re
 
 @app.post("/api/auth/verify")
 async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Request = None):
-    logger.info(f"VERIFY ATTEMPT: employee_id='{request.employee_id}', otp='{request.otp_code}'")
+    logger.info(f"VERIFY ATTEMPT: employee_id='{request.employee_id}', otp='***'")
     
     # Use the normalized ID from DB if found
     user = db.query(User).filter(func.lower(User.employee_id) == request.employee_id.lower()).first()
