@@ -1088,7 +1088,7 @@
     function retakePhoto() {
         if (cropper) { cropper.destroy(); cropper = null; }
         currentPreviewCanvas = null; currentAutoPts = null; currentWarpedCanvas = null;
-        showView('main');
+        startCamera();
     }
 
     // ── File Upload (multi-file, no crop UI) ──────────────────────────────────
