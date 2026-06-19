@@ -20,7 +20,7 @@ app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_MB", "50")) * 
 
 db = SQLAlchemy(app)
 
-ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
 VALID_PRINT_MODES = {"pdf", "id_card"}
 
 

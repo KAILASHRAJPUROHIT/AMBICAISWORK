@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Aradhana Jewellers | Smart Scan & Print</title>
-    <!-- Cropper.js CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <style>
         :root {
@@ -85,7 +84,7 @@
 
         .hidden { display: none !important; }
 
-        /* Debug UI (Hidden in Production) */
+        /* Debug UI */
         .debug-overlay {
             display: {% if production_mode %}none{% else %}block{% endif %};
             position: absolute;
@@ -106,7 +105,6 @@
 
         .debug-row { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid rgba(0, 255, 0, 0.1); padding: 2px 0; }
         .debug-val { color: #fff; font-weight: bold; }
-        .debug-reject { color: #ff4d4d; }
 
         /* Queue UI */
         .queue-container {
@@ -151,6 +149,19 @@
             justify-content: center;
             font-size: 24px;
             color: var(--gold);
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .queue-item .pdf-icon small {
+            font-size: 10px;
+            color: #aaa;
+            max-width: 90px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-align: center;
+            padding: 0 4px;
         }
 
         .btn-remove {
@@ -159,14 +170,14 @@
             background: var(--error);
             color: white;
             border: none;
-            width: 20px; height: 20px;
+            width: 22px; height: 22px;
             border-radius: 50%;
-            font-size: 14px; font-weight: bold;
+            font-size: 15px; font-weight: bold;
             display: flex; align-items: center; justify-content: center;
             cursor: pointer; z-index: 5;
         }
 
-        /* Camera View & Overlays */
+        /* Camera View */
         .camera-wrapper {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -191,14 +202,37 @@
             position: absolute;
             top: 20px; left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.6);
+            background: rgba(0,0,0,0.65);
             color: white;
-            padding: 8px 16px;
+            padding: 8px 18px;
             border-radius: 20px;
             font-size: 14px;
             z-index: 10;
             white-space: nowrap;
+            transition: background 0.3s;
         }
+
+        .camera-guide.guide-locked {
+            background: rgba(39, 174, 96, 0.85);
+            color: #fff;
+            font-weight: bold;
+        }
+
+        /* Auto-capture ring */
+        #autocapture-ring {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            border: 4px solid var(--gold);
+            z-index: 105;
+            pointer-events: none;
+            display: none;
+        }
+
+        #autocapture-ring.visible { display: block; }
+        #autocapture-ring.flash { background: rgba(212,175,55,0.4); }
 
         .camera-controls {
             height: 120px;
@@ -214,6 +248,7 @@
             border: 5px solid white;
             background: transparent;
             position: relative;
+            cursor: pointer;
         }
 
         .btn-shutter::after {
@@ -224,7 +259,7 @@
             border-radius: 50%;
         }
 
-        .btn-camera-cancel { color: white; background: transparent; border: none; font-size: 16px; }
+        .btn-camera-cancel { color: white; background: transparent; border: none; font-size: 16px; cursor: pointer; }
 
         /* Crop View */
         .crop-wrapper { display: flex; flex-direction: column; gap: 15px; }
@@ -244,7 +279,7 @@
             margin-bottom: 10px;
         }
 
-        #crop-image { 
+        #crop-image {
             width: 100%;
             max-height: 60vh;
             object-fit: contain;
@@ -259,14 +294,26 @@
         .type-card input { display: none; }
         .type-content {
             background: var(--navy-light);
-            border: 1px solid rgba(212, 175, 55, 0.3);
+            border: 2px solid rgba(212, 175, 55, 0.3);
             border-radius: 10px;
-            padding: 10px;
+            padding: 12px 10px;
             text-align: center;
             transition: 0.2s;
             cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
         }
-        .type-card input:checked + .type-content { border-color: var(--gold); background: rgba(212, 175, 55, 0.15); }
+
+        .type-content .mode-icon { font-size: 24px; }
+        .type-content .mode-desc { font-size: 10px; color: #aaa; margin-top: 2px; }
+
+        .type-card input:checked + .type-content {
+            border-color: var(--gold);
+            background: rgba(212, 175, 55, 0.15);
+        }
+        .type-card input:checked + .type-content .mode-desc { color: var(--gold-light); }
 
         .btn-master {
             background: linear-gradient(135deg, #D4AF37 0%, #C5A059 100%);
@@ -283,7 +330,7 @@
             box-shadow: 0 5px 15px rgba(212,175,55,0.4);
         }
 
-        .btn-master:disabled { background: #444; color: #777; box-shadow: none; }
+        .btn-master:disabled { background: #444; color: #777; box-shadow: none; cursor: not-allowed; }
 
         .loader-overlay { text-align: center; padding: 40px 0; }
         .spinner {
@@ -304,18 +351,53 @@
             z-index: 2000;
             transition: width 0.3s;
         }
+
+        /* Toast Notifications */
+        #toast-container {
+            position: fixed;
+            bottom: 30px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            pointer-events: none;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .toast {
+            background: #1a1a2e;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            border-left: 4px solid var(--gold);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards;
+            width: 100%;
+            text-align: center;
+        }
+
+        .toast.error { border-left-color: var(--error); }
+        .toast.success { border-left-color: var(--success); }
+
+        @keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
     </style>
 </head>
 <body>
 
 <div id="cv-loading-bar"></div>
+<div id="toast-container"></div>
 
 <div class="header">
     <h1>Aradhana</h1>
 </div>
 
 <div class="container">
-    
+
     <!-- MAIN VIEW -->
     <div id="view-main" class="card">
         <div class="action-buttons">
@@ -346,11 +428,19 @@
             <div class="print-types">
                 <label class="type-card">
                     <input type="radio" name="print-mode" value="pdf">
-                    <div class="type-content"><strong>Full Page</strong></div>
+                    <div class="type-content">
+                        <span class="mode-icon">📄</span>
+                        <strong>Full Page</strong>
+                        <span class="mode-desc">One image per A4 page</span>
+                    </div>
                 </label>
                 <label class="type-card">
                     <input type="radio" name="print-mode" value="id_card" checked>
-                    <div class="type-content"><strong>ID Cards</strong></div>
+                    <div class="type-content">
+                        <span class="mode-icon">🪪</span>
+                        <strong>ID Cards</strong>
+                        <span class="mode-desc">6 cards per A4 sheet</span>
+                    </div>
                 </label>
             </div>
 
@@ -375,6 +465,7 @@
             <video id="camera-video" autoplay playsinline muted></video>
             <canvas id="detection-overlay"></canvas>
             <div id="camera-debug-overlay" class="debug-overlay"></div>
+            <div id="autocapture-ring"></div>
             <div id="camera-guide" class="camera-guide">Align document within frame</div>
         </div>
         <div class="camera-controls">
@@ -392,23 +483,17 @@
                 <img id="crop-image" src="">
                 <canvas id="crop-canvas" class="hidden"></canvas>
             </div>
-            
+
             <div class="action-stack" style="display: flex; flex-direction: column; gap: 10px;">
-                <!-- 1. ADD TO PRINT QUEUE (Primary) -->
                 <button id="btn-add-to-queue" class="btn-master" onclick="confirmCrop()">ADD TO PRINT QUEUE</button>
-                
+
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <!-- 2. Reset / Auto Crop Toggle -->
                     <button id="btn-toggle-auto" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="useAutoCrop()">Auto Crop</button>
-                    <!-- 3. Manual Crop -->
                     <button id="btn-manual-crop" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="enableManualCrop()">Manual Crop</button>
                 </div>
-                
-                <!-- 4. Use Original -->
+
                 <button id="btn-use-original" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="useOriginal()">Use Original</button>
-                
-                <!-- 5. Discard -->
-                <button class="btn-master" style="background: #444; color: white;" onclick="retakePhoto()">Discard</button>
+                <button class="btn-master" style="background: #444; color: white;" onclick="retakePhoto()">Discard & Retake</button>
             </div>
         </div>
     </div>
@@ -427,33 +512,34 @@
         <div style="font-size: 50px; color: var(--gold); margin-bottom: 15px;">✓</div>
         <h2 style="color: var(--gold-light); margin-bottom: 10px;">Sent to Queue!</h2>
         <div style="background: rgba(255,255,255,0.05); border: 1px solid var(--gold); border-radius: 8px; padding: 20px; margin: 20px 0;">
-            <div style="font-size: 12px; color: #aaa; text-transform: uppercase;">Queue ID</div>
-            <div id="display-queue-id" style="font-size: 24px; font-weight: bold; letter-spacing: 2px;">AR-XXXX</div>
+            <div style="font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px;">Queue ID</div>
+            <div id="display-queue-id" style="font-size: 24px; font-weight: bold; letter-spacing: 2px; color: var(--gold-light);">AR-XXXX</div>
+            <div style="font-size: 12px; color: #888; margin-top: 8px;">Show this to the counter</div>
         </div>
-        <button class="btn-master" onclick="location.reload()">Done</button>
+        <button class="btn-master" onclick="location.reload()">Done — Print Another</button>
     </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 
 <script>
-    // Global State
     const PRODUCTION_MODE = {{ 'true' if production_mode else 'false' }};
+
+    // Global state
     let queue = [];
     let cropper = null;
     let cameraStream = null;
     let cvLoaded = false;
     let isDetecting = false;
     let lastDetectionTime = 0;
-    let heartbeat = 0;
     let currentPreviewCanvas = null;
     let currentAutoPts = null;
     let currentWarpedCanvas = null;
 
-    // Auto-capture State
+    // Auto-capture state
     let stabilityTimer = 0;
-    let autoCaptureCounter = 3;
     let lastBestPoints = null;
+    let autoCaptureFired = false;
 
     const views = {
         main: document.getElementById('view-main'),
@@ -468,31 +554,39 @@
         views[viewName].classList.remove('hidden');
     }
 
-    // OpenCV.js Loading
-    function onOpenCvReady() {
-        if (typeof cv !== 'undefined') {
-            cv['onRuntimeInitialized'] = () => {
-                cvLoaded = true;
-                logDebug("OpenCV Engine Ready");
-                document.getElementById('cv-loading-bar').style.width = '100%';
-                setTimeout(() => document.getElementById('cv-loading-bar').style.display = 'none', 500);
-            };
-            if (cv.Mat) {
-                cvLoaded = true;
-                document.getElementById('cv-loading-bar').style.display = 'none';
-            }
-        }
+    // ── Toast Notifications ──────────────────────────────────────────────────
+    function showToast(msg, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = msg;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3100);
     }
 
-    const script = document.createElement('script');
-    script.async = true;
-    script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
-    script.onload = onOpenCvReady;
-    document.body.appendChild(script);
+    // ── OpenCV Loading ───────────────────────────────────────────────────────
+    function onOpenCvReady() {
+        if (typeof cv === 'undefined') return;
+        const bar = document.getElementById('cv-loading-bar');
+        const init = () => {
+            cvLoaded = true;
+            bar.style.width = '100%';
+            setTimeout(() => bar.style.display = 'none', 500);
+        };
+        if (cv.Mat) { init(); return; }
+        cv['onRuntimeInitialized'] = init;
+    }
 
-    // Queue Management
+    const cvScript = document.createElement('script');
+    cvScript.async = true;
+    cvScript.src = 'https://docs.opencv.org/4.8.0/opencv.js';
+    cvScript.onload = onOpenCvReady;
+    cvScript.onerror = () => showToast('Camera detection unavailable — manual capture still works', 'error');
+    document.body.appendChild(cvScript);
+
+    // ── Queue Management ─────────────────────────────────────────────────────
     function addToQueue(blob, name, type) {
-        const id = Date.now();
+        const id = Date.now() + Math.random();
         const url = URL.createObjectURL(blob);
         queue.push({ id, blob, name, type, url });
         updateQueueUI();
@@ -523,7 +617,11 @@
             queue.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'queue-item';
-                div.innerHTML = item.type === 'application/pdf' ? `<div class="pdf-icon">PDF</div>` : `<img src="${item.url}">`;
+                if (item.type === 'application/pdf') {
+                    div.innerHTML = `<div class="pdf-icon">📄<small>${item.name}</small></div>`;
+                } else {
+                    div.innerHTML = `<img src="${item.url}" loading="lazy">`;
+                }
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'btn-remove';
                 removeBtn.innerHTML = '×';
@@ -535,14 +633,12 @@
         countLabel.textContent = `${queue.length} Item${queue.length === 1 ? '' : 's'}`;
     }
 
+    // ── Debug Logging ─────────────────────────────────────────────────────────
     function logDebug(msg, data = null) {
-        if (PRODUCTION_MODE) {
-            console.log(`[DEBUG] ${msg}`, data);
-            return;
-        }
+        if (PRODUCTION_MODE) return;
         const overlay = document.getElementById('camera-debug-overlay');
         if (!overlay) return;
-        if (msg === "CLEAR") { overlay.innerHTML = ''; return; }
+        if (msg === 'CLEAR') { overlay.innerHTML = ''; return; }
         const row = document.createElement('div');
         row.className = 'debug-row';
         row.innerHTML = `<span>${msg}</span><span class="debug-val">${data !== null ? data : ''}</span>`;
@@ -550,7 +646,7 @@
         if (overlay.children.length > 20) overlay.removeChild(overlay.firstChild);
     }
 
-    // Camera Logic
+    // ── Camera ────────────────────────────────────────────────────────────────
     async function startCamera() {
         try {
             cameraStream = await navigator.mediaDevices.getUserMedia({
@@ -563,106 +659,123 @@
             video.onloadedmetadata = () => {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
-                showView('camera');
                 isDetecting = true;
                 stabilityTimer = 0;
-                autoCaptureCounter = 3;
                 lastBestPoints = null;
+                autoCaptureFired = false;
+                showView('camera');
                 requestAnimationFrame(detectionLoop);
             };
-        } catch (err) { alert("Camera Error: " + err.message); }
+        } catch (err) {
+            showToast('Camera Error: ' + err.message, 'error');
+        }
     }
 
     function stopCamera() {
         isDetecting = false;
         if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+        const ring = document.getElementById('autocapture-ring');
+        ring.classList.remove('visible', 'flash');
         showView('main');
     }
 
     function detectionLoop(timestamp) {
         if (!isDetecting) return;
-        heartbeat++;
+
         const video = document.getElementById('camera-video');
         const canvas = document.getElementById('detection-overlay');
         const guide = document.getElementById('camera-guide');
+        const ring = document.getElementById('autocapture-ring');
 
         if (!video.videoWidth || !cvLoaded) { requestAnimationFrame(detectionLoop); return; }
-        if (timestamp - lastDetectionTime < 200) { requestAnimationFrame(detectionLoop); return; }
+        if (timestamp - lastDetectionTime < 150) { requestAnimationFrame(detectionLoop); return; }
         lastDetectionTime = timestamp;
 
         const result = detectDocument(video);
         const best = result.bestRect;
 
-        // Visuals & Auto-Capture Logic
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
+
         if (best) {
             const stable = checkStability(best.points);
             if (stable) {
-                stabilityTimer += 200;
-                if (stabilityTimer >= 800) {
-                    autoCaptureCounter = 3 - Math.floor((stabilityTimer - 800) / 800);
-                    if (autoCaptureCounter <= 0) {
-                        guide.textContent = "Capturing...";
-                        triggerAutoCapture(best.points);
-                        return;
-                    }
-                    guide.textContent = `Hold Still... Capturing in ${autoCaptureCounter}`;
+                stabilityTimer += 150;
+
+                if (stabilityTimer >= 1800 && !autoCaptureFired) {
+                    // Auto-capture!
+                    autoCaptureFired = true;
+                    ring.classList.add('flash');
+                    guide.textContent = 'Capturing…';
+                    guide.classList.add('guide-locked');
+                    setTimeout(() => triggerAutoCapture(best.points), 80);
+                    return;
+                } else if (stabilityTimer >= 600) {
+                    const remaining = Math.ceil((1800 - stabilityTimer) / 600);
+                    guide.textContent = remaining > 0 ? `Hold still… ${remaining}` : 'Capturing…';
+                    guide.classList.add('guide-locked');
+                    ring.classList.add('visible');
+                    ring.classList.remove('flash');
                 } else {
-                    guide.textContent = "Hold Still";
+                    guide.textContent = 'Document detected — hold still';
+                    guide.classList.add('guide-locked');
+                    ring.classList.remove('visible');
                 }
             } else {
                 stabilityTimer = 0;
-                autoCaptureCounter = 3;
-                guide.textContent = "Document found";
+                guide.textContent = 'Align document within frame';
+                guide.classList.remove('guide-locked');
+                ring.classList.remove('visible', 'flash');
             }
-            drawShape(ctx, best.points, '#27AE60', 6);
+            drawShape(ctx, best.points, '#27AE60', 5);
         } else {
             stabilityTimer = 0;
-            autoCaptureCounter = 3;
-            guide.textContent = "Align document within frame";
+            guide.textContent = 'Align document within frame';
+            guide.classList.remove('guide-locked');
+            ring.classList.remove('visible', 'flash');
         }
 
-        // Draw alternate candidates (Only in non-production)
-        if (!PRODUCTION_MODE) {
-            result.rects.forEach(r => { if (r !== best) drawShape(ctx, r.points, 'rgba(212,175,55,0.4)', 2); });
+        if (!PRODUCTION_MODE && result.rects.length > 0) {
+            result.rects.slice(1, 4).forEach(r => drawShape(ctx, r.points, 'rgba(212,175,55,0.3)', 1));
         }
 
         requestAnimationFrame(detectionLoop);
     }
 
-    function checkStability(newPoints) {
-        if (!lastBestPoints) { lastBestPoints = newPoints; return false; }
-        const threshold = 30; // pixels
-        let diff = 0;
+    function checkStability(newPts) {
+        if (!lastBestPoints) { lastBestPoints = newPts; return false; }
+        let totalDiff = 0;
         for (let i = 0; i < 4; i++) {
-            diff += Math.abs(newPoints[i].x - lastBestPoints[i].x);
-            diff += Math.abs(newPoints[i].y - lastBestPoints[i].y);
+            totalDiff += Math.abs(newPts[i].x - lastBestPoints[i].x);
+            totalDiff += Math.abs(newPts[i].y - lastBestPoints[i].y);
         }
-        lastBestPoints = newPoints;
-        return diff < threshold;
+        lastBestPoints = newPts;
+        return totalDiff < 20; // tighter: 20px total across all 8 values
     }
 
     function drawShape(ctx, pts, color, width) {
-        if (pts.length < 2) return;
+        if (!pts || pts.length < 2) return;
         ctx.strokeStyle = color; ctx.lineWidth = width;
         ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
         ctx.closePath(); ctx.stroke();
     }
 
-    // Advanced Detection Core (Multi-pass)
+    // ── Document Detection (multi-pass) ───────────────────────────────────────
     function detectDocument(source) {
-        const results = { rects: [], bestRect: null, contourCount: 0, rejectionReason: "No doc found", rejectedContours: [] };
+        const results = { rects: [], bestRect: null, contourCount: 0 };
+        if (!cvLoaded) return results;
+
         try {
             const vw = source.videoWidth || source.width;
             const vh = source.videoHeight || source.height;
-            const scale = 0.3;
+            const scale = 0.35;
+            const tw = Math.round(vw * scale);
+            const th = Math.round(vh * scale);
+
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = vw * scale; tempCanvas.height = vh * scale;
-            const tCtx = tempCanvas.getContext('2d');
-            tCtx.drawImage(source, 0, 0, tempCanvas.width, tempCanvas.height);
+            tempCanvas.width = tw; tempCanvas.height = th;
+            tempCanvas.getContext('2d').drawImage(source, 0, 0, tw, th);
 
             let src = cv.imread(tempCanvas);
             let gray = new cv.Mat();
@@ -670,49 +783,53 @@
 
             const allCandidates = [];
 
-            // Pass 1: Standard
-            const pass1 = processPass(gray, 50, 150, tempCanvas.width, tempCanvas.height, scale);
-            allCandidates.push(...pass1.candidates);
-            results.contourCount += pass1.contourCount;
+            // Pass 1: Standard Canny
+            const p1 = processPass(gray, 40, 120, tw, th, scale);
+            allCandidates.push(...p1);
 
-            // Pass 2: CLAHE for Low Contrast
-            let clahe = new cv.CLAHE(2.0, new cv.Size(8, 8));
+            // Pass 2: CLAHE for low-contrast docs
+            let clahe = new cv.CLAHE(3.0, new cv.Size(8, 8));
             let contrastGray = new cv.Mat();
             clahe.apply(gray, contrastGray);
-            const pass2 = processPass(contrastGray, 30, 100, tempCanvas.width, tempCanvas.height, scale);
-            allCandidates.push(...pass2.candidates);
-            results.contourCount += pass2.contourCount;
+            const p2 = processPass(contrastGray, 25, 80, tw, th, scale);
+            allCandidates.push(...p2);
             contrastGray.delete(); clahe.delete();
 
-            // Pass 3: Adaptive Threshold
+            // Pass 3: Adaptive threshold
             let thresh = new cv.Mat();
             cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
-            const pass3 = processPass(thresh, 0, 0, tempCanvas.width, tempCanvas.height, scale, true);
-            allCandidates.push(...pass3.candidates);
-            results.contourCount += pass3.contourCount;
+            const p3 = processPass(thresh, 0, 0, tw, th, scale, true);
+            allCandidates.push(...p3);
             thresh.delete();
 
-            if (allCandidates.length > 0) {
-                allCandidates.sort((a, b) => b.score - a.score);
-                results.bestRect = allCandidates[0];
-                results.rects = allCandidates;
-                results.rejectionReason = "None";
-            }
+            // Deduplicate and rank
+            const deduped = deduplicateCandidates(allCandidates);
+            deduped.sort((a, b) => b.score - a.score);
+
+            results.rects = deduped;
+            results.bestRect = deduped[0] || null;
+            results.contourCount = allCandidates.length;
 
             src.delete(); gray.delete();
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            if (!PRODUCTION_MODE) console.error('[Detection]', e);
+        }
         return results;
     }
 
-    function processPass(gray, low, high, tw, th, scale, isThreshold = false) {
+    function processPass(gray, low, high, tw, th, scale, isThresh = false) {
+        const candidates = [];
+        const frameArea = tw * th;
+        const borderMargin = Math.min(tw, th) * 0.03; // 3% border exclusion zone
+
         let edges = new cv.Mat();
-        if (isThreshold) {
+        if (isThresh) {
             edges = gray.clone();
         } else {
             cv.GaussianBlur(gray, edges, new cv.Size(5, 5), 0);
             cv.Canny(edges, edges, low, high);
         }
-        
+
         let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
         cv.dilate(edges, edges, kernel);
 
@@ -720,65 +837,99 @@
         let hierarchy = new cv.Mat();
         cv.findContours(edges, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
 
-        const candidates = [];
-        const frameArea = tw * th;
-        const minArea = frameArea * 0.05;
+        const minArea = frameArea * 0.08; // at least 8% of frame
 
-        for (let i = 0; i < contours.size(); ++i) {
-            const parent = hierarchy.intPtr(0, i)[3];
-            if (parent !== -1) continue;
+        for (let i = 0; i < contours.size(); i++) {
+            // Only top-level contours
+            if (hierarchy.intPtr(0, i)[3] !== -1) continue;
 
             let cnt = contours.get(i);
             let area = cv.contourArea(cnt);
-            if (area < minArea / 2) continue;
+            if (area < minArea) continue;
 
             let hull = new cv.Mat();
             cv.convexHull(cnt, hull);
+
             let rect = cv.minAreaRect(hull);
-            const w = rect.size.width;
-            const h = rect.size.height;
-            if (w < 20 || h < 20) { hull.delete(); continue; }
+            const rw = rect.size.width, rh = rect.size.height;
+            if (rw < 30 || rh < 30) { hull.delete(); continue; }
 
-            const ratio = Math.max(w/h, h/w);
-            const rectArea = w * h;
-            const rectangularity = area / rectArea;
+            const hullArea = cv.contourArea(hull);
+            const rectArea = rw * rh;
+            const rectangularity = hullArea / rectArea;
 
-            let score = (area / frameArea) * 100;
-            if (ratio >= 1.45 && ratio <= 1.75) score += 50;
-            if (rectangularity > 0.8) score += 20;
-
-            const dummyRect = {
+            // Get the 4 corner points (scaled back to video coords)
+            let box = cv.RotatedRect.points({
                 center: rect.center,
-                size: { width: rect.size.width * 1.05, height: rect.size.height * 1.05 },
+                size: { width: rw * 1.03, height: rh * 1.03 }, // tiny expansion
                 angle: rect.angle
-            };
-            
-            let box = cv.RotatedRect.points(dummyRect);
+            });
+
             const pts = [];
+            let touchesBorder = false;
             for (let j = 0; j < 4; j++) {
-                pts.push({ 
-                    x: Math.max(0, Math.min(tw, box[j].x)) / scale, 
-                    y: Math.max(0, Math.min(th, box[j].y)) / scale 
-                });
+                const px = box[j].x / scale;
+                const py = box[j].y / scale;
+                pts.push({ x: px, y: py });
+                // Reject if corners are too close to the frame edge
+                if (box[j].x < borderMargin || box[j].x > tw - borderMargin ||
+                    box[j].y < borderMargin || box[j].y > th - borderMargin) {
+                    touchesBorder = true;
+                }
             }
 
-            candidates.push({ 
-                points: orderPoints(pts), 
-                area, ratio: ratio.toFixed(2), score, rectangularity: rectangularity.toFixed(2)
-            });
+            if (touchesBorder) { hull.delete(); continue; }
+
+            const ratio = Math.max(rw / rh, rh / rw);
+
+            // Score: prefer large, rectangular, A4-proportioned shapes
+            let score = (area / frameArea) * 80;
+            if (ratio >= 1.3 && ratio <= 1.55) score += 40; // A4 / Letter
+            if (ratio >= 1.55 && ratio <= 1.80) score += 25; // other IDs/docs
+            if (rectangularity > 0.85) score += 25;
+            else if (rectangularity > 0.70) score += 10;
+
+            candidates.push({ points: orderPoints(pts), area, ratio: +ratio.toFixed(2), score, rectangularity: +rectangularity.toFixed(2) });
             hull.delete();
         }
+
         edges.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
-        return { candidates, contourCount: contours.size() };
+        return candidates;
+    }
+
+    function deduplicateCandidates(candidates) {
+        // Remove candidates whose center is within 15% of another higher-scored one
+        const sorted = [...candidates].sort((a, b) => b.score - a.score);
+        const kept = [];
+        for (const c of sorted) {
+            const cx = (c.points[0].x + c.points[2].x) / 2;
+            const cy = (c.points[0].y + c.points[2].y) / 2;
+            const dup = kept.some(k => {
+                const kx = (k.points[0].x + k.points[2].x) / 2;
+                const ky = (k.points[0].y + k.points[2].y) / 2;
+                return Math.hypot(cx - kx, cy - ky) < 80;
+            });
+            if (!dup) kept.push(c);
+        }
+        return kept;
     }
 
     function orderPoints(pts) {
-        const sum = pts.map(p => p.x + p.y); const diff = pts.map(p => p.y - p.x);
-        return [pts[sum.indexOf(Math.min(...sum))], pts[diff.indexOf(Math.min(...diff))], pts[sum.indexOf(Math.max(...sum))], pts[diff.indexOf(Math.max(...diff))]];
+        // Returns [TL, TR, BR, BL] using sum/diff method
+        const sum = pts.map(p => p.x + p.y);
+        const diff = pts.map(p => p.y - p.x);
+        return [
+            pts[sum.indexOf(Math.min(...sum))],  // TL: min x+y
+            pts[diff.indexOf(Math.min(...diff))], // TR: min y-x
+            pts[sum.indexOf(Math.max(...sum))],  // BR: max x+y
+            pts[diff.indexOf(Math.max(...diff))] // BL: max y-x
+        ];
     }
 
+    // ── Capture ───────────────────────────────────────────────────────────────
     function captureManual() {
         if (!isDetecting) return;
+        isDetecting = false; // Stop detection loop immediately
         const video = document.getElementById('camera-video');
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth; canvas.height = video.videoHeight;
@@ -789,85 +940,89 @@
 
     function triggerAutoCapture(pts) {
         if (!isDetecting) return;
+        isDetecting = false;
+        if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
         const video = document.getElementById('camera-video');
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth; canvas.height = video.videoHeight;
         canvas.getContext('2d').drawImage(video, 0, 0);
-        if (navigator.vibrate) navigator.vibrate(100);
         processFinalImage(canvas, pts);
     }
 
     async function processFinalImage(sourceCanvas, pts) {
-        stopCamera();
-        currentPreviewCanvas = sourceCanvas; currentAutoPts = pts;
-        let finalCanvas = sourceCanvas;
-        if (pts) {
-            const warped = warpDocument(sourceCanvas, pts);
-            finalCanvas = refineDocument(warped);
-        }
-        currentWarpedCanvas = finalCanvas;
-        updateCropPreview(finalCanvas);
+        // Always destroy any lingering cropper before loading new image
+        if (cropper) { cropper.destroy(); cropper = null; }
+
+        // Stop camera tracks (if not already stopped)
+        if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+
+        currentPreviewCanvas = sourceCanvas;
+        currentAutoPts = pts;
+        currentWarpedCanvas = null;
+
         const autoBtn = document.getElementById('btn-toggle-auto');
+
         if (pts) {
-            autoBtn.textContent = "Reset to Original"; autoBtn.onclick = useOriginal;
-            document.getElementById('crop-label').textContent = "Auto Processed";
+            try {
+                const warped = warpDocument(sourceCanvas, pts);
+                currentWarpedCanvas = warped; // no refine — warp is enough
+                updateCropPreview(currentWarpedCanvas);
+                autoBtn.textContent = 'Reset to Original';
+                autoBtn.onclick = useOriginal;
+                document.getElementById('crop-label').textContent = 'Auto Cropped';
+            } catch (e) {
+                // Warp failed — fall back to original
+                updateCropPreview(sourceCanvas);
+                autoBtn.textContent = 'Auto Crop';
+                autoBtn.onclick = useAutoCrop;
+                document.getElementById('crop-label').textContent = 'Preview';
+            }
         } else {
-            autoBtn.textContent = "Auto Crop"; autoBtn.onclick = useAutoCrop;
-            document.getElementById('crop-label').textContent = "No doc detected";
+            updateCropPreview(sourceCanvas);
+            autoBtn.textContent = 'Auto Crop';
+            autoBtn.onclick = useAutoCrop;
+            document.getElementById('crop-label').textContent = 'No document detected';
         }
+
         showView('crop');
     }
 
+    // ── Perspective Warp ──────────────────────────────────────────────────────
     function warpDocument(src, pts) {
-        let mat = cv.imread(src);
         const w1 = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
         const w2 = Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
-        const maxWidth = Math.max(w1, w2);
         const h1 = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y);
         const h2 = Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y);
-        const maxHeight = Math.max(h1, h2);
+        const maxW = Math.round(Math.max(w1, w2));
+        const maxH = Math.round(Math.max(h1, h2));
+
+        let mat = cv.imread(src);
         let dst = new cv.Mat();
-        let sP = cv.matFromArray(4, 1, cv.CV_32FC2, [pts[0].x, pts[0].y, pts[1].x, pts[1].y, pts[2].x, pts[2].y, pts[3].x, pts[3].y]);
-        let dP = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, maxWidth, 0, maxWidth, maxHeight, 0, maxHeight]);
+        let sP = cv.matFromArray(4, 1, cv.CV_32FC2, [
+            pts[0].x, pts[0].y,
+            pts[1].x, pts[1].y,
+            pts[2].x, pts[2].y,
+            pts[3].x, pts[3].y
+        ]);
+        let dP = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, maxW, 0, maxW, maxH, 0, maxH]);
         let M = cv.getPerspectiveTransform(sP, dP);
-        cv.warpPerspective(mat, dst, M, new cv.Size(maxWidth, maxHeight), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
-        const out = document.createElement('canvas'); cv.imshow(out, dst);
+        cv.warpPerspective(mat, dst, M, new cv.Size(maxW, maxH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+
+        const out = document.createElement('canvas');
+        cv.imshow(out, dst);
         mat.delete(); dst.delete(); M.delete(); sP.delete(); dP.delete();
         return out;
     }
 
-    function refineDocument(canvas) {
-        try {
-            let src = cv.imread(canvas); let gray = new cv.Mat();
-            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-            cv.threshold(gray, gray, 50, 255, cv.THRESH_BINARY | cv.THRESH_OTSU);
-            let contours = new cv.MatVector(); let hierarchy = new cv.Mat();
-            cv.findContours(gray, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-            let maxArea = 0, bestRect = null;
-            for(let i=0; i<contours.size(); i++) {
-                let rect = cv.boundingRect(contours.get(i));
-                let area = rect.width * rect.height;
-                if(area > maxArea) { maxArea = area; bestRect = rect; }
-            }
-            if(bestRect && maxArea > (canvas.width * canvas.height * 0.5)) {
-                const padW = Math.round(bestRect.width * 0.02), padH = Math.round(bestRect.height * 0.02);
-                let x = Math.max(0, bestRect.x - padW), y = Math.max(0, bestRect.y - padH);
-                let w = Math.min(canvas.width - x, bestRect.width + padW*2), h = Math.min(canvas.height - y, bestRect.height + padH*2);
-                let roi = src.roi(new cv.Rect(x, y, w, h));
-                const out = document.createElement('canvas'); cv.imshow(out, roi);
-                roi.delete(); src.delete(); gray.delete(); contours.delete(); hierarchy.delete(); return out;
-            }
-            src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
-        } catch(e) {}
-        return canvas;
-    }
-
+    // ── Crop View Actions ─────────────────────────────────────────────────────
     function updateCropPreview(canvas) {
         const cropImg = document.getElementById('crop-image');
-        cropImg.src = canvas.toDataURL('image/jpeg', 0.9);
         const cc = document.getElementById('crop-canvas');
+        // Update hidden canvas first (this is what confirmCrop reads)
         cc.width = canvas.width; cc.height = canvas.height;
         cc.getContext('2d').drawImage(canvas, 0, 0);
+        // Update visible img
+        cropImg.src = canvas.toDataURL('image/jpeg', 0.92);
     }
 
     function useAutoCrop() {
@@ -875,75 +1030,127 @@
             const res = detectDocument(currentPreviewCanvas);
             if (res.bestRect) currentAutoPts = res.bestRect.points;
         }
-        if (currentAutoPts) {
-            const warped = warpDocument(currentPreviewCanvas, currentAutoPts);
-            currentWarpedCanvas = refineDocument(warped);
+        if (!currentAutoPts) { showToast('Could not detect document edges — try Manual Crop', 'error'); return; }
+        try {
+            currentWarpedCanvas = warpDocument(currentPreviewCanvas, currentAutoPts);
             updateCropPreview(currentWarpedCanvas);
             const btn = document.getElementById('btn-toggle-auto');
-            btn.textContent = "Reset to Original"; btn.onclick = useOriginal;
-            document.getElementById('crop-label').textContent = "Auto Processed";
+            btn.textContent = 'Reset to Original'; btn.onclick = useOriginal;
+            document.getElementById('crop-label').textContent = 'Auto Cropped';
+        } catch (e) {
+            showToast('Auto crop failed — use Manual Crop', 'error');
         }
     }
 
     function useOriginal() {
-        updateCropPreview(currentPreviewCanvas); currentWarpedCanvas = null;
-        const btn = document.getElementById('btn-toggle-auto');
-        btn.textContent = "Auto Crop"; btn.onclick = useAutoCrop;
-        document.getElementById('crop-label').textContent = "Original Image";
         if (cropper) { cropper.destroy(); cropper = null; }
+        currentWarpedCanvas = null;
+        updateCropPreview(currentPreviewCanvas);
+        const btn = document.getElementById('btn-toggle-auto');
+        btn.textContent = 'Auto Crop'; btn.onclick = useAutoCrop;
+        document.getElementById('crop-label').textContent = 'Original Image';
     }
 
     function enableManualCrop() {
-        if (currentWarpedCanvas) useOriginal();
-        document.getElementById('crop-label').textContent = "Adjust Corners";
+        // Show original (non-warped) for the cropper so user crops on full frame
+        if (cropper) { cropper.destroy(); cropper = null; }
+        updateCropPreview(currentPreviewCanvas);
+        document.getElementById('crop-label').textContent = 'Drag to adjust crop';
         const cropImg = document.getElementById('crop-image');
-        cropper = new Cropper(cropImg, { viewMode: 1, dragMode: 'move', autoCropArea: 0.98, restore: false, guides: true, center: true, highlight: false, cropBoxMovable: true, cropBoxResizable: true });
+        cropper = new Cropper(cropImg, {
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 0.95,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: false,
+            cropBoxMovable: true,
+            cropBoxResizable: true
+        });
     }
 
     function confirmCrop() {
-        let finalCanvas = cropper ? cropper.getCroppedCanvas({ maxWidth: 2048, maxHeight: 2048 }) : document.getElementById('crop-canvas');
+        let finalCanvas;
+        if (cropper) {
+            finalCanvas = cropper.getCroppedCanvas({ maxWidth: 2048, maxHeight: 2048 });
+            cropper.destroy(); cropper = null;
+        } else {
+            finalCanvas = document.getElementById('crop-canvas');
+        }
         finalCanvas.toBlob(blob => {
             addToQueue(blob, `scan_${Date.now()}.jpg`, 'image/jpeg');
+            showToast('Added to print queue', 'success');
             showView('main');
-        }, 'image/jpeg', 0.9);
+        }, 'image/jpeg', 0.92);
     }
 
-    function retakePhoto() { showView('main'); }
+    function retakePhoto() {
+        if (cropper) { cropper.destroy(); cropper = null; }
+        currentPreviewCanvas = null; currentAutoPts = null; currentWarpedCanvas = null;
+        showView('main');
+    }
 
-    async function processFiles(files) {
-        for (const file of files) {
-            if (file.type === 'application/pdf') { addToQueue(file, file.name, file.type); }
-            else {
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.width; canvas.height = img.height;
-                    canvas.getContext('2d').drawImage(img, 0, 0);
-                    const res = detectDocument(canvas);
-                    processFinalImage(canvas, res.bestRect ? res.bestRect.points : null);
-                };
-                img.src = URL.createObjectURL(file);
-                return;
-            }
+    // ── File Upload (multi-file, no crop UI) ──────────────────────────────────
+    function triggerFileInput() { document.getElementById('file-input').click(); }
+
+    function handleFileSelect(e) {
+        const files = Array.from(e.target.files);
+        e.target.value = ''; // reset so same file can be selected again
+        if (!files.length) return;
+
+        const MAX_SIZE = 50 * 1024 * 1024;
+        const oversized = files.filter(f => f.size > MAX_SIZE);
+        if (oversized.length) {
+            showToast(`${oversized.length} file(s) exceed 50 MB and were skipped`, 'error');
+        }
+
+        const valid = files.filter(f => f.size <= MAX_SIZE);
+        valid.forEach(f => {
+            const type = f.type || (f.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
+            addToQueue(f, f.name, type);
+        });
+
+        if (valid.length) {
+            showToast(`${valid.length} file${valid.length > 1 ? 's' : ''} added to queue`, 'success');
         }
     }
 
-    function triggerFileInput() { document.getElementById('file-input').click(); }
-    function handleFileSelect(e) { const files = Array.from(e.target.files); if (files.length) processFiles(files); e.target.value = ''; }
-
+    // ── Submit ────────────────────────────────────────────────────────────────
     function submitAll() {
         if (!queue.length) return;
+
+        const totalSize = queue.reduce((sum, item) => sum + (item.blob.size || 0), 0);
+        if (totalSize > 50 * 1024 * 1024) {
+            showToast('Total file size exceeds 50 MB. Please remove some items.', 'error');
+            return;
+        }
+
         showView('progress');
+        document.getElementById('progress-title').textContent = `Sending ${queue.length} item${queue.length > 1 ? 's' : ''}…`;
+        document.getElementById('progress-desc').textContent = 'Please wait while your documents are uploaded.';
+
         const fd = new FormData();
         queue.forEach((item, i) => fd.append('files[]', item.blob, item.name || `doc_${i}.jpg`));
         fd.append('print_mode', document.querySelector('input[name="print-mode"]:checked').value);
         fd.append('copies', document.getElementById('copies-select').value);
+
         fetch('/upload', { method: 'POST', body: fd })
-        .then(r => r.json()).then(data => {
-            document.getElementById('display-queue-id').textContent = data.queue_id;
-            showView('success');
-            queue = []; updateQueueUI();
-        }).catch(err => { alert("Error: " + err.message); showView('main'); });
+            .then(r => {
+                if (!r.ok) return r.json().then(d => Promise.reject(d.error || `Server error ${r.status}`));
+                return r.json();
+            })
+            .then(data => {
+                document.getElementById('display-queue-id').textContent = data.queue_id;
+                queue.forEach(item => URL.revokeObjectURL(item.url));
+                queue = [];
+                updateQueueUI();
+                showView('success');
+            })
+            .catch(err => {
+                showToast('Upload failed: ' + err, 'error');
+                showView('main');
+            });
     }
 </script>
 
