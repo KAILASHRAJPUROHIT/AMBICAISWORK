@@ -423,6 +423,15 @@
             </div>
         </div>
 
+        <!-- LAYOUT PREVIEW -->
+        <div id="preview-section" class="hidden" style="margin-bottom: 20px;">
+            <span class="section-label">Print Preview</span>
+            <div style="display:flex; justify-content:center;">
+                <canvas id="layout-preview" style="border:1px solid rgba(212,175,55,0.25); border-radius:6px; box-shadow:0 2px 10px rgba(0,0,0,0.4); max-width:100%;"></canvas>
+            </div>
+            <p id="preview-desc" style="text-align:center; font-size:11px; color:#aaa; margin-top:6px;"></p>
+        </div>
+
         <div class="options">
             <span class="section-label">Print Mode</span>
             <div class="print-types">
@@ -590,6 +599,7 @@
         const url = URL.createObjectURL(blob);
         queue.push({ id, blob, name, type, url });
         updateQueueUI();
+        if (queue.length === 1) autoDetectPrintMode();
     }
 
     function removeFromQueue(id) {
@@ -631,6 +641,133 @@
             });
         }
         countLabel.textContent = `${queue.length} Item${queue.length === 1 ? '' : 's'}`;
+        renderLayoutPreview();
+    }
+
+    // ── Layout Preview ────────────────────────────────────────────────────────
+    function renderLayoutPreview() {
+        const section = document.getElementById('preview-section');
+        const canvas = document.getElementById('layout-preview');
+        const desc = document.getElementById('preview-desc');
+        if (!section || !canvas) return;
+
+        if (queue.length === 0) { section.classList.add('hidden'); return; }
+        section.classList.remove('hidden');
+
+        const mode = document.querySelector('input[name="print-mode"]:checked').value;
+        const PW = 240, PH = Math.round(240 * 842 / 595); // A4 ratio ≈ 340px tall
+        canvas.width = PW; canvas.height = PH;
+        canvas.style.width = PW + 'px'; canvas.style.height = PH + 'px';
+
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, PW, PH);
+
+        const imgItems = queue.filter(item => item.type !== 'application/pdf');
+
+        if (mode === 'id_card') {
+            // Mirror layout_engine.py: scale PDF points (595×842) → canvas
+            const sx = PW / 595, sy = PH / 842;
+            const mx = 35*sx, my = 45*sy, sw = 243*sx, sh = 153*sy, gx = 35*sx, gy = 40*sy;
+
+            const slots = [];
+            for (let row = 0; row < 3; row++)
+                for (let col = 0; col < 2; col++)
+                    slots.push({ x: mx + col*(sw+gx), y: my + row*(sh+gy) });
+
+            // Draw empty slot placeholders first (sync)
+            slots.forEach((pos, i) => {
+                ctx.fillStyle = '#1a2a4a';
+                ctx.fillRect(pos.x, pos.y, sw, sh);
+                ctx.strokeStyle = 'rgba(212,175,55,0.3)';
+                ctx.lineWidth = 0.5;
+                ctx.strokeRect(pos.x, pos.y, sw, sh);
+                if (!imgItems[i]) {
+                    ctx.fillStyle = 'rgba(212,175,55,0.25)';
+                    ctx.font = `bold ${Math.round(sh * 0.35)}px Arial`;
+                    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText(i + 1, pos.x + sw/2, pos.y + sh/2);
+                }
+            });
+
+            // Load images into slots async
+            slots.forEach((pos, i) => {
+                const item = imgItems[i];
+                if (!item) return;
+                const img = new Image();
+                img.onload = () => {
+                    const ir = img.naturalWidth / img.naturalHeight, sr = sw / sh;
+                    let dw, dh, dx, dy;
+                    if (ir > sr) { dw=sw; dh=sw/ir; dx=pos.x; dy=pos.y+(sh-dh)/2; }
+                    else { dh=sh; dw=sh*ir; dy=pos.y; dx=pos.x+(sw-dw)/2; }
+                    ctx.save();
+                    ctx.beginPath(); ctx.rect(pos.x, pos.y, sw, sh); ctx.clip();
+                    ctx.drawImage(img, dx, dy, dw, dh);
+                    ctx.restore();
+                    ctx.strokeStyle = 'rgba(212,175,55,0.5)';
+                    ctx.lineWidth = 0.5;
+                    ctx.strokeRect(pos.x, pos.y, sw, sh);
+                };
+                img.src = item.url;
+            });
+
+            const filled = Math.min(imgItems.length, 6);
+            const pages = Math.ceil(imgItems.length / 6);
+            desc.textContent = `${filled}/6 slots filled${pages > 1 ? ` · ${pages} sheets` : ''}`;
+
+        } else {
+            // Full page — first image centred on A4
+            const pad = 14, aw = PW - 2*pad, ah = PH - 2*pad;
+            ctx.fillStyle = '#1a2a4a';
+            ctx.fillRect(pad, pad, aw, ah);
+
+            const item = imgItems[0];
+            if (item) {
+                const img = new Image();
+                img.onload = () => {
+                    const ir = img.naturalWidth / img.naturalHeight;
+                    let dw, dh, dx, dy;
+                    if (ir > aw/ah) { dw=aw; dh=aw/ir; dx=pad; dy=pad+(ah-dh)/2; }
+                    else { dh=ah; dw=ah*ir; dy=pad; dx=pad+(aw-dw)/2; }
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(pad, pad, aw, ah);
+                    ctx.drawImage(img, dx, dy, dw, dh);
+                    if (queue.length > 1) {
+                        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                        ctx.fillRect(0, PH-22, PW, 22);
+                        ctx.fillStyle = '#D4AF37';
+                        ctx.font = 'bold 10px Arial';
+                        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                        ctx.fillText(`${queue.length} pages total`, PW/2, PH-11);
+                    }
+                };
+                img.src = item.url;
+            }
+            desc.textContent = `${queue.length} page${queue.length > 1 ? 's' : ''} · one image per A4 sheet`;
+        }
+    }
+
+    // ── Auto Print-Mode Detection ─────────────────────────────────────────────
+    function autoDetectPrintMode() {
+        const firstImg = queue.find(item => item.type !== 'application/pdf');
+        if (!firstImg) return;
+        const img = new Image();
+        img.onload = () => {
+            const r = img.naturalWidth / img.naturalHeight;
+            const lr = Math.max(r, 1/r); // normalise to landscape
+            let detected = null;
+            if (lr >= 1.45 && lr <= 1.75) detected = 'id_card';  // PAN/Aadhaar/credit card ~1.58
+            else if (lr >= 1.35 && lr <= 1.45) detected = 'pdf'; // A4/Letter ~1.414
+            if (detected) {
+                const radio = document.querySelector(`input[name="print-mode"][value="${detected}"]`);
+                if (radio && !radio.checked) {
+                    radio.checked = true;
+                    showToast(detected === 'id_card' ? 'ID card detected — switched to ID Cards mode' : 'A4 document detected — switched to Full Page mode', 'success');
+                }
+            }
+            renderLayoutPreview();
+        };
+        img.src = firstImg.url;
     }
 
     // ── Debug Logging ─────────────────────────────────────────────────────────
@@ -1152,6 +1289,9 @@
                 showView('main');
             });
     }
+
+    // Wire up mode radios to re-render preview on change
+    document.querySelectorAll('input[name="print-mode"]').forEach(r => r.addEventListener('change', renderLayoutPreview));
 </script>
 
 </body>
