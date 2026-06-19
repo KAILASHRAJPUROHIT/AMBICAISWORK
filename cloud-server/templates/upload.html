@@ -887,7 +887,7 @@
             totalDiff += Math.abs(newPts[i].y - lastBestPoints[i].y);
         }
         lastBestPoints = newPts;
-        return totalDiff < 80; // ~10px per corner — natural handheld steadiness
+        return totalDiff < 140; // ~17px per corner — relaxed handheld steadiness
     }
 
     function drawShape(ctx, pts, color, width) {
