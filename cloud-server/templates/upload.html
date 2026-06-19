@@ -750,7 +750,7 @@
             totalDiff += Math.abs(newPts[i].y - lastBestPoints[i].y);
         }
         lastBestPoints = newPts;
-        return totalDiff < 20; // tighter: 20px total across all 8 values
+        return totalDiff < 80; // ~10px per corner — natural handheld steadiness
     }
 
     function drawShape(ctx, pts, color, width) {
