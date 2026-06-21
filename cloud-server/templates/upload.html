@@ -502,7 +502,7 @@
                 </div>
 
                 <button id="btn-use-original" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="useOriginal()">Use Original</button>
-                <button class="btn-master" style="background: #444; color: white;" onclick="retakePhoto()">Discard & Retake</button>
+                <button id="btn-discard" class="btn-master" style="background: #444; color: white;" onclick="retakePhoto()">Discard & Retake</button>
             </div>
         </div>
     </div>
@@ -549,6 +549,10 @@
     let stabilityTimer = 0;
     let lastBestPoints = null;
     let autoCaptureFired = false;
+
+    // File-upload crop queue
+    let pendingFiles = [];      // Files waiting to be cropped (upload mode)
+    let cropSource = 'scan';    // 'scan' | 'upload'
 
     const views = {
         main: document.getElementById('view-main'),
@@ -1086,29 +1090,37 @@
         processFinalImage(canvas, pts);
     }
 
-    async function processFinalImage(sourceCanvas, pts) {
+    async function processFinalImage(sourceCanvas, pts, source = 'scan') {
         // Always destroy any lingering cropper before loading new image
         if (cropper) { cropper.destroy(); cropper = null; }
 
         // Stop camera tracks (if not already stopped)
         if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
 
+        cropSource = source;
         currentPreviewCanvas = sourceCanvas;
         currentAutoPts = pts;
         currentWarpedCanvas = null;
 
         const autoBtn = document.getElementById('btn-toggle-auto');
+        const discardBtn = document.getElementById('btn-discard');
+
+        // Update discard button label based on context
+        if (source === 'upload') {
+            discardBtn.textContent = pendingFiles.length > 0 ? `Skip (${pendingFiles.length} left)` : 'Skip';
+        } else {
+            discardBtn.textContent = 'Discard & Retake';
+        }
 
         if (pts) {
             try {
                 const warped = warpDocument(sourceCanvas, pts);
-                currentWarpedCanvas = warped; // no refine — warp is enough
+                currentWarpedCanvas = warped;
                 updateCropPreview(currentWarpedCanvas);
                 autoBtn.textContent = 'Reset to Original';
                 autoBtn.onclick = useOriginal;
                 document.getElementById('crop-label').textContent = 'Auto Cropped';
             } catch (e) {
-                // Warp failed — fall back to original
                 updateCropPreview(sourceCanvas);
                 autoBtn.textContent = 'Auto Crop';
                 autoBtn.onclick = useAutoCrop;
@@ -1118,7 +1130,7 @@
             updateCropPreview(sourceCanvas);
             autoBtn.textContent = 'Auto Crop';
             autoBtn.onclick = useAutoCrop;
-            document.getElementById('crop-label').textContent = 'No document detected';
+            document.getElementById('crop-label').textContent = source === 'upload' ? 'No edges detected — crop manually' : 'No document detected';
         }
 
         showView('crop');
@@ -1216,24 +1228,39 @@
             finalCanvas = document.getElementById('crop-canvas');
         }
         finalCanvas.toBlob(blob => {
-            addToQueue(blob, `scan_${Date.now()}.jpg`, 'image/jpeg');
-            showToast('Added to print queue', 'success');
-            showView('main');
+            const name = cropSource === 'upload' ? `upload_${Date.now()}.jpg` : `scan_${Date.now()}.jpg`;
+            addToQueue(blob, name, 'image/jpeg');
+            // If more files are pending in upload batch, process next
+            if (pendingFiles.length > 0) {
+                processNextPendingFile();
+            } else {
+                showToast('Added to print queue', 'success');
+                showView('main');
+            }
         }, 'image/jpeg', 0.92);
     }
 
     function retakePhoto() {
         if (cropper) { cropper.destroy(); cropper = null; }
         currentPreviewCanvas = null; currentAutoPts = null; currentWarpedCanvas = null;
-        startCamera();
+        if (cropSource === 'upload') {
+            // Skip this file; process next pending or return to main
+            if (pendingFiles.length > 0) {
+                processNextPendingFile();
+            } else {
+                showView('main');
+            }
+        } else {
+            startCamera();
+        }
     }
 
-    // ── File Upload (multi-file, no crop UI) ──────────────────────────────────
+    // ── File Upload — routes images through crop view one-by-one ─────────────
     function triggerFileInput() { document.getElementById('file-input').click(); }
 
     function handleFileSelect(e) {
         const files = Array.from(e.target.files);
-        e.target.value = ''; // reset so same file can be selected again
+        e.target.value = '';
         if (!files.length) return;
 
         const MAX_SIZE = 50 * 1024 * 1024;
@@ -1243,14 +1270,51 @@
         }
 
         const valid = files.filter(f => f.size <= MAX_SIZE);
-        valid.forEach(f => {
-            const type = f.type || (f.name.endsWith('.pdf') ? 'application/pdf' : 'image/jpeg');
-            addToQueue(f, f.name, type);
-        });
+        if (!valid.length) return;
 
-        if (valid.length) {
-            showToast(`${valid.length} file${valid.length > 1 ? 's' : ''} added to queue`, 'success');
+        // PDFs go straight to queue; images go through crop view
+        const pdfs = valid.filter(f => (f.type || '').includes('pdf') || f.name.toLowerCase().endsWith('.pdf'));
+        const images = valid.filter(f => !pdfs.includes(f));
+
+        pdfs.forEach(f => addToQueue(f, f.name, 'application/pdf'));
+        if (pdfs.length) showToast(`${pdfs.length} PDF${pdfs.length > 1 ? 's' : ''} added to queue`, 'success');
+
+        if (images.length) {
+            pendingFiles = [...images]; // fill the pending queue
+            processNextPendingFile();
         }
+    }
+
+    function processNextPendingFile() {
+        const file = pendingFiles.shift(); // take next
+        if (!file) { showView('main'); return; }
+
+        const remaining = pendingFiles.length;
+        const total = queue.filter(i => i.name && i.name.startsWith('upload_')).length + pendingFiles.length + 1;
+
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+            canvas.getContext('2d').drawImage(img, 0, 0);
+
+            // Try auto-detection on the uploaded image
+            const res = cvLoaded ? detectDocument(canvas) : { bestRect: null };
+
+            // Update crop label to show progress
+            const labelSuffix = remaining > 0 ? ` (${remaining} more after this)` : '';
+            document.getElementById('crop-label').textContent = `Review Image${labelSuffix}`;
+
+            processFinalImage(canvas, res.bestRect ? res.bestRect.points : null, 'upload');
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            showToast(`Could not load ${file.name} — skipped`, 'error');
+            processNextPendingFile();
+        };
+        img.src = url;
     }
 
     // ── Submit ────────────────────────────────────────────────────────────────
