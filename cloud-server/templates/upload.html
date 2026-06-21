@@ -1286,35 +1286,46 @@
     }
 
     function processNextPendingFile() {
-        const file = pendingFiles.shift(); // take next
+        const file = pendingFiles.shift();
         if (!file) { showView('main'); return; }
 
         const remaining = pendingFiles.length;
-        const total = queue.filter(i => i.name && i.name.startsWith('upload_')).length + pendingFiles.length + 1;
 
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.onload = () => {
-            URL.revokeObjectURL(url);
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
-            canvas.getContext('2d').drawImage(img, 0, 0);
+        // Use FileReader (more reliable on iOS/Android than blob URL → Image)
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                // Cap to 2048px max dimension — prevents OOM on high-res phone photos
+                const MAX_DIM = 2048;
+                let w = img.naturalWidth, h = img.naturalHeight;
+                if (w > MAX_DIM || h > MAX_DIM) {
+                    const s = MAX_DIM / Math.max(w, h);
+                    w = Math.round(w * s);
+                    h = Math.round(h * s);
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
 
-            // Try auto-detection on the uploaded image
-            const res = cvLoaded ? detectDocument(canvas) : { bestRect: null };
+                const res = cvLoaded ? detectDocument(canvas) : { bestRect: null };
 
-            // Update crop label to show progress
-            const labelSuffix = remaining > 0 ? ` (${remaining} more after this)` : '';
-            document.getElementById('crop-label').textContent = `Review Image${labelSuffix}`;
+                const labelSuffix = remaining > 0 ? ` (${remaining} more after this)` : '';
+                document.getElementById('crop-label').textContent = `Review Image${labelSuffix}`;
 
-            processFinalImage(canvas, res.bestRect ? res.bestRect.points : null, 'upload');
+                processFinalImage(canvas, res.bestRect ? res.bestRect.points : null, 'upload');
+            };
+            img.onerror = () => {
+                showToast(`Could not load ${file.name} — skipped`, 'error');
+                processNextPendingFile();
+            };
+            img.src = e.target.result;
         };
-        img.onerror = () => {
-            URL.revokeObjectURL(url);
-            showToast(`Could not load ${file.name} — skipped`, 'error');
+        reader.onerror = () => {
+            showToast(`Could not read ${file.name} — skipped`, 'error');
             processNextPendingFile();
         };
-        img.src = url;
+        reader.readAsDataURL(file);
     }
 
     // ── Submit ────────────────────────────────────────────────────────────────
