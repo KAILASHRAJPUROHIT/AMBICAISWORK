@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import logging
+import traceback
 import requests
 import subprocess
 import tempfile
@@ -149,12 +150,12 @@ def process_job(job):
         resp.raise_for_status()
 
     except Exception as e:
-        error_msg = str(e)
-        logging.error(f"Error processing job {job_id}: {error_msg}")
+        error_msg = traceback.format_exc()
+        logging.error(f"Error processing job {job_id}:\n{error_msg}")
         try:
             resp = requests.patch(
                 f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
-                json={"status": "failed", "error": error_msg},
+                json={"status": "failed", "error": error_msg[:2000]},
                 timeout=10
             )
             resp.raise_for_status()

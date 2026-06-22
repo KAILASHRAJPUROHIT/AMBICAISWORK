@@ -839,6 +839,7 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         if (best) {
+            noDetectFrames = 0;
             const stable = checkStability(best.points);
             if (stable) {
                 stabilityTimer += 150;
@@ -871,7 +872,13 @@
             drawShape(ctx, best.points, '#27AE60', 5);
         } else {
             stabilityTimer = 0;
-            guide.textContent = 'Align document within frame';
+            noDetectFrames++;
+            // After ~3s of no detection, suggest dark background
+            if (noDetectFrames > 20) {
+                guide.textContent = 'No edges found — try dark surface or better light';
+            } else {
+                guide.textContent = 'Align document within frame';
+            }
             guide.classList.remove('guide-locked');
             ring.classList.remove('visible', 'flash');
         }
@@ -903,6 +910,8 @@
     }
 
     // ── Document Detection (multi-pass) ───────────────────────────────────────
+    let noDetectFrames = 0; // track consecutive missed frames for hint
+
     function detectDocument(source) {
         const results = { rects: [], bestRect: null, contourCount: 0 };
         if (!cvLoaded) return results;
@@ -928,20 +937,52 @@
             const p1 = processPass(gray, 40, 120, tw, th, scale);
             allCandidates.push(...p1);
 
-            // Pass 2: CLAHE for low-contrast docs
-            let clahe = new cv.CLAHE(3.0, new cv.Size(8, 8));
-            let contrastGray = new cv.Mat();
-            clahe.apply(gray, contrastGray);
-            const p2 = processPass(contrastGray, 25, 80, tw, th, scale);
-            allCandidates.push(...p2);
-            contrastGray.delete(); clahe.delete();
+            // Pass 2: CLAHE (moderate) + Canny — helps low-contrast coloured docs
+            let clahe2 = new cv.CLAHE(3.0, new cv.Size(8, 8));
+            let eg2 = new cv.Mat();
+            clahe2.apply(gray, eg2);
+            allCandidates.push(...processPass(eg2, 25, 80, tw, th, scale));
+            eg2.delete(); clahe2.delete();
 
             // Pass 3: Adaptive threshold
             let thresh = new cv.Mat();
             cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
-            const p3 = processPass(thresh, 0, 0, tw, th, scale, true);
-            allCandidates.push(...p3);
+            allCandidates.push(...processPass(thresh, 0, 0, tw, th, scale, true));
             thresh.delete();
+
+            // Pass 4: Scharr gradient magnitude — ultra-sensitive to faint edges
+            // Catches white paper on white background via subtle shadow/texture line
+            try {
+                let grayF = new cv.Mat();
+                gray.convertTo(grayF, cv.CV_32F);
+                let sx = new cv.Mat(), sy = new cv.Mat(), mag = new cv.Mat();
+                cv.Scharr(grayF, sx, cv.CV_32F, 1, 0);
+                cv.Scharr(grayF, sy, cv.CV_32F, 0, 1);
+                cv.magnitude(sx, sy, mag);
+                cv.normalize(mag, mag, 0, 255, cv.NORM_MINMAX);
+                let mag8 = new cv.Mat();
+                mag.convertTo(mag8, cv.CV_8U);
+                // Very low threshold — just 8/255 to catch near-invisible edges
+                cv.threshold(mag8, mag8, 8, 255, cv.THRESH_BINARY);
+                allCandidates.push(...processPass(mag8, 0, 0, tw, th, scale, true, true));
+                grayF.delete(); sx.delete(); sy.delete(); mag.delete(); mag8.delete();
+            } catch(e) { /* Scharr not critical */ }
+
+            // Pass 5: LAB L-channel + hyper-aggressive CLAHE
+            // Amplifies colour-temperature difference between white paper and white surface
+            try {
+                let lab = new cv.Mat();
+                cv.cvtColor(src, lab, cv.COLOR_RGBA2Lab);
+                let chans = new cv.MatVector();
+                cv.split(lab, chans);
+                let Lch = chans.get(0);
+                let clahe5 = new cv.CLAHE(8.0, new cv.Size(4, 4));
+                let Lenhanced = new cv.Mat();
+                clahe5.apply(Lch, Lenhanced);
+                cv.GaussianBlur(Lenhanced, Lenhanced, new cv.Size(3, 3), 0);
+                allCandidates.push(...processPass(Lenhanced, 5, 20, tw, th, scale, false, true));
+                lab.delete(); chans.delete(); Lch.delete(); clahe5.delete(); Lenhanced.delete();
+            } catch(e) { /* LAB pass not critical */ }
 
             // Deduplicate and rank
             const deduped = deduplicateCandidates(allCandidates);
@@ -958,10 +999,12 @@
         return results;
     }
 
-    function processPass(gray, low, high, tw, th, scale, isThresh = false) {
+    // isLowContrast = true → relaxed settings for white-on-white / subtle-edge passes
+    function processPass(gray, low, high, tw, th, scale, isThresh = false, isLowContrast = false) {
         const candidates = [];
         const frameArea = tw * th;
-        const borderMargin = Math.min(tw, th) * 0.03; // 3% border exclusion zone
+        // Low-contrast passes: shrink exclusion zone so near-edge doc corners aren't rejected
+        const borderMargin = Math.min(tw, th) * (isLowContrast ? 0.01 : 0.03);
 
         let edges = new cv.Mat();
         if (isThresh) {
@@ -971,14 +1014,17 @@
             cv.Canny(edges, edges, low, high);
         }
 
-        let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+        // Larger dilation for low-contrast passes to bridge broken edge fragments
+        const kSize = isLowContrast ? 5 : 3;
+        let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(kSize, kSize));
         cv.dilate(edges, edges, kernel);
 
         let contours = new cv.MatVector();
         let hierarchy = new cv.Mat();
         cv.findContours(edges, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
 
-        const minArea = frameArea * 0.08; // at least 8% of frame
+        // Low-contrast: accept smaller contour areas (subtle edges = incomplete outlines)
+        const minArea = frameArea * (isLowContrast ? 0.05 : 0.08);
 
         for (let i = 0; i < contours.size(); i++) {
             // Only top-level contours
@@ -1024,7 +1070,9 @@
             const ratio = Math.max(rw / rh, rh / rw);
 
             // Score: prefer large, rectangular, A4-proportioned shapes
-            let score = (area / frameArea) * 80;
+            // Low-contrast passes get a small base bonus so they can win when
+            // high-contrast passes produce nothing (white-on-white scenario)
+            let score = (area / frameArea) * 80 + (isLowContrast ? 5 : 0);
             if (ratio >= 1.3 && ratio <= 1.55) score += 40; // A4 / Letter
             if (ratio >= 1.55 && ratio <= 1.80) score += 25; // other IDs/docs
             if (rectangularity > 0.85) score += 25;
