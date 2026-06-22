@@ -546,7 +546,6 @@
     let currentWarpedCanvas = null;
 
     // Auto-capture state
-    let stabilityTimer = 0;
     let lastBestPoints = null;
     let autoCaptureFired = false;
 
@@ -801,7 +800,6 @@
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 isDetecting = true;
-                stabilityTimer = 0;
                 lastBestPoints = null;
                 autoCaptureFired = false;
                 showView('camera');
@@ -840,40 +838,46 @@
 
         if (best) {
             noDetectFrames = 0;
-            const stable = checkStability(best.points);
-            if (stable) {
-                stabilityTimer += 150;
 
-                if (stabilityTimer >= 1800 && !autoCaptureFired) {
-                    // Auto-capture!
-                    autoCaptureFired = true;
-                    ring.classList.add('flash');
-                    guide.textContent = 'Capturing…';
-                    guide.classList.add('guide-locked');
-                    setTimeout(() => triggerAutoCapture(best.points), 80);
-                    return;
-                } else if (stabilityTimer >= 600) {
-                    const remaining = Math.ceil((1800 - stabilityTimer) / 600);
-                    guide.textContent = remaining > 0 ? `Hold still… ${remaining}` : 'Capturing…';
-                    guide.classList.add('guide-locked');
-                    ring.classList.add('visible');
-                    ring.classList.remove('flash');
-                } else {
-                    guide.textContent = 'Document detected — hold still';
-                    guide.classList.add('guide-locked');
-                    ring.classList.remove('visible');
-                }
-            } else {
-                stabilityTimer = 0;
-                guide.textContent = 'Align document within frame';
-                guide.classList.remove('guide-locked');
-                ring.classList.remove('visible', 'flash');
-            }
+            // ── Spotlight effect ─────────────────────────────────────────────
+            // Draw blurred + darkened video over entire canvas, then punch out
+            // the document quad so sharp video shows through underneath
+            try {
+                ctx.save();
+                ctx.filter = 'blur(6px) brightness(0.4)';
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                ctx.filter = 'none';
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.beginPath();
+                ctx.moveTo(best.points[0].x, best.points[0].y);
+                for (let i = 1; i < best.points.length; i++) ctx.lineTo(best.points[i].x, best.points[i].y);
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(0,0,0,1)';
+                ctx.fill();
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.restore();
+            } catch(e) { ctx.restore(); }
+
+            // Green border on document
             drawShape(ctx, best.points, '#27AE60', 5);
+
+            // ── Instant auto-capture on first stable frame ───────────────────
+            const stable = checkStability(best.points);
+            if (stable && !autoCaptureFired) {
+                autoCaptureFired = true;
+                if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+                guide.textContent = 'Captured!';
+                guide.classList.add('guide-locked');
+                ring.classList.add('visible', 'flash');
+                setTimeout(() => triggerAutoCapture(best.points), 80);
+                return;
+            }
+            guide.textContent = 'Document found';
+            guide.classList.add('guide-locked');
+            ring.classList.remove('visible', 'flash');
+
         } else {
-            stabilityTimer = 0;
             noDetectFrames++;
-            // After ~3s of no detection, suggest dark background
             if (noDetectFrames > 20) {
                 guide.textContent = 'No edges found — try dark surface or better light';
             } else {
