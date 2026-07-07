@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 import random
@@ -14,6 +15,8 @@ app = Flask(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+CHECKIN_DIR = BASE_DIR / "checkins"
+CHECKIN_DIR.mkdir(parents=True, exist_ok=True)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'jobs.db'}")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -160,7 +163,7 @@ def admin():
         color = STATUS_COLOR.get(job.status, "#aaa")
         retry_btn = f'<button onclick="retryJob(\'{job.id}\')" style="padding:3px 10px;background:#e6a817;color:#000;border:none;border-radius:3px;cursor:pointer;font-size:12px;font-weight:bold">↺ Retry</button>' if job.status == "failed" else ""
         rows += f'<tr><td>{job.id}</td><td style="color:{color};font-weight:bold">{job.status}</td><td>{job.print_mode}</td><td>{job.copies}</td><td>{file_count}</td><td>{job.created_at.strftime("%d-%m-%Y %H:%M")}</td><td>{retry_btn}</td></tr>'
-    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aradhana Print Admin</title><style>body{{font-family:Arial;background:#f7f5f0;padding:20px}}h1{{color:#06142E}}table{{width:100%;border-collapse:collapse;background:white}}th,td{{padding:10px;border-bottom:1px solid #ddd;font-size:14px}}th{{background:#06142E;color:#D4AF37;text-align:left}}</style><meta http-equiv="refresh" content="10"></head><body><h1>Aradhana Print Queue</h1><div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap"><a href="/admin/history" style="padding:10px 15px;background:#06142E;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">📷 30-Day History</a><button onclick="clearPending()" style="padding:10px 15px;background:#d9534f;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px">[Clear Pending Queue]</button></div><script>function clearPending(){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Deleted: "+data.deleted);location.reload();}}}}).catch(e=>alert("Request failed"));}}function retryJob(jobId){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/retry/"+jobId,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Job queued for retry");location.reload();}}}}).catch(e=>alert("Request failed"));}}</script><table><tr><th>Queue ID</th><th>Status</th><th>Mode</th><th>Copies</th><th>Files</th><th>Created</th><th>Actions</th></tr>{rows}</table></body></html>"""
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aradhana Print Admin</title><style>body{{font-family:Arial;background:#f7f5f0;padding:20px}}h1{{color:#06142E}}table{{width:100%;border-collapse:collapse;background:white}}th,td{{padding:10px;border-bottom:1px solid #ddd;font-size:14px}}th{{background:#06142E;color:#D4AF37;text-align:left}}</style><meta http-equiv="refresh" content="10"></head><body><h1>Aradhana Print Queue</h1><div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap"><a href="/admin/history" style="padding:10px 15px;background:#06142E;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">📷 30-Day History</a><a href="/admin/checkins" style="padding:10px 15px;background:#1a0a2e;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">👤 Staff Activity</a><button onclick="clearPending()" style="padding:10px 15px;background:#d9534f;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px">[Clear Pending Queue]</button></div><script>function clearPending(){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Deleted: "+data.deleted);location.reload();}}}}).catch(e=>alert("Request failed"));}}function retryJob(jobId){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/retry/"+jobId,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Job queued for retry");location.reload();}}}}).catch(e=>alert("Request failed"));}}</script><table><tr><th>Queue ID</th><th>Status</th><th>Mode</th><th>Copies</th><th>Files</th><th>Created</th><th>Actions</th></tr>{rows}</table></body></html>"""
 
 
 @app.route("/admin/retry/<job_id>", methods=["POST"])
@@ -192,6 +195,71 @@ def admin_clear_pending():
     deleted = PrintJob.query.filter_by(status="pending").delete()
     db.session.commit()
     return jsonify({"deleted": deleted})
+
+
+@app.route("/api/checkin", methods=["POST"])
+def staff_checkin():
+    data = request.get_json(silent=True) or {}
+    img_data = data.get("image", "")
+    queue_id = data.get("queue_id", "unknown")
+    if not img_data:
+        return jsonify({"error": "No image"}), 400
+    # Strip data URI prefix if present
+    if "," in img_data:
+        img_data = img_data.split(",", 1)[1]
+    try:
+        raw = base64.b64decode(img_data)
+    except Exception:
+        return jsonify({"error": "Invalid image data"}), 400
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"{ts}_{queue_id}.jpg"
+    (CHECKIN_DIR / filename).write_bytes(raw)
+    return jsonify({"ok": True})
+
+
+@app.route("/checkin-photo/<filename>", methods=["GET"])
+def checkin_photo(filename):
+    return send_from_directory(CHECKIN_DIR, secure_filename(filename))
+
+
+@app.route("/admin/checkins", methods=["GET"])
+def admin_checkins():
+    photos = sorted(CHECKIN_DIR.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    cards = ""
+    for photo in photos:
+        mtime = datetime.utcfromtimestamp(photo.stat().st_mtime)
+        if mtime < cutoff:
+            continue
+        parts = photo.stem.split("_", 3)
+        try:
+            ts_str = f"{parts[0][:4]}-{parts[0][4:6]}-{parts[0][6:]} {parts[1][:2]}:{parts[1][2:4]}:{parts[1][4:]}"
+        except Exception:
+            ts_str = photo.stem
+        queue_id = "_".join(parts[2:]) if len(parts) > 2 else "—"
+        img_url = f"/checkin-photo/{photo.name}"
+        cards += f'''<div style="background:#111;border:1px solid #2a2a2a;border-radius:10px;overflow:hidden;break-inside:avoid;margin-bottom:16px">
+            <img src="{img_url}" style="width:100%;display:block;object-fit:cover;max-height:260px">
+            <div style="padding:10px 12px">
+                <div style="color:#D4AF37;font-size:12px;font-weight:bold;margin-bottom:3px">{ts_str} UTC</div>
+                <div style="color:#666;font-size:11px">Job: {queue_id}</div>
+            </div>
+        </div>'''
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Staff Checkins</title>
+<style>
+body{{font-family:Arial,sans-serif;background:#0a0a14;color:#ddd;padding:20px;margin:0}}
+h1{{color:#D4AF37;font-family:Georgia,serif;letter-spacing:2px}}
+.grid{{columns:1;column-gap:16px}}
+@media(min-width:500px){{.grid{{columns:2}}}}
+@media(min-width:800px){{.grid{{columns:3}}}}
+a.back{{color:#D4AF37;text-decoration:none;font-size:14px;display:inline-block;margin-bottom:20px}}
+</style></head><body>
+<a class="back" href="/admin">← Back to Admin</a>
+<h1>Staff Activity — Last 30 Days</h1>
+<p style="color:#888;font-size:13px;margin-bottom:20px">{len([p for p in photos if datetime.utcfromtimestamp(p.stat().st_mtime) >= cutoff])} photo(s)</p>
+<div class="grid">{cards if cards else "<p style='color:#555'>No activity captured yet.</p>"}</div>
+</body></html>"""
 
 
 def cleanup_old_uploads():

