@@ -223,7 +223,7 @@ def admin_social_handles():
             ts, handle = line.split(",", 1)
             entries.append((ts.strip(), handle.strip().strip('"')))
     for ts, handle in reversed(entries):
-        ig_url = f"https://www.instagram.com/{handle.lstrip('@')}/"
+        ig_url = f"https://www.instagram.com/{handle.lstrip('@').replace('@', '')}/"
         rows += f'<tr><td>{ts}</td><td><a href="{ig_url}" target="_blank" style="color:#D4AF37">{handle}</a></td></tr>'
     return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Customer Handles</title>
