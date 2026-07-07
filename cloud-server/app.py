@@ -1,7 +1,8 @@
 import json
 import os
 import random
-from datetime import datetime
+import shutil
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, request, jsonify, render_template, send_from_directory
@@ -159,7 +160,7 @@ def admin():
         color = STATUS_COLOR.get(job.status, "#aaa")
         retry_btn = f'<button onclick="retryJob(\'{job.id}\')" style="padding:3px 10px;background:#e6a817;color:#000;border:none;border-radius:3px;cursor:pointer;font-size:12px;font-weight:bold">↺ Retry</button>' if job.status == "failed" else ""
         rows += f'<tr><td>{job.id}</td><td style="color:{color};font-weight:bold">{job.status}</td><td>{job.print_mode}</td><td>{job.copies}</td><td>{file_count}</td><td>{job.created_at.strftime("%d-%m-%Y %H:%M")}</td><td>{retry_btn}</td></tr>'
-    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aradhana Print Admin</title><style>body{{font-family:Arial;background:#f7f5f0;padding:20px}}h1{{color:#06142E}}table{{width:100%;border-collapse:collapse;background:white}}th,td{{padding:10px;border-bottom:1px solid #ddd;font-size:14px}}th{{background:#06142E;color:#D4AF37;text-align:left}}</style><meta http-equiv="refresh" content="10"></head><body><h1>Aradhana Print Queue</h1><button onclick="clearPending()" style="margin-bottom:20px;padding:10px 15px;background:#d9534f;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px">[Clear Pending Queue]</button><script>function clearPending(){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Deleted: "+data.deleted);location.reload();}}}}).catch(e=>alert("Request failed"));}}function retryJob(jobId){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/retry/"+jobId,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Job queued for retry");location.reload();}}}}).catch(e=>alert("Request failed"));}}</script><table><tr><th>Queue ID</th><th>Status</th><th>Mode</th><th>Copies</th><th>Files</th><th>Created</th><th>Actions</th></tr>{rows}</table></body></html>"""
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aradhana Print Admin</title><style>body{{font-family:Arial;background:#f7f5f0;padding:20px}}h1{{color:#06142E}}table{{width:100%;border-collapse:collapse;background:white}}th,td{{padding:10px;border-bottom:1px solid #ddd;font-size:14px}}th{{background:#06142E;color:#D4AF37;text-align:left}}</style><meta http-equiv="refresh" content="10"></head><body><h1>Aradhana Print Queue</h1><div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap"><a href="/admin/history" style="padding:10px 15px;background:#06142E;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">📷 30-Day History</a><button onclick="clearPending()" style="padding:10px 15px;background:#d9534f;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px">[Clear Pending Queue]</button></div><script>function clearPending(){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Deleted: "+data.deleted);location.reload();}}}}).catch(e=>alert("Request failed"));}}function retryJob(jobId){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/retry/"+jobId,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Job queued for retry");location.reload();}}}}).catch(e=>alert("Request failed"));}}</script><table><tr><th>Queue ID</th><th>Status</th><th>Mode</th><th>Copies</th><th>Files</th><th>Created</th><th>Actions</th></tr>{rows}</table></body></html>"""
 
 
 @app.route("/admin/retry/<job_id>", methods=["POST"])
@@ -193,7 +194,70 @@ def admin_clear_pending():
     return jsonify({"deleted": deleted})
 
 
+def cleanup_old_uploads():
+    """Delete upload directories for jobs older than 30 days."""
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    with app.app_context():
+        old_jobs = PrintJob.query.filter(PrintJob.created_at < cutoff).all()
+        removed = 0
+        for job in old_jobs:
+            job_dir = UPLOAD_DIR / job.id
+            if job_dir.exists():
+                shutil.rmtree(job_dir, ignore_errors=True)
+                removed += 1
+    if removed:
+        print(f"[cleanup] Removed {removed} upload directories older than 30 days.")
+
+
+@app.route("/admin/history", methods=["GET"])
+def admin_history():
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    jobs = (PrintJob.query
+            .filter(PrintJob.created_at >= cutoff)
+            .order_by(PrintJob.created_at.desc())
+            .all())
+
+    IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+    cards = ""
+    for job in jobs:
+        filenames = json.loads(job.file_paths or "[]")
+        status_color = {"pending": "#e6a817", "printing": "#5bc0de", "completed": "#5cb85c", "failed": "#d9534f"}.get(job.status, "#aaa")
+        thumbs = ""
+        for name in filenames:
+            ext = Path(name).suffix.lower()
+            media_url = f"/media/{job.id}/{name}"
+            if ext in IMAGE_EXTS:
+                thumbs += f'<a href="{media_url}" target="_blank"><img src="{media_url}" style="width:100px;height:100px;object-fit:cover;border-radius:4px;border:1px solid #333;cursor:pointer" title="{name}"></a>'
+            else:
+                thumbs += f'<a href="{media_url}" target="_blank" style="display:inline-flex;align-items:center;justify-content:center;width:100px;height:100px;background:#1a1a2e;border:1px solid #444;border-radius:4px;color:#D4AF37;font-size:11px;text-align:center;text-decoration:none;padding:6px">📄<br>{name[:20]}</a>'
+        cards += f'''<div style="background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:14px;break-inside:avoid;margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <span style="font-weight:bold;color:#D4AF37;letter-spacing:1px">{job.id}</span>
+                <span style="color:{status_color};font-size:12px;font-weight:bold">{job.status.upper()}</span>
+            </div>
+            <div style="font-size:11px;color:#888;margin-bottom:10px">{job.created_at.strftime("%d %b %Y, %H:%M")} &nbsp;·&nbsp; {job.print_mode} &nbsp;·&nbsp; {job.copies}x</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">{thumbs if thumbs else "<span style='color:#555;font-size:12px'>No files found on disk</span>"}</div>
+        </div>'''
+
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aradhana Print History</title>
+<style>
+body{{font-family:Arial,sans-serif;background:#0a0a14;color:#ddd;padding:20px;margin:0}}
+h1{{color:#D4AF37;font-family:Georgia,serif;letter-spacing:2px}}
+.grid{{columns:1;column-gap:16px}}
+@media(min-width:600px){{.grid{{columns:2}}}}
+@media(min-width:900px){{.grid{{columns:3}}}}
+a.back{{color:#D4AF37;text-decoration:none;font-size:14px;display:inline-block;margin-bottom:20px}}
+</style></head><body>
+<a class="back" href="/admin">← Back to Admin</a>
+<h1>Print History — Last 30 Days</h1>
+<p style="color:#888;font-size:13px;margin-bottom:20px">{len(jobs)} job(s) found</p>
+<div class="grid">{cards if cards else "<p style='color:#666'>No print jobs in the last 30 days.</p>"}</div>
+</body></html>"""
+
+
 init_db()
+cleanup_old_uploads()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "5000"))
