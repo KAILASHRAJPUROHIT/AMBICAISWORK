@@ -163,7 +163,7 @@ def admin():
         color = STATUS_COLOR.get(job.status, "#aaa")
         retry_btn = f'<button onclick="retryJob(\'{job.id}\')" style="padding:3px 10px;background:#e6a817;color:#000;border:none;border-radius:3px;cursor:pointer;font-size:12px;font-weight:bold">↺ Retry</button>' if job.status == "failed" else ""
         rows += f'<tr><td>{job.id}</td><td style="color:{color};font-weight:bold">{job.status}</td><td>{job.print_mode}</td><td>{job.copies}</td><td>{file_count}</td><td>{job.created_at.strftime("%d-%m-%Y %H:%M")}</td><td>{retry_btn}</td></tr>'
-    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aradhana Print Admin</title><style>body{{font-family:Arial;background:#f7f5f0;padding:20px}}h1{{color:#06142E}}table{{width:100%;border-collapse:collapse;background:white}}th,td{{padding:10px;border-bottom:1px solid #ddd;font-size:14px}}th{{background:#06142E;color:#D4AF37;text-align:left}}</style><meta http-equiv="refresh" content="10"></head><body><h1>Aradhana Print Queue</h1><div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap"><a href="/admin/history" style="padding:10px 15px;background:#06142E;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">📷 30-Day History</a><a href="/admin/checkins" style="padding:10px 15px;background:#1a0a2e;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">👤 Staff Activity</a><button onclick="clearPending()" style="padding:10px 15px;background:#d9534f;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px">[Clear Pending Queue]</button></div><script>function clearPending(){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Deleted: "+data.deleted);location.reload();}}}}).catch(e=>alert("Request failed"));}}function retryJob(jobId){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/retry/"+jobId,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Job queued for retry");location.reload();}}}}).catch(e=>alert("Request failed"));}}</script><table><tr><th>Queue ID</th><th>Status</th><th>Mode</th><th>Copies</th><th>Files</th><th>Created</th><th>Actions</th></tr>{rows}</table></body></html>"""
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aradhana Print Admin</title><style>body{{font-family:Arial;background:#f7f5f0;padding:20px}}h1{{color:#06142E}}table{{width:100%;border-collapse:collapse;background:white}}th,td{{padding:10px;border-bottom:1px solid #ddd;font-size:14px}}th{{background:#06142E;color:#D4AF37;text-align:left}}</style><meta http-equiv="refresh" content="10"></head><body><h1>Aradhana Print Queue</h1><div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap"><a href="/admin/history" style="padding:10px 15px;background:#06142E;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">📷 30-Day History</a><a href="/admin/checkins" style="padding:10px 15px;background:#1a0a2e;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">👤 Staff Activity</a><a href="/admin/social-handles" style="padding:10px 15px;background:#0a2e1a;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">📱 Customer Handles</a><button onclick="clearPending()" style="padding:10px 15px;background:#d9534f;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px">[Clear Pending Queue]</button></div><script>function clearPending(){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Deleted: "+data.deleted);location.reload();}}}}).catch(e=>alert("Request failed"));}}function retryJob(jobId){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/retry/"+jobId,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Job queued for retry");location.reload();}}}}).catch(e=>alert("Request failed"));}}</script><table><tr><th>Queue ID</th><th>Status</th><th>Mode</th><th>Copies</th><th>Files</th><th>Created</th><th>Actions</th></tr>{rows}</table></body></html>"""
 
 
 @app.route("/admin/retry/<job_id>", methods=["POST"])
@@ -195,6 +195,47 @@ def admin_clear_pending():
     deleted = PrintJob.query.filter_by(status="pending").delete()
     db.session.commit()
     return jsonify({"deleted": deleted})
+
+
+HANDLES_FILE = BASE_DIR / "social_handles.csv"
+
+
+@app.route("/api/social-handle", methods=["POST"])
+def save_social_handle():
+    data = request.get_json(silent=True) or {}
+    handle = (data.get("handle") or "").strip()[:60]
+    if not handle:
+        return jsonify({"error": "No handle"}), 400
+    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    with open(HANDLES_FILE, "a", encoding="utf-8") as f:
+        f.write(f'{ts},"{handle}"\n')
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/social-handles", methods=["GET"])
+def admin_social_handles():
+    rows = ""
+    entries = []
+    if HANDLES_FILE.exists():
+        for line in HANDLES_FILE.read_text(encoding="utf-8").splitlines():
+            if "," not in line:
+                continue
+            ts, handle = line.split(",", 1)
+            entries.append((ts.strip(), handle.strip().strip('"')))
+    for ts, handle in reversed(entries):
+        ig_url = f"https://www.instagram.com/{handle.lstrip('@')}/"
+        rows += f'<tr><td>{ts}</td><td><a href="{ig_url}" target="_blank" style="color:#D4AF37">{handle}</a></td></tr>'
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Customer Handles</title>
+<style>body{{font-family:Arial;background:#0a0a14;color:#ddd;padding:20px}}h1{{color:#D4AF37;font-family:Georgia,serif}}
+table{{width:100%;border-collapse:collapse;background:#111}}th,td{{padding:10px 14px;border-bottom:1px solid #222;font-size:14px;text-align:left}}
+th{{background:#06142E;color:#D4AF37}}a.back{{color:#D4AF37;text-decoration:none;font-size:14px;display:inline-block;margin-bottom:20px}}</style>
+</head><body>
+<a class="back" href="/admin">← Back to Admin</a>
+<h1>Customer Instagram Handles</h1>
+<p style="color:#888;font-size:13px;margin-bottom:16px">{len(entries)} collected</p>
+<table><tr><th>Time (UTC)</th><th>Handle</th></tr>{rows if rows else "<tr><td colspan='2' style='color:#555'>None yet.</td></tr>"}</table>
+</body></html>"""
 
 
 @app.route("/api/checkin", methods=["POST"])
