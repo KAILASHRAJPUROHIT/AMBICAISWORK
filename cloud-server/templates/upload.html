@@ -260,6 +260,10 @@
         }
 
         .btn-camera-cancel { color: white; background: transparent; border: none; font-size: 16px; cursor: pointer; }
+        @keyframes successPop { 0%{transform:scale(0);opacity:0} 70%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
+        @keyframes stampReveal { 0%{transform:scale(1.4) rotate(-4deg);opacity:0} 60%{transform:scale(0.96) rotate(1deg);opacity:1} 100%{transform:scale(1) rotate(0deg);opacity:1} }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+        @keyframes statusPrint { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
         /* Crop View */
         .crop-wrapper { display: flex; flex-direction: column; gap: 15px; }
@@ -517,15 +521,29 @@
     </div>
 
     <!-- SUCCESS VIEW -->
-    <div id="view-success" class="card hidden" style="text-align: center;">
-        <div style="font-size: 50px; color: var(--gold); margin-bottom: 15px;">✓</div>
-        <h2 style="color: var(--gold-light); margin-bottom: 10px;">Sent to Queue!</h2>
-        <div style="background: rgba(255,255,255,0.05); border: 1px solid var(--gold); border-radius: 8px; padding: 20px; margin: 20px 0;">
-            <div style="font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px;">Queue ID</div>
-            <div id="display-queue-id" style="font-size: 24px; font-weight: bold; letter-spacing: 2px; color: var(--gold-light);">AR-XXXX</div>
-            <div style="font-size: 12px; color: #888; margin-top: 8px;">Show this to the counter</div>
+    <div id="view-success" class="card hidden" style="text-align:center">
+        <div id="success-icon" style="font-size:52px;color:var(--gold);margin-bottom:10px;animation:successPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) both">✓</div>
+        <h2 style="color:var(--gold-light);margin-bottom:16px">Sent to Print Queue!</h2>
+        <div id="stamp-box" style="background:rgba(255,255,255,0.04);border:2px solid var(--gold);border-radius:12px;padding:22px 20px;margin:0 0 16px;animation:stampReveal 0.5s 0.15s cubic-bezier(0.36,0.07,0.19,0.97) both">
+            <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">Queue ID</div>
+            <div id="display-queue-id" style="font-size:28px;font-weight:bold;letter-spacing:4px;color:var(--gold)">AR-XXXX</div>
+            <div style="font-size:11px;color:#666;margin-top:8px">Show this to the counter</div>
         </div>
-        <button class="btn-master" onclick="location.reload()">Done — Print Another</button>
+        <div id="live-status-row" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:10px">
+            <span id="status-dot" style="width:8px;height:8px;border-radius:50%;background:#e6a817;display:inline-block;animation:pulse 1.2s infinite"></span>
+            <span id="status-text" style="font-size:13px;color:#ccc">Waiting in queue…</span>
+        </div>
+        <div id="queue-position-text" style="font-size:12px;color:#666;margin-bottom:20px"></div>
+        <button class="btn-master" onclick="stopPolling();location.reload()">Done — Print Another</button>
+    </div>
+
+    <!-- ERROR VIEW -->
+    <div id="view-error" class="card hidden" style="text-align:center">
+        <div style="font-size:52px;color:#d9534f;margin-bottom:10px">✗</div>
+        <h2 style="color:#d9534f;margin-bottom:10px">Upload Failed</h2>
+        <div id="error-detail" style="color:#aaa;font-size:14px;background:rgba(217,83,79,0.08);border:1px solid #d9534f44;border-radius:8px;padding:14px;margin:16px 0;line-height:1.5"></div>
+        <button class="btn-master" onclick="retryUpload()" style="margin-bottom:10px">Try Again</button>
+        <button onclick="location.reload()" style="width:100%;padding:12px;background:none;border:1px solid #444;border-radius:8px;color:#888;cursor:pointer;font-size:14px">Start Over</button>
     </div>
 </div>
 
@@ -1311,6 +1329,7 @@
         } else {
             finalCanvas = document.getElementById('crop-canvas');
         }
+        haptic(50);
         finalCanvas.toBlob(blob => {
             const name = cropSource === 'upload' ? `upload_${Date.now()}.jpg` : `scan_${Date.now()}.jpg`;
             addToQueue(blob, name, 'image/jpeg');
@@ -1435,14 +1454,25 @@
         showSocialModal();
     }
 
+    let _pollTimer = null;
+    let _lastFd = null;  // kept for retry
+
+    function stopPolling() {
+        if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    }
+
     function proceedWithPrint() {
         if (!_pendingFd) return;
         const fd = _pendingFd;
         _pendingFd = null;
+        _lastFd = null;
 
         showView('progress');
         document.getElementById('progress-title').textContent = 'Sending to print queue…';
         document.getElementById('progress-desc').textContent = 'Please wait while your documents are uploaded.';
+
+        // Save a clone so retry can re-use the same files
+        _lastFd = fd;
 
         fetch('/upload', { method: 'POST', body: fd })
             .then(r => {
@@ -1454,12 +1484,61 @@
                 queue.forEach(item => URL.revokeObjectURL(item.url));
                 queue = [];
                 updateQueueUI();
+                haptic([100, 50, 200]);
                 showView('success');
+                startPolling(data.queue_id);
             })
             .catch(err => {
-                showToast('Upload failed: ' + err, 'error');
-                showView('main');
+                showErrorView(err);
             });
+    }
+
+    function showErrorView(msg) {
+        document.getElementById('error-detail').textContent = msg || 'Unknown error. Please try again.';
+        showView('error');
+    }
+
+    function retryUpload() {
+        if (!_lastFd) { location.reload(); return; }
+        _pendingFd = _lastFd;
+        proceedWithPrint();
+    }
+
+    function startPolling(jobId) {
+        stopPolling();
+        _pollTimer = setInterval(() => {
+            fetch(`/api/job/${jobId}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (!data) return;
+                    updateStatusUI(data.status, data.queue_position);
+                    if (data.status === 'completed' || data.status === 'failed') stopPolling();
+                })
+                .catch(() => {});
+        }, 3000);
+    }
+
+    function updateStatusUI(status, pos) {
+        const dot = document.getElementById('status-dot');
+        const txt = document.getElementById('status-text');
+        const posEl = document.getElementById('queue-position-text');
+        const colors = { pending: '#e6a817', printing: '#5bc0de', completed: '#5cb85c', failed: '#d9534f' };
+        const labels = { pending: 'Waiting in queue…', printing: '🖨️ Printing now…', completed: '✓ Printed successfully!', failed: '✗ Print failed — ask staff' };
+        dot.style.background = colors[status] || '#aaa';
+        dot.style.animation = (status === 'printing') ? 'pulse 0.6s infinite' : (status === 'completed' || status === 'failed') ? 'none' : 'pulse 1.2s infinite';
+        txt.textContent = labels[status] || status;
+        txt.style.color = colors[status] || '#ccc';
+        if (status === 'completed') haptic([200, 100, 200, 100, 400]);
+        if (pos && status === 'pending') {
+            posEl.textContent = pos === 1 ? 'You are next!' : `Position ${pos} in queue`;
+        } else {
+            posEl.textContent = '';
+        }
+    }
+
+    // ── Haptic feedback ───────────────────────────────────────────────────
+    function haptic(pattern) {
+        try { navigator.vibrate && navigator.vibrate(pattern); } catch(e) {}
     }
 
     // Wire up mode radios to re-render preview on change

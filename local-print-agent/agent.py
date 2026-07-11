@@ -18,6 +18,21 @@ CLOUD_SERVER_URL = os.getenv("CLOUD_SERVER_URL")
 PRINTER_NAME = os.getenv("PRINTER_NAME")
 SUMATRA_PATH = os.getenv("SUMATRA_PATH")
 
+def _notify(title, body=""):
+    try:
+        subprocess.Popen(
+            ["powershell", "-WindowStyle", "Hidden", "-Command",
+             f"[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] | Out-Null;"
+             f"$t=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
+             f"$t.GetElementsByTagName('text')[0].AppendChild($t.CreateTextNode('{title}')) | Out-Null;"
+             f"$t.GetElementsByTagName('text')[1].AppendChild($t.CreateTextNode('{body}')) | Out-Null;"
+             f"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Aradhana Print').Show([Windows.UI.Notifications.ToastNotification]::new($t))"],
+            creationflags=0x08000000
+        )
+    except Exception:
+        pass
+
+
 def setup_logging():
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
@@ -148,6 +163,7 @@ def process_job(job):
             timeout=10
         )
         resp.raise_for_status()
+        _notify(f"Printed: {job_id}", f"{print_mode} · {copies} cop{'y' if copies==1 else 'ies'}")
 
     except Exception as e:
         error_msg = traceback.format_exc()

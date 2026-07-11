@@ -121,6 +121,19 @@ def upload():
     return jsonify({"success": True, "queue_id": job_id, "status": job.status, "file_count": len(saved_files)})
 
 
+@app.route("/api/job/<job_id>", methods=["GET"])
+def get_job_status(job_id):
+    job = PrintJob.query.get_or_404(job_id)
+    position = None
+    if job.status == "pending":
+        ahead = PrintJob.query.filter(
+            PrintJob.status == "pending",
+            PrintJob.created_at < job.created_at
+        ).count()
+        position = ahead + 1
+    return jsonify({"job_id": job.id, "status": job.status, "queue_position": position, "updated_at": job.updated_at.isoformat()})
+
+
 @app.route("/api/agent/jobs/pending", methods=["GET"])
 def get_pending_jobs():
     jobs = PrintJob.query.filter_by(status="pending").order_by(PrintJob.created_at.asc()).limit(5).all()
@@ -157,13 +170,49 @@ def media(job_id, filename):
 def admin():
     jobs = PrintJob.query.order_by(PrintJob.created_at.desc()).limit(100).all()
     STATUS_COLOR = {"pending": "#e6a817", "printing": "#5bc0de", "completed": "#5cb85c", "failed": "#d9534f"}
-    rows = ""
+    cards = ""
     for job in jobs:
         file_count = len(json.loads(job.file_paths or "[]"))
         color = STATUS_COLOR.get(job.status, "#aaa")
-        retry_btn = f'<button onclick="retryJob(\'{job.id}\')" style="padding:3px 10px;background:#e6a817;color:#000;border:none;border-radius:3px;cursor:pointer;font-size:12px;font-weight:bold">↺ Retry</button>' if job.status == "failed" else ""
-        rows += f'<tr><td>{job.id}</td><td style="color:{color};font-weight:bold">{job.status}</td><td>{job.print_mode}</td><td>{job.copies}</td><td>{file_count}</td><td>{job.created_at.strftime("%d-%m-%Y %H:%M")}</td><td>{retry_btn}</td></tr>'
-    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aradhana Print Admin</title><style>body{{font-family:Arial;background:#f7f5f0;padding:20px}}h1{{color:#06142E}}table{{width:100%;border-collapse:collapse;background:white}}th,td{{padding:10px;border-bottom:1px solid #ddd;font-size:14px}}th{{background:#06142E;color:#D4AF37;text-align:left}}</style><meta http-equiv="refresh" content="10"></head><body><h1>Aradhana Print Queue</h1><div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap"><a href="/admin/history" style="padding:10px 15px;background:#06142E;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">📷 30-Day History</a><a href="/admin/checkins" style="padding:10px 15px;background:#1a0a2e;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">👤 Staff Activity</a><a href="/admin/social-handles" style="padding:10px 15px;background:#0a2e1a;color:#D4AF37;border:none;border-radius:4px;cursor:pointer;font-size:14px;text-decoration:none;font-weight:bold">📱 Customer Handles</a><button onclick="clearPending()" style="padding:10px 15px;background:#d9534f;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px">[Clear Pending Queue]</button></div><script>function clearPending(){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Deleted: "+data.deleted);location.reload();}}}}).catch(e=>alert("Request failed"));}}function retryJob(jobId){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/retry/"+jobId,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Job queued for retry");location.reload();}}}}).catch(e=>alert("Request failed"));}}</script><table><tr><th>Queue ID</th><th>Status</th><th>Mode</th><th>Copies</th><th>Files</th><th>Created</th><th>Actions</th></tr>{rows}</table></body></html>"""
+        actions = ""
+        if job.status == "failed":
+            actions += f'<button onclick="retryJob(\'{job.id}\')" style="flex:1;padding:8px;background:#e6a817;color:#000;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">↺ Retry</button>'
+        if job.status in ("completed", "failed"):
+            actions += f'<button onclick="reprintJob(\'{job.id}\')" style="flex:1;padding:8px;background:#5bc0de;color:#000;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">🖨 Reprint</button>'
+        actions_html = f'<div style="display:flex;gap:8px;margin-top:10px">{actions}</div>' if actions else ""
+        error_html = f'<div style="font-size:11px;color:#d9534f;margin-top:6px;word-break:break-word">{job.error_message[:120]}…</div>' if job.error_message else ""
+        cards += f'''<div style="background:#111;border:1px solid #222;border-radius:10px;padding:14px;margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <span style="font-weight:bold;color:#D4AF37;font-size:15px;letter-spacing:1px">{job.id}</span>
+                <span style="color:{color};font-size:12px;font-weight:bold;background:rgba(0,0,0,0.4);padding:3px 8px;border-radius:10px">{job.status.upper()}</span>
+            </div>
+            <div style="font-size:12px;color:#888">{job.created_at.strftime("%d %b %Y, %H:%M")} &nbsp;·&nbsp; {job.print_mode} &nbsp;·&nbsp; {job.copies}x &nbsp;·&nbsp; {file_count} file(s)</div>
+            {error_html}{actions_html}
+        </div>'''
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aradhana Print Admin</title>
+<style>
+*{{box-sizing:border-box}}body{{font-family:Arial,sans-serif;background:#0a0a14;color:#ddd;padding:16px;margin:0;max-width:600px;margin:0 auto}}
+h1{{color:#D4AF37;font-family:Georgia,serif;font-size:22px;margin-bottom:16px}}
+.nav{{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}}
+.nav a,.nav button{{padding:9px 14px;border-radius:6px;font-size:13px;font-weight:bold;text-decoration:none;border:none;cursor:pointer}}
+</style>
+<meta http-equiv="refresh" content="10">
+</head><body>
+<h1>🖨 Print Queue</h1>
+<div class="nav">
+  <a href="/admin/history" style="background:#06142E;color:#D4AF37">📷 History</a>
+  <a href="/admin/checkins" style="background:#1a0a2e;color:#D4AF37">👤 Staff</a>
+  <a href="/admin/social-handles" style="background:#0a2e1a;color:#D4AF37">📱 Handles</a>
+  <button onclick="clearPending()" style="background:#d9534f;color:white">🗑 Clear Pending</button>
+</div>
+<script>
+function clearPending(){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Deleted: "+d.deleted);location.reload();}}}});}}
+function retryJob(id){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/retry/"+id,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Retrying…");location.reload();}}}});}}
+function reprintJob(id){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/reprint/"+id,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Sent to print again!");location.reload();}}}});}}
+</script>
+{cards if cards else "<p style='color:#555'>No jobs yet.</p>"}
+</body></html>"""
 
 
 @app.route("/admin/retry/<job_id>", methods=["POST"])
@@ -176,6 +225,21 @@ def admin_retry_job(job_id):
     job = PrintJob.query.get_or_404(job_id)
     if job.status != "failed":
         return jsonify({"error": "Only failed jobs can be retried."}), 400
+    job.status = "pending"
+    job.error_message = None
+    job.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"success": True, "job_id": job.id})
+
+
+@app.route("/admin/reprint/<job_id>", methods=["POST"])
+def admin_reprint_job(job_id):
+    expected_secret = os.environ.get("ADMIN_SECRET")
+    if expected_secret:
+        data = request.get_json(silent=True) or {}
+        if data.get("secret") != expected_secret:
+            return jsonify({"error": "Unauthorized"}), 401
+    job = PrintJob.query.get_or_404(job_id)
     job.status = "pending"
     job.error_message = None
     job.updated_at = datetime.utcnow()
