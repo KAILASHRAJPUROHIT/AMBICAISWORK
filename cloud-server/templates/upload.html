@@ -1438,12 +1438,55 @@
     // ── Voice welcome message (custom recorded clip, plays on phone speaker) ──
     const _welcomeAudio = new Audio('/static/audio/welcome.mp3');
     _welcomeAudio.preload = 'auto';
+    _welcomeAudio.playsInline = true;
+    _welcomeAudio.load();
+
+    // Some Android/WebView contexts only "unlock" audio playback on the FIRST
+    // real touch/click on the page, not on a later synthetic-feeling call deep
+    // in a JS chain. Prime it silently as early as possible.
+    let _audioUnlocked = false;
+    function _unlockAudio() {
+        if (_audioUnlocked) return;
+        _audioUnlocked = true;
+        _welcomeAudio.muted = true;
+        _welcomeAudio.play().then(() => {
+            _welcomeAudio.pause();
+            _welcomeAudio.currentTime = 0;
+            _welcomeAudio.muted = false;
+        }).catch(() => { _welcomeAudio.muted = false; });
+    }
+    document.addEventListener('pointerdown', _unlockAudio, { once: true, passive: true });
+    document.addEventListener('touchstart', _unlockAudio, { once: true, passive: true });
 
     function speakWelcome() {
         try {
+            _welcomeAudio.muted = false;
+            _welcomeAudio.currentTime = 0;
+            const p = _welcomeAudio.play();
+            if (p && p.catch) {
+                p.catch(() => {
+                    // Autoplay was blocked — surface a visible tap-to-play fallback
+                    // so the message is never silently lost.
+                    showAudioFallback();
+                });
+            }
+        } catch (e) {}
+    }
+
+    function showAudioFallback() {
+        if (document.getElementById('audio-fallback-btn')) return;
+        const btn = document.createElement('button');
+        btn.id = 'audio-fallback-btn';
+        btn.textContent = '🔊 Tap to hear welcome message';
+        btn.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10000;padding:12px 20px;background:#D4AF37;color:#06142E;border:none;border-radius:24px;font-weight:bold;font-size:14px;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer';
+        btn.onclick = () => {
+            _welcomeAudio.muted = false;
             _welcomeAudio.currentTime = 0;
             _welcomeAudio.play().catch(() => {});
-        } catch (e) {}
+            btn.remove();
+        };
+        document.body.appendChild(btn);
+        setTimeout(() => btn.remove(), 8000);
     }
 
     function submitAll() {
