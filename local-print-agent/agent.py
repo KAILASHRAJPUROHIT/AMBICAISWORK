@@ -18,6 +18,32 @@ CLOUD_SERVER_URL = os.getenv("CLOUD_SERVER_URL")
 PRINTER_NAME = os.getenv("PRINTER_NAME")
 SUMATRA_PATH = os.getenv("SUMATRA_PATH")
 
+WELCOME_MESSAGE = (
+    "Namaskar! Welcome to Aradhana Jewellers. "
+    "Please follow us on Instagram, aradhanajewellers dot boisar, "
+    "and on Facebook, Aradhana Jewellers Boisar, "
+    "for amazing content and latest offers. "
+    "Thank you!"
+)
+
+def _speak(text=WELCOME_MESSAGE):
+    try:
+        ps_cmd = (
+            "Add-Type -AssemblyName System.Speech; "
+            "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+            "$s.Rate = -1; "
+            "$s.Volume = 100; "
+            f"$s.Speak('{text}');"
+            "$s.Dispose()"
+        )
+        subprocess.Popen(
+            ["powershell", "-WindowStyle", "Hidden", "-NonInteractive", "-Command", ps_cmd],
+            creationflags=0x08000000
+        )
+    except Exception:
+        pass
+
+
 def _notify(title, body=""):
     try:
         subprocess.Popen(
@@ -164,6 +190,7 @@ def process_job(job):
         )
         resp.raise_for_status()
         _notify(f"Printed: {job_id}", f"{print_mode} · {copies} cop{'y' if copies==1 else 'ies'}")
+        _speak()
 
     except Exception as e:
         error_msg = traceback.format_exc()
