@@ -418,6 +418,36 @@ async def get_live_feed(days: int = 7, per_day: int = 20, db: Session = Depends(
         })
     return results
 
+def operational_bills_filter():
+    """Filter conditions for production bills (excludes test data and the
+    non-production bill-number prefixes used for fixtures/imports/mocks)."""
+    return [
+        Bill.is_test_data == False,
+        ~Bill.bill_number.ilike("TEST-%"),
+        ~Bill.bill_number.ilike("ARCH-%"),
+        ~Bill.bill_number.ilike("HARDENING-%"),
+        ~Bill.bill_number.ilike("MOCK-%"),
+    ]
+
+def resolve_operational_date(db: Session) -> str:
+    """The business day the dashboard should show.
+
+    Returns today if any production bills are dated today; otherwise the most
+    recent business day that actually has invoices. The shop frequently imports
+    *prior* days' invoices, so a strict "today" view shows a wall of zeros even
+    though there is fresh data — this falls back to the latest real day instead.
+    """
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_count = db.query(Bill).filter(
+        func.date(Bill.invoice_date) == today_str, *operational_bills_filter()
+    ).count()
+    if today_count > 0:
+        return today_str
+    latest = db.query(func.max(func.date(Bill.invoice_date))).filter(
+        *operational_bills_filter()
+    ).scalar()
+    return latest or today_str
+
 @app.get("/api/dashboard/live")
 @app.get("/api/prime/dashboard/stats")
 async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
@@ -436,21 +466,26 @@ async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
     now = datetime.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_str = now.strftime("%Y-%m-%d")
-    
-    bills_today_query = db.query(Bill).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False)
+
+    # Business day shown by the day-scoped cards/sections (falls back to the
+    # latest real day when today has no dated bills — see resolve_operational_date).
+    operational_date = resolve_operational_date(db)
+    is_showing_today = (operational_date == today_str)
+
+    bills_today_query = db.query(Bill).filter(func.date(Bill.invoice_date) == operational_date, *operational_bills_filter())
     total_bills_today = bills_today_query.count()
-    
+
     unverified_adv_query = db.query(Bill).filter(Bill.is_test_data == False, Bill.advance_amount > 0, Bill.advance_verification_status != "VERIFIED")
     unverified_adv_count = unverified_adv_query.count()
     unverified_adv_amount = float(db.query(func.sum(Bill.advance_amount)).filter(Bill.is_test_data == False, Bill.advance_amount > 0, Bill.advance_verification_status != "VERIFIED").scalar() or 0.0)
-    
+
     imported_today = db.query(Bill).filter(Bill.created_at >= today_start, Bill.is_test_data == False).count()
-    pending_previous = db.query(Bill).filter(func.date(Bill.invoice_date) < today_str, Bill.is_test_data == False, or_(Bill.status == "Yellow", Bill.status == "Blue", Bill.status == "Purple", Bill.review_required == 1)).count()
+    pending_previous = db.query(Bill).filter(func.date(Bill.invoice_date) < operational_date, Bill.is_test_data == False, or_(Bill.status == "Yellow", Bill.status == "Blue", Bill.status == "Purple", Bill.review_required == 1)).count()
     verified_today = bills_today_query.filter(Bill.status == "Green").count()
     review_required_total = db.query(Bill).filter(Bill.review_required == 1, Bill.is_test_data == False).count()
     partial_paid = db.query(Bill).filter(Bill.status == "Blue", Bill.remaining_amount > 0, Bill.is_test_data == False).count()
-    total_sale_today = float(db.query(func.sum(Bill.amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
-    cash_in_hand_today = float(db.query(func.sum(Bill.cash_received)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
+    total_sale_today = float(db.query(func.sum(Bill.amount)).filter(func.date(Bill.invoice_date) == operational_date, *operational_bills_filter()).scalar() or 0.0)
+    cash_in_hand_today = float(db.query(func.sum(Bill.cash_received)).filter(func.date(Bill.invoice_date) == operational_date, *operational_bills_filter()).scalar() or 0.0)
     bank_confirmed_today = float(db.query(
         func.sum(
             func.coalesce(Bill.bank_received, 0)
@@ -458,7 +493,7 @@ async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
             + func.coalesce(Bill.sms_confirmed_amount, 0)
             + func.coalesce(Bill.email_confirmed_amount, 0)
         )
-    ).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
+    ).filter(func.date(Bill.invoice_date) == operational_date, *operational_bills_filter()).scalar() or 0.0)
     
     # Financial visibility check
     is_owner = user_role in ["OWNER", "ADMIN"]
@@ -475,7 +510,7 @@ async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
         Cheque.bill_id.in_(bills_today_ids),
         Cheque.status.in_(["Blue", "CHEQUE_DEPOSITED", "CHEQUE_CLEARING", "REALIZING_CHEQUE"])
     ).scalar() or 0.0) if bills_today_ids else 0.0
-    latest_invoice_date = db.query(func.max(func.date(Bill.invoice_date))).filter(Bill.is_test_data == False).scalar()
+    latest_invoice_date = db.query(func.max(func.date(Bill.invoice_date))).filter(*operational_bills_filter()).scalar()
     
     # Mandate: Only Owners/Admins see collections
     if is_owner:
@@ -485,8 +520,8 @@ async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
         cash_collection = float(sum(p.amount for p in payments_today if p.mode in ["CASH", "OLD_GOLD_EXCHANGE"]) or 0.0)
         cash_collection += verified_adv_today
         bank_collection = float(sum(p.amount for p in payments_today if p.mode in ["BANK_TRANSFER", "CARD", "UPI", "NEFT", "IMPS", "RTGS"]) or 0.0)
-        sms_confirmed = float(db.query(func.sum(Bill.sms_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
-        email_confirmed = float(db.query(func.sum(Bill.email_confirmed_amount)).filter(func.date(Bill.invoice_date) == today_str, Bill.is_test_data == False).scalar() or 0.0)
+        sms_confirmed = float(db.query(func.sum(Bill.sms_confirmed_amount)).filter(func.date(Bill.invoice_date) == operational_date, *operational_bills_filter()).scalar() or 0.0)
+        email_confirmed = float(db.query(func.sum(Bill.email_confirmed_amount)).filter(func.date(Bill.invoice_date) == operational_date, *operational_bills_filter()).scalar() or 0.0)
         cheque_collection = float(db.query(func.sum(PaymentModel.amount)).filter(PaymentModel.bill_id.in_(bills_today_ids), PaymentModel.mode == "CHEQUE").scalar() or 0.0)
     else:
         # Strictly hide from Accountant/Staff/Biller
@@ -510,6 +545,7 @@ async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
         "totalSaleToday": total_sale_today if is_owner else None, "cashInHandToday": cash_in_hand_today if is_owner else None,
         "bankConfirmedToday": bank_confirmed_today if is_owner else None, "chequesPendingToday": cheques_pending_today if is_owner else None,
         "totalReview": review_required_total, "financialDataAvailable": total_bills_today > 0, "latestOperationalDate": latest_invoice_date,
+        "operationalDate": operational_date, "isShowingToday": is_showing_today,
         "totalCollection": total_collection, "cashCollection": cash_collection, "bankCollection": bank_collection,
         "smsConfirmed": sms_confirmed, "emailConfirmed": email_confirmed, "chequeCollection": cheque_collection,
         "pdfCountInShare": pdf_count, "invoiceWatcherStatus": "READY" if online else "OFFLINE",
@@ -770,6 +806,137 @@ async def get_reconciliation_proof_preview(proof_type: str, proof_id: int, reque
             ])
         )
     raise HTTPException(status_code=404, detail="Proof type not found")
+
+# Path to the latest Prime manual-report import snapshot produced by the import
+# pipeline. Overridable via env; defaults to the standard production location.
+PRIME_REPORT_IMPORT_JSON = os.environ.get(
+    "PRIME_REPORT_IMPORT_JSON",
+    os.path.join(r"C:\Aradhana\PrimeExports", "JSON", "prime_report_import.json"),
+)
+
+def _json_safe(obj):
+    """Recursively replace NaN/Infinity floats with None so the payload is
+    strict-JSON compliant (the Prime export occasionally contains NaN)."""
+    import math
+    if isinstance(obj, float):
+        return None if (math.isnan(obj) or math.isinf(obj)) else obj
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+@app.get("/api/prime/manual-report-import/latest")
+async def get_prime_manual_report_latest(request: Request, db: Session = Depends(get_db)):
+    """Return the latest Prime manual-report import snapshot.
+
+    Read-only. Serves the already-validated extraction JSON (shape:
+    {timestamp, count, stats, records[]}) consumed by the Prime Extraction
+    Review page. Requires a valid session.
+    """
+    require_valid_session(request, db)
+    path = PRIME_REPORT_IMPORT_JSON
+    if not os.path.exists(path):
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "No Prime manual report import found yet."},
+        )
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as exc:  # pragma: no cover - defensive file/JSON guard
+        logger.error(f"Failed to read Prime manual report import at {path}: {exc}")
+        raise HTTPException(
+            status_code=500, detail="Could not read Prime manual report import."
+        )
+    return JSONResponse(content=_json_safe(data))
+
+def _escalation_severity(display_status: str) -> str:
+    """Owner-escalation severity derived from the reconciliation display status."""
+    if display_status == "Risk / Mismatch":
+        return "CRITICAL"
+    if display_status == "ACCOUNTANT APPROVAL REQUIRED":
+        return "HIGH"
+    return "MEDIUM"
+
+@app.get("/api/escalations/open")
+async def get_open_escalations_real(request: Request, db: Session = Depends(get_db)):
+    """Owner escalations — operational bills the reconciliation engine flags as
+    needing owner attention.
+
+    An escalation is a non-test, undelivered bill whose computed reconciliation
+    status is a problem state: "Risk / Mismatch" (CRITICAL) or
+    "ACCOUNTANT APPROVAL REQUIRED" (HIGH). This reuses the SAME classifiers as
+    /api/reconciliation/open so the two views can never drift apart. Ordinary
+    pending bills stay in the reconciliation queue and are NOT escalated.
+    Requires a valid session.
+    """
+    require_valid_session(request, db)
+
+    bills = (
+        db.query(Bill)
+        .filter(
+            Bill.is_test_data == False,
+            ~Bill.bill_number.ilike("TEST-%"),
+            ~Bill.bill_number.ilike("ARCH-%"),
+            ~Bill.bill_number.ilike("HARDENING-%"),
+            Bill.is_delivered == False,
+        )
+        .order_by(Bill.invoice_generated_at.desc().nullslast(), Bill.created_at.desc())
+        .limit(1000)
+        .all()
+    )
+
+    ESCALATION_STATUSES = {"Risk / Mismatch", "ACCOUNTANT APPROVAL REQUIRED"}
+    escalations = []
+    for bill in bills:
+        if not is_operational_reconciliation_bill(bill):
+            continue
+
+        payments = db.query(Payment).filter(Payment.bill_id == bill.id).all()
+        payment_total = sum(float(p.amount or 0.0) for p in payments)
+        fallback_total = (
+            float(bill.cash_received or 0.0)
+            + float(bill.bank_received or 0.0)
+            + float(bill.card_received or 0.0)
+        )
+        received_amount = payment_total if payment_total > 0 else fallback_total
+        invoice_amount = float(bill.amount or 0.0)
+        difference = round(invoice_amount - received_amount, 2)
+        payment_mode = bill.payment_mode or ", ".join(p.mode for p in payments if p.mode) or "UNKNOWN"
+        display_status = reconciliation_display_status(
+            invoice_amount, received_amount, difference, payment_mode, bill.status
+        )
+        if display_status not in ESCALATION_STATUSES:
+            continue
+
+        invoice_ts, _, _ = best_invoice_timestamp(bill)
+        escalations.append({
+            "escalation_id": f"BILL-{bill.id}",
+            "bill_id": bill.id,
+            "bill_no": bill.bill_number,
+            "customer_name": bill.customer_name or "Unknown",
+            "invoice_amount": invoice_amount,
+            "received_amount": received_amount,
+            "difference": difference,
+            "payment_mode": payment_mode,
+            "reason": display_status,
+            "severity": _escalation_severity(display_status),
+            "status": bill.status,
+            "confidence": reconciliation_confidence(invoice_amount, received_amount, payment_mode),
+            "invoice_date": iso_or_none(bill.invoice_date),
+            "invoice_timestamp": iso_or_none(invoice_ts),
+            "pdf_available": bool(bill.pdf_path),
+        })
+
+    severity_rank = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    escalations.sort(key=lambda e: (severity_rank.get(e["severity"], 9), -e["invoice_amount"]))
+    return JSONResponse(content={
+        "count": len(escalations),
+        "critical_count": sum(1 for e in escalations if e["severity"] == "CRITICAL"),
+        "high_count": sum(1 for e in escalations if e["severity"] == "HIGH"),
+        "escalations": escalations,
+    })
 
 @app.get("/api/reconciliation/open")
 async def get_open_reconciliation_real(request: Request, response: Response, db: Session = Depends(get_db)):
@@ -1651,7 +1818,13 @@ async def get_me(request: Request, db: Session = Depends(get_db)):
     if not employee_id:
         raise HTTPException(status_code=401, detail="Session expired")
 
-    user = db.query(User).filter(User.employee_id == employee_id).first()
+    # Case-insensitive lookup to match the login flow (which normalizes the id).
+    # If the account no longer exists (archived/deleted) return a clean 401 rather
+    # than dereferencing None and 500-ing, which the SPA reads as an auth failure
+    # and bounces to /login on every load (a "login loop").
+    user = db.query(User).filter(func.lower(User.employee_id) == employee_id.lower()).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User account not found")
     return {
         "name": user.name,
         "role": user.role,
@@ -1759,8 +1932,59 @@ if os.path.exists(frontend_dist):
     assets_path = os.path.join(frontend_dist, "assets")
     if os.path.exists(assets_path):
         app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
-    @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
+    
+@app.get("/api/dashboard/today-bills")
+async def get_dashboard_today_bills(db: Session = Depends(get_db)):
+    from backend.models import Bill
+    operational_date = resolve_operational_date(db)
+
+    bills = db.query(Bill).filter(
+        *operational_bills_filter(),
+        func.date(func.coalesce(Bill.invoice_date, func.datetime(Bill.created_at, 'localtime'))) == operational_date
+    ).order_by(Bill.invoice_date.desc(), Bill.created_at.desc()).all()
+    
+    results = []
+    for b in bills:
+        status_text = b.status_text or b.status or "Pending"
+        results.append({
+            "id": b.id,
+            "bill_number": b.bill_number,
+            "customer_name": b.customer_name or "Unknown",
+            "amount": float(b.amount) if b.amount else 0.0,
+            "payment_mode": "Various" if b.status == "Green" else "Pending",
+            "status": status_text,
+            "invoice_date": b.invoice_date.isoformat() if b.invoice_date else None
+        })
+    return JSONResponse(content=results)
+
+@app.get("/api/dashboard/today-payments")
+async def get_dashboard_today_payments(db: Session = Depends(get_db)):
+    from backend.models import Payment as PaymentModel
+    from backend.models import Bill
+    operational_date = resolve_operational_date(db)
+
+    payments = db.query(PaymentModel, Bill).join(Bill, PaymentModel.bill_id == Bill.id).filter(
+        *operational_bills_filter(),
+        func.date(func.coalesce(PaymentModel.payment_date, func.datetime(PaymentModel.created_at, 'localtime'))) == operational_date
+    ).order_by(PaymentModel.payment_date.desc(), PaymentModel.created_at.desc()).all()
+    
+    results = []
+    for p, b in payments:
+        status_text = p.status or "Unknown"
+        results.append({
+            "id": p.id,
+            "invoice_number": b.bill_number,
+            "customer_name": b.customer_name or "Unknown",
+            "amount_received": float(p.amount) if p.amount else 0.0,
+            "payment_mode": p.mode or "Unknown",
+            "utr_reference": p.utr_reference or p.cheque_number or "N/A",
+            "payment_date": p.payment_date.isoformat() if p.payment_date else None,
+            "status": status_text
+        })
+    return JSONResponse(content=results)
+
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
         if full_path.startswith("api/") or full_path.startswith("debug/"): return JSONResponse(status_code=404, content={"detail": "Not Found"})
         index_path = os.path.join(frontend_dist, "index.html")
         if os.path.exists(index_path): return FileResponse(index_path)
@@ -1823,3 +2047,5 @@ async def further_review_accountant_verification(action: AccountantVerificationA
     log_audit(db, "Bill", action.bill_id, "ACCOUNTANT_FURTHER_REVIEW", bill.status, bill.status, action.note)
     db.commit()
     return {"status": "success"}
+
+

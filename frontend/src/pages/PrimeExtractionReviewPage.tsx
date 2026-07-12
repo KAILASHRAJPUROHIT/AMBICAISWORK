@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getHeaders } from '../api/client';
 
 interface RawRow {
   [key: string]: any;
@@ -49,7 +50,7 @@ const PrimeExtractionReviewPage: React.FC = () => {
   const [expandedRaw, setExpandedRaw] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/prime/manual-report-import/latest')
+    fetch(`${window.location.origin}/api/prime/manual-report-import/latest`, { headers: getHeaders() })
       .then(res => {
         if (!res.ok) throw new Error('API Unavailable: Extraction data could not be loaded.');
         return res.json();

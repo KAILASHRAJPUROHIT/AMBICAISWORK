@@ -20,6 +20,8 @@ interface DashboardStats {
   totalReview: number;
   financialDataAvailable: boolean;
   latestOperationalDate: string | null;
+  operationalDate?: string | null;
+  isShowingToday?: boolean;
   totalCollection: number;
   cashCollection: number;
   bankCollection: number;
@@ -66,40 +68,26 @@ interface SMSStatus {
   is_running: boolean;
 }
 
-interface LiveInvoice {
+
+interface TodayBill {
   id: number;
   bill_number: string;
-  invoice_date: string;
-  invoice_time: string | null;
-  invoice_generated_at: string | null;
-  ingested_at: string | null;
-  pipeline_delay_seconds: number;
   customer_name: string;
-  invoice_total: number;
-  cust_purc: number;
-  advance: number;
-  net_payable: number;
-  paid_amount: number;
-  remaining_amount: number;
+  amount: number;
+  payment_mode: string;
   status: string;
-  status_text: string;
-  is_historical_claim: boolean;
-  historical_payment_date: string | null;
-  pdf_path: string | null;
-  created_at: string;
+  invoice_date: string | null;
 }
 
-interface LivePaymentEvent {
-  id: string;
-  source: string;
-  bank: string;
-  account?: string;
-  amount: number;
-  reference: string;
-  timestamp: string;
-  confidence: string;
-  payer?: string;
-  raw: string;
+interface TodayPayment {
+  id: number;
+  invoice_number: string;
+  customer_name: string;
+  amount_received: number;
+  payment_mode: string;
+  utr_reference: string;
+  payment_date: string | null;
+  status: string;
 }
 
 const initialStats: DashboardStats = {
@@ -134,16 +122,13 @@ const DashboardPage: React.FC = () => {
   const [ingestionStatus, setIngestionStatus] = useState<IngestionStatus | null>(null);
   const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null);
   const [smsStatus, setSMSStatus] = useState<SMSStatus | null>(null);
-  const [liveFeed, setLiveFeed] = useState<LiveInvoice[]>([]);
-  const [paymentEvents, setPaymentEvents] = useState<LivePaymentEvent[]>([]);
+  const [todayBills, setTodayBills] = useState<TodayBill[]>([]);
+  const [todayPayments, setTodayPayments] = useState<TodayPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dashboardApiAvailable, setDashboardApiAvailable] = useState(false);
   const [isSyncing, setIsSyncing] = useState({ pdf: false, email: false, sms: false });
-  const [selectedEvent, setSelectedEvent] = useState<LivePaymentEvent | null>(null);
-  const [expandedFeedDates, setExpandedFeedDates] = useState<Set<string>>(new Set());
-  const [showFullPipeline, setShowFullPipeline] = useState(false);
-
+    
   const API_BASE = window.location.origin;
 
   // SAFE FORMATTERS
@@ -154,8 +139,17 @@ const DashboardPage: React.FC = () => {
     return money(value ?? 0);
   };
   const num = (v?: number | null) => Number(v ?? 0).toLocaleString("en-IN");
+  const fmtDay = (iso?: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return isNaN(d.getTime())
+      ? iso
+      : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+  const showingToday = stats?.isShowingToday !== false;
+  const periodLabel = showingToday ? 'Today' : fmtDay(stats?.operationalDate || stats?.latestOperationalDate);
 
-  const fetchData = async () => {
+    const fetchData = async () => {
     const token = getSessionToken();
     const headers = {
       'X-Session-Token': token || ''
@@ -164,11 +158,9 @@ const DashboardPage: React.FC = () => {
     try {
       const endpoints = [
         `${API_BASE}/api/dashboard/live`,
-        `${API_BASE}/api/invoices/live-feed?days=7&per_day=20`,
         `${API_BASE}/api/admin/ingestion-status`,
         `${API_BASE}/api/admin/email-status`,
         `${API_BASE}/api/admin/sms-status`,
-        `${API_BASE}/api/live-payment-events`,
         `${API_BASE}/api/version`
       ];
 
@@ -181,30 +173,45 @@ const DashboardPage: React.FC = () => {
       setDashboardApiAvailable(!!dashboardLive);
       if (dashboardLive) setStats(dashboardLive);
 
-      const liveFeed = responses[1] && responses[1].ok ? await responses[1].json() : null;
-      console.log("LIVE_FEED_RESPONSE:", liveFeed);
-      if (liveFeed) setLiveFeed(liveFeed);
-
-      const ingestionStatus = responses[2] && responses[2].ok ? await responses[2].json() : null;
+      const ingestionStatus = responses[1] && responses[1].ok ? await responses[1].json() : null;
       console.log("INGESTION_STATUS_RESPONSE:", ingestionStatus);
       if (ingestionStatus) setIngestionStatus(ingestionStatus);
 
-      if (responses[3] && responses[3].ok) setEmailStatus(await (responses[3] as Response).json());
-      if (responses[4] && responses[4].ok) setSMSStatus(await (responses[4] as Response).json());
-      if (responses[5] && responses[5].ok) setPaymentEvents(await (responses[5] as Response).json());
-      if (responses[6] && responses[6].ok) {
-         const vData = await (responses[6] as Response).json();
+      if (responses[2] && responses[2].ok) setEmailStatus(await (responses[2] as Response).json());
+      if (responses[3] && responses[3].ok) setSMSStatus(await (responses[3] as Response).json());
+      if (responses[4] && responses[4].ok) {
+         const vData = await (responses[4] as Response).json();
          setAppVersion(vData.version);
       }
 
+      // Fetch new dashboard split feeds independently
+      const [billsRes, paymentsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/dashboard/today-bills`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/api/dashboard/today-payments`, { headers }).catch(() => null)
+      ]);
+      
+      if (billsRes && billsRes.ok) {
+        const billsData = await billsRes.json();
+        setTodayBills(Array.isArray(billsData) ? billsData : []);
+      } else {
+        setTodayBills([]);
+      }
+
+      if (paymentsRes && paymentsRes.ok) {
+        const paymentsData = await paymentsRes.json();
+        setTodayPayments(Array.isArray(paymentsData) ? paymentsData : []);
+      } else {
+        setTodayPayments([]);
+      }
+
       // Check for auth failure
-      if (responses[1] && responses[1].status === 401) {
+      if (responses[0] && responses[0].status === 401) {
           setError('Session Expired. Please Login.');
           return;
       }
 
       // Only show error if core stats or feed fail when NOT loading
-      if ((!responses[0] || !responses[0].ok) && (!responses[1] || !responses[1].ok) && !loading) {
+      if ((!responses[0] || !responses[0].ok) && !loading) {
           setError('API Connection Lost');
           AlertSoundSystem.playCritical();
       } else {
@@ -244,73 +251,7 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const openPDF = async (bill_id: number) => {
-    try {
-      const token = getSessionToken();
-      const response = await fetch(`${API_BASE}/api/invoices/pdf/${bill_id}`, {
-        headers: { 'X-Session-Token': token || '' }
-      });
-      if (!response.ok) {
-        if (response.status === 401) {
-          window.location.href = '/login';
-        } else {
-          throw new Error('Failed to load PDF');
-        }
-        return;
-      }
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, '_blank');
-    } catch (e) {
-      console.error("Error opening PDF:", e);
-      alert("Error opening PDF. It may not exist on the server.");
-    }
-  };
-
-  const groupedFeed = liveFeed.reduce((acc: { [key: string]: LiveInvoice[] }, inv) => {
-    const date = inv.invoice_date || 'Unknown Date';
-    if (!acc[date]) acc[date] = [];
-    acc[date].push(inv);
-    return acc;
-  }, {});
-
-  const sortedDates = Object.keys(groupedFeed).sort((a, b) => b.localeCompare(a));
-  const latestFeedDate = sortedDates[0];
-  const visibleInvoicesForDate = (date: string) => {
-    const items = groupedFeed[date] || [];
-    if (showFullPipeline || expandedFeedDates.has(date)) return items;
-    const defaultLimit = date === latestFeedDate ? 5 : 10;
-    return items.slice(0, defaultLimit);
-  };
-  const toggleFeedDate = (date: string) => {
-    setExpandedFeedDates(prev => {
-      const next = new Set(prev);
-      if (next.has(date)) {
-        next.delete(date);
-      } else {
-        next.add(date);
-      }
-      return next;
-    });
-  };
-
-  const delayInfo = (seconds: number) => {
-    if (seconds < 0) {
-      return { text: '---', label: 'Unknown', className: 'bg-gray-100 text-gray-500 border-gray-200' };
-    }
-    const minutes = seconds / 60;
-    const text = seconds < 60
-      ? `${Math.round(seconds)}s`
-      : seconds < 3600
-        ? `${Math.round(minutes)}m`
-        : `${Math.round(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
-    if (minutes < 15) return { text, label: 'Normal', className: 'bg-green-50 text-green-700 border-green-100' };
-    if (minutes < 120) return { text, label: 'Watch', className: 'bg-yellow-50 text-yellow-700 border-yellow-100' };
-    if (minutes < 1440) return { text, label: 'Review', className: 'bg-orange-50 text-orange-700 border-orange-100' };
-    return { text, label: 'Escalate', className: 'bg-red-50 text-red-700 border-red-100' };
-  };
-
-  const SkeletonCard = () => (
+        const SkeletonCard = () => (
     <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm animate-pulse">
       <div className="h-2 w-16 bg-gray-200 rounded mb-4"></div>
       <div className="h-6 w-24 bg-gray-300 rounded"></div>
@@ -502,9 +443,9 @@ const DashboardPage: React.FC = () => {
       <section className="mb-6">
         <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-4 border-b border-gray-200 pb-2">Operational Metrics</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-            <StatCard label="Bills Dated Today" value={num(stats?.totalBillsToday)} />
+            <StatCard label={showingToday ? 'Bills Dated Today' : `Bills (${periodLabel})`} value={num(stats?.totalBillsToday)} />
             <StatCard label="Imported Today" value={num(stats?.importedToday)} />
-            <StatCard label="Verified Cleared" value={num(stats?.verified)} />
+            <StatCard label={showingToday ? 'Verified Cleared' : `Verified (${periodLabel})`} value={num(stats?.verified)} />
             <StatCard label="Advance Verification Queue" value={num(stats?.unverifiedAdvancesCount)} />
             <StatCard label="Pending Previous Days" value={num(stats?.pendingPreviousDays)} />
             <StatCard label="Review Queue" value={num(stats?.totalReview ?? stats?.pendingReview)} />
@@ -514,14 +455,16 @@ const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {stats?.is_owner && (
         <div className="lg:col-span-1">
-          <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Financial Collection (Today)</h2>
+          <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-200 pb-2">Financial Collection ({periodLabel})</h2>
+          {!showingToday && (
+            <p className="mb-4 text-[10px] font-bold text-amber-600 uppercase tracking-wide bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Showing latest business day — no billing activity dated today yet.
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-4">
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
                  <p className="text-[10px] font-black text-gray-400 uppercase mb-2 tracking-tighter">Total Sale</p>
                  <p className="text-xl font-black text-gray-900">{moneyOrUnavailable(stats?.totalSaleToday, stats?.totalCollection)}</p>
-                 {!stats?.financialDataAvailable && stats?.latestOperationalDate && (
-                   <p className="mt-1 text-[9px] font-bold text-gray-400 uppercase">Latest invoices: {stats.latestOperationalDate}</p>
-                 )}
               </div>
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm border-l-4 border-l-green-500">
                  <p className="text-[10px] font-black text-green-500 uppercase mb-2 tracking-tighter">Cash In Hand (After opening)</p>
@@ -546,193 +489,93 @@ const DashboardPage: React.FC = () => {
         )}
 
         <div className={stats?.is_owner ? "lg:col-span-2" : "lg:col-span-3"}>
-          <div className="flex justify-between items-center mb-6 border-b border-gray-200 pb-2">
-             <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Recent Pipeline Activity</h2>
-             <button
-               type="button"
-               onClick={() => setShowFullPipeline(prev => !prev)}
-               className="text-[10px] bg-black text-white px-4 py-2 rounded-lg uppercase font-black tracking-widest hover:bg-gray-800 transition-colors shadow-lg shadow-black/10"
-             >
-                 {showFullPipeline ? 'Collapse Pipeline' : 'Open Full Pipeline'}
-             </button>
-          </div>
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            {sortedDates.length > 0 ? sortedDates.map(date => (
-              <div key={date}>
-                <div className="bg-black text-white px-4 py-2 text-[10px] font-black uppercase tracking-tighter flex items-center justify-between">
-                   <span>
-                     {date} — {visibleInvoicesForDate(date).length} of {groupedFeed[date].length} shown
-                   </span>
-                   {visibleInvoicesForDate(date).length < groupedFeed[date].length && (
-                     <button
-                       type="button"
-                       onClick={() => toggleFeedDate(date)}
-                       className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-md uppercase"
-                     >
-                       Expand
-                     </button>
-                   )}
-                   {visibleInvoicesForDate(date).length === groupedFeed[date].length && groupedFeed[date].length > (date === latestFeedDate ? 5 : 10) && !showFullPipeline && (
-                     <button
-                       type="button"
-                       onClick={() => toggleFeedDate(date)}
-                       className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded-md uppercase"
-                     >
-                       Collapse
-                     </button>
-                   )}
-                </div>
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-100">
-                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase">PDF</th>
-                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Bill No / Time</th>
-                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Customer</th>
-                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Net Pay</th>
-                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Delay</th>
-                      <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleInvoicesForDate(date).map((inv) => (
-                      <tr key={inv.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                        <td className="p-4">
-                          {inv.pdf_path ? (
-                            <button 
-                              onClick={() => openPDF(inv.id)}
-                              className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                              </svg>
-                            </button>
-                          ) : (
-                            <span className="text-[8px] text-gray-300 font-bold uppercase">No PDF</span>
-                          )}
-                        </td>
-                        <td className="p-4">
-                           <div className="font-black text-gray-900 leading-none">{inv.bill_number}</div>
-                           <div className="text-[9px] text-gray-400 font-bold mt-1 uppercase">Gen: {inv.invoice_date} {inv.invoice_time || ''}</div>
-                           {inv.is_historical_claim && (
-                             <div className="mt-1 flex items-center text-[8px] font-black text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 uppercase tracking-tighter animate-pulse">
-                                ⚠ Historical Claim
-                             </div>
-                           )}
-                        </td>
-                        <td className="p-4 text-sm text-gray-600 truncate max-w-[100px] font-medium">{inv.customer_name}</td>
-                        <td className="p-4 font-black text-gray-900 text-right">{money(inv.net_payable)}</td>
-                        <td className="p-4 text-right">
-                           {(() => {
-                             const delay = delayInfo(inv.pipeline_delay_seconds || 0);
-                             return (
-                               <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${delay.className}`}>
-                                 {delay.label}: {delay.text}
-                               </span>
-                             );
-                           })()}
-                        </td>
-                        <td className="p-4">
-                          <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase border ${pipelineStatusClass(inv.status, inv.status_text)}`}>
-                            {operatorLabel(inv.status_text || inv.status)}
-                          </span>
-                        </td>
+          <div className="flex flex-col gap-8">
+            {/* SECTION A - TODAY'S BILLS */}
+            <div>
+              <div className="flex justify-between items-center mb-4 border-b border-gray-200 pb-2">
+                <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Section A — Bills ({periodLabel})</h2>
+              </div>
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="max-h-96 overflow-y-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="sticky top-0 bg-gray-50 z-10 shadow-sm border-b border-gray-100">
+                      <tr>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Invoice Number</th>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Customer Name</th>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Amount</th>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Payment Mode</th>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Invoice Date</th>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {todayBills.length > 0 ? todayBills.map((bill) => (
+                        <tr key={bill.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                          <td className="p-4 font-black text-gray-900">{bill.bill_number}</td>
+                          <td className="p-4 text-sm text-gray-600 font-medium">{bill.customer_name}</td>
+                          <td className="p-4 font-black text-gray-900 text-right">{money(bill.amount)}</td>
+                          <td className="p-4 text-xs font-bold text-gray-600">{bill.payment_mode}</td>
+                          <td className="p-4 text-xs text-gray-500">{bill.invoice_date ? new Date(bill.invoice_date).toLocaleString() : 'N/A'}</td>
+                          <td className="p-4">
+                            <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase border ${pipelineStatusClass(bill.status, null)}`}>
+                              {operatorLabel(bill.status)}
+                            </span>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan={6} className="p-8 text-center text-gray-400 italic font-medium">No bills recorded for {periodLabel}.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            )) : (
-              <div className="p-12 text-center text-gray-400 italic">
-                {error === 'Session Expired. Please Login.' ? (
-                    <span className="text-red-500 font-bold">Authentication Required to View Feed</span>
-                ) : (stats?.pdfCountInShare || 0) > 0 || stats?.totalBillsToday ? (
-                    <span className="text-orange-500 font-bold uppercase tracking-widest text-xs animate-pulse">Feed Sync Error: Invoices exist but are not loading. Check Session.</span>
-                ) : (
-                    'No invoices ingested yet. Waiting for PDFs...'
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-6">
-        <div className="lg:col-span-3">
-          <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Recent Payment Events</h2>
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Source</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Bank/Account</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Amount</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Reference</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Timestamp</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Confidence</th>
-                  <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Evidence</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paymentEvents.slice(0, 5).map((event) => (
-                  <tr key={event.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="p-4 font-bold text-gray-900">[{event.source}]</td>
-                    <td className="p-4 text-sm text-gray-600">
-                      {event.bank} {event.account ? `(${event.account})` : ''}
-                    </td>
-                    <td className="p-4 font-black text-gray-900">{money(event.amount)}</td>
-                    <td className="p-4 text-sm font-mono">{event.reference || 'N/A'}</td>
-                    <td className="p-4 text-xs text-gray-500">
-                      {new Date(event.timestamp).toLocaleTimeString()}
-                    </td>
-                    <td className="p-4">
-                      <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase ${
-                        event.confidence === 'HIGH' ? 'bg-green-100 text-green-700' : 
-                        event.confidence === 'MEDIUM' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {event.confidence}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <button 
-                        onClick={() => setSelectedEvent(event)}
-                        className="text-[10px] font-black text-blue-600 uppercase hover:underline"
-                      >
-                        Show Evidence
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {paymentEvents.length === 0 && (
-              <div className="p-12 text-center text-gray-400 italic">No payment events detected yet.</div>
-            )}
-          </div>
-        </div>
-      </div>
+            </div>
 
-      {/* Evidence Modal */}
-      {selectedEvent && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-8 z-50">
-          <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl">
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h3 className="text-xl font-black text-gray-900 uppercase">Payment Evidence</h3>
-                <p className="text-sm text-gray-500">{selectedEvent.bank} | {selectedEvent.timestamp}</p>
+            {/* SECTION B - TODAY'S PAYMENTS */}
+            <div>
+              <div className="flex justify-between items-center mb-4 border-b border-gray-200 pb-2">
+                <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest">Section B — Payments ({periodLabel})</h2>
               </div>
-              <button onClick={() => setSelectedEvent(null)} className="text-gray-400 hover:text-gray-900 font-bold">Close</button>
-            </div>
-            <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 font-mono text-xs whitespace-pre-wrap max-h-96 overflow-y-auto">
-              {selectedEvent.raw}
-            </div>
-            <div className="mt-8 pt-6 border-t border-gray-100 flex justify-end">
-               <button onClick={() => setSelectedEvent(null)} className="bg-gray-900 text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest hover:bg-black transition-colors">
-                  Got it
-               </button>
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="max-h-96 overflow-y-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="sticky top-0 bg-gray-50 z-10 shadow-sm border-b border-gray-100">
+                      <tr>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Invoice Number</th>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Customer Name</th>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase text-right">Amount Received</th>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Payment Mode</th>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase">UTR / Reference</th>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Payment Date</th>
+                        <th className="p-4 text-[10px] font-black text-gray-400 uppercase">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {todayPayments.length > 0 ? todayPayments.map((payment) => (
+                        <tr key={payment.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                          <td className="p-4 font-black text-gray-900">{payment.invoice_number}</td>
+                          <td className="p-4 text-sm text-gray-600 font-medium">{payment.customer_name}</td>
+                          <td className="p-4 font-black text-gray-900 text-right">{money(payment.amount_received)}</td>
+                          <td className="p-4 text-xs font-bold text-gray-600">{payment.payment_mode}</td>
+                          <td className="p-4 text-xs font-mono">{payment.utr_reference}</td>
+                          <td className="p-4 text-xs text-gray-500">{payment.payment_date ? new Date(payment.payment_date).toLocaleString() : 'N/A'}</td>
+                          <td className="p-4">
+                            <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase border ${pipelineStatusClass(payment.status, null)}`}>
+                              {operatorLabel(payment.status)}
+                            </span>
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr><td colSpan={7} className="p-8 text-center text-gray-400 italic font-medium">No payments recorded for {periodLabel}.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

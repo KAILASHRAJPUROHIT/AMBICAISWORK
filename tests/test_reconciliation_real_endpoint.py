@@ -187,15 +187,17 @@ def test_real_reconciliation_endpoint_returns_json_array(monkeypatch):
     assert row["invoice_timestamp"] == "2026-06-05T10:30:00"
     assert row["invoice_timestamp_source"] == "invoice_generated_at"
     assert row["invoice_time_recorded"] is True
+    # Display contract: electronic modes show the payment UTR as the reference,
+    # and proof_label describes the verified proof ("Verified by <type> Proof (ID: n)").
     assert row["payment_breakdown"][0] == {
         "amount": 900.0,
         "mode": "UPI",
         "timestamp": "2026-06-05T10:45:00",
         "utr_reference": "UTR-REAL-01",
-        "reference": "SMS-REAL-01",
+        "reference": "UTR-REAL-01",
         "source": "SMS",
         "proof_url": "/api/reconciliation/proof/sms/1",
-        "proof_label": "View SMS Proof",
+        "proof_label": "Verified by SMS Proof (ID: 1)",
     }
 
     exact_upi = next(item for item in data if item["bill_no"] == "SG-UPI-EXACT-01")
@@ -203,13 +205,17 @@ def test_real_reconciliation_endpoint_returns_json_array(monkeypatch):
     assert exact_upi["status"] == "Verified"
     assert exact_upi["difference"] == 0.0
     assert exact_upi["has_special_payment_flag"] is False
-    assert exact_upi["payment_breakdown"][0]["source"] == "Email"
-    assert exact_upi["payment_breakdown"][0]["proof_label"] == "View Email Proof"
+    assert exact_upi["payment_breakdown"][0]["source"] == "Bank"
+    assert exact_upi["payment_breakdown"][0]["proof_label"] == "Verified by Bank Proof (ID: 1)"
 
     no_utr = next(item for item in data if item["bill_no"] == "SG-NOUTR-01")
     assert no_utr["payment_breakdown"][0]["source"] == "Bank"
-    assert no_utr["payment_breakdown"][0]["reference"] == "BANK-NO-UTR-MATCH"
-    assert no_utr["payment_breakdown"][0]["proof_label"] == "View Bank Alert"
+    # No UTR on the payment + amount-only proof match => reference is not surfaced
+    # and the proof is reported as a partial (conservative; not auto-confirmed).
+    assert no_utr["payment_breakdown"][0]["reference"] is None
+    assert no_utr["payment_breakdown"][0]["proof_label"] == (
+        "Partial Proof from Bank (ID: 2): Amount matches, UTR differs/missing"
+    )
 
     verified = next(item for item in data if item["bill_no"] == "SG-VERIFIED-01")
     assert verified["status"] == "Verified"

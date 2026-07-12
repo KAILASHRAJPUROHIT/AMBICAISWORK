@@ -71,19 +71,25 @@ _ROLE_PERMISSIONS = {
 }
 
 
-def get_permissions(role_str: str) -> Set[Permission]:
+def get_permissions(role: "str | UserRole") -> Set[Permission]:
     """
-    Returns the set of permissions for a given user role string.
+    Returns the set of permissions for a given user role.
+
+    Accepts either a ``UserRole`` enum member or a role string (case-insensitive).
+    Returns an empty set for unknown roles.
     """
     try:
-        role = UserRole(role_str.lower())
-        return _ROLE_PERMISSIONS.get(role, set())
-    except ValueError:
+        if isinstance(role, UserRole):
+            resolved = role
+        else:
+            resolved = UserRole(str(role).lower())
+        return _ROLE_PERMISSIONS.get(resolved, set())
+    except (ValueError, AttributeError):
         return set()
 
 
-def has_permission(role_str: str, permission: Permission) -> bool:
+def has_permission(role: "str | UserRole", permission: Permission) -> bool:
     """
-    Checks if a given role string has a specific permission.
+    Checks if a given role (enum or string) has a specific permission.
     """
-    return permission in get_permissions(role_str)
+    return permission in get_permissions(role)

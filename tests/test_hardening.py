@@ -101,7 +101,9 @@ def test_same_amount_two_invoices(db):
     # bill1 has name match (ALICE), so it should have higher score.
     # But wait, my logic flags as Ambiguous if multiple candidates exist and score < 100.
     assert bill1.status == "Blue" # Flagged for review
-    assert "Ambiguous" in bill1.status_text
+    # status_text now carries the structured reason code, e.g.
+    # "Review Required: AMBIGUOUS_AMOUNT_MATCH (Score: 50)"
+    assert "AMBIGUOUS" in bill1.status_text.upper()
 
 def test_sms_forwarder_parse():
     from backend.sms_parser import parse_bank_sms
@@ -216,4 +218,6 @@ def test_wrong_date_match(db):
     # Score = 0 (UTR mismatch) + 50 (Name) + 0 (Date) + 0 (Bank) = 50.
     # Should be Blue (Review Required)
     assert bill.status == "Blue"
-    assert "Low Confidence" in bill.status_text
+    # status_text now carries the structured reason code, e.g.
+    # "Review Required: LOW_CONFIDENCE_MATCH (Score: 50)"
+    assert "LOW_CONFIDENCE" in bill.status_text.upper()

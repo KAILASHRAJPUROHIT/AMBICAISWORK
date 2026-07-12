@@ -2,12 +2,25 @@ import pytest
 from fastapi.testclient import TestClient
 from backend.review_api import app
 from backend.database import SessionLocal
+from backend.auth_service import create_user_session
 from backend.models import Bill
 from datetime import datetime
 
 client = TestClient(app)
 
-def test_test_data_exclusion():
+
+@pytest.fixture
+def auth_headers():
+    """Mint a real session token so requests pass the /api auth hardwall."""
+    db = SessionLocal()
+    try:
+        token = create_user_session(db, "TEST-RUNNER")
+    finally:
+        db.close()
+    return {"X-Session-Token": token}
+
+
+def test_test_data_exclusion(auth_headers):
     db = SessionLocal()
     # Create a test bill
     test_bill = Bill(
@@ -32,14 +45,14 @@ def test_test_data_exclusion():
     
     try:
         # Check Dashboard Stats
-        response = client.get("/api/dashboard/live")
+        response = client.get("/api/dashboard/live", headers=auth_headers)
         assert response.status_code == 200
         stats = response.json()
-        
+
         # We don't know exact total but we can check if it includes our test bill
         # Actually it's easier to check the live feed
-        
-        feed_response = client.get("/api/invoices/live-feed")
+
+        feed_response = client.get("/api/invoices/live-feed", headers=auth_headers)
         assert feed_response.status_code == 200
         feed = feed_response.json()
         
@@ -53,7 +66,7 @@ def test_test_data_exclusion():
         db.commit()
         db.close()
 
-def test_amount_mapping_parity():
+def test_amount_mapping_parity(auth_headers):
     db = SessionLocal()
     # SG-891 Mock parity
     # total 23672, purc 18572, net 5100
@@ -69,9 +82,10 @@ def test_amount_mapping_parity():
     db.commit()
     
     try:
-        feed_response = client.get("/api/invoices/live-feed")
+        feed_response = client.get("/api/invoices/live-feed", headers=auth_headers)
+        assert feed_response.status_code == 200
         feed = feed_response.json()
-        
+
         found = False
         for b in feed:
             if b["bill_number"] == "MOCK-SG-891":
