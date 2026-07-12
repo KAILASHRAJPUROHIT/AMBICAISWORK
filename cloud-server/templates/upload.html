@@ -1438,15 +1438,51 @@
     // ── Voice welcome message (plays on phone speaker) ─────────────────────
     const WELCOME_MESSAGE = "Namaskar! Welcome to Aradhana Jewellers. Please follow us on Instagram, aradhanajewellers dot boisar, and on Facebook, Aradhana Jewellers Boisar, for amazing content and latest offers. Thank you!";
 
+    let _voicesReady = false;
+    if ('speechSynthesis' in window) {
+        // Chrome (desktop especially) loads voices asynchronously; speak() called
+        // before this fires is silently dropped. Kick off loading immediately.
+        window.speechSynthesis.getVoices();
+        window.speechSynthesis.onvoiceschanged = () => { _voicesReady = true; };
+    }
+
+    function _pickVoice() {
+        const voices = window.speechSynthesis.getVoices();
+        if (!voices.length) return null;
+        return voices.find(v => v.lang === 'en-IN')
+            || voices.find(v => v.lang && v.lang.startsWith('en'))
+            || voices[0];
+    }
+
     function speakWelcome() {
         try {
             if (!('speechSynthesis' in window)) return;
-            window.speechSynthesis.cancel();  // stop any overlap from double-tap
-            const u = new SpeechSynthesisUtterance(WELCOME_MESSAGE);
-            u.rate = 0.95;
-            u.volume = 1;
-            u.lang = 'en-IN';
-            window.speechSynthesis.speak(u);
+            const synth = window.speechSynthesis;
+            synth.cancel();  // stop any overlap from double-tap
+
+            const fire = () => {
+                const u = new SpeechSynthesisUtterance(WELCOME_MESSAGE);
+                u.rate = 0.95;
+                u.volume = 1;
+                const v = _pickVoice();
+                if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'en-IN'; }
+                synth.speak(u);
+            };
+
+            if (synth.getVoices().length > 0) {
+                fire();
+            } else {
+                // Voices not loaded yet — wait briefly, then speak regardless
+                // (some mobile browsers never populate voices but still speak fine).
+                let tries = 0;
+                const wait = setInterval(() => {
+                    tries++;
+                    if (synth.getVoices().length > 0 || tries > 8) {
+                        clearInterval(wait);
+                        fire();
+                    }
+                }, 150);
+            }
         } catch (e) {}
     }
 
