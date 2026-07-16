@@ -11,8 +11,11 @@ from dotenv import load_dotenv
 
 from layout_engine import create_full_page_layout, create_id_layout, is_image
 
-# Load environment variables
-load_dotenv()
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+# Load environment variables (absolute path — a Windows Service's working
+# directory is not the script folder, so a bare load_dotenv() finds nothing)
+load_dotenv(SCRIPT_DIR / ".env")
 
 CLOUD_SERVER_URL = os.getenv("CLOUD_SERVER_URL")
 PRINTER_NAME = os.getenv("PRINTER_NAME")
@@ -35,7 +38,7 @@ def _notify(title, body=""):
 
 
 def setup_logging():
-    log_dir = Path("logs")
+    log_dir = SCRIPT_DIR / "logs"
     log_dir.mkdir(exist_ok=True)
     
     # Configure root logger
