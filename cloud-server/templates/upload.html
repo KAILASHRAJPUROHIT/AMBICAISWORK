@@ -5,13 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{ profile.business_name if profile else "AMBIC SmartQR" }} | Smart Scan & Print</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --navy: #06142E;
-            --navy-light: #112244;
-            --gold: #D4AF37;
-            --gold-light: #F3E5AB;
-            --bg-color: #F7F5F0;
+            /* Per-tenant accent only — surfaces stay a fixed neutral dark so
+               readability never depends on which color a tenant happens to
+               pick during onboarding (see tenant_profile.py brand_colors). */
+            --brand-primary: {{ (profile.brand_colors.primary if profile and profile.brand_colors else '#06142E') }};
+            --brand-accent: {{ (profile.brand_colors.accent if profile and profile.brand_colors else '#D4AF37') }};
+
+            --navy: #16181c;
+            --navy-light: #1e2126;
+            --gold: var(--brand-accent);
+            --gold-light: var(--brand-accent);
+            --bg-color: #0a0b0d;
             --text-light: #FFFFFF;
             --error: #E74C3C;
             --success: #27AE60;
@@ -21,7 +30,7 @@
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-family: 'Inter', -apple-system, sans-serif;
             -webkit-tap-highlight-color: transparent;
         }
 
@@ -31,53 +40,59 @@
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
-            padding: 10px;
+            min-height: 100dvh;
+            padding: 16px;
         }
 
         .action-buttons {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 25px;
+            gap: 12px;
+            margin-bottom: 20px;
         }
 
         .btn-action {
             background: var(--navy-light);
-            border: 2px solid var(--gold);
+            border: 1px solid #2a2d33;
             border-radius: 16px;
-            padding: 20px 10px;
-            color: var(--gold-light);
+            padding: 22px 10px;
+            color: var(--text-light);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 12px;
+            gap: 10px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.18s, background 0.18s;
             min-height: 100px;
             text-align: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
         .btn-action:active {
-            transform: scale(0.95);
-            background: rgba(212, 175, 55, 0.1);
+            transform: scale(0.96);
         }
 
-        .btn-action span { font-size: 32px; }
-        .btn-action strong { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+        @media (hover: hover) {
+            .btn-action:hover {
+                border-color: var(--gold);
+                background: rgba(255, 255, 255, 0.04);
+            }
+        }
 
-        .header { text-align: center; margin: 10px 0; }
-        .header h1 { color: var(--navy); font-family: Georgia, serif; font-size: 24px; letter-spacing: 2px; text-transform: uppercase; }
+        .btn-action span { font-size: 26px; color: var(--gold); }
+        .btn-action strong { font-size: 13px; font-weight: 600; letter-spacing: 0.01em; }
 
-        .container { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; }
+        .header { text-align: center; margin: 6px 0 18px; }
+        .header h1 { color: var(--text-light); font-weight: 700; font-size: 19px; letter-spacing: -0.01em; }
+
+        .container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 14px; }
 
         .card {
             background: var(--navy);
-            border: 2px solid var(--gold);
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 10px 30px rgba(6, 20, 46, 0.2);
+            border: 1px solid #2a2d33;
+            border-radius: 20px;
+            padding: 22px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
             color: white;
             position: relative;
         }
@@ -108,36 +123,33 @@
 
         /* Queue UI */
         .queue-container {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 20px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 18px;
             min-height: 120px;
-            border: 1px solid rgba(212, 175, 55, 0.2);
+            border: 1px solid #2a2d33;
         }
 
         .queue-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 14px;
             font-size: 12px;
-            color: var(--gold);
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            font-weight: bold;
+            color: #9a9ca1;
+            font-weight: 600;
         }
 
-        .queue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; }
+        .queue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; }
 
         .queue-item {
             position: relative;
             aspect-ratio: 3/4;
-            background: #111;
-            border-radius: 8px;
+            background: #0d0e10;
+            border-radius: 10px;
             overflow: hidden;
-            border: 2px solid var(--gold);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            border: 1px solid #2a2d33;
         }
 
         .queue-item img { width: 100%; height: 100%; object-fit: contain; }
@@ -166,15 +178,16 @@
 
         .btn-remove {
             position: absolute;
-            top: 2px; right: 2px;
-            background: var(--error);
+            top: 6px; right: 6px;
+            background: rgba(0, 0, 0, 0.7);
             color: white;
             border: none;
-            width: 22px; height: 22px;
+            width: 24px; height: 24px;
             border-radius: 50%;
-            font-size: 15px; font-weight: bold;
+            font-size: 14px; font-weight: bold;
             display: flex; align-items: center; justify-content: center;
             cursor: pointer; z-index: 5;
+            backdrop-filter: blur(4px);
         }
 
         /* Camera View */
@@ -225,7 +238,7 @@
             transform: translate(-50%, -50%);
             width: 80px; height: 80px;
             border-radius: 50%;
-            border: 4px solid var(--gold);
+            border: 3px solid var(--gold);
             z-index: 105;
             pointer-events: none;
             display: none;
@@ -266,7 +279,7 @@
         @keyframes statusPrint { 0%,100%{opacity:1} 50%{opacity:0.5} }
 
         /* Crop View */
-        .crop-wrapper { display: flex; flex-direction: column; gap: 15px; }
+        .crop-wrapper { display: flex; flex-direction: column; gap: 14px; }
 
         .crop-container {
             width: 100%;
@@ -274,13 +287,13 @@
             max-height: 60vh;
             background: #000;
             overflow: hidden;
-            border-radius: 12px;
+            border-radius: 14px;
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid rgba(212, 175, 55, 0.4);
-            margin-bottom: 10px;
+            border: 1px solid #2a2d33;
+            margin-bottom: 8px;
         }
 
         #crop-image {
@@ -291,18 +304,18 @@
         }
 
         /* Print Options */
-        .section-label { font-size: 12px; color: var(--gold); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; display: block; }
+        .section-label { font-size: 12px; color: #9a9ca1; margin-bottom: 8px; font-weight: 600; display: block; }
 
-        .print-types { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .print-types { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
 
         .type-card input { display: none; }
         .type-content {
             background: var(--navy-light);
-            border: 2px solid rgba(212, 175, 55, 0.3);
-            border-radius: 10px;
-            padding: 12px 10px;
+            border: 1px solid #2a2d33;
+            border-radius: 12px;
+            padding: 14px 10px;
             text-align: center;
-            transition: 0.2s;
+            transition: border-color 0.18s, background 0.18s;
             cursor: pointer;
             display: flex;
             flex-direction: column;
@@ -310,39 +323,40 @@
             gap: 6px;
         }
 
-        .type-content .mode-icon { font-size: 24px; }
-        .type-content .mode-desc { font-size: 10px; color: #aaa; margin-top: 2px; }
+        .type-content .mode-icon { font-size: 22px; }
+        .type-content .mode-desc { font-size: 10.5px; color: #8a8c91; margin-top: 2px; }
 
         .type-card input:checked + .type-content {
             border-color: var(--gold);
-            background: rgba(212, 175, 55, 0.15);
+            background: rgba(255, 255, 255, 0.04);
         }
         .type-card input:checked + .type-content .mode-desc { color: var(--gold-light); }
 
         .btn-master {
-            background: linear-gradient(135deg, #D4AF37 0%, #C5A059 100%);
-            color: var(--navy);
+            background: var(--gold);
+            color: #0a0b0d;
             border: 0;
-            border-radius: 12px;
-            padding: 18px;
-            font-size: 18px;
-            font-weight: bold;
+            border-radius: 14px;
+            padding: 17px;
+            font-size: 15.5px;
+            font-weight: 700;
             width: 100%;
             cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 5px 15px rgba(212,175,55,0.4);
+            letter-spacing: -0.01em;
+            transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s;
         }
 
-        .btn-master:disabled { background: #444; color: #777; box-shadow: none; cursor: not-allowed; }
+        .btn-master:active:not(:disabled) { transform: scale(0.98); }
+
+        .btn-master:disabled { background: #2a2d33; color: #64666b; cursor: not-allowed; }
 
         .loader-overlay { text-align: center; padding: 40px 0; }
         .spinner {
-            width: 40px; height: 40px;
-            border: 4px solid rgba(212, 175, 55, 0.1);
+            width: 36px; height: 36px;
+            border: 3px solid rgba(255, 255, 255, 0.08);
             border-top-color: var(--gold);
             border-radius: 50%;
-            animation: spin 1s linear infinite;
+            animation: spin 0.9s linear infinite;
             margin: 0 auto 15px;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -372,14 +386,15 @@
         }
 
         .toast {
-            background: #1a1a2e;
+            background: #1c1e23;
             color: white;
             padding: 12px 20px;
-            border-radius: 10px;
-            font-size: 14px;
-            border-left: 4px solid var(--gold);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-            animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards;
+            border-radius: 12px;
+            font-size: 13.5px;
+            border: 1px solid #2a2d33;
+            border-left: 3px solid var(--gold);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            animation: toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1), toastOut 0.25s ease 2.7s forwards;
             width: 100%;
             text-align: center;
         }
@@ -549,31 +564,31 @@
 
 <!-- SOCIAL HANDLE MODAL -->
 <div id="social-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px">
-    <div style="background:linear-gradient(160deg,#06142E 0%,#0d1f3c 100%);border:1px solid #D4AF37;border-radius:16px;padding:30px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.8)">
+    <div style="background:var(--navy);border:1px solid #2a2d33;border-radius:20px;padding:30px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.8)">
         <div style="font-size:34px;margin-bottom:10px">🙏</div>
-        <div style="font-family:Georgia,serif;color:#D4AF37;font-size:18px;font-weight:bold;letter-spacing:1px;margin-bottom:12px">Follow Us on Social Media</div>
-        <div style="color:#ddd;font-size:14px;margin-bottom:6px;line-height:1.7">Please follow <strong style="color:#D4AF37">{{ profile.business_name if profile else "us" }}</strong><br>on Instagram &amp; Facebook</div>
+        <div style="font-family:'Inter',sans-serif;color:var(--gold);font-size:17px;font-weight:700;letter-spacing:-0.01em;margin-bottom:12px">Follow us on social media</div>
+        <div style="color:#ddd;font-size:14px;margin-bottom:6px;line-height:1.7">Please follow <strong style="color:var(--gold)">{{ profile.business_name if profile else "us" }}</strong><br>on Instagram &amp; Facebook</div>
         <div style="display:flex;justify-content:center;gap:16px;margin-bottom:20px">
             {% if profile and profile.instagram_handle %}
             <div style="background:rgba(255,255,255,0.06);border:1px solid #333;border-radius:8px;padding:8px 14px;font-size:12px;color:#aaa">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="#D4AF37" style="vertical-align:middle;margin-right:4px"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--gold)" style="vertical-align:middle;margin-right:4px"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
                 {{ profile.instagram_handle if profile.instagram_handle.startswith('@') else '@' + profile.instagram_handle }}
             </div>
             {% endif %}
             {% if profile and profile.facebook_page %}
             <div style="background:rgba(255,255,255,0.06);border:1px solid #333;border-radius:8px;padding:8px 14px;font-size:12px;color:#aaa">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="#D4AF37" style="vertical-align:middle;margin-right:4px"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="var(--gold)" style="vertical-align:middle;margin-right:4px"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                 {{ profile.business_name }}
             </div>
             {% endif %}
         </div>
-        <div style="color:#aaa;font-size:12px;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">Your Instagram Handle</div>
+        <div style="color:#aaa;font-size:12px;margin-bottom:10px;font-weight:600">Your Instagram handle</div>
         <input id="ig-handle-input" type="text" placeholder="@yourhandle"
-               style="width:100%;box-sizing:border-box;padding:13px 16px;border-radius:10px;border:1px solid #D4AF37;background:rgba(255,255,255,0.06);color:#fff;font-size:16px;text-align:center;outline:none;margin-bottom:16px;letter-spacing:0.5px"
+               style="width:100%;box-sizing:border-box;padding:13px 16px;border-radius:12px;border:1px solid #2a2d33;background:rgba(255,255,255,0.06);color:#fff;font-size:16px;text-align:center;outline:none;margin-bottom:16px;letter-spacing:0.5px"
                oninput="this.value=this.value.replace(/[^a-zA-Z0-9._@]/g,'')"
                onkeydown="if(event.key==='Enter')submitHandle()">
         <button onclick="submitHandle()"
-                style="width:100%;padding:14px;background:linear-gradient(90deg,#D4AF37,#b8972e);border:none;border-radius:10px;color:#06142E;font-weight:bold;font-size:15px;cursor:pointer;letter-spacing:0.5px;margin-bottom:10px">
+                style="width:100%;padding:14px;background:var(--gold);border:none;border-radius:12px;color:#0a0b0d;font-weight:700;font-size:15px;cursor:pointer;letter-spacing:-0.01em;margin-bottom:10px">
             Continue
         </button>
         <button onclick="closeSocialModal()"
@@ -1489,7 +1504,7 @@
         const btn = document.createElement('button');
         btn.id = 'audio-fallback-btn';
         btn.textContent = '🔊 Tap to hear welcome message';
-        btn.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10000;padding:12px 20px;background:#D4AF37;color:#06142E;border:none;border-radius:24px;font-weight:bold;font-size:14px;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer';
+        btn.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10000;padding:12px 20px;background:var(--gold);color:#0a0b0d;border:none;border-radius:24px;font-weight:700;font-size:14px;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer';
         btn.onclick = () => {
             _welcomeAudio.muted = false;
             _welcomeAudio.currentTime = 0;

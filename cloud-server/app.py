@@ -355,55 +355,19 @@ def _check_admin_secret(data: dict) -> bool:
 
 @app.route("/admin", methods=["GET"])
 def admin():
-    jobs = (PrintJob.query.filter_by(tenant_slug=ACTIVE_SLUG)
-            .order_by(PrintJob.created_at.desc()).limit(100).all())
-    STATUS_COLOR = {"pending": "#e6a817", "printing": "#5bc0de", "completed": "#5cb85c", "failed": "#d9534f"}
-    cards = ""
-    for job in jobs:
-        file_count = len(json.loads(job.file_paths or "[]"))
-        color = STATUS_COLOR.get(job.status, "#aaa")
-        actions = ""
-        if job.status == "failed":
-            actions += f'<button onclick="retryJob(\'{job.id}\')" style="flex:1;padding:8px;background:#e6a817;color:#000;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">↺ Retry</button>'
-        if job.status in ("completed", "failed"):
-            actions += f'<button onclick="reprintJob(\'{job.id}\')" style="flex:1;padding:8px;background:#5bc0de;color:#000;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">🖨 Reprint</button>'
-        actions_html = f'<div style="display:flex;gap:8px;margin-top:10px">{actions}</div>' if actions else ""
-        error_html = f'<div style="font-size:11px;color:#d9534f;margin-top:6px;word-break:break-word">{job.error_message[:120]}…</div>' if job.error_message else ""
-        cards += f'''<div style="background:#111;border:1px solid #222;border-radius:10px;padding:14px;margin-bottom:12px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                <span style="font-weight:bold;color:#D4AF37;font-size:15px;letter-spacing:1px">{job.id}</span>
-                <span style="color:{color};font-size:12px;font-weight:bold;background:rgba(0,0,0,0.4);padding:3px 8px;border-radius:10px">{job.status.upper()}</span>
-            </div>
-            <div style="font-size:12px;color:#888">{job.created_at.strftime("%d %b %Y, %H:%M")} &nbsp;·&nbsp; {job.print_mode} &nbsp;·&nbsp; {job.copies}x &nbsp;·&nbsp; {file_count} file(s)</div>
-            {error_html}{actions_html}
-        </div>'''
+    db_jobs = (PrintJob.query.filter_by(tenant_slug=ACTIVE_SLUG)
+               .order_by(PrintJob.created_at.desc()).limit(100).all())
+    jobs = [{
+        "id": job.id,
+        "status": job.status,
+        "print_mode": job.print_mode,
+        "copies": job.copies,
+        "error_message": job.error_message,
+        "file_count": len(json.loads(job.file_paths or "[]")),
+        "created_display": job.created_at.strftime("%d %b %Y, %H:%M"),
+    } for job in db_jobs]
     business_name = (ACTIVE_PROFILE or {}).get("business_name", "")
-    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AMBIC SmartQR Admin</title>
-<style>
-*{{box-sizing:border-box}}body{{font-family:Arial,sans-serif;background:#0a0a14;color:#ddd;padding:16px;margin:0;max-width:600px;margin:0 auto}}
-h1{{color:#D4AF37;font-family:Georgia,serif;font-size:22px;margin-bottom:4px}}
-.sub{{color:#888;font-size:13px;margin-bottom:16px}}
-.nav{{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}}
-.nav a,.nav button{{padding:9px 14px;border-radius:6px;font-size:13px;font-weight:bold;text-decoration:none;border:none;cursor:pointer}}
-</style>
-<meta http-equiv="refresh" content="10">
-</head><body>
-<h1>🖨 AMBIC SmartQR — Print Queue</h1>
-<div class="sub">{business_name}</div>
-<div class="nav">
-  <a href="/admin/history" style="background:#06142E;color:#D4AF37">📷 History</a>
-  <a href="/admin/checkins" style="background:#1a0a2e;color:#D4AF37">👤 Staff</a>
-  <a href="/admin/social-handles" style="background:#0a2e1a;color:#D4AF37">📱 Handles</a>
-  <button onclick="clearPending()" style="background:#d9534f;color:white">🗑 Clear Pending</button>
-</div>
-<script>
-function clearPending(){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Deleted: "+d.deleted);location.reload();}}}});}}
-function retryJob(id){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/retry/"+id,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Retrying…");location.reload();}}}});}}
-function reprintJob(id){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/reprint/"+id,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Sent to print again!");location.reload();}}}});}}
-</script>
-{cards if cards else "<p style='color:#555'>No jobs yet.</p>"}
-</body></html>"""
+    return render_template("admin.html", jobs=jobs, business_name=business_name, profile=ACTIVE_PROFILE)
 
 
 @app.route("/admin/retry/<job_id>", methods=["POST"])
