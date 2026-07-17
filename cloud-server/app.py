@@ -8,13 +8,18 @@ import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for, make_response
+from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for, make_response, session
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
 import tenant_profile as tp
 
 app = Flask(__name__)
+# Required for the admin session cookie (see _admin_authenticated below) to
+# be signed/tamper-proof. Falls back to a random per-process key so the app
+# still runs without one set, but that invalidates every admin session on
+# restart — set FLASK_SECRET_KEY in production so logins persist.
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -386,8 +391,77 @@ def _check_admin_secret(data: dict) -> bool:
     return data.get("secret") == expected
 
 
+def _admin_authenticated() -> bool:
+    """Session-based gate for every /admin* VIEW route. Every one of these
+    used to be reachable with no auth at all — only the destructive POST
+    actions (retry/reprint/clear-pending) ever checked a secret. /admin
+    /history in particular renders full-resolution <img> thumbnails of
+    every customer's uploaded document from the last 30 days directly on
+    the page, so an unauthenticated GET there was a much bigger exposure
+    than any single guessed job ID."""
+    expected = (ACTIVE_PROFILE or {}).get("admin_secret", "")
+    if not expected:
+        return True  # tenant hasn't set a password — matches the existing POST-route behavior
+    return session.get("admin_slug") == ACTIVE_SLUG
+
+
+def _require_admin():
+    """Call at the top of every /admin* view. Returns a redirect to the
+    login page (preserving where the visitor was headed) if not
+    authenticated, otherwise None so the caller proceeds normally."""
+    if not _admin_authenticated():
+        return redirect(url_for("admin_login", next=request.path))
+    return None
+
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    error = None
+    if request.method == "POST":
+        expected = (ACTIVE_PROFILE or {}).get("admin_secret", "")
+        if not expected or request.form.get("secret") == expected:
+            session["admin_slug"] = ACTIVE_SLUG
+            dest = request.args.get("next") or url_for("admin")
+            return redirect(dest)
+        error = "Incorrect admin secret."
+    business_name = (ACTIVE_PROFILE or {}).get("business_name", "")
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin Login</title>
+<style>
+*{{box-sizing:border-box}}body{{font-family:'Inter',-apple-system,sans-serif;background:#0a0b0d;color:#f5f5f4;
+display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px}}
+.box{{background:#16181c;border:1px solid #26292f;border-radius:16px;padding:32px;max-width:340px;width:100%}}
+h1{{font-size:18px;margin-bottom:4px}}
+.sub{{color:#9a9ca1;font-size:13px;margin-bottom:20px}}
+input{{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #26292f;background:#0a0b0d;
+color:#fff;font-size:15px;margin-bottom:14px}}
+button{{width:100%;padding:13px;border:none;border-radius:10px;background:#D4AF37;color:#0a0b0d;
+font-weight:700;font-size:14px;cursor:pointer}}
+.err{{color:#e05555;font-size:13px;margin-bottom:14px}}
+</style></head><body>
+<div class="box">
+<h1>🔒 Admin Login</h1>
+<div class="sub">{business_name}</div>
+{f'<div class="err">{error}</div>' if error else ''}
+<form method="POST">
+<input type="password" name="secret" placeholder="Admin secret" autofocus required>
+<button type="submit">Sign in</button>
+</form>
+</div>
+</body></html>"""
+
+
+@app.route("/admin/logout", methods=["POST"])
+def admin_logout():
+    session.pop("admin_slug", None)
+    return redirect(url_for("admin_login"))
+
+
 @app.route("/admin", methods=["GET"])
 def admin():
+    guard = _require_admin()
+    if guard:
+        return guard
     db_jobs = (PrintJob.query.filter_by(tenant_slug=ACTIVE_SLUG)
                .order_by(PrintJob.created_at.desc()).limit(100).all())
     jobs = [{
@@ -456,6 +530,9 @@ def save_social_handle():
 
 @app.route("/admin/social-handles", methods=["GET"])
 def admin_social_handles():
+    guard = _require_admin()
+    if guard:
+        return guard
     rows = ""
     entries = []
     if HANDLES_FILE.exists():
@@ -502,11 +579,20 @@ def staff_checkin():
 
 @app.route("/checkin-photo/<filename>", methods=["GET"])
 def checkin_photo(filename):
+    # Only ever linked to from admin_checkins() below — no external agent
+    # needs these the way the print agent needs /media files, so a session
+    # check (rather than a separate token scheme) is enough here.
+    guard = _require_admin()
+    if guard:
+        return guard
     return send_from_directory(CHECKIN_DIR, secure_filename(filename))
 
 
 @app.route("/admin/checkins", methods=["GET"])
 def admin_checkins():
+    guard = _require_admin()
+    if guard:
+        return guard
     photos = sorted(CHECKIN_DIR.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
     cutoff = datetime.utcnow() - timedelta(days=30)
     cards = ""
@@ -566,6 +652,9 @@ def cleanup_old_uploads():
 
 @app.route("/admin/history", methods=["GET"])
 def admin_history():
+    guard = _require_admin()
+    if guard:
+        return guard
     cutoff = datetime.utcnow() - timedelta(days=30)
     jobs = (PrintJob.query
             .filter(PrintJob.tenant_slug == ACTIVE_SLUG, PrintJob.created_at >= cutoff)
@@ -580,7 +669,7 @@ def admin_history():
         thumbs = ""
         for name in filenames:
             ext = Path(name).suffix.lower()
-            media_url = f"/media/{job.id}/{name}"
+            media_url = f"/media/{job.id}/{name}?token={job.access_token or ''}"
             if ext in IMAGE_EXTS:
                 thumbs += f'<a href="{media_url}" target="_blank"><img src="{media_url}" style="width:100px;height:100px;object-fit:cover;border-radius:4px;border:1px solid #333;cursor:pointer" title="{name}"></a>'
             else:

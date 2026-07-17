@@ -166,6 +166,9 @@
         <a href="/admin/checkins">👤 Staff</a>
         <a href="/admin/social-handles">📱 Handles</a>
         <button class="danger" onclick="clearPending()">🗑 Clear pending</button>
+        <form action="/admin/logout" method="POST" style="display:inline">
+            <button type="submit">🔒 Logout</button>
+        </form>
     </div>
 
     {% if jobs %}
