@@ -1,7 +1,9 @@
 import base64
+import hmac
 import json
 import os
 import random
+import secrets
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -35,6 +37,14 @@ class PrintJob(db.Model):
     copies = db.Column(db.Integer, default=1, nullable=False)
     file_paths = db.Column(db.Text, nullable=False, default="[]")
     error_message = db.Column(db.Text, nullable=True)
+    # Unauthenticated download token for /media/<job_id>/<filename>. The
+    # queue_id alone (e.g. "SUN-20260717-042") is deliberately short and
+    # human-readable for the customer to show at the counter — only 999
+    # possible values per business per day, and easily scriptable to
+    # enumerate. Document downloads require this separate, unguessable
+    # token instead, which is only ever revealed to (a) the print agent
+    # via its already-authenticated X-Agent-Key poll and (b) nowhere else.
+    access_token = db.Column(db.String(64), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -53,6 +63,20 @@ def init_db():
             if "tenant_slug" not in columns:
                 conn.execute(db.text("ALTER TABLE print_jobs ADD COLUMN tenant_slug VARCHAR(64) DEFAULT ''"))
                 conn.commit()
+            if "access_token" not in columns:
+                conn.execute(db.text("ALTER TABLE print_jobs ADD COLUMN access_token VARCHAR(64)"))
+                conn.commit()
+
+        # Backfill existing rows (from before this column existed) with a
+        # real token instead of leaving them permanently inaccessible —
+        # otherwise every in-flight job at deploy time would 403 forever.
+        unset = PrintJob.query.filter(
+            (PrintJob.access_token.is_(None)) | (PrintJob.access_token == "")
+        ).all()
+        for job in unset:
+            job.access_token = secrets.token_urlsafe(32)
+        if unset:
+            db.session.commit()
 
 def allowed_file(filename):
     return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
@@ -274,7 +298,8 @@ def upload():
         return jsonify({"error": "No valid files uploaded."}), 400
 
     job = PrintJob(id=job_id, tenant_slug=ACTIVE_SLUG, status="pending", print_mode=print_mode,
-                   copies=copies, file_paths=json.dumps(saved_files))
+                   copies=copies, file_paths=json.dumps(saved_files),
+                   access_token=secrets.token_urlsafe(32))
     db.session.add(job)
     db.session.commit()
     return jsonify({"success": True, "queue_id": job_id, "status": job.status, "file_count": len(saved_files)})
@@ -315,7 +340,7 @@ def get_pending_jobs():
     response = []
     for job in jobs:
         filenames = json.loads(job.file_paths or "[]")
-        files = [{"filename": name, "url": request.url_root.rstrip("/") + f"/media/{job.id}/{name}?tenant={tenant['slug']}"} for name in filenames]
+        files = [{"filename": name, "url": request.url_root.rstrip("/") + f"/media/{job.id}/{name}?tenant={tenant['slug']}&token={job.access_token}"} for name in filenames]
         response.append({"job_id": job.id, "status": job.status, "print_mode": job.print_mode, "copies": job.copies, "files": files, "created_at": job.created_at.isoformat()})
     return jsonify(response)
 
@@ -343,6 +368,14 @@ def update_job_status(job_id):
 @app.route("/media/<job_id>/<path:filename>", methods=["GET"])
 def media(job_id, filename):
     job = PrintJob.query.filter_by(id=job_id, tenant_slug=ACTIVE_SLUG).first_or_404()
+    # queue_id alone is not a secret — it's a 3-digit-per-day code shown to
+    # the customer as their pickup reference, trivially enumerable. The
+    # actual document download requires this separate, unguessable token
+    # (see PrintJob.access_token), which only ever reaches the print agent
+    # via its own X-Agent-Key-authenticated poll.
+    token = request.args.get("token", "")
+    if not job.access_token or not hmac.compare_digest(token, job.access_token):
+        return jsonify({"error": "Invalid or missing access token"}), 403
     return send_from_directory(UPLOAD_DIR / secure_filename(job_id), filename, as_attachment=True)
 
 
