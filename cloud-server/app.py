@@ -5,6 +5,8 @@ import os
 import random
 import secrets
 import shutil
+import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -650,6 +652,74 @@ def cleanup_old_uploads():
         print(f"[cleanup] Removed {removed} upload directories older than 30 days.")
 
 
+# ── Document retention ────────────────────────────────────────────────────────
+# This is the actual technical backing for "we don't keep your documents" —
+# without it that's just marketing copy. A completed/failed job's files are
+# only kept long enough for a same-visit admin reprint (paper jam, wrong
+# tray, etc.), then deleted outright — not just made hard to reach. Jobs
+# stuck pending/printing (customer walked off, agent never picked it up) get
+# a longer safety-net window so nothing lingers forever on an edge case.
+# cleanup_old_uploads() above only ever runs once at process start with a
+# 30-day cutoff; this is the recurring, short-window sweep.
+RETENTION_HOURS = float(os.environ.get("DOCUMENT_RETENTION_HOURS", "2"))
+STALE_JOB_HOURS = float(os.environ.get("STALE_JOB_RETENTION_HOURS", "24"))
+RETENTION_SWEEP_INTERVAL_SECONDS = 15 * 60
+
+
+def _delete_job_files(job) -> bool:
+    """Removes a job's uploaded files from disk and clears the DB references
+    to them (file_paths, access_token) — the job row itself (id, status,
+    timestamps) is kept for history/audit, only the document content goes."""
+    if not job.file_paths or job.file_paths == "[]":
+        return False
+    job_dir = _tenant_dir(job.tenant_slug) / "uploads" / job.id
+    if job_dir.exists():
+        shutil.rmtree(job_dir, ignore_errors=True)
+    job.file_paths = "[]"
+    job.access_token = None
+    return True
+
+
+def document_retention_sweep():
+    """One pass: delete files for jobs past their retention window. Called
+    repeatedly by the background thread below, and safe to call more often
+    than that if ever needed (e.g. manually) — it's just a query + delete,
+    no state carried between calls."""
+    now = datetime.utcnow()
+    resolved_cutoff = now - timedelta(hours=RETENTION_HOURS)
+    stale_cutoff = now - timedelta(hours=STALE_JOB_HOURS)
+    cleaned = 0
+    with app.app_context():
+        resolved_jobs = PrintJob.query.filter(
+            PrintJob.status.in_(("completed", "failed")),
+            PrintJob.updated_at < resolved_cutoff,
+        ).all()
+        stale_jobs = PrintJob.query.filter(
+            PrintJob.status.in_(("pending", "printing")),
+            PrintJob.created_at < stale_cutoff,
+        ).all()
+        for job in resolved_jobs + stale_jobs:
+            if _delete_job_files(job):
+                cleaned += 1
+        if cleaned:
+            db.session.commit()
+    if cleaned:
+        print(f"[retention] Deleted documents for {cleaned} job(s) past their retention window.")
+
+
+def _retention_sweep_loop():
+    while True:
+        try:
+            document_retention_sweep()
+        except Exception as e:
+            print(f"[retention] Sweep failed (will retry next interval): {e}")
+        time.sleep(RETENTION_SWEEP_INTERVAL_SECONDS)
+
+
+def start_retention_sweep_thread():
+    threading.Thread(target=_retention_sweep_loop, daemon=True, name="document-retention-sweep").start()
+
+
 @app.route("/admin/history", methods=["GET"])
 def admin_history():
     guard = _require_admin()
@@ -702,6 +772,7 @@ a.back{{color:#D4AF37;text-decoration:none;font-size:14px;display:inline-block;m
 
 init_db()
 cleanup_old_uploads()
+start_retention_sweep_thread()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "5000"))
