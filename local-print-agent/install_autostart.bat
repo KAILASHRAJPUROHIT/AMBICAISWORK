@@ -17,13 +17,15 @@ if %errorLevel% neq 0 (
 
 :: 2. Define Paths
 SET "AGENT_DIR=%~dp0"
-SET "PYTHON_PATH=C:\Users\kaila\AppData\Local\Programs\Python\Python311\pythonw.exe"
+SET "PYTHON_PATH=%AGENT_DIR%.venv\Scripts\pythonw.exe"
 SET "TASK_NAME=AMBIC SmartQR Print Agent"
 
 :: 3. Verification checks
 if not exist "%PYTHON_PATH%" (
     echo ERROR: pythonw.exe not found at %PYTHON_PATH%
-    echo Please verify your Python installation path.
+    echo Create the local virtual environment first:
+    echo   python -m venv .venv
+    echo   .venv\Scripts\python.exe -m pip install -r requirements.txt
     pause
     exit /b 1
 )

@@ -6,6 +6,8 @@ import traceback
 import requests
 import subprocess
 import tempfile
+import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -23,6 +25,45 @@ SUMATRA_PATH = os.getenv("SUMATRA_PATH")
 TENANT_SLUG = os.getenv("TENANT_SLUG")
 AGENT_API_KEY = os.getenv("AGENT_API_KEY")
 AGENT_HEADERS = {"X-Agent-Key": AGENT_API_KEY or ""}
+LEDGER_PATH = SCRIPT_DIR / "agent_state.db"
+
+
+def init_ledger():
+    """Create the durable local execution ledger used to prevent reprints."""
+    with sqlite3.connect(LEDGER_PATH) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS job_executions (
+                job_id TEXT PRIMARY KEY,
+                state TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                detail TEXT
+            )
+            """
+        )
+
+
+def ledger_state(job_id):
+    with sqlite3.connect(LEDGER_PATH) as conn:
+        row = conn.execute(
+            "SELECT state FROM job_executions WHERE job_id = ?", (job_id,)
+        ).fetchone()
+    return row[0] if row else None
+
+
+def record_ledger(job_id, state, detail=""):
+    with sqlite3.connect(LEDGER_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO job_executions (job_id, state, updated_at, detail)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(job_id) DO UPDATE SET
+                state = excluded.state,
+                updated_at = excluded.updated_at,
+                detail = excluded.detail
+            """,
+            (job_id, state, datetime.now(timezone.utc).isoformat(), detail[:2000]),
+        )
 
 
 def _notify(title, body=""):
@@ -110,6 +151,25 @@ def process_job(job):
 
     logging.info(f"Processing job {job_id}")
 
+    previous_state = ledger_state(job_id)
+    if previous_state in {"printing", "printed", "completed"}:
+        message = (
+            f"Refusing to reprint {job_id}: local ledger state is "
+            f"{previous_state}. Manual operator review required."
+        )
+        logging.critical(message)
+        _notify("Print held for review", f"{job_id} may already have printed")
+        try:
+            requests.patch(
+                f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
+                json={"status": "failed", "error": message},
+                headers=AGENT_HEADERS,
+                timeout=10,
+            ).raise_for_status()
+        except Exception as api_err:
+            logging.error(f"Could not report duplicate-print hold for {job_id}: {api_err}")
+        return
+
     try:
         # Mark status as printing locally and on server
         job['status'] = 'printing'
@@ -120,6 +180,7 @@ def process_job(job):
             headers=AGENT_HEADERS,
             timeout=10
         ).raise_for_status()
+        record_ledger(job_id, "printing")
 
         files = job.get("files", [])
         if not files:
@@ -167,6 +228,11 @@ def process_job(job):
             else:
                 raise Exception(f"Unsupported print_mode: {print_mode}")
 
+        # Sumatra returned successfully for every requested copy. Persist this
+        # before the server callback so a network failure cannot cause an
+        # operator requeue to print the document twice.
+        record_ledger(job_id, "printed")
+
         # Post success
         logging.info(f"Job {job_id} completed successfully. Notifying server.")
         resp = requests.patch(
@@ -176,11 +242,14 @@ def process_job(job):
             timeout=10
         )
         resp.raise_for_status()
+        record_ledger(job_id, "completed")
         _notify(f"Printed: {job_id}", f"{print_mode} · {copies} cop{'y' if copies==1 else 'ies'}")
 
     except Exception as e:
         error_msg = traceback.format_exc()
         logging.error(f"Error processing job {job_id}:\n{error_msg}")
+        if ledger_state(job_id) != "printed":
+            record_ledger(job_id, "failed", error_msg)
         try:
             resp = requests.patch(
                 f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
@@ -221,5 +290,6 @@ def main_loop():
 if __name__ == "__main__":
     setup_logging()
     validate_config()
+    init_ledger()
     logging.info("Agent started.")
     main_loop()
