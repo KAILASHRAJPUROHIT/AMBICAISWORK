@@ -25,12 +25,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     if not hashed_password: return False
     return hash_password(plain_password) == hashed_password
 
-def create_otp(db: Session, employee_id: str, is_resend: bool = False) -> Dict[str, Any]:
+def create_otp(db: Session, employee_id: str, is_resend: bool = False, business_name: str = "Payment Auditor") -> Dict[str, Any]:
     """
     Creates or returns existing OTP with cooldown logic.
     Rules:
     - If unused OTP < 60s exists: return cooldown.
     - If unused OTP > 60s exists: invalidate and send new.
+
+    business_name: the tenant's own business name, resolved by the caller
+    (see review_api.py) from its business profile — passed through to
+    send_otp_email so each business's OTP mail is branded correctly rather
+    than a single hardcoded name across every tenant.
     """
     user = db.query(User).filter(User.employee_id == employee_id).first()
     if not user:
@@ -77,7 +82,7 @@ def create_otp(db: Session, employee_id: str, is_resend: bool = False) -> Dict[s
     db.commit()
     
     # Send actual email
-    sent = send_otp_email(target_email, otp_code)
+    sent = send_otp_email(target_email, otp_code, business_name=business_name)
     
     event_type = "OTP_RESENT" if is_resend else "OTP_SENT"
     if sent:

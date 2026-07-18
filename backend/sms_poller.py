@@ -21,7 +21,12 @@ sms_status = {
     "is_running": False
 }
 
-SMS_INBOX_PATH = r"Z:\Aradhana\SMSInbox"
+# Was hardcoded to Z:\Aradhana\SMSInbox — one specific business's own
+# mapped drive. SMS_INBOX_PATH env var lets a deployment point at its own
+# real location; the default here is business-neutral and simply won't
+# exist until configured (os.path.exists guard below already handles that
+# gracefully — this poller no-ops rather than errors with nothing mounted).
+SMS_INBOX_PATH = os.environ.get("SMS_INBOX_PATH", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sms_inbox"))
 status_lock = threading.Lock()
 
 def update_sms_status(**kwargs):

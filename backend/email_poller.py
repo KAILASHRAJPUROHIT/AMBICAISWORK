@@ -19,6 +19,20 @@ load_dotenv()
 
 logger = logging.getLogger("Email_Poller")
 
+# Was hardcoded to "info@aradhanajewellers.com" — one specific business's
+# own forwarding address, baked into the SMS-forwarder detection rule for
+# every tenant. SMS_FORWARDER_SENDER lets a deployment configure its own
+# (this module is still single-tenant/default-DB scoped until the
+# background pollers are converted to loop over every business — see
+# database.py's _default_slug docstring); falls back to relying on the
+# "[SMSForwarder]" subject tag alone when unset, which still works without
+# any hardcoded business identity.
+SMS_FORWARDER_SENDER = os.environ.get("SMS_FORWARDER_SENDER", "")
+
+# Was hardcoded to "shreearadhana1001@gmail.com" — see SMS_FORWARDER_SENDER
+# above for the same fix applied to the bank-alert-forwarding rule.
+BANK_ALERT_FORWARDER = os.environ.get("BANK_ALERT_FORWARDER", "")
+
 email_status = {
     "last_sync": None,
     "next_sync": None,
@@ -235,7 +249,7 @@ def process_emails():
                 continue
 
             # Rule 1: SMS Forwarder
-            is_sms_forwarder = "info@aradhanajewellers.com" in sender or "[SMSForwarder]" in subject
+            is_sms_forwarder = (bool(SMS_FORWARDER_SENDER) and SMS_FORWARDER_SENDER in sender) or "[SMSForwarder]" in subject
             
             if is_sms_forwarder:
                 logger.info(f"Classified as SMS_FORWARDER: {subject}")
@@ -307,8 +321,11 @@ def process_emails():
                     logger.info(f"BankAlert duplicate (from SMS): {utr_to_use} already exists.")
                 continue
 
-            # Rule 2: Bank Email Alerts (forwarded from shreearadhana1001@gmail.com)
-            is_forwarded_bank = "shreearadhana1001@gmail.com" in sender
+            # Rule 2: Bank Email Alerts (forwarded from a business's own
+            # bank-alert forwarding address — was hardcoded to one specific
+            # business's Gmail; BANK_ALERT_FORWARDER lets a deployment
+            # configure its own, same pattern as SMS_FORWARDER_SENDER above)
+            is_forwarded_bank = bool(BANK_ALERT_FORWARDER) and BANK_ALERT_FORWARDER in sender
             is_direct_bank = any(bank in (sender + subject).lower() for bank in ["icici", "hdfc", "sbi", "axis", "kotak"])
             
             if is_forwarded_bank or is_direct_bank:

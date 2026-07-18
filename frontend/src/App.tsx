@@ -84,9 +84,9 @@ function App() {
                 {/* Sidebar */}
                 <aside className="w-72 bg-black shadow-2xl p-8 flex flex-col text-white">
                   <div className="flex items-center space-x-3 mb-12">
-                    <div className="w-10 h-10 bg-white text-black flex items-center justify-center font-black rounded-xl text-xl">A</div>
+                    <div className="w-10 h-10 bg-white text-black flex items-center justify-center font-black rounded-xl text-xl">P</div>
                     <div className="text-xl font-black uppercase tracking-tighter">
-                        Aradhana <span className="text-gray-500">Auditor</span>
+                        Payment <span className="text-gray-500">Auditor</span>
                     </div>
                   </div>
 

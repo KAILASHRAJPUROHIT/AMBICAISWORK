@@ -371,7 +371,7 @@ const DashboardPage: React.FC = () => {
       <header className="mb-6 flex justify-between items-end">
         <div>
            <div className="flex items-center space-x-3 mb-1">
-              <h1 className="text-4xl font-black text-gray-900 tracking-tight">Aradhana Auditor Live</h1>
+              <h1 className="text-4xl font-black text-gray-900 tracking-tight">Payment Auditor Live</h1>
               <span className="bg-gray-200 text-gray-500 text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-widest">{appVersion}</span>
            </div>
            <p className="mt-2 text-lg text-gray-600 font-medium">Real-time Ingestion & Reconciliation Pipeline</p>

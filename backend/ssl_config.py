@@ -16,7 +16,7 @@ def generate_self_signed_cert():
         subprocess.run([
             "openssl", "req", "-x509", "-newkey", "rsa:4096", "-keyout", key_path,
             "-out", cert_path, "-days", "365", "-nodes",
-            "-subj", "/C=IN/ST=Karnataka/L=Bangalore/O=Aradhana/CN=aradhana-auditor.local"
+            "-subj", "/C=IN/O=Payment Auditor/CN=payment-auditor.local"
         ], check=True)
     except Exception as e:
         print(f"Error generating cert: {e}. Please install OpenSSL.")

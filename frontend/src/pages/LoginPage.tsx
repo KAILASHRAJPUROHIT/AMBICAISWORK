@@ -100,7 +100,7 @@ const LoginPage: React.FC = () => {
             console.error("LOGIN ERROR:", err);
             const msg = err.message || '';
             if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Server returned 0')) {
-                 setError('SERVER OFFLINE OR LOGIN SERVICE UNAVAILABLE. Please restart Aradhana Auditor Server.');
+                 setError('SERVER OFFLINE OR LOGIN SERVICE UNAVAILABLE. Please contact your administrator.');
             } else {
                  setError(msg);
             }
@@ -179,8 +179,8 @@ const LoginPage: React.FC = () => {
         <div className="login-container">
             <div className="login-card">
                 <div className="login-header">
-                    <div className="logo-placeholder">A</div>
-                    <h1>Aradhana Auditor</h1>
+                    <div className="logo-placeholder">P</div>
+                    <h1>Payment Auditor</h1>
                     <p>Secure Financial Gateway</p>
                 </div>
 

@@ -18,13 +18,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("PDF_Ingestion")
 
 # PART C — SHARE PATH
-# Prefer network share \\PC2\AradhanaInvoicePDFs as per mandate
-DEFAULT_SHARE = r"\\PC2\AradhanaInvoicePDFs"
+# Was hardcoded to \\PC2\AradhanaInvoicePDFs — one specific business's own
+# network share. Falls back to a local, business-neutral folder now; a real
+# deployment sets INVOICE_SHARE_PATH (or, once the pollers are converted to
+# loop over every tenant — see database.py's _default_slug docstring — each
+# business's own invoice_share_path from its profile).
+DEFAULT_SHARE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "invoice_inbox")
+os.makedirs(DEFAULT_SHARE, exist_ok=True)
 WATCH_PATH = os.getenv("INVOICE_SHARE_PATH", DEFAULT_SHARE)
-
-# If the share is explicitly local but user wants network, we log warning
-if WATCH_PATH.startswith("C:") and DEFAULT_SHARE.startswith("\\\\"):
-    logger.warning(f"WATCH_PATH is local ({WATCH_PATH}). Network share ({DEFAULT_SHARE}) is ignored.")
 
 from backend.invoice_lifecycle import handle_duplicate
 

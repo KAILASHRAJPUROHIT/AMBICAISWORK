@@ -6,6 +6,13 @@
 # (already covered by *.db above, but the whole tree including the global
 # session-token index is live per-deployment state, not source).
 businesses/
+# Runtime data dirs for the (still single-tenant-scoped, pending task #76)
+# background pollers' business-neutral local defaults — see pdf_ingestion.py,
+# invoice_lifecycle.py, sms_poller.py.
+invoice_inbox/
+invoice_lifecycle_data/
+sms_inbox/
+certs/
 __pycache__/
 .venv/
 node_modules/

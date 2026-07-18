@@ -6,10 +6,7 @@ from email.mime.multipart import MIMEMultipart
 
 logger = logging.getLogger("EmailNotifier")
 
-# Mandate: Security alerts destination
-SECURITY_ALERT_EMAIL = "kuldeeprajpurohit309@gmail.com"
-
-def send_email(to_email: str, subject: str, html_body: str):
+def send_email(to_email: str, subject: str, html_body: str, from_name: str = "Payment Auditor"):
     """Base email sender."""
     smtp_server = os.getenv("EMAIL_HOST", "smtp.gmail.com")
     smtp_port = int(os.getenv("EMAIL_PORT", "587"))
@@ -21,7 +18,7 @@ def send_email(to_email: str, subject: str, html_body: str):
         return False
 
     msg = MIMEMultipart()
-    msg['From'] = f"Aradhana Auditor <{sender_email}>"
+    msg['From'] = f"{from_name} <{sender_email}>"
     msg['To'] = to_email
     msg['Subject'] = subject
     msg.attach(MIMEText(html_body, 'html'))
@@ -38,9 +35,13 @@ def send_email(to_email: str, subject: str, html_body: str):
         logger.error(f"OTP_EMAIL_SEND_FAILED to {to_email}: {str(e)}")
         return False
 
-def send_otp_email(to_email: str, otp_code: str):
-    """Sends OTP email for authentication."""
-    subject = f"OTP: {otp_code} for Aradhana Payment Auditor"
+def send_otp_email(to_email: str, otp_code: str, business_name: str = "Payment Auditor"):
+    """Sends OTP email for authentication.
+    business_name: the tenant's own name, resolved by the caller from its
+    business profile (see review_api.py's login/verify/resend-otp handlers)
+    — this used to be a hardcoded "Aradhana Payment Auditor" regardless of
+    which business the OTP was actually for."""
+    subject = f"OTP: {otp_code} for {business_name}"
     body = f"""
     <html>
     <body style="font-family: sans-serif; padding: 20px; color: #333;">
@@ -53,16 +54,25 @@ def send_otp_email(to_email: str, otp_code: str):
     </body>
     </html>
     """
-    return send_email(to_email, subject, body)
+    return send_email(to_email, subject, body, from_name=business_name)
 
-def send_security_alert(event_type: str, details: str):
-    """Immediately notifies owner of critical security events."""
+def send_security_alert(event_type: str, details: str, alert_emails: list[str], business_name: str = "Payment Auditor"):
+    """Immediately notifies a tenant's configured recipients of critical
+    security events. alert_emails comes from that tenant's own business
+    profile (business_registry.py's alert_emails field) — this used to be
+    a single hardcoded personal Gmail address, force-used for every tenant
+    regardless of who the alert was actually about. Currently unused
+    (no caller wires this up yet), but fixed here so it can't be
+    reactivated with the old hardcoded-recipient bug."""
+    if not alert_emails:
+        logger.warning(f"send_security_alert: no alert_emails configured, dropping alert: {event_type}")
+        return False
     subject = f"CRITICAL SECURITY ALERT: {event_type}"
     body = f"""
     <html>
     <body style="font-family: sans-serif; padding: 20px; color: #333;">
         <h2 style="color: #d32f2f;">CRITICAL SECURITY ALERT</h2>
-        <p>A severe security event has been detected by Aradhana Auditor.</p>
+        <p>A severe security event has been detected by {business_name}.</p>
         <div style="background: #fff1f0; border-left: 5px solid #d32f2f; padding: 20px; margin: 20px 0;">
             <strong>Event:</strong> {event_type}<br/>
             <strong>Timestamp:</strong> {logging.Formatter('%(asctime)s').format(logging.LogRecord('',0,'','',0,'','',None))}<br/>
@@ -72,11 +82,14 @@ def send_security_alert(event_type: str, details: str):
     </body>
     </html>
     """
-    # Force delivery to the security alert email
-    return send_email(SECURITY_ALERT_EMAIL, subject, body)
+    return all(send_email(addr, subject, body, from_name=business_name) for addr in alert_emails)
 
-def send_financial_alert(event_type: str, invoice_no: str, amount: float):
-    """Notifies owner of high-risk financial events."""
+def send_financial_alert(event_type: str, invoice_no: str, amount: float, alert_emails: list[str], business_name: str = "Payment Auditor"):
+    """Notifies a tenant's configured recipients of high-risk financial
+    events. See send_security_alert's docstring — same fix, same reason."""
+    if not alert_emails:
+        logger.warning(f"send_financial_alert: no alert_emails configured, dropping alert: {event_type} {invoice_no}")
+        return False
     subject = f"FINANCIAL ALERT: {event_type} - {invoice_no}"
     body = f"""
     <html>
@@ -91,4 +104,4 @@ def send_financial_alert(event_type: str, invoice_no: str, amount: float):
     </body>
     </html>
     """
-    return send_email(SECURITY_ALERT_EMAIL, subject, body)
+    return all(send_email(addr, subject, body, from_name=business_name) for addr in alert_emails)

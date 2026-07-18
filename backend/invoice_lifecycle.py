@@ -12,9 +12,15 @@ import json
 logger = logging.getLogger("InvoiceLifecycle")
 logging.basicConfig(level=logging.INFO)
 
-WATCH_PATH = r"C:\Aradhana\InvoicePDFs"
-ARCHIVE_ROOT = r"C:\Aradhana\OLD"
-DUPLICATE_ROOT = r"C:\Aradhana\DUPLICATE"
+# Were hardcoded to C:\Aradhana\InvoicePDFs, \OLD, \DUPLICATE — one
+# specific business's own fixed absolute paths, which also meant this
+# module could fail at import time on any deployment without a C:\Aradhana
+# directory writable by the process. Business-neutral local defaults now;
+# each env var lets a deployment point at its own real location.
+_LIFECYCLE_BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "invoice_lifecycle_data")
+WATCH_PATH = os.environ.get("INVOICE_LIFECYCLE_WATCH_PATH", os.path.join(_LIFECYCLE_BASE, "inbox"))
+ARCHIVE_ROOT = os.environ.get("INVOICE_LIFECYCLE_ARCHIVE_ROOT", os.path.join(_LIFECYCLE_BASE, "archive"))
+DUPLICATE_ROOT = os.environ.get("INVOICE_LIFECYCLE_DUPLICATE_ROOT", os.path.join(_LIFECYCLE_BASE, "duplicate"))
 
 # Ensure directories exist
 for path in [WATCH_PATH, ARCHIVE_ROOT, DUPLICATE_ROOT]:

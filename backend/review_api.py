@@ -55,7 +55,6 @@ for _slug in business_registry.list_businesses():
                 (f" error={_integrity_err}" if _integrity_err else ""))
 
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event
-from backend.lan_config import lan_health_check
 from backend.models import User, LoginLog, Bill, BankAlert, SMSAlert
 from backend.pdf_ingestion import start_ingestion_thread, perform_scan, ingestion_status, WATCH_PATH
 from backend.email_poller import start_email_poller, process_emails, email_status
@@ -338,7 +337,7 @@ async def get_share_status():
         try: pdf_count = len([f for f in os.listdir(WATCH_PATH) if f.lower().endswith(".pdf")])
         except: pass
             
-    return {"online": online, "path": WATCH_PATH, "label": "Invoice PDF Share (PC2)", "status_color": "Green" if online else "Red", "pdf_count": pdf_count}
+    return {"online": online, "path": WATCH_PATH, "label": "Invoice PDF Share", "status_color": "Green" if online else "Red", "pdf_count": pdf_count}
 
 @app.get("/api/invoices/live-feed")
 async def get_live_feed(db: Session = Depends(get_db)):
@@ -511,12 +510,17 @@ async def get_invoice_pdf(bill_id: int, db: Session = Depends(get_db)):
     return FileResponse(bill.pdf_path, media_type="application/pdf")
 
 @app.post("/api/review")
-async def review_invoice(action: ReviewAction):
+async def review_invoice(action: ReviewAction, request: Request):
     log_entry = {"timestamp": datetime.now().isoformat(), "event": "ACCOUNTANT_REVIEW", "invoice_no": action.invoice_no, "action": action.status, "comment": action.comment, "accountant": action.accountant_id}
-    AUDIT_LOG_DIR = r"C:\Aradhana\AuditLogs"
-    os.makedirs(AUDIT_LOG_DIR, exist_ok=True)
+    # Per-tenant audit log directory — this used to be a single hardcoded
+    # C:\Aradhana\AuditLogs shared by whichever business happened to be
+    # "the" tenant, which would have silently interleaved every business's
+    # review audit trail into one folder on a shared SaaS deployment.
+    slug = resolve_tenant_slug(request) or "_unscoped"
+    audit_log_dir = os.path.join(business_registry.BUSINESSES_DIR, slug, "audit_logs")
+    os.makedirs(audit_log_dir, exist_ok=True)
     log_filename = f"REVIEW_{action.invoice_no.replace('/', '_')}_{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
-    log_path = os.path.join(AUDIT_LOG_DIR, log_filename)
+    log_path = os.path.join(audit_log_dir, log_filename)
     with open(log_path, "w", encoding="utf-8") as f: json.dump(log_entry, f, indent=4)
     return {"status": "success", "audit_log": log_path}
 
@@ -720,27 +724,39 @@ class VerifyRequest(BaseModel):
     employee_id: str
     otp_code: str
 
+
+def _business_name_for(req: Request | None) -> str:
+    """Resolves the current request's tenant business_name for OTP/alert
+    branding, falling back to a generic name if the tenant can't be
+    resolved yet (e.g. a raw test call with no request object)."""
+    if req is None:
+        return "Payment Auditor"
+    slug = resolve_tenant_slug(req)
+    profile = business_registry.load_profile(slug) if slug else None
+    return (profile or {}).get("business_name") or "Payment Auditor"
+
+
 @app.post("/api/auth/login")
-async def login(request: LoginRequest, db: Session = Depends(get_db)):
+async def login(request: LoginRequest, db: Session = Depends(get_db), req: Request = None):
     from backend.auth_service import verify_password
     logger.info(f"LOGIN ATTEMPT: Received employee_id='{request.employee_id}'")
-    
+
     # CASE INSENSITIVE LOOKUP
     user = db.query(User).filter(func.lower(User.employee_id) == request.employee_id.lower()).first()
-    
+
     if not user or not user.is_active:
         logger.warning(f"LOGIN FAILED: User '{request.employee_id}' not found or inactive")
         raise HTTPException(status_code=401, detail="Invalid ID or inactive account")
-    
+
     if not verify_password(request.password, user.hashed_password):
         log_event(db, user.employee_id, "PASSWORD_FAILED")
         logger.warning(f"LOGIN FAILED: Invalid password for '{user.employee_id}'")
         raise HTTPException(status_code=401, detail="Invalid password")
-    
+
     log_event(db, user.employee_id, "LOGIN_REQUEST")
-    
+
     # Get/Create OTP with cooldown
-    otp_res = create_otp(db, user.employee_id)
+    otp_res = create_otp(db, user.employee_id, business_name=_business_name_for(req))
     if otp_res.get("status") == "error":
         raise HTTPException(status_code=500, detail=otp_res["message"])
     
@@ -814,20 +830,20 @@ async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Req
     raise HTTPException(status_code=401, detail="Invalid or expired OTP")
 
 @app.post("/api/auth/resend-otp")
-async def resend_otp(request: LoginRequest, db: Session = Depends(get_db)):
-    # We use LoginRequest because it has employee_id. Password is also sent but we can skip re-verifying it 
+async def resend_otp(request: LoginRequest, db: Session = Depends(get_db), req: Request = None):
+    # We use LoginRequest because it has employee_id. Password is also sent but we can skip re-verifying it
     # if we want to be fast, but for security, let's verify password again.
     from backend.auth_service import verify_password
     user = db.query(User).filter(func.lower(User.employee_id) == request.employee_id.lower()).first()
-    
+
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid ID or inactive account")
-    
+
     if not verify_password(request.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid password")
-    
+
     # Generate new OTP (create_otp handles invalidation of old ones)
-    otp = create_otp(db, user.employee_id, is_resend=True)
+    otp = create_otp(db, user.employee_id, is_resend=True, business_name=_business_name_for(req))
     if not otp:
         raise HTTPException(status_code=500, detail="Failed to resend OTP")
     
@@ -871,12 +887,12 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 @app.post("/api/auth/forgot-password")
-async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db), req: Request = None):
     # Mandate Step 2 & 3: Check active user by email and send OTP
     user = db.query(User).filter(func.lower(User.email) == request.email.lower(), User.is_active == 1).first()
-    
+
     if user:
-        otp = create_otp(db, user.employee_id)
+        otp = create_otp(db, user.employee_id, business_name=_business_name_for(req))
         if otp:
             log_event(db, user.employee_id, "FORGOT_PASSWORD_REQUEST")
             return {"status": "success", "message": "Reset OTP sent to your registered email."}
@@ -918,13 +934,6 @@ async def security_middleware(request: Request, call_next):
     # Static files and root are public (they serve the React app)
     if request.url.path == "/" or request.url.path.startswith("/assets/"):
         return await call_next(request)
-
-    if not await lan_health_check(request):
-        # Even read-only might be blocked if totally disconnected?
-        # User: "If LAN disconnected... read-only mode allowed."
-        # But: "Production Actions Blocked." (POST/PUT/DELETE)
-        # lan_health_check already handles this.
-        pass
 
     is_protected = request.url.path.startswith("/api/")
     for public_path in PUBLIC_ENDPOINTS:
@@ -995,6 +1004,13 @@ async def startup_event():
 
 if __name__ == "__main__":
     import uvicorn
-    cert_path, key_path = r"C:\Aradhana\SSL\cert.pem", r"C:\Aradhana\SSL\key.pem"
+    # README's own setup instructions ("Generate self-signed certificates
+    # and place them in certs/cert.pem and certs/key.pem") never actually
+    # matched this hardcoded C:\Aradhana\SSL\... path — anyone who followed
+    # the README got silent HTTP fallback instead. SSL_CERT_PATH/
+    # SSL_KEY_PATH let a deployment override either; the default now
+    # matches what the README documents.
+    cert_path = os.environ.get("SSL_CERT_PATH", os.path.join(BASE_DIR, "certs", "cert.pem"))
+    key_path = os.environ.get("SSL_KEY_PATH", os.path.join(BASE_DIR, "certs", "key.pem"))
     if os.path.exists(cert_path) and os.path.exists(key_path): uvicorn.run("backend.review_api:app", host="0.0.0.0", port=8000, ssl_keyfile=key_path, ssl_certfile=cert_path)
     else: uvicorn.run("backend.review_api:app", host="0.0.0.0", port=8000)
