@@ -51,6 +51,8 @@ def default_profile(business_name: str) -> dict:
         "smtp": {"host": "", "port": 587, "username": "", "password": ""},
         # Replaces the hardcoded \\PC2\AradhanaInvoicePDFs share path.
         "invoice_share_path": "",
+        # Replaces the hardcoded Z:\Aradhana\SMSInbox mapped drive.
+        "sms_inbox_path": "",
     }
 
 
