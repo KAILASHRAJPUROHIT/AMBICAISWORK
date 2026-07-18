@@ -760,6 +760,166 @@ async def force_sync(command: str, db: Session = Depends(get_db), owner: User = 
     log_audit(db, "System", 0, "FORCE_SYNC", None, command, f"Forced by {owner.employee_id}")
     return {"status": "success", "command": command}
 
+# ── Business onboarding ─────────────────────────────────────────────────────
+# Standalone HTML wizard (not part of the React SPA — no build step needed
+# to ship it) mirroring the setup-wizard pattern used by the sibling AMBIC
+# products. A brand-new business has no session token and isn't in the
+# global session index yet, so /api/setup/* is exempt from the auth gate
+# (see PUBLIC_ENDPOINTS above) — same bootstrap problem /api/auth/login
+# solves for an EXISTING business's login.
+
+class SetupSaveRequest(BaseModel):
+    business_name: str
+
+class SetupOwnerRequest(BaseModel):
+    slug: str
+    employee_id: str
+    name: str
+    email: str
+    password: str
+
+@app.get("/setup")
+async def setup_page():
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(_SETUP_HTML)
+
+@app.post("/api/setup/save")
+async def setup_save(payload: SetupSaveRequest):
+    business_name = (payload.business_name or "").strip()
+    if not business_name:
+        raise HTTPException(status_code=400, detail="Business name is required")
+    slug = business_registry.slugify(business_name)
+    if business_registry.load_profile(slug):
+        raise HTTPException(status_code=400, detail=f"A business already exists at slug '{slug}' — pick a different name")
+    profile = business_registry.default_profile(business_name)
+    business_registry.save_profile(profile)
+    # Provisions the tenant's own database file (schema only, no data) so
+    # the owner-account step right after this can open a real session
+    # against it — see database.py's get_session_factory auto-create.
+    get_session_factory(slug)
+    return {"ok": True, "slug": slug}
+
+@app.post("/api/setup/create-owner")
+async def setup_create_owner(payload: SetupOwnerRequest):
+    from backend.auth_service import hash_password
+    slug = payload.slug.strip()
+    profile = business_registry.load_profile(slug)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Unknown business — save it first")
+
+    employee_id = (payload.employee_id or "").strip()
+    email = (payload.email or "").strip()
+    if not employee_id or not email:
+        raise HTTPException(status_code=400, detail="Employee ID and email are required")
+    if len(payload.password or "") < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    db = get_session_factory(slug)()
+    try:
+        if db.query(User).count() > 0:
+            raise HTTPException(status_code=400, detail="This business already has an owner account")
+        owner = User(
+            employee_id=employee_id,
+            name=payload.name or employee_id,
+            email=email,
+            role="OWNER",
+            hashed_password=hash_password(payload.password),
+            is_active=1,
+        )
+        db.add(owner)
+        db.commit()
+    finally:
+        db.close()
+    return {"ok": True, "slug": slug, "employee_id": employee_id}
+
+_SETUP_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Payment Auditor — Business Setup</title>
+<style>
+  :root { --gold:#D4AF37; --navy:#0B1F3A; --bg:#0a0b0d; --err:#e05555; --ok:#5cb85c; }
+  * { box-sizing:border-box; }
+  body { font-family:Arial,Helvetica,sans-serif; background:var(--bg); color:#f5f5f4; margin:0;
+         display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px; }
+  .card { background:#16181c; border:1px solid #26292f; border-radius:14px; padding:32px; max-width:420px; width:100%; }
+  h1 { margin:0 0 4px; font-size:20px; color:var(--gold); }
+  .sub { color:#9a9ca1; font-size:13px; margin-bottom:22px; }
+  label { display:block; font-size:13px; font-weight:bold; margin:14px 0 5px; }
+  input { width:100%; padding:10px 12px; border:1px solid #26292f; border-radius:8px;
+          background:#0a0b0d; color:#fff; font-size:14px; }
+  button { width:100%; margin-top:20px; padding:12px; border:none; border-radius:8px; cursor:pointer;
+           font-size:14px; font-weight:bold; background:var(--gold); color:#0a0b0d; }
+  .err { color:var(--err); font-size:13px; margin-top:10px; }
+  .ok { color:var(--ok); font-size:13px; margin-top:10px; }
+  .step2 { display:none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div id="step1">
+    <h1>Payment Auditor — New Business</h1>
+    <div class="sub">Step 1 of 2 — business identity</div>
+    <label for="business_name">Business name</label>
+    <input type="text" id="business_name" autofocus required>
+    <button id="saveBiz">Continue</button>
+    <div class="err" id="err1"></div>
+  </div>
+  <div class="card step2" id="step2">
+    <h1>Create your owner account</h1>
+    <div class="sub" id="step2sub"></div>
+    <label for="employee_id">Employee ID</label>
+    <input type="text" id="employee_id" required>
+    <label for="name">Your name</label>
+    <input type="text" id="name" required>
+    <label for="email">Email (OTP is sent here)</label>
+    <input type="email" id="email" required>
+    <label for="password">Password</label>
+    <input type="password" id="password" minlength="8" required>
+    <button id="createOwner">Create account</button>
+    <div class="err" id="err2"></div>
+    <div class="ok" id="ok2"></div>
+  </div>
+</div>
+<script>
+let savedSlug = null;
+document.getElementById("saveBiz").addEventListener("click", function() {
+  const name = document.getElementById("business_name").value.trim();
+  const err = document.getElementById("err1");
+  err.textContent = "";
+  if (!name) { err.textContent = "Business name is required"; return; }
+  fetch("/api/setup/save", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({business_name: name})})
+    .then(r => r.json().then(d => ({status: r.status, body: d})))
+    .then(({status, body}) => {
+      if (status !== 200) { err.textContent = body.detail || "Failed to save"; return; }
+      savedSlug = body.slug;
+      document.getElementById("step1").style.display = "none";
+      document.getElementById("step2").style.display = "block";
+      document.getElementById("step2sub").textContent = "Business slug: " + savedSlug;
+    });
+});
+document.getElementById("createOwner").addEventListener("click", function() {
+  const err = document.getElementById("err2"), ok = document.getElementById("ok2");
+  err.textContent = ""; ok.textContent = "";
+  const body = {
+    slug: savedSlug,
+    employee_id: document.getElementById("employee_id").value.trim(),
+    name: document.getElementById("name").value.trim(),
+    email: document.getElementById("email").value.trim(),
+    password: document.getElementById("password").value,
+  };
+  fetch("/api/setup/create-owner", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)})
+    .then(r => r.json().then(d => ({status: r.status, body: d})))
+    .then(({status, body}) => {
+      if (status !== 200) { err.textContent = body.detail || "Failed to create account"; return; }
+      ok.textContent = "Account created — you can now log in with X-Business-Slug: " + savedSlug;
+    });
+});
+</script>
+</body>
+</html>"""
+
 # ... rest ...
 
 # Auth Models
@@ -970,6 +1130,7 @@ async def reset_password(request: ResetPasswordRequest, db: Session = Depends(ge
 async def security_middleware(request: Request, call_next):
     PUBLIC_ENDPOINTS = [
         "/api/auth/",
+        "/api/setup/",
         "/api/version",
         "/api/reports/payment-bifurcation",
         "/api/debug/",
