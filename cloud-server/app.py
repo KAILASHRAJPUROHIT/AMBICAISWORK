@@ -1,12 +1,14 @@
 import base64
 import json
+import mimetypes
 import os
 import random
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for, make_response
+from cryptography.fernet import Fernet, InvalidToken
+from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for, make_response, Response, abort
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
@@ -56,6 +58,33 @@ def init_db():
 
 def allowed_file(filename):
     return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
+
+
+# ── Document encryption at rest ───────────────────────────────────────────────
+# Every tenant's uploaded documents are encrypted on disk with a per-tenant
+# key (tenant_profile.default_profile's "encryption_key"). Decryption happens
+# only in-memory, on the fly, when serving an authenticated request (customer
+# admin view or the tenant's own print agent) — the plaintext is never
+# written back to disk. This is separate from a tenant's "secure_documents"
+# toggle, which additionally deletes the encrypted file the moment its job
+# completes instead of keeping it for the normal 30-day retention window.
+
+def _encrypt_bytes(data: bytes, profile: dict) -> bytes:
+    key = (profile or {}).get("encryption_key")
+    if not key:
+        return data  # old/incomplete profile — degrade to unencrypted rather than break uploads
+    return Fernet(key.encode()).encrypt(data)
+
+
+def _decrypt_bytes(data: bytes, profile: dict) -> bytes:
+    key = (profile or {}).get("encryption_key")
+    if not key:
+        return data
+    try:
+        return Fernet(key.encode()).decrypt(data)
+    except InvalidToken:
+        # Pre-encryption-feature files on disk are still plaintext — serve as-is.
+        return data
 
 
 def generate_queue_id(tenant_slug: str):
@@ -142,6 +171,7 @@ def setup_save():
     profile["google_review_url"] = (data.get("google_review_url") or "").strip()
     profile["whatsapp_number"] = (data.get("whatsapp_number") or "").strip()
     profile["phone_number"] = (data.get("phone_number") or "").strip()
+    profile["secure_documents"] = bool(data.get("secure_documents"))
 
     tp.save_profile(profile)
     resp = jsonify({
@@ -267,7 +297,7 @@ def upload():
         destination = job_dir / safe_name
         if destination.exists():
             destination = job_dir / f"{destination.stem}_{len(saved_files)+1}{destination.suffix}"
-        uploaded.save(destination)
+        destination.write_bytes(_encrypt_bytes(uploaded.read(), ACTIVE_PROFILE))
         saved_files.append(destination.name)
 
     if not saved_files:
@@ -337,13 +367,30 @@ def update_job_status(job_id):
     if error_message:
         job.error_message = str(error_message)[:2000]
     db.session.commit()
+
+    # Secure-documents tenants: don't wait for the 30-day cleanup sweep —
+    # once the agent confirms printing, the customer's document is deleted
+    # immediately rather than retained.
+    if status == "completed" and tenant.get("secure_documents"):
+        job_dir = _tenant_dir(tenant["slug"]) / "uploads" / secure_filename(job.id)
+        shutil.rmtree(job_dir, ignore_errors=True)
+
     return jsonify({"success": True, "job_id": job.id, "status": job.status})
 
 
 @app.route("/media/<job_id>/<path:filename>", methods=["GET"])
 def media(job_id, filename):
     job = PrintJob.query.filter_by(id=job_id, tenant_slug=ACTIVE_SLUG).first_or_404()
-    return send_from_directory(UPLOAD_DIR / secure_filename(job_id), filename, as_attachment=True)
+    safe_name = secure_filename(filename)
+    file_path = UPLOAD_DIR / secure_filename(job_id) / safe_name
+    if not file_path.is_file():
+        abort(404)
+    data = _decrypt_bytes(file_path.read_bytes(), ACTIVE_PROFILE)
+    mimetype = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
+    return Response(
+        data, mimetype=mimetype,
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+    )
 
 
 def _check_admin_secret(data: dict) -> bool:
@@ -584,7 +631,10 @@ def admin_history():
         for name in filenames:
             ext = Path(name).suffix.lower()
             media_url = f"/media/{job.id}/{name}"
-            if ext in IMAGE_EXTS:
+            on_disk = (UPLOAD_DIR / secure_filename(job.id) / secure_filename(name)).is_file()
+            if not on_disk:
+                thumbs += f'<div style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:100px;height:100px;background:#1a1a2e;border:1px solid #444;border-radius:4px;color:#666;font-size:11px;text-align:center;padding:6px">🔒<br>Deleted<br>(secure)</div>'
+            elif ext in IMAGE_EXTS:
                 thumbs += f'<a href="{media_url}" target="_blank"><img src="{media_url}" style="width:100px;height:100px;object-fit:cover;border-radius:4px;border:1px solid #333;cursor:pointer" title="{name}"></a>'
             else:
                 thumbs += f'<a href="{media_url}" target="_blank" style="display:inline-flex;align-items:center;justify-content:center;width:100px;height:100px;background:#1a1a2e;border:1px solid #444;border-radius:4px;color:#D4AF37;font-size:11px;text-align:center;text-decoration:none;padding:6px">📄<br>{name[:20]}</a>'

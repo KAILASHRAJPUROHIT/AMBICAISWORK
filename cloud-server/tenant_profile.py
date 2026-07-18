@@ -16,6 +16,8 @@ import re
 import json
 import secrets
 
+from cryptography.fernet import Fernet
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 TENANTS_DIR = os.path.join(BASE, "tenants")
 os.makedirs(TENANTS_DIR, exist_ok=True)
@@ -45,6 +47,12 @@ def default_profile(business_name: str) -> dict:
         "voice_clip_path": "",
         "admin_secret": secrets.token_urlsafe(12),
         "agent_api_key": secrets.token_urlsafe(24),
+        # Every tenant's uploaded documents are encrypted at rest with this
+        # key regardless of secure_documents — see app.py's _encrypt_bytes /
+        # _decrypt_bytes. secure_documents additionally deletes the file the
+        # moment a job completes instead of keeping it for 30 days.
+        "encryption_key": Fernet.generate_key().decode(),
+        "secure_documents": False,
     }
 
 

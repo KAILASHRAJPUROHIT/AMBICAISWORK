@@ -20,9 +20,21 @@ printing, shared across many independent businesses ("tenants") on one deploymen
 
 *   Each business ("tenant") is a JSON profile at `cloud-server/tenants/<slug>/profile.json`,
     holding its branding (name, logo, colors), optional social/contact links (Instagram,
-    Facebook, Google review, WhatsApp, phone), an optional welcome voice clip, and two secrets:
-    an `admin_secret` (protects that tenant's `/admin` actions) and an `agent_api_key` (what that
-    shop's local print agent authenticates with).
+    Facebook, Google review, WhatsApp, phone), an optional welcome voice clip, and three secrets:
+    an `admin_secret` (protects that tenant's `/admin` actions), an `agent_api_key` (what that
+    shop's local print agent authenticates with), and an `encryption_key` (per-tenant Fernet key
+    for document encryption at rest — see section 2a).
+
+### 2a. Document encryption & secure-documents mode
+
+*   Every uploaded file is encrypted on disk with the tenant's `encryption_key`
+    (`app.py`'s `_encrypt_bytes`/`_decrypt_bytes`) — this is always on, not configurable.
+    Decryption happens only in-memory when serving an authenticated request (`/media/...`); the
+    plaintext is never written back to disk.
+    *   A tenant's `secure_documents` toggle (set in `/setup`) additionally deletes a job's
+    encrypted files the moment its status becomes `completed`, instead of keeping them for the
+    normal 30-day retention window. Recommended for ID cards and other sensitive documents.
+    Print history for those jobs shows a "Deleted (secure)" placeholder instead of a thumbnail.
 *   The active tenant for a request is resolved via a `?tenant=` query param or a `tenant_slug`
     cookie (`tenant_profile.resolve_active_slug`), bound once per request in a
     `@app.before_request` hook.
