@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for, make_response, session
+from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for, make_response, session, g
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
@@ -106,11 +106,6 @@ def generate_queue_id(tenant_slug: str):
 # cookie/query-param flow customer browsers use.
 
 TENANTS_DIR = tp.TENANTS_DIR
-ACTIVE_SLUG = None
-ACTIVE_PROFILE = None
-UPLOAD_DIR = None
-CHECKIN_DIR = None
-HANDLES_FILE = None
 
 _SETUP_EXEMPT_ROUTES = {"setup_page", "setup_save", "setup_logo", "setup_voice_clip", "static"}
 _AGENT_EXEMPT_ROUTES = {"get_pending_jobs", "update_job_status"}
@@ -124,8 +119,12 @@ def _tenant_dir(slug: str) -> Path:
 
 @app.before_request
 def _bind_tenant():
-    global ACTIVE_SLUG, ACTIVE_PROFILE, UPLOAD_DIR, CHECKIN_DIR, HANDLES_FILE
-
+    # Bound to flask.g (request-scoped), not module globals. The old code
+    # rebound module-level ACTIVE_SLUG/ACTIVE_PROFILE/UPLOAD_DIR globals here
+    # on every request — two tenants' requests running concurrently on
+    # different worker threads shared that one mutable set, so one request
+    # could read or write through another tenant's paths if their timing
+    # overlapped. g is a fresh object per request; nothing left to race on.
     if request.endpoint in _SETUP_EXEMPT_ROUTES or request.endpoint in _AGENT_EXEMPT_ROUTES:
         return None
 
@@ -135,14 +134,14 @@ def _bind_tenant():
             return jsonify({"error": "No tenant configured yet — visit /setup"}), 409
         return redirect(url_for("setup_page"))
 
-    profile = tp.load_profile(slug)
-    ACTIVE_SLUG, ACTIVE_PROFILE = slug, profile
+    g.slug = slug
+    g.profile = tp.load_profile(slug)
     d = _tenant_dir(slug)
-    UPLOAD_DIR = d / "uploads"
-    UPLOAD_DIR.mkdir(exist_ok=True)
-    CHECKIN_DIR = d / "checkins"
-    CHECKIN_DIR.mkdir(exist_ok=True)
-    HANDLES_FILE = d / "social_handles.csv"
+    g.upload_dir = d / "uploads"
+    g.upload_dir.mkdir(exist_ok=True)
+    g.checkin_dir = d / "checkins"
+    g.checkin_dir.mkdir(exist_ok=True)
+    g.handles_file = d / "social_handles.csv"
     return None
 
 
@@ -252,16 +251,16 @@ def setup_voice_clip_serve(slug):
 
 @app.route("/", methods=["GET"])
 def index():
-    resp = make_response(render_template("index.html", profile=ACTIVE_PROFILE))
-    resp.set_cookie("tenant_slug", ACTIVE_SLUG, max_age=60 * 60 * 24 * 365)
+    resp = make_response(render_template("index.html", profile=g.profile))
+    resp.set_cookie("tenant_slug", g.slug, max_age=60 * 60 * 24 * 365)
     return resp
 
 
 @app.route("/print", methods=["GET"])
 def print_page():
     production_mode = os.environ.get("PRODUCTION_MODE", "false").lower() == "true"
-    resp = make_response(render_template("upload.html", production_mode=production_mode, profile=ACTIVE_PROFILE))
-    resp.set_cookie("tenant_slug", ACTIVE_SLUG, max_age=60 * 60 * 24 * 365)
+    resp = make_response(render_template("upload.html", production_mode=production_mode, profile=g.profile))
+    resp.set_cookie("tenant_slug", g.slug, max_age=60 * 60 * 24 * 365)
     return resp
 
 
@@ -284,8 +283,8 @@ def upload():
     if copies < 1 or copies > 5:
         return jsonify({"error": "Copies must be between 1 and 5."}), 400
 
-    job_id = generate_queue_id(ACTIVE_SLUG)
-    job_dir = UPLOAD_DIR / job_id
+    job_id = generate_queue_id(g.slug)
+    job_dir = g.upload_dir / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     saved_files = []
 
@@ -304,7 +303,7 @@ def upload():
     if not saved_files:
         return jsonify({"error": "No valid files uploaded."}), 400
 
-    job = PrintJob(id=job_id, tenant_slug=ACTIVE_SLUG, status="pending", print_mode=print_mode,
+    job = PrintJob(id=job_id, tenant_slug=g.slug, status="pending", print_mode=print_mode,
                    copies=copies, file_paths=json.dumps(saved_files),
                    access_token=secrets.token_urlsafe(32))
     db.session.add(job)
@@ -314,11 +313,11 @@ def upload():
 
 @app.route("/api/job/<job_id>", methods=["GET"])
 def get_job_status(job_id):
-    job = PrintJob.query.filter_by(id=job_id, tenant_slug=ACTIVE_SLUG).first_or_404()
+    job = PrintJob.query.filter_by(id=job_id, tenant_slug=g.slug).first_or_404()
     position = None
     if job.status == "pending":
         ahead = PrintJob.query.filter(
-            PrintJob.tenant_slug == ACTIVE_SLUG,
+            PrintJob.tenant_slug == g.slug,
             PrintJob.status == "pending",
             PrintJob.created_at < job.created_at
         ).count()
@@ -374,7 +373,7 @@ def update_job_status(job_id):
 
 @app.route("/media/<job_id>/<path:filename>", methods=["GET"])
 def media(job_id, filename):
-    job = PrintJob.query.filter_by(id=job_id, tenant_slug=ACTIVE_SLUG).first_or_404()
+    job = PrintJob.query.filter_by(id=job_id, tenant_slug=g.slug).first_or_404()
     # queue_id alone is not a secret — it's a 3-digit-per-day code shown to
     # the customer as their pickup reference, trivially enumerable. The
     # actual document download requires this separate, unguessable token
@@ -383,11 +382,11 @@ def media(job_id, filename):
     token = request.args.get("token", "")
     if not job.access_token or not hmac.compare_digest(token, job.access_token):
         return jsonify({"error": "Invalid or missing access token"}), 403
-    return send_from_directory(UPLOAD_DIR / secure_filename(job_id), filename, as_attachment=True)
+    return send_from_directory(g.upload_dir / secure_filename(job_id), filename, as_attachment=True)
 
 
 def _check_admin_secret(data: dict) -> bool:
-    expected = (ACTIVE_PROFILE or {}).get("admin_secret", "")
+    expected = (g.profile or {}).get("admin_secret", "")
     if not expected:
         return True  # tenant hasn't set one — no gate (matches old ADMIN_SECRET-unset behavior)
     return data.get("secret") == expected
@@ -401,10 +400,10 @@ def _admin_authenticated() -> bool:
     every customer's uploaded document from the last 30 days directly on
     the page, so an unauthenticated GET there was a much bigger exposure
     than any single guessed job ID."""
-    expected = (ACTIVE_PROFILE or {}).get("admin_secret", "")
+    expected = (g.profile or {}).get("admin_secret", "")
     if not expected:
         return True  # tenant hasn't set a password — matches the existing POST-route behavior
-    return session.get("admin_slug") == ACTIVE_SLUG
+    return session.get("admin_slug") == g.slug
 
 
 def _require_admin():
@@ -420,13 +419,13 @@ def _require_admin():
 def admin_login():
     error = None
     if request.method == "POST":
-        expected = (ACTIVE_PROFILE or {}).get("admin_secret", "")
+        expected = (g.profile or {}).get("admin_secret", "")
         if not expected or request.form.get("secret") == expected:
-            session["admin_slug"] = ACTIVE_SLUG
+            session["admin_slug"] = g.slug
             dest = request.args.get("next") or url_for("admin")
             return redirect(dest)
         error = "Incorrect admin secret."
-    business_name = (ACTIVE_PROFILE or {}).get("business_name", "")
+    business_name = (g.profile or {}).get("business_name", "")
     return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Admin Login</title>
 <style>
@@ -464,7 +463,7 @@ def admin():
     guard = _require_admin()
     if guard:
         return guard
-    db_jobs = (PrintJob.query.filter_by(tenant_slug=ACTIVE_SLUG)
+    db_jobs = (PrintJob.query.filter_by(tenant_slug=g.slug)
                .order_by(PrintJob.created_at.desc()).limit(100).all())
     jobs = [{
         "id": job.id,
@@ -475,8 +474,8 @@ def admin():
         "file_count": len(json.loads(job.file_paths or "[]")),
         "created_display": job.created_at.strftime("%d %b %Y, %H:%M"),
     } for job in db_jobs]
-    business_name = (ACTIVE_PROFILE or {}).get("business_name", "")
-    return render_template("admin.html", jobs=jobs, business_name=business_name, profile=ACTIVE_PROFILE)
+    business_name = (g.profile or {}).get("business_name", "")
+    return render_template("admin.html", jobs=jobs, business_name=business_name, profile=g.profile)
 
 
 @app.route("/admin/retry/<job_id>", methods=["POST"])
@@ -484,7 +483,7 @@ def admin_retry_job(job_id):
     data = request.get_json(silent=True) or {}
     if not _check_admin_secret(data):
         return jsonify({"error": "Unauthorized"}), 401
-    job = PrintJob.query.filter_by(id=job_id, tenant_slug=ACTIVE_SLUG).first_or_404()
+    job = PrintJob.query.filter_by(id=job_id, tenant_slug=g.slug).first_or_404()
     if job.status != "failed":
         return jsonify({"error": "Only failed jobs can be retried."}), 400
     job.status = "pending"
@@ -499,7 +498,7 @@ def admin_reprint_job(job_id):
     data = request.get_json(silent=True) or {}
     if not _check_admin_secret(data):
         return jsonify({"error": "Unauthorized"}), 401
-    job = PrintJob.query.filter_by(id=job_id, tenant_slug=ACTIVE_SLUG).first_or_404()
+    job = PrintJob.query.filter_by(id=job_id, tenant_slug=g.slug).first_or_404()
     job.status = "pending"
     job.error_message = None
     job.updated_at = datetime.utcnow()
@@ -513,7 +512,7 @@ def admin_clear_pending():
     if not _check_admin_secret(data):
         return jsonify({"error": "Unauthorized"}), 401
 
-    deleted = PrintJob.query.filter_by(status="pending", tenant_slug=ACTIVE_SLUG).delete()
+    deleted = PrintJob.query.filter_by(status="pending", tenant_slug=g.slug).delete()
     db.session.commit()
     return jsonify({"deleted": deleted})
 
@@ -525,7 +524,7 @@ def save_social_handle():
     if not handle:
         return jsonify({"error": "No handle"}), 400
     ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    with open(HANDLES_FILE, "a", encoding="utf-8") as f:
+    with open(g.handles_file, "a", encoding="utf-8") as f:
         f.write(f'{ts},"{handle}"\n')
     return jsonify({"ok": True})
 
@@ -537,8 +536,8 @@ def admin_social_handles():
         return guard
     rows = ""
     entries = []
-    if HANDLES_FILE.exists():
-        for line in HANDLES_FILE.read_text(encoding="utf-8").splitlines():
+    if g.handles_file.exists():
+        for line in g.handles_file.read_text(encoding="utf-8").splitlines():
             if "," not in line:
                 continue
             ts, handle = line.split(",", 1)
@@ -575,7 +574,7 @@ def staff_checkin():
         return jsonify({"error": "Invalid image data"}), 400
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename = f"{ts}_{queue_id}.jpg"
-    (CHECKIN_DIR / filename).write_bytes(raw)
+    (g.checkin_dir / filename).write_bytes(raw)
     return jsonify({"ok": True})
 
 
@@ -587,7 +586,7 @@ def checkin_photo(filename):
     guard = _require_admin()
     if guard:
         return guard
-    return send_from_directory(CHECKIN_DIR, secure_filename(filename))
+    return send_from_directory(g.checkin_dir, secure_filename(filename))
 
 
 @app.route("/admin/checkins", methods=["GET"])
@@ -595,7 +594,7 @@ def admin_checkins():
     guard = _require_admin()
     if guard:
         return guard
-    photos = sorted(CHECKIN_DIR.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
+    photos = sorted(g.checkin_dir.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
     cutoff = datetime.utcnow() - timedelta(days=30)
     cards = ""
     for photo in photos:
@@ -727,7 +726,7 @@ def admin_history():
         return guard
     cutoff = datetime.utcnow() - timedelta(days=30)
     jobs = (PrintJob.query
-            .filter(PrintJob.tenant_slug == ACTIVE_SLUG, PrintJob.created_at >= cutoff)
+            .filter(PrintJob.tenant_slug == g.slug, PrintJob.created_at >= cutoff)
             .order_by(PrintJob.created_at.desc())
             .all())
 
