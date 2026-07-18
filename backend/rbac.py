@@ -71,14 +71,17 @@ _ROLE_PERMISSIONS = {
 }
 
 
-def get_permissions(role_str: str) -> Set[Permission]:
+def get_permissions(role_str) -> Set[Permission]:
     """
-    Returns the set of permissions for a given user role string.
+    Returns the set of permissions for a given user role — accepts either
+    a plain string (e.g. the User.role column's raw value) or a UserRole
+    enum member directly, normalizing to a string before lookup either way.
     """
     try:
-        role = UserRole(role_str.lower())
+        value = role_str.value if isinstance(role_str, Enum) else role_str
+        role = UserRole(value.lower())
         return _ROLE_PERMISSIONS.get(role, set())
-    except ValueError:
+    except (ValueError, AttributeError):
         return set()
 
 
