@@ -1,0 +1,17 @@
+.git
+.github
+.pytest_cache
+__pycache__
+*.py[cod]
+*.db
+.env
+.env.*
+!.env.example
+businesses
+invoice_inbox
+invoice_lifecycle_data
+frontend/node_modules
+frontend/dist
+tests
+ai-prompts
+*.spec

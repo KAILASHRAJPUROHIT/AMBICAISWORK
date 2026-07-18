@@ -1,5 +1,7 @@
 # Prime Invoice Field Mapping
 
+> **Legacy customer-specific mapping:** Window titles, example invoices, indices, addresses, and field values below belong to the original Aradhana Prime environment. Keep this file out of customer-facing packages and create a separate validated mapping for every tenant ERP version.
+
 Based on the probe conducted on 2026-05-31.
 
 ## Window Information

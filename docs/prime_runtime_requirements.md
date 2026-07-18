@@ -1,5 +1,7 @@
 # Prime Extraction Runtime Requirements
 
+> **Local edge only:** These requirements apply to the optional Windows Prime automation agent, not the hosted FastAPI service. The absolute path below is historical and must be replaced by a tenant-specific configured interpreter path.
+
 ## 1. Requirement: 32-bit Python
 To reliably automate and extract data from the 32-bit Prime VB6 application (`FA.exe`), the extraction engine **MUST** run on a 32-bit Python interpreter. 
 

@@ -1,5 +1,7 @@
 # Payment Confirmation SLA Rules
 
+> **Policy template, not universal financial advice:** A tenant owner/accountant must approve payment windows, holiday calendars, evidence rules, and escalation thresholds before activation. Store the approved version as tenant configuration and audit later changes.
+
 ## 1. Expected Bank Confirmation Timeline
 The following table defines the allowed working days for bank confirmation based on the payment mode recorded on the invoice.
 

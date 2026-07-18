@@ -1,5 +1,7 @@
 # Prime Excel Extraction Strategy Report
 
+> **Tenant edge adapter:** This strategy applies to businesses using the supported Prime desktop workflow. Exports must be written to that tenant's configured edge directory and uploaded through an authenticated tenant-scoped ingestion path.
+
 ## 1. Overview
 The Prime extraction pipeline has been updated to prioritize the **Billwise Sale/Purc Detail (Payment Mode)** report. This strategy uses automated Excel exports to retrieve structured settlement data, which is more reliable than direct UI scraping of the GST register.
 

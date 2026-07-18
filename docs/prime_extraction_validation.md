@@ -1,5 +1,7 @@
 # Prime Extraction Validation Report (32-bit Verified)
 
+> **Legacy validation evidence:** The values and paths below came from one Aradhana workstation on 2026-05-31. They prove that approach only; they are not reusable customer data, a universal control map, or a hosted-SaaS runtime requirement.
+
 **Date:** 2026-05-31
 **Environment:** Python 32-bit, FA.exe 32-bit
 **Strategy:** Deterministic Pattern Detection + Spatial Grouping

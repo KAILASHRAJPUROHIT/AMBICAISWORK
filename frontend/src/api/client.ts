@@ -2,9 +2,11 @@ const BASE_URL = window.location.origin;
 
 export function getHeaders() {
   const token = localStorage.getItem('session_token');
+  const businessSlug = localStorage.getItem('business_slug');
   return {
     'Content-Type': 'application/json',
-    ...(token ? { 'X-Session-Token': token } : {})
+    ...(token ? { 'X-Session-Token': token } : {}),
+    ...(businessSlug ? { 'X-Business-Slug': businessSlug } : {})
   };
 }
 
@@ -32,19 +34,19 @@ export async function getHealth() {
   return handleResponse(response, 'Failed to fetch health status');
 }
 
-export async function login(employee_id: string, password: string) {
+export async function login(employee_id: string, password: string, businessSlug: string) {
   const response = await fetch(`${BASE_URL}/api/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Business-Slug': businessSlug },
     body: JSON.stringify({ employee_id, password })
   });
   return handleResponse(response, 'Login failed');
 }
 
-export async function verifyOTP(employee_id: string, otp_code: string) {
+export async function verifyOTP(employee_id: string, otp_code: string, businessSlug: string) {
   const response = await fetch(`${BASE_URL}/api/auth/verify`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Business-Slug': businessSlug },
     body: JSON.stringify({ employee_id, otp_code })
   });
   return handleResponse(response, 'Verification failed');
@@ -86,6 +88,16 @@ export async function getOpenEscalations() {
     headers: getHeaders()
   });
   return handleResponse(response, 'Failed to fetch open escalations');
+}
+
+export async function getReconciliations() {
+  const response = await fetch(`${BASE_URL}/api/reconciliations`, { headers: getHeaders() });
+  return handleResponse(response, 'Failed to fetch reconciliation data');
+}
+
+export async function getAuditLogs() {
+  const response = await fetch(`${BASE_URL}/api/audit-logs`, { headers: getHeaders() });
+  return handleResponse(response, 'Failed to fetch audit logs');
 }
 
 export async function getOwnerReport() {

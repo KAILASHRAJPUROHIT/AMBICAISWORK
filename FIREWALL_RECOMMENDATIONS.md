@@ -1,26 +1,24 @@
-# Physical Firewall & Deployment Recommendations
+# Network and Deployment Security Recommendations
 
-To ensure maximum financial integrity and security for the Aradhana Auditor, the following deployment strategy is recommended:
+AMBIC Payment Auditor now supports hosted multi-tenant operation; it is no longer protected by a LAN-only application gate. Network controls must match the deployment model.
 
-## 1. Network Segmentation (LAN-Only)
-*   **Wired LAN Only**: All core components (Auditor Laptop, PC2 Billing Machine, App Server) MUST be connected via wired Ethernet. Disable Wi-Fi on these machines to prevent wireless intercept or unauthorized access.
-*   **Approved Subnet**: The auditor is configured to only accept requests from the approved local subnet (e.g., `192.168.1.0/24`).
+## Hosted application
 
-## 2. Hardware Firewall
-*   **Dedicated Router/Firewall**: Deploy a dedicated hardware firewall (e.g., pfSense, OPNsense, or a managed Ubiquiti/Cisco router) between the Auditor LAN and the rest of the building/internet.
-*   **Block Inbound Access**: Configure the firewall to block ALL inbound traffic from the internet. Port forwarding is STRICTLY PROHIBITED.
-*   **Walled Garden**: Allow only required LAN ports for the Auditor:
-    *   `8000` (HTTPS Backend)
-    *   `5173` (Frontend)
-    *   `445` (SMB for Z: drive share)
+- Terminate TLS at a managed reverse proxy and redirect HTTP to HTTPS.
+- Expose only ports 80/443 publicly; keep databases, object storage, admin diagnostics, and poller control surfaces private.
+- Restrict setup/onboarding after the intended tenant-creation flow is established.
+- Apply rate limits to login, OTP, password-reset, setup, and ingestion-trigger endpoints.
+- Store SMTP/IMAP credentials in an encrypted secret manager, not tenant JSON on disk.
+- Disable or authenticate `/debug/*` and operational status routes before launch.
+- Use centralised audit logs, error monitoring, backups, and alerting with tenant identifiers but no raw financial evidence.
 
-## 3. Android SMS Collector
-*   **Local Route Only**: The Android phone acting as the SMS collector should be connected to the approved LAN via a secure local route (e.g., a dedicated local Wi-Fi AP bridged to the wired LAN with strict MAC filtering).
-*   **No Cloud Sync**: SMS data should be polled directly from the phone via a local API; do not use cloud-based SMS sync services.
+## Local edge integrations
 
-## 4. HTTPS & Local SSL
-*   **Self-Signed Certs**: The system uses local self-signed certificates for HTTPS.
-*   **Installation**: To avoid browser warnings on the LAN, manually install the `certs/cert.pem` as a "Trusted Root Certification Authority" on the auditor laptop and any other authorized viewing machines.
+Prime desktop automation, SMB invoice shares, and SMS relays should run on a business-controlled Windows edge machine. Use outbound-only connections to the hosted service where possible. Do not expose SMB, the Prime application, or local relay ports to the internet.
 
-## 5. Remote Access (Optional)
-*   **Zero Trust**: If the owner requires remote access, DO NOT open ports. Instead, use **Cloudflare Zero Trust** or a **Tailscale/Wireguard VPN** with Employee ID + OTP enforced at the tunnel level.
+If remote administration is required, use a managed VPN/zero-trust tunnel with MFA. Do not create public port-forwarding rules to the Windows host.
+
+## Pilot minimum
+
+For a single-business pilot, bind the local service to an explicit trusted interface, use TLS or a trusted private tunnel, rotate all default credentials, and verify that backups and restore procedures work before processing real invoices.
+

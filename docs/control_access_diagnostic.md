@@ -1,5 +1,7 @@
 # Prime Control Access Diagnostic Report
 
+> **Legacy evidence:** This report records one Aradhana/Prime workstation investigation from 2026-05-31. It is retained as adapter evidence, not as a portable SaaS setup guide. Re-run the diagnostic on each tenant's own edge machine; never assume its paths, bitness, window title, or controls apply elsewhere.
+
 **Date:** 2026-05-31
 **Environment:** Python 64-bit, FA.exe 32-bit
 

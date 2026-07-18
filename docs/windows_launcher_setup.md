@@ -1,5 +1,7 @@
 # Aradhana Payment Auditor - Windows Launcher Setup
 
+> **Legacy launcher only:** This builds the original Aradhana single-machine executable. It is not the SaaS deployment method and still contains business-specific paths and branding. Do not distribute it to another tenant without first converting the launcher and every bundled utility to explicit tenant configuration.
+
 This document describes how to build and use the single-window launcher for the Aradhana Payment Auditor.
 
 ## 1. Prerequisites

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReconciliationTable from '../components/ReconciliationTable';
 import InvoiceDetailDrawer from '../components/InvoiceDetailDrawer';
 import type { ReconciliationItem } from '../types';
+import { getReconciliations } from '../api/client';
 
 const ReconciliationQueuePage: React.FC = () => {
   const [items, setItems] = useState<ReconciliationItem[]>([]);
@@ -10,11 +11,7 @@ const ReconciliationQueuePage: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<ReconciliationItem | null>(null);
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/reconciliations')
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch live reconciliation data.');
-        return res.json();
-      })
+    getReconciliations()
       .then(data => {
         // Transform backend ReconciliationResult to frontend ReconciliationItem
         const transformed: ReconciliationItem[] = data.map((r: any, idx: number) => ({

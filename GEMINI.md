@@ -1,4 +1,6 @@
-# Aradhana Payment Auditor - Project Instructions
+# AMBIC Payment Auditor — Prime Integration Rules
+
+> **Scope:** These rules govern the optional, tenant-installed Prime ERP edge integration. They do not describe the hosted SaaS control plane. Business names, invoice patterns, paths, and ERP controls must come from that tenant's explicit configuration.
 
 ## 1. Prime Invoice Extraction Rules
 

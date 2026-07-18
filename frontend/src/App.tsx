@@ -4,7 +4,6 @@ import DashboardPage from './pages/DashboardPage';
 import ReconciliationQueuePage from './pages/ReconciliationQueuePage';
 import EscalationsPage from './pages/EscalationsPage';
 import ReportsPage from './pages/ReportsPage';
-import PrimeExtractionReviewPage from './pages/PrimeExtractionReviewPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import MasterConsolePage from './pages/MasterConsolePage';
 import LoginPage from './pages/LoginPage';
@@ -116,11 +115,6 @@ function App() {
                         Reports
                       </NavLink>
                     )}
-                    {['admin', 'accountant', 'owner'].includes(role) && (
-                      <NavLink to="/prime-extraction-review" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
-                        Extraction Review
-                      </NavLink>
-                    )}
                     {['admin', 'owner', 'accountant', 'developer'].includes(role) && (
                       <NavLink to="/audit-logs" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
                         Audit Logs
@@ -162,9 +156,6 @@ function App() {
                     } />
                     <Route path="/reports" element={
                         <ProtectedRoute roles={['admin', 'owner', 'accountant']}><ReportsPage /></ProtectedRoute>
-                    } />
-                    <Route path="/prime-extraction-review" element={
-                        <ProtectedRoute roles={['admin', 'accountant', 'owner']}><PrimeExtractionReviewPage /></ProtectedRoute>
                     } />
                     <Route path="/audit-logs" element={
                         <ProtectedRoute roles={['admin', 'owner', 'accountant', 'developer']}><AuditLogsPage /></ProtectedRoute>

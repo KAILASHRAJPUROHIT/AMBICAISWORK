@@ -2,11 +2,14 @@ import random
 import string
 import logging
 import hashlib
+import hmac
+import re
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from backend.models import User, OTP, Session as SessionModel, LoginLog
 from backend.email_notifier import send_otp_email
+from werkzeug.security import generate_password_hash, check_password_hash
 
 logger = logging.getLogger("AuthService")
 
@@ -19,11 +22,35 @@ def generate_otp(length: int = 6) -> str:
     return ''.join(random.choices(string.digits, k=length))
 
 def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Return a salted, deliberately expensive password hash."""
+    return generate_password_hash(password, method="scrypt")
+
+
+def validate_password_strength(password: str) -> str | None:
+    """Return a user-facing validation error, or None for an acceptable password."""
+    if len(password) < 12:
+        return "Password must be at least 12 characters"
+    if not re.search(r"[a-z]", password) or not re.search(r"[A-Z]", password):
+        return "Password must include upper- and lower-case letters"
+    if not re.search(r"\d", password):
+        return "Password must include a number"
+    return None
+
+
+def is_legacy_password_hash(hashed_password: str | None) -> bool:
+    """Identify the original unsalted SHA-256 format for login migration."""
+    return bool(hashed_password and re.fullmatch(r"[0-9a-fA-F]{64}", hashed_password))
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    if not hashed_password: return False
-    return hash_password(plain_password) == hashed_password
+    if not hashed_password:
+        return False
+    if is_legacy_password_hash(hashed_password):
+        legacy = hashlib.sha256(plain_password.encode()).hexdigest()
+        return hmac.compare_digest(legacy, hashed_password.lower())
+    try:
+        return check_password_hash(hashed_password, plain_password)
+    except (ValueError, TypeError):
+        return False
 
 def create_otp(db: Session, employee_id: str, is_resend: bool = False, business_name: str = "Payment Auditor") -> Dict[str, Any]:
     """

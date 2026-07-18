@@ -4,6 +4,7 @@ import './LoginPage.css';
 
 const LoginPage: React.FC = () => {
     const [employeeId, setEmployeeId] = useState('');
+    const [businessSlug, setBusinessSlug] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [otp, setOtp] = useState('');
@@ -20,9 +21,6 @@ const LoginPage: React.FC = () => {
     const [resendTimer, setResendTimer] = useState(0);
     const [expiryTimer, setExpiryTimer] = useState(300); // 5 minutes
 
-    // Diagnostic Info
-    const [diag, setDiag] = useState({ url: '', reachable: 'Checking...', status: 0, response: '' });
-
     // Captcha
     const [captcha, setCaptcha] = useState({ a: 0, b: 0, result: '' });
     
@@ -32,14 +30,8 @@ const LoginPage: React.FC = () => {
         setCaptcha({ a, b, result: '' });
     };
 
-    const updateDiag = (status: number, text: string) => {
-        setDiag(prev => ({ ...prev, status, response: text.slice(0, 100) }));
-    };
-
     useEffect(() => {
-        console.log("UI STATE CHANGE: step =", step);
         if (step === 'OTP') {
-            console.log("OTP_SCREEN_RENDERED");
             setResendTimer(60);
             setExpiryTimer(300);
         }
@@ -63,12 +55,8 @@ const LoginPage: React.FC = () => {
 
     useEffect(() => {
         refreshCaptcha();
-        const apiBase = window.location.origin;
-        setDiag(prev => ({ ...prev, url: `${apiBase}/api/auth/login` }));
-        
-        fetch(`${apiBase}/health`)
-            .then(res => setDiag(prev => ({ ...prev, reachable: res.ok ? 'YES' : `NO (${res.status})` })))
-            .catch(() => setDiag(prev => ({ ...prev, reachable: 'NO (NETWORK ERROR)' })));
+        const querySlug = new URLSearchParams(window.location.search).get('business');
+        setBusinessSlug(querySlug || localStorage.getItem('business_slug') || '');
     }, []);
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -82,22 +70,15 @@ const LoginPage: React.FC = () => {
             return;
         }
 
-        console.log("LOGIN_REQUEST_SENT: employee_id submitted:", employeeId);
         setLoading(true);
         try {
-            const res = await login(employeeId, password);
-            console.log("LOGIN_RESPONSE_RECEIVED:", res);
-            updateDiag(200, JSON.stringify(res));
-
-            // Extract email for masking if available (we might need backend to return it)
-            // For now use a placeholder or update backend to return email hint
-            setMaskedEmail(res.email_hint || 'registered email');
-
-            console.log("TRANSITIONING TO OTP STEP...");
+            const normalizedSlug = businessSlug.trim().toLowerCase();
+            localStorage.setItem('business_slug', normalizedSlug);
+            const res = await login(employeeId, password, normalizedSlug);
+            setMaskedEmail(res.masked_email || 'registered email');
             setSuccess("OTP sent to your registered email.");
             setStep('OTP');
         } catch (err: any) {
-            console.error("LOGIN ERROR:", err);
             const msg = err.message || '';
             if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Server returned 0')) {
                  setError('SERVER OFFLINE OR LOGIN SERVICE UNAVAILABLE. Please contact your administrator.');
@@ -117,7 +98,7 @@ const LoginPage: React.FC = () => {
         try {
             const response = await fetch(`${window.location.origin}/api/auth/resend-otp`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Business-Slug': businessSlug.trim().toLowerCase() },
                 body: JSON.stringify({ employee_id: employeeId, password })
             });
             const data = await response.json();
@@ -138,7 +119,7 @@ const LoginPage: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            const data = await verifyOTP(employeeId, otp.trim());
+            const data = await verifyOTP(employeeId, otp.trim(), businessSlug.trim().toLowerCase());
             localStorage.setItem('session_token', data.token);
             localStorage.setItem('user', JSON.stringify(data.user));
             window.location.href = '/';
@@ -156,7 +137,7 @@ const LoginPage: React.FC = () => {
         try {
             const response = await fetch(`${window.location.origin}/api/auth/forgot-password`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Business-Slug': businessSlug.trim().toLowerCase() },
                 body: JSON.stringify({ email })
             });
             const data = await response.json();
@@ -189,6 +170,18 @@ const LoginPage: React.FC = () => {
 
                 {step === 'LOGIN' ? (
                     <form onSubmit={handleLogin} className="login-form">
+                        <div className="form-group">
+                            <label>Business Code</label>
+                            <input
+                                type="text"
+                                value={businessSlug}
+                                onChange={(e) => setBusinessSlug(e.target.value)}
+                                placeholder="your-business"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                required
+                            />
+                        </div>
                         <div className="form-group">
                             <label>Employee ID</label>
                             <input 
@@ -252,7 +245,6 @@ const LoginPage: React.FC = () => {
                         </div>
                     </form>
                 ) : step === 'OTP' ? (
-                    (() => { console.log("OTP_FORM_MOUNTED_IN_DOM"); return (
                     <div className="login-form">
                         <div className="mb-6 text-center">
                             <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest mb-1">OTP sent to:</p>
@@ -296,7 +288,6 @@ const LoginPage: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                    )})()
                 ) : (
                     <form onSubmit={handleForgot} className="login-form">
                          <p className="recovery-hint">Password recovery requires access to your private security mailbox.</p>
@@ -319,27 +310,8 @@ const LoginPage: React.FC = () => {
                     </form>
                 )}
                 
-                {/* Diagnostic Panel */}
-                <div className="mt-8 p-4 bg-gray-900 rounded-xl font-mono text-[8px] text-gray-400">
-                    <p className="text-gray-500 font-bold mb-1 uppercase tracking-widest">Login Diagnostics</p>
-                    <div className="flex justify-between">
-                        <span>API ENDPOINT:</span>
-                        <span className="text-blue-400">{diag.url}</span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span>REACHABLE:</span>
-                        <span className={diag.reachable === 'YES' ? 'text-green-400' : 'text-red-400'}>{diag.reachable}</span>
-                    </div>
-                    {diag.status > 0 && (
-                        <div className="flex justify-between">
-                            <span>LAST STATUS:</span>
-                            <span className="text-orange-400">{diag.status}</span>
-                        </div>
-                    )}
-                </div>
-
                 <div className="login-footer">
-                    <p>Physical LAN Connection Required</p>
+                    <p>Tenant-isolated session · OTP protected</p>
                     <div className="lan-indicator online"></div>
                 </div>
             </div>

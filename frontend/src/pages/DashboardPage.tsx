@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import StatCard from '../components/StatCard';
 import AlertSoundSystem from '../api/AlertSoundSystem';
+import { getHeaders } from '../api/client';
 import '../Dashboard.css';
 
 interface DashboardStats {
@@ -130,10 +131,7 @@ const DashboardPage: React.FC = () => {
   const num = (v?: number | null) => Number(v ?? 0).toLocaleString("en-IN");
 
   const fetchData = async () => {
-    const token = localStorage.getItem('aradhana_session_token');
-    const headers = {
-      'X-Session-Token': token || ''
-    };
+    const headers = getHeaders();
 
     try {
       const endpoints = [
@@ -151,15 +149,12 @@ const DashboardPage: React.FC = () => {
       ));
 
       const dashboardLive = responses[0] && responses[0].ok ? await responses[0].json() : null;
-      console.log("DASHBOARD_LIVE_RESPONSE:", dashboardLive);
       if (dashboardLive) setStats(dashboardLive);
 
       const liveFeed = responses[1] && responses[1].ok ? await responses[1].json() : null;
-      console.log("LIVE_FEED_RESPONSE:", liveFeed);
       if (liveFeed) setLiveFeed(liveFeed);
 
       const ingestionStatus = responses[2] && responses[2].ok ? await responses[2].json() : null;
-      console.log("INGESTION_STATUS_RESPONSE:", ingestionStatus);
       if (ingestionStatus) setIngestionStatus(ingestionStatus);
 
       if (responses[3] && responses[3].ok) setEmailStatus(await (responses[3] as Response).json());
@@ -208,7 +203,7 @@ const DashboardPage: React.FC = () => {
                 `${API_BASE}/api/sms-sync-now`;
     
     try {
-      await fetch(url, { method: 'POST' });
+      await fetch(url, { method: 'POST', headers: getHeaders() });
       setTimeout(fetchData, 1000); // Refresh after 1s
     } catch (e) {
       console.error(`Sync failed for ${type}:`, e);
@@ -219,9 +214,8 @@ const DashboardPage: React.FC = () => {
 
   const openPDF = async (bill_id: number) => {
     try {
-      const token = localStorage.getItem('session_token');
       const response = await fetch(`${API_BASE}/api/invoices/pdf/${bill_id}`, {
-        headers: { 'X-Session-Token': token || '' }
+        headers: getHeaders()
       });
       if (!response.ok) {
         if (response.status === 401) {

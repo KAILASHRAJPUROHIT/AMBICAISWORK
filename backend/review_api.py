@@ -2,6 +2,9 @@ import os
 import json
 import logging
 import sys
+import time
+import threading
+from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from typing import List, Optional
 from pydantic import BaseModel
@@ -60,7 +63,7 @@ for _slug in business_registry.list_businesses():
                 (f" error={_integrity_err}" if _integrity_err else ""))
 
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event
-from backend.models import User, LoginLog, Bill, BankAlert, SMSAlert
+from backend.models import User, LoginLog, Bill, BankAlert, SMSAlert, AuditLog
 from backend.pdf_ingestion import start_ingestion_thread, perform_scan, WATCH_PATH
 from backend.email_poller import start_email_poller, process_emails
 from backend.sms_poller import start_sms_poller, process_sms
@@ -69,6 +72,20 @@ from backend.invoice_lifecycle import start_lifecycle_automation
 
 # Initialize FastAPI app
 app = FastAPI(title="AMBIC Payment Auditor")
+
+# Single-process abuse protection for the controlled pilot topology. Public
+# SaaS must use a shared limiter so limits apply across all replicas.
+_RATE_LIMITS = {
+    "/api/auth/login": (20, 60),
+    "/api/auth/verify": (20, 300),
+    "/api/auth/resend-otp": (5, 300),
+    "/api/auth/forgot-password": (5, 900),
+    "/api/auth/reset-password": (8, 900),
+    "/api/setup/save": (5, 3600),
+    "/api/setup/create-owner": (5, 3600),
+}
+_RATE_EVENTS = defaultdict(deque)
+_RATE_LOCK = threading.Lock()
 
 # Dependency — resolves which business this request belongs to (see
 # tenant_context.py) and hands back a session scoped to ONLY that
@@ -85,30 +102,6 @@ def get_db(request: Request):
         yield db
     finally:
         db.close()
-
-@app.get("/api/debug/live-feed")
-async def debug_live_feed(db: Session = Depends(get_db)):
-    from sqlalchemy import text
-    try:
-        total_count = db.query(Bill).count()
-        real_count = db.query(Bill).filter(Bill.is_test_data == False).count()
-        last_5 = db.query(Bill).order_by(Bill.ingested_at.desc()).limit(5).all()
-        
-        return {
-            "total_bills_in_db": total_count,
-            "real_bills_in_db": real_count,
-            "last_5_bills": [
-                {
-                    "id": b.id,
-                    "bill_no": b.bill_number,
-                    "is_test": b.is_test_data,
-                    "ingested_at": b.ingested_at.isoformat()
-                } for b in last_5
-            ],
-            "database_path": DB_PATH
-        }
-    except Exception as e:
-        return {"error": str(e), "database_path": DB_PATH}
 
 # VERSIONING
 APP_VERSION = "1.2.0-STABLE"
@@ -647,6 +640,106 @@ async def require_role(roles: List[str], request: Request, db: Session = Depends
 async def require_owner(user: User = Depends(lambda r, d: require_role(["OWNER", "ADMIN"], r, d))):
     return user
 
+
+@app.get("/api/reconciliations")
+async def list_reconciliations(
+    db: Session = Depends(get_db),
+    user: User = Depends(lambda r, d: require_role(["OWNER", "ADMIN", "ACCOUNTANT"], r, d)),
+):
+    bills = db.query(Bill).filter(Bill.is_test_data == False).order_by(Bill.created_at.desc()).limit(100).all()
+    return [{
+        "invoice_no": bill.bill_number,
+        "status": (bill.status or "Yellow").upper(),
+        "reason": bill.status_text or "REVIEW_PENDING",
+        "details": {
+            "customer": bill.customer_name or "Unknown customer",
+            "total": float(bill.amount or 0),
+            "payments": float(bill.cash_received or 0) + float(bill.bank_received or 0) + float(bill.card_received or 0),
+            "mode": bill.payment_mode or "UNKNOWN",
+        },
+    } for bill in bills]
+
+
+@app.get("/api/reviews/open")
+async def list_open_reviews(
+    db: Session = Depends(get_db),
+    user: User = Depends(lambda r, d: require_role(["OWNER", "ADMIN", "ACCOUNTANT"], r, d)),
+):
+    bills = db.query(Bill).filter(Bill.review_required == 1, Bill.is_test_data == False).order_by(Bill.created_at.desc()).limit(100).all()
+    return [{
+        "review_id": f"bill-{bill.id}",
+        "entity_type": "bill",
+        "entity_id": str(bill.id),
+        "queue_type": "owner" if (bill.status or "").upper() in {"RED", "ORANGE", "PURPLE"} else "accountant",
+        "assigned_role": "OWNER" if (bill.status or "").upper() in {"RED", "ORANGE", "PURPLE"} else "ACCOUNTANT",
+        "escalation_required": (bill.status or "").upper() in {"RED", "ORANGE", "PURPLE"},
+        "status": "OPEN",
+        "reason": bill.status_text or "REVIEW_REQUIRED",
+        "created_at": bill.created_at.isoformat() if bill.created_at else None,
+        "invoice_no": bill.bill_number,
+        "customer_name": bill.customer_name,
+        "amount": float(bill.amount or 0),
+    } for bill in bills]
+
+
+@app.get("/api/escalations/open")
+async def list_open_escalations(
+    db: Session = Depends(get_db),
+    owner: User = Depends(require_owner),
+):
+    bills = db.query(Bill).filter(
+        Bill.is_test_data == False,
+        or_(Bill.status.in_(["Red", "Orange", "Purple"]), Bill.status_text.like("%ESCALATION%")),
+    ).order_by(Bill.created_at.desc()).limit(100).all()
+    return [{
+        "id": f"bill-{bill.id}",
+        "invoice_no": bill.bill_number,
+        "customer_name": bill.customer_name or "Unknown customer",
+        "amount": float(bill.amount or 0),
+        "status": bill.status,
+        "reason": bill.status_text or "OWNER_REVIEW_REQUIRED",
+        "created_at": bill.created_at.isoformat() if bill.created_at else None,
+    } for bill in bills]
+
+
+@app.get("/api/reports/owner")
+async def get_live_owner_report(
+    db: Session = Depends(get_db),
+    owner: User = Depends(require_owner),
+):
+    processed = db.query(Bill).filter(Bill.is_test_data == False).count()
+    open_reviews = db.query(Bill).filter(Bill.is_test_data == False, Bill.review_required == 1).count()
+    escalated = db.query(Bill).filter(Bill.is_test_data == False, Bill.status.in_(["Red", "Orange", "Purple"])).count()
+    resolved = db.query(Bill).filter(Bill.is_test_data == False, Bill.status == "Green").count()
+    return {
+        "daily_summary": {
+            "generated_at": datetime.now().isoformat(),
+            "processed_count": processed,
+            "open_reviews": open_reviews,
+            "escalated_reviews": escalated,
+            "resolved_reviews": resolved,
+            "high_risk_count": escalated,
+            "critical_risk_count": db.query(Bill).filter(Bill.is_test_data == False, Bill.status == "Red").count(),
+            "summary_notes": "Live tenant database summary",
+        }
+    }
+
+
+@app.get("/api/audit-logs")
+async def list_audit_logs(
+    db: Session = Depends(get_db),
+    user: User = Depends(lambda r, d: require_role(["OWNER", "ADMIN", "ACCOUNTANT", "DEVELOPER"], r, d)),
+):
+    logs = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(250).all()
+    return [{
+        "id": str(log.id),
+        "timestamp": log.created_at.isoformat() if log.created_at else None,
+        "actor": log.actor,
+        "action": log.action,
+        "result": "Failure" if (log.new_status or "").upper() in {"RED", "ORANGE"} else "Success" if (log.new_status or "").upper() == "GREEN" else "Info",
+        "details": log.metadata_json or f"{log.entity_type} {log.entity_id}: {log.old_status or '—'} → {log.new_status or '—'}",
+    } for log in logs]
+
 # MASTER CONSOLE: User Administration
 @app.get("/api/admin/users")
 async def list_users(db: Session = Depends(get_db), owner: User = Depends(require_owner)):
@@ -806,7 +899,7 @@ async def setup_save(payload: SetupSaveRequest):
 
 @app.post("/api/setup/create-owner")
 async def setup_create_owner(payload: SetupOwnerRequest):
-    from backend.auth_service import hash_password
+    from backend.auth_service import hash_password, validate_password_strength
     slug = payload.slug.strip()
     profile = business_registry.load_profile(slug)
     if not profile:
@@ -816,8 +909,9 @@ async def setup_create_owner(payload: SetupOwnerRequest):
     email = (payload.email or "").strip()
     if not employee_id or not email:
         raise HTTPException(status_code=400, detail="Employee ID and email are required")
-    if len(payload.password or "") < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    password_error = validate_password_strength(payload.password or "")
+    if password_error:
+        raise HTTPException(status_code=400, detail=password_error)
 
     db = get_session_factory(slug)()
     try:
@@ -881,7 +975,7 @@ _SETUP_HTML = """<!doctype html>
     <label for="email">Email (OTP is sent here)</label>
     <input type="email" id="email" required>
     <label for="password">Password</label>
-    <input type="password" id="password" minlength="8" required>
+    <input type="password" id="password" minlength="12" required>
     <button id="createOwner">Create account</button>
     <div class="err" id="err2"></div>
     <div class="ok" id="ok2"></div>
@@ -950,7 +1044,7 @@ def _business_name_for(req: Request | None) -> str:
 
 @app.post("/api/auth/login")
 async def login(request: LoginRequest, db: Session = Depends(get_db), req: Request = None):
-    from backend.auth_service import verify_password
+    from backend.auth_service import verify_password, hash_password, is_legacy_password_hash
     logger.info(f"LOGIN ATTEMPT: Received employee_id='{request.employee_id}'")
 
     # CASE INSENSITIVE LOOKUP
@@ -964,6 +1058,11 @@ async def login(request: LoginRequest, db: Session = Depends(get_db), req: Reque
         log_event(db, user.employee_id, "PASSWORD_FAILED")
         logger.warning(f"LOGIN FAILED: Invalid password for '{user.employee_id}'")
         raise HTTPException(status_code=401, detail="Invalid password")
+
+    if is_legacy_password_hash(user.hashed_password):
+        user.hashed_password = hash_password(request.password)
+        db.commit()
+        log_event(db, user.employee_id, "PASSWORD_HASH_UPGRADED")
 
     log_event(db, user.employee_id, "LOGIN_REQUEST")
 
@@ -1008,7 +1107,7 @@ async def get_otp_status(employee_id: str, db: Session = Depends(get_db), user: 
 
 @app.post("/api/auth/verify")
 async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Request = None):
-    logger.info(f"VERIFY ATTEMPT: employee_id='{request.employee_id}', otp='{request.otp_code}'")
+    logger.info(f"VERIFY ATTEMPT: employee_id='{request.employee_id}'")
     
     # Use the normalized ID from DB if found
     user = db.query(User).filter(func.lower(User.employee_id) == request.employee_id.lower()).first()
@@ -1116,10 +1215,14 @@ async def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(
 async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(func.lower(User.email) == request.email.lower(), User.is_active == 1).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
+        raise HTTPException(status_code=401, detail="Invalid or expired reset request")
+
+    from backend.auth_service import hash_password, validate_password_strength
+    password_error = validate_password_strength(request.new_password)
+    if password_error:
+        raise HTTPException(status_code=400, detail=password_error)
+
     if verify_otp(db, user.employee_id, request.otp_code):
-        from backend.auth_service import hash_password
         user.hashed_password = hash_password(request.new_password)
         db.commit()
         
@@ -1137,18 +1240,37 @@ async def security_middleware(request: Request, call_next):
         "/api/auth/",
         "/api/setup/",
         "/api/version",
-        "/api/reports/payment-bifurcation",
-        "/api/debug/",
-        "/debug/",
-        "/status-colors",
         "/health"
     ]
+
+    policy = _RATE_LIMITS.get(request.url.path) if request.method == "POST" else None
+    if policy:
+        limit, window_seconds = policy
+        client_ip = request.client.host if request.client else "unknown"
+        key = (client_ip, request.url.path)
+        now = time.monotonic()
+        with _RATE_LOCK:
+            events = _RATE_EVENTS[key]
+            while events and events[0] <= now - window_seconds:
+                events.popleft()
+            if len(events) >= limit:
+                retry_after = max(1, int(window_seconds - (now - events[0])))
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": "Too many requests. Please try again later."},
+                    headers={"Retry-After": str(retry_after)},
+                )
+            events.append(now)
 
     # Static files and root are public (they serve the React app)
     if request.url.path == "/" or request.url.path.startswith("/assets/"):
         return await call_next(request)
 
-    is_protected = request.url.path.startswith("/api/")
+    is_protected = (
+        request.url.path.startswith("/api/")
+        or request.url.path.startswith("/debug/")
+        or request.url.path == "/status-colors"
+    )
     for public_path in PUBLIC_ENDPOINTS:
         if request.url.path.startswith(public_path):
             is_protected = False

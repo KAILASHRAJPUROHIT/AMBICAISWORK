@@ -1,5 +1,7 @@
 # Prime Control Anchor Strategy
 
+> **Tenant edge adapter:** This is a design note for the optional Windows Prime integration. Invoice patterns, labels, and window classes are configuration/validation inputs for a tenant deployment, not global SaaS constants.
+
 ## Overview
 To ensure robust extraction across dynamic UI states in Prime (VB6), we are moving from global indices to a label-anchored detection strategy.
 

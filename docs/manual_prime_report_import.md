@@ -1,5 +1,7 @@
 # Manual Prime Report Import Instructions
 
+> **Legacy Aradhana operator procedure:** The paths and menu workflow below are retained for the original single-business deployment. The SaaS product needs a tenant-scoped upload/import workflow before this procedure can be offered to other businesses.
+
 ## 1. Overview
 As a transitionary measure, the Payment Auditor now supports manual imports of Excel reports exported directly from Prime. This replaces the bill-by-bill robotic extraction and ensures 100% data coverage from the source of truth.
 

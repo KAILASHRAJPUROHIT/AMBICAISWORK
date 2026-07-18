@@ -1,20 +1,19 @@
-# Bank Email Operational Checklist
+# Bank Email Integration Checklist
 
-To ensure deterministic reconciliation, all banks should be configured to send the following alerts to the registered email address:
+Bank-email ingestion is configured per business in `businesses/<slug>/profile.json`; hosted tenants must never share IMAP credentials.
 
-1.  **Transaction Alerts**:
-    *   Immediate email for every credit (UPI, NEFT, IMPS, RTGS).
-    *   Email should contain: Amount, UTR/Reference Number, and Sender Name if available.
+## Required alerts
 
-2.  **Cheque Alerts**:
-    *   Alert when a cheque is deposited or sent for clearing.
-    *   Alert when a cheque is cleared (Realized).
-    *   Alert when a cheque is returned or bounced (with reason).
+- Immediate credit alerts for UPI, NEFT, IMPS, and RTGS.
+- Cheque deposited, cleared, returned, and bounced notifications.
+- Amount, reference/UTR, timestamp, bank/account identifier, and payer name when available.
+- Daily or weekly statement exports for secondary human validation.
 
-3.  **Account Statements**:
-    *   Daily or weekly automated statements in PDF or Excel format for secondary validation.
+## Tenant configuration
 
-## Technical Configuration
-*   Use environment variables for IMAP credentials (`IMAP_USER`, `IMAP_PASS`).
-*   Ensure the auditor laptop has read access to `Z:\Aradhana\InvoicePDFs`.
-*   Maintain `Z:` drive mapping even after restarts.
+Use the tenant profile's `imap` object (`server`, `port`, `user`, `password`, `folder`) and `alert_emails` list. Legacy `IMAP_USER`/`IMAP_PASS` variables apply only to the original single-business tool and must not be used for a shared SaaS deployment.
+
+Use a dedicated read-only mailbox or folder where the bank supports it. Grant the minimum permission necessary, rotate credentials, and test failure/reconnect behaviour before enabling a production poller.
+
+Never place real credentials in `profile.json` on an ephemeral or broadly accessible host. Before public SaaS launch, move secrets to an encrypted secret store and keep only secret references in the tenant profile.
+

@@ -1,54 +1,28 @@
-# Aradhana Payment Auditor: Launch Instructions
+# AMBIC Payment Auditor — Launch Instructions
 
-This guide explains how to start the application for daily use.
+## SaaS evaluation server
 
-## Quick Start (One-Click)
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Set-Location frontend
+npm install
+npm run build
+Set-Location ..
+python -m backend.review_api
+```
 
-The project includes two launcher scripts at the root directory:
+Open `http://localhost:8000/setup` for a disposable first tenant. The live FastAPI entry point is `backend.review_api:app`; the old `backend.main:app` no longer exists.
 
-### 1. `start_aradhana_auditor.bat` (Recommended)
-Use this for daily monitoring.
-*   **What it does:** Starts the Backend API and Frontend UI, then opens your browser to the dashboard.
-*   **How to use:** Double-click the file.
+## Important limitations
 
-### 2. `run_import_and_launch.bat` (After New Reports)
-Use this after you have placed new Excel files in `C:\Aradhana\PrimeExports\ManualReports`.
-*   **What it does:** Imports the data from your Excel files first, then launches the application.
-*   **How to use:** Double-click the file.
+- The current React frontend supports only the sole-tenant fallback. Do not register a second real business.
+- A process restart is required after onboarding so ingestion pollers start for the new tenant.
+- Windows Prime utilities remain local edge scripts with legacy paths. They are not part of the hosted launch.
+- Do not use production bank credentials or financial data until every pilot gate in `LAUNCH_READINESS_AUDIT.md` is complete.
 
----
+## Original Aradhana launchers
 
-## Important Configuration
+`start_aradhana_auditor.bat` and `run_import_and_launch.bat` are retained for historical compatibility with the original Windows deployment. They are not generic SaaS launchers.
 
-### ⚠️ Backend API Warning
-The system uses `backend.review_api:app` for live production data.
-**DO NOT** attempt to use `backend.main:app` for the live dashboard; it is a legacy endpoint and will show incorrect data.
-
-### 🏠 File Paths
-Ensure your Prime reports are exported to:
-`C:\Aradhana\PrimeExports\ManualReports`
-
-The system generates the consolidated database at:
-`C:\Aradhana\PrimeExports\JSON\prime_report_import.json`
-
----
-
-## Desktop Shortcut (Optional)
-
-To make it even easier to launch from your desktop:
-1.  Right-click `start_aradhana_auditor.bat`.
-2.  Select **Send to** > **Desktop (create shortcut)**.
-3.  Rename the shortcut to "Aradhana Auditor".
-
----
-
-## Troubleshooting
-
-If the application fails to start:
-1.  Open a terminal in the project folder.
-2.  Run the health check:
-    ```bash
-    py -3.11 scripts\health_check_launch.py
-    ```
-3.  If "Backend API" shows FAILED, ensure no other program is using Port 8000.
-4.  If "Frontend UI" shows FAILED, ensure no other program is using Port 5173.

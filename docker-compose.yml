@@ -1,0 +1,27 @@
+services:
+  payment-auditor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./businesses:/app/businesses
+      - ./invoice_inbox:/app/invoice_inbox
+    environment:
+      PYTHONUNBUFFERED: "1"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+# Controlled single-host pilot topology only. Put a TLS reverse proxy in
+# front of 127.0.0.1:8000. This does not make the SQLite/JSON control plane
+# suitable for horizontal scaling or public multi-tenant SaaS.

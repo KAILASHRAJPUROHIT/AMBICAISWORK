@@ -1,12 +1,14 @@
 # AMBIC Payment Auditor — Handover (start here in a new session)
 
+> **Launch status (2026-07-18):** This is a conversion checkpoint, not a production-readiness certificate. Public multi-tenant launch is blocked. Read `LAUNCH_READINESS_AUDIT.md` before making deployment or marketing claims.
+
 **Location:** `D:\AI_PROJECTS\AMBIC-Payment-Auditor` — a completely standalone repo. The original
 single-tenant tool for Aradhana Jewellers (`KAILASHRAJPUROHIT/Payment-Auditor`, live production,
 real business) is **untouched**. Nothing in this conversion ever modified that repo or its
 deployment.
 
 **Git:** `https://github.com/KAILASHRAJPUROHIT/AMBIC-Payment-Auditor`, branch `main`, private.
-10 commits, all pushed, working tree clean as of this document. Run `git log --oneline` for the
+11 commits at the time of the forensic audit, all pushed before the audit changes. Run `git log --oneline` for the
 full list — every commit message is written as a standalone explanation of what changed and why,
 so that log is itself a second source of truth for everything below.
 
@@ -92,12 +94,12 @@ per-request in `review_api.py`'s `security_middleware`. Roles: `ADMIN`, `OWNER`,
 own string-list check per-route rather than going through `rbac.get_permissions`/`has_permission`
 (those two functions are themselves unused in production — see the test-suite section).
 
-**Password hashing is a known, unfixed weakness**: `hashlib.sha256(password.encode()).hexdigest()`
-— plain, unsalted. Flagged during the conversion but not fixed, since it's a pre-existing issue
-unrelated to multi-tenancy and touching it means a migration for the (currently zero, since no
-real tenant is onboarded yet) existing password hashes. Worth fixing before any real business
-signs up — swap for `werkzeug.security.generate_password_hash`/`check_password_hash`, same as
-both other AMBIC products already use.
+**Password hashing was hardened during the forensic audit**: new/changed passwords use Werkzeug
+`scrypt` hashes. Login still recognises the original 64-character SHA-256 format only long enough
+to verify a legacy account and immediately replace it with a salted scrypt hash.
+Owner setup and password reset now enforce a 12-character mixed-case/number policy, OTP values are
+not written to verification logs, and auth/setup endpoints have in-process pilot rate limits.
+Those limits are not a substitute for shared gateway/Redis enforcement in a scaled deployment.
 
 ### The three background pollers
 
@@ -148,21 +150,24 @@ brand-new business has no token yet.
 
 ## Frontend
 
-`frontend/src` — a Vite/React/TS SPA, untouched structurally. Only change: hardcoded "Aradhana
-Auditor" branding text in `App.tsx`, `DashboardPage.tsx`, `LoginPage.tsx` replaced with generic
-"Payment Auditor" text. **Full per-tenant dynamic branding (fetched from each business's own
+`frontend/src` is a Vite/React/TypeScript SPA. Hardcoded "Aradhana Auditor" branding was replaced
+with generic "Payment Auditor" text. **Full per-tenant dynamic branding (fetched from each business's own
 profile) was explicitly NOT built** — that's a real feature (an API endpoint returning the
 current tenant's branding + a frontend fetch to render it), not a one-line fix, and was out of
 scope for a correctness-focused conversion pass. Right now every tenant sees the same generic
 "Payment Auditor" name in the UI regardless of their actual business name.
 
-The frontend also has **no tenant-selection UI at all** — no switcher, no `X-Business-Slug`
-awareness anywhere in the React code. It works today only because of the single-tenant fallback
-in `resolve_tenant_slug` (exactly one registered business → assume that's the one). The moment a
-second real business signs up, the frontend will break for both of them unless one of:
-(a) it starts sending `X-Business-Slug` (needs a login-time business picker or subdomain-based
-detection), or (b) custom subdomains get built (see below) and the slug comes from the hostname
-instead of application state.
+The login UI now requires (or pre-fills from `?business=`) an explicit business code. It stores
+that slug and sends `X-Business-Slug` through login, OTP, resend, recovery, and authenticated API
+calls. The obsolete session key and hardcoded loopback fetches were removed from active paths.
+Public SaaS still needs a polished custom-domain/subdomain resolution strategy.
+
+### Mock and disconnected UI/API paths
+
+The mock financial routes were removed from `backend/api_routes.py`. Live reconciliation, review,
+escalation, owner-report, and audit-log screens now call tenant database-backed endpoints in
+`backend/review_api.py`. The inherited Prime extraction screen called a nonexistent endpoint and
+presented a fake client-side approval action, so it was removed from active navigation.
 
 ---
 
@@ -179,6 +184,11 @@ Visit `http://localhost:8000/setup` to create your first business + owner accoun
 values are required just to explore the onboarding flow and the API — IMAP/SMTP only matter once
 you want real OTP emails or real bank-alert ingestion to work.
 
+For a controlled single-host pilot, `Dockerfile` builds the SPA and API together and
+`docker-compose.yml` runs one worker with persistent `businesses/` and `invoice_inbox/` mounts.
+It binds to `127.0.0.1:8000` and expects a separate TLS reverse proxy. Do not scale this Compose
+service horizontally while SQLite and the JSON session index remain authoritative.
+
 `requirements-prime-integration.txt` is separate and Windows-only (`pywinauto`, `pywin32`) — only
 needed if a tenant uses the "Prime" desktop ERP integration (`scripts/prime_*.py`, UI-automation
 driven, not an API). Not part of the core web app.
@@ -187,33 +197,16 @@ driven, not an API). Not part of the core web app.
 
 ## Test suite
 
-`pytest tests/` — **136 passing, 7 failing**, stable across repeated runs. Went from *unable to
-even collect* (the per-tenant database rewrite broke every test's import chain) to this. See
+`pytest tests/` — **148 passing** as of the forensic audit. The suite went from *unable to
+even collect* (the per-tenant database rewrite broke every test's import chain) to green. See
 `tests/conftest.py`'s module docstring for the full isolation-seam mechanics (temp SQLite file via
 `DATABASE_URL`, temp `business_registry.BUSINESSES_DIR`, one auto-registered `test-tenant`
 business, explicit `backend.models` import ordering to avoid a real footgun around
 `Base.metadata` being populated lazily).
 
-**The 7 remaining failures are all pre-existing, unrelated to this conversion**, and were
-deliberately left alone rather than guess-fixed:
-
-- `tests/test_rbac.py` (3 failures) — the actual `_ROLE_PERMISSIONS` mapping in `rbac.py`
-  disagrees with what the tests assert an Accountant/Owner should be able to do (e.g. the test
-  expects Owner to NOT have `MANAGE_USERS`, but the real mapping grants it). This is a business
-  logic question about the intended permission model, not something safe to guess at for a
-  financial system. Also: `get_permissions`/`has_permission` are confirmed **unused in
-  production** — `require_role()` in `review_api.py` does its own separate string-list check.
-- `tests/test_hardening.py` (2 failures) — pure string-casing mismatches
-  (`"Ambiguous"` vs the real `"AMBIGUOUS_AMOUNT_MATCH"`). The actual reconciliation logic and
-  resulting status (`"Blue"`, review required) are both correct; only the exact-case substring
-  assertion is stale.
-- `tests/test_production_filtering.py` (2 failures) — hit `/api/dashboard/live` and
-  `/api/invoices/live-feed` without a session token; both routes have required auth since before
-  this conversion (a "harden the API" pass sometime in the original repo's history), the tests
-  were just never updated to log in first.
-
-None of these represent a regression from this conversion — they're pointed out so whoever picks
-this up next doesn't have to rediscover them from scratch.
+Stale assertions were aligned with the implemented RBAC and machine-readable reconciliation
+statuses. Authenticated production-filtering tests now create a real session and tenant mapping.
+`tests/test_auth_passwords.py` covers salted scrypt hashes and legacy SHA-256 verification.
 
 ---
 
@@ -221,10 +214,10 @@ this up next doesn't have to rediscover them from scratch.
 
 Ranked roughly by how much it matters before a second real business could safely use this:
 
-1. **Frontend has no tenant awareness** (see Frontend section above) — breaks the moment a second
-   business signs up, since the whole SPA relies on the single-tenant fallback.
-2. **Password hashing is unsalted SHA-256** — fix before real users exist; the API is identical
-   to `werkzeug.security`'s functions, drop-in swap.
+1. **Production-grade storage and control plane** — SQLite tenant files and the JSON session index
+   require a single persistent host and cannot support safe horizontal scaling.
+2. **Rate limiting and abuse controls** — authentication, OTP, recovery, and setup endpoints need
+   production throttling, lockout policy, and monitoring.
 3. **Pollers don't live-reload new tenants** — process restart needed after onboarding a business
    for its PDF/email/SMS ingestion to actually start.
 4. **A handful of modules still use the "default tenant" shim** rather than an explicit slug

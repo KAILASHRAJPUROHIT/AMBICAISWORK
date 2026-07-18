@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import ReportSummaryCard from '../components/ReportSummaryCard';
-import { getOwnerReport } from '../api/client';
+import { getHeaders, getOwnerReport } from '../api/client';
 import ConfirmationDialog from '../components/ConfirmationDialog';
 import AlertSoundSystem from '../api/AlertSoundSystem';
 
@@ -42,7 +42,10 @@ const ReportsPage = () => {
         setLoading(true);
         const [liveReport, bifData] = await Promise.all([
           getOwnerReport(),
-          fetch(`${API_BASE}/api/reports/payment-bifurcation`).then(res => res.json())
+          fetch(`${API_BASE}/api/reports/payment-bifurcation`, { headers: getHeaders() }).then(res => {
+            if (!res.ok) throw new Error('Failed to load payment bifurcation');
+            return res.json();
+          })
         ]);
         
         const summary = liveReport.daily_summary;

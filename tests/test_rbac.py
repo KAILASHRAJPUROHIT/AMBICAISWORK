@@ -9,20 +9,20 @@ def test_accountant_permissions():
     assert Permission.RESOLVE_REVIEWS in permissions
     assert Permission.VIEW_ESCALATIONS not in permissions
     assert Permission.RESOLVE_ESCALATIONS not in permissions
-    assert Permission.VIEW_REPORTS not in permissions
+    assert Permission.VIEW_REPORTS in permissions
     assert Permission.GENERATE_REPORTS not in permissions
     assert Permission.MANAGE_USERS not in permissions
 
 
 def test_owner_permissions():
     permissions = get_permissions(UserRole.OWNER)
-    assert Permission.VIEW_REVIEWS not in permissions
-    assert Permission.RESOLVE_REVIEWS not in permissions
+    assert Permission.VIEW_REVIEWS in permissions
+    assert Permission.RESOLVE_REVIEWS in permissions
     assert Permission.VIEW_ESCALATIONS in permissions
     assert Permission.RESOLVE_ESCALATIONS in permissions
     assert Permission.VIEW_REPORTS in permissions
-    assert Permission.GENERATE_REPORTS not in permissions
-    assert Permission.MANAGE_USERS not in permissions
+    assert Permission.GENERATE_REPORTS in permissions
+    assert Permission.MANAGE_USERS in permissions
 
 
 def test_admin_permissions():
@@ -43,7 +43,7 @@ def test_has_permission():
 
     # Owner
     assert has_permission(UserRole.OWNER, Permission.VIEW_ESCALATIONS)
-    assert not has_permission(UserRole.OWNER, Permission.MANAGE_USERS)
+    assert has_permission(UserRole.OWNER, Permission.MANAGE_USERS)
 
     # Admin
     assert has_permission(UserRole.ADMIN, Permission.GENERATE_REPORTS)
