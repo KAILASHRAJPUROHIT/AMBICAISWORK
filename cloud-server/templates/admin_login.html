@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ business_name or "AMBIC SmartQR" }} · Admin Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --brand-accent: {{ (profile.brand_colors.accent if profile and profile.brand_colors else '#D4AF37') }};
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: #0a0b0d;
+            color: #f5f5f4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .box {
+            background: #16181c;
+            border: 1px solid #26292f;
+            border-radius: 16px;
+            padding: 32px;
+            max-width: 340px;
+            width: 100%;
+        }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        .sub { color: #9a9ca1; font-size: 13px; margin-bottom: 20px; }
+        label { display: block; font-size: 12.5px; color: #9a9ca1; margin-bottom: 6px; }
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid #26292f;
+            background: #0a0b0d;
+            color: #fff;
+            font-size: 15px;
+            margin-bottom: 14px;
+        }
+        button {
+            width: 100%;
+            padding: 13px;
+            border: none;
+            border-radius: 10px;
+            background: var(--brand-accent);
+            color: #0a0b0d;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .err { color: #e05555; font-size: 13px; margin-bottom: 14px; }
+    </style>
+</head>
+<body>
+<div class="box">
+    <h1>🔒 Admin Login</h1>
+    <div class="sub">{{ business_name }}</div>
+    {% if error %}<div class="err">{{ error }}</div>{% endif %}
+    <form method="POST">
+        {% if has_users %}
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" autofocus required>
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+        {% else %}
+        <label for="secret">Admin secret</label>
+        <input type="password" id="secret" name="secret" autofocus required>
+        {% endif %}
+        <button type="submit">Sign in</button>
+    </form>
+</div>
+</body>
+</html>

@@ -13,6 +13,7 @@ from pathlib import Path
 from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for, make_response, session, g
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 
 import tenant_profile as tp
 
@@ -54,6 +55,26 @@ class PrintJob(db.Model):
     access_token = db.Column(db.String(64), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class StaffUser(db.Model):
+    """A named login for one person on one tenant's staff. Replaces the old
+    single shared admin_secret (still supported as a legacy fallback for
+    tenants that haven't created their first staff account yet — see
+    _admin_authenticated) with real per-person accounts, so a shop can revoke
+    one employee's access without changing a password everyone else shares,
+    and actions are attributable to a person rather than "whoever had the
+    secret". The first account ever created for a tenant is always "owner";
+    only an owner can manage other accounts (see _require_owner)."""
+    __tablename__ = "staff_users"
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_slug = db.Column(db.String(64), nullable=False, index=True)
+    email = db.Column(db.String(255), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default="staff")  # "owner" or "staff"
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("tenant_slug", "email", name="uq_staff_tenant_email"),)
 
 
 def init_db():
@@ -385,11 +406,18 @@ def media(job_id, filename):
     return send_from_directory(g.upload_dir / secure_filename(job_id), filename, as_attachment=True)
 
 
-def _check_admin_secret(data: dict) -> bool:
-    expected = (g.profile or {}).get("admin_secret", "")
-    if not expected:
-        return True  # tenant hasn't set one — no gate (matches old ADMIN_SECRET-unset behavior)
-    return data.get("secret") == expected
+def _tenant_has_staff_users() -> bool:
+    return StaffUser.query.filter_by(tenant_slug=g.slug).count() > 0
+
+
+def _current_staff_user() -> StaffUser | None:
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+    user = StaffUser.query.get(user_id)
+    if not user or user.tenant_slug != g.slug:
+        return None
+    return user
 
 
 def _admin_authenticated() -> bool:
@@ -399,11 +427,31 @@ def _admin_authenticated() -> bool:
     /history in particular renders full-resolution <img> thumbnails of
     every customer's uploaded document from the last 30 days directly on
     the page, so an unauthenticated GET there was a much bigger exposure
-    than any single guessed job ID."""
+    than any single guessed job ID.
+
+    Two auth paths: real per-person StaffUser accounts (preferred), or the
+    legacy shared admin_secret for tenants that haven't created a staff
+    account yet. Once a tenant has at least one StaffUser row the legacy
+    secret path is retired for them — see admin_login."""
+    if _tenant_has_staff_users():
+        return _current_staff_user() is not None
     expected = (g.profile or {}).get("admin_secret", "")
     if not expected:
-        return True  # tenant hasn't set a password — matches the existing POST-route behavior
+        return True  # tenant hasn't set a password — matches the existing behavior
     return session.get("admin_slug") == g.slug
+
+
+def _current_role() -> str:
+    """"owner" or "staff" for the authenticated session, or "" if
+    unauthenticated. Legacy secret-authenticated sessions (pre-StaffUser
+    tenants) are treated as owner — they hold the same secret an owner
+    would set up their first real account with."""
+    user = _current_staff_user()
+    if user:
+        return user.role
+    if session.get("admin_slug") == g.slug:
+        return "owner"
+    return ""
 
 
 def _require_admin():
@@ -415,47 +463,105 @@ def _require_admin():
     return None
 
 
+def _require_owner():
+    """Call at the top of staff-management routes. Only an owner may add,
+    remove, or view the list of staff accounts."""
+    guard = _require_admin()
+    if guard:
+        return guard
+    if _current_role() != "owner":
+        return jsonify({"error": "Owner access required"}), 403
+    return None
+
+
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     error = None
+    has_users = _tenant_has_staff_users()
     if request.method == "POST":
-        expected = (g.profile or {}).get("admin_secret", "")
-        if not expected or request.form.get("secret") == expected:
-            session["admin_slug"] = g.slug
-            dest = request.args.get("next") or url_for("admin")
-            return redirect(dest)
-        error = "Incorrect admin secret."
+        if has_users:
+            email = (request.form.get("email") or "").strip().lower()
+            password = request.form.get("password") or ""
+            user = StaffUser.query.filter_by(tenant_slug=g.slug, email=email).first()
+            if user and check_password_hash(user.password_hash, password):
+                session["user_id"] = user.id
+                dest = request.args.get("next") or url_for("admin")
+                return redirect(dest)
+            error = "Incorrect email or password."
+        else:
+            expected = (g.profile or {}).get("admin_secret", "")
+            if not expected or request.form.get("secret") == expected:
+                session["admin_slug"] = g.slug
+                dest = request.args.get("next") or url_for("admin")
+                return redirect(dest)
+            error = "Incorrect admin secret."
     business_name = (g.profile or {}).get("business_name", "")
-    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Admin Login</title>
-<style>
-*{{box-sizing:border-box}}body{{font-family:'Inter',-apple-system,sans-serif;background:#0a0b0d;color:#f5f5f4;
-display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px}}
-.box{{background:#16181c;border:1px solid #26292f;border-radius:16px;padding:32px;max-width:340px;width:100%}}
-h1{{font-size:18px;margin-bottom:4px}}
-.sub{{color:#9a9ca1;font-size:13px;margin-bottom:20px}}
-input{{width:100%;padding:12px 14px;border-radius:10px;border:1px solid #26292f;background:#0a0b0d;
-color:#fff;font-size:15px;margin-bottom:14px}}
-button{{width:100%;padding:13px;border:none;border-radius:10px;background:#D4AF37;color:#0a0b0d;
-font-weight:700;font-size:14px;cursor:pointer}}
-.err{{color:#e05555;font-size:13px;margin-bottom:14px}}
-</style></head><body>
-<div class="box">
-<h1>🔒 Admin Login</h1>
-<div class="sub">{business_name}</div>
-{f'<div class="err">{error}</div>' if error else ''}
-<form method="POST">
-<input type="password" name="secret" placeholder="Admin secret" autofocus required>
-<button type="submit">Sign in</button>
-</form>
-</div>
-</body></html>"""
+    return render_template("admin_login.html", business_name=business_name, error=error,
+                            has_users=has_users, profile=g.profile)
 
 
 @app.route("/admin/logout", methods=["POST"])
 def admin_logout():
     session.pop("admin_slug", None)
+    session.pop("user_id", None)
     return redirect(url_for("admin_login"))
+
+
+@app.route("/admin/users", methods=["GET"])
+def admin_users():
+    guard = _require_owner()
+    if guard:
+        return guard
+    users = StaffUser.query.filter_by(tenant_slug=g.slug).order_by(StaffUser.created_at.asc()).all()
+    business_name = (g.profile or {}).get("business_name", "")
+    return render_template("admin_users.html", users=users, business_name=business_name,
+                            current_user_id=session.get("user_id"), profile=g.profile)
+
+
+@app.route("/admin/users/create", methods=["POST"])
+def admin_users_create():
+    # Bootstrapping the first account is allowed on the legacy secret alone
+    # (no StaffUser rows exist yet, so _require_owner's admin check falls
+    # through to the admin_secret session path); every account after that
+    # requires an authenticated owner.
+    guard = _require_owner()
+    if guard:
+        return guard
+    data = request.get_json(silent=True) or request.form
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    role = data.get("role") if data.get("role") in ("owner", "staff") else "staff"
+    if not email or "@" not in email:
+        return jsonify({"error": "Valid email required"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if StaffUser.query.filter_by(tenant_slug=g.slug, email=email).first():
+        return jsonify({"error": "That email already has an account"}), 400
+
+    is_first = not _tenant_has_staff_users()
+    user = StaffUser(tenant_slug=g.slug, email=email,
+                      password_hash=generate_password_hash(password),
+                      role="owner" if is_first else role)
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({"ok": True, "id": user.id, "role": user.role})
+
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+def admin_users_delete(user_id):
+    guard = _require_owner()
+    if guard:
+        return guard
+    user = StaffUser.query.filter_by(id=user_id, tenant_slug=g.slug).first_or_404()
+    if user.id == session.get("user_id"):
+        return jsonify({"error": "You can't remove your own account while logged in as it"}), 400
+    if user.role == "owner":
+        remaining_owners = StaffUser.query.filter_by(tenant_slug=g.slug, role="owner").count()
+        if remaining_owners <= 1:
+            return jsonify({"error": "Can't remove the last owner"}), 400
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/admin", methods=["GET"])
@@ -475,13 +581,19 @@ def admin():
         "created_display": job.created_at.strftime("%d %b %Y, %H:%M"),
     } for job in db_jobs]
     business_name = (g.profile or {}).get("business_name", "")
-    return render_template("admin.html", jobs=jobs, business_name=business_name, profile=g.profile)
+    return render_template("admin.html", jobs=jobs, business_name=business_name, profile=g.profile,
+                            is_owner=(_current_role() == "owner"),
+                            legacy_secret_mode=(session.get("admin_slug") == g.slug))
 
 
 @app.route("/admin/retry/<job_id>", methods=["POST"])
 def admin_retry_job(job_id):
-    data = request.get_json(silent=True) or {}
-    if not _check_admin_secret(data):
+    # Gated on the logged-in admin session, not a per-action secret prompt —
+    # once real per-person accounts exist there's no single shared secret to
+    # prompt for, and re-entering it on every click was redundant with the
+    # login the user already has.
+    guard = _require_admin()
+    if guard:
         return jsonify({"error": "Unauthorized"}), 401
     job = PrintJob.query.filter_by(id=job_id, tenant_slug=g.slug).first_or_404()
     if job.status != "failed":
@@ -495,8 +607,8 @@ def admin_retry_job(job_id):
 
 @app.route("/admin/reprint/<job_id>", methods=["POST"])
 def admin_reprint_job(job_id):
-    data = request.get_json(silent=True) or {}
-    if not _check_admin_secret(data):
+    guard = _require_admin()
+    if guard:
         return jsonify({"error": "Unauthorized"}), 401
     job = PrintJob.query.filter_by(id=job_id, tenant_slug=g.slug).first_or_404()
     job.status = "pending"
@@ -508,8 +620,8 @@ def admin_reprint_job(job_id):
 
 @app.route("/admin/clear-pending", methods=["POST"])
 def admin_clear_pending():
-    data = request.get_json(silent=True) or {}
-    if not _check_admin_secret(data):
+    guard = _require_admin()
+    if guard:
         return jsonify({"error": "Unauthorized"}), 401
 
     deleted = PrintJob.query.filter_by(status="pending", tenant_slug=g.slug).delete()
