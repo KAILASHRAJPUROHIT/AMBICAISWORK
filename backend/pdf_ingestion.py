@@ -9,9 +9,20 @@ from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from sqlalchemy.orm import Session
-from backend.database import SessionLocal, engine
+from backend.database import get_session_factory
+from backend import business_registry
 from backend.models import Bill, Payment, AuditLog, Cheque
 import json
+
+
+def _alert_emails_for(slug: str) -> list:
+    profile = business_registry.load_profile(slug)
+    return (profile or {}).get("alert_emails") or []
+
+
+def _business_name_for_slug(slug: str) -> str:
+    profile = business_registry.load_profile(slug)
+    return (profile or {}).get("business_name") or "Payment Auditor"
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -41,34 +52,48 @@ except ImportError:
 logger.info(f"CUDA Available: {CUDA_AVAILABLE}")
 logger.info(f"OCR Acceleration Setting: {OCR_ACCELERATION}")
 
-# Global status tracker
-ingestion_status = {
-    "watcher_running": False,
-    "watch_path": WATCH_PATH,
-    "path_exists": False,
-    "pdf_files_found": 0,
-    "files_processed": 0,
-    "invoices_inserted": 0,
-    "skipped_duplicates": 0,
-    "failed_files": 0,
-    "last_file_seen": None,
-    "last_processed_time": None,
-    "last_error": None,
-    "cuda_active": CUDA_AVAILABLE
-}
-
+# Per-tenant status trackers. Used to be one shared global dict — under
+# multiple tenants' ingestion running concurrently, every business's
+# scan/file/error counts would have stomped on every other business's in
+# the same dict, and /api/admin/ingestion-status would show whichever
+# tenant's poller last wrote to it rather than the requesting tenant's own.
+_ingestion_status: dict[str, dict] = {}
 status_lock = threading.Lock()
 
-def update_status(**kwargs):
+
+def _status_for(slug: str, watch_path: str = None) -> dict:
+    with status_lock:
+        if slug not in _ingestion_status:
+            _ingestion_status[slug] = {
+                "watcher_running": False,
+                "watch_path": watch_path or WATCH_PATH,
+                "path_exists": False,
+                "pdf_files_found": 0,
+                "files_processed": 0,
+                "invoices_inserted": 0,
+                "skipped_duplicates": 0,
+                "failed_files": 0,
+                "last_file_seen": None,
+                "last_processed_time": None,
+                "last_error": None,
+                "cuda_active": CUDA_AVAILABLE,
+            }
+        return _ingestion_status[slug]
+
+
+def update_status(slug: str, **kwargs):
+    st = _status_for(slug)
     with status_lock:
         for key, value in kwargs.items():
-            if key in ingestion_status:
-                ingestion_status[key] = value
+            if key in st:
+                st[key] = value
 
-def increment_status(key, amount=1):
+
+def increment_status(slug: str, key, amount=1):
+    st = _status_for(slug)
     with status_lock:
-        if key in ingestion_status:
-            ingestion_status[key] += amount
+        if key in st:
+            st[key] += amount
 
 def get_file_hash(file_path):
     sha256_hash = hashlib.sha256()
@@ -89,15 +114,15 @@ def get_file_hash(file_path):
         logger.error(f"Error hashing file {file_path}: {e}")
         return None
 
-def check_share_health():
-    exists = os.path.exists(WATCH_PATH)
-    update_status(path_exists=exists)
+def check_share_health(slug: str, watch_path: str):
+    exists = os.path.exists(watch_path)
+    update_status(slug, path_exists=exists)
     if not exists:
-        logger.error(f"Invoice Share Offline: {WATCH_PATH} is unavailable.")
+        logger.error(f"[{slug}] Invoice Share Offline: {watch_path} is unavailable.")
         return False
     return True
 
-def parse_pdf(file_path):
+def parse_pdf(file_path, slug: str = None):
     try:
         text = ""
         metadata = {}
@@ -280,38 +305,40 @@ def parse_pdf(file_path):
         return data
     except Exception as e:
         logger.error(f"Error parsing PDF {file_path}: {e}")
-        update_status(last_error=f"Parse Error ({os.path.basename(file_path)}): {str(e)}")
+        if slug:
+            update_status(slug, last_error=f"Parse Error ({os.path.basename(file_path)}): {str(e)}")
         return None
 
-def process_invoice(file_path):
+def process_invoice(file_path, slug: str):
     if not file_path.lower().endswith(".pdf"):
         return
 
-    update_status(last_file_seen=os.path.basename(file_path))
-    
+    update_status(slug, last_file_seen=os.path.basename(file_path))
+
     file_hash = get_file_hash(file_path)
     if not file_hash:
-        increment_status("failed_files")
+        increment_status(slug, "failed_files")
         return
 
-    db = SessionLocal()
+    db = get_session_factory(slug)()
     try:
         # 1. SHA256 Hash check
         existing_hash = db.query(Bill).filter(Bill.pdf_hash == file_hash).first()
         if existing_hash:
             logger.info(f"Duplicate hash detected for {os.path.basename(file_path)}")
-            increment_status("skipped_duplicates")
+            increment_status(slug, "skipped_duplicates")
             handle_duplicate(file_path, db, reason="Duplicate PDF SHA256 hash")
             return
 
-        invoice_data = parse_pdf(file_path)
+        invoice_data = parse_pdf(file_path, slug)
         if not invoice_data or not invoice_data["bill_number"]:
             logger.warning(f"Parse Failed: {os.path.basename(file_path)} (No bill number)")
-            increment_status("failed_files")
+            increment_status(slug, "failed_files")
             from backend.email_notifier import send_red_alert_email
             send_red_alert_email(
                 subject=f"RED ALERT: Parse Failure - {os.path.basename(file_path)}",
-                body=f"System failed to parse invoice details from file: {file_path}"
+                body=f"System failed to parse invoice details from file: {file_path}",
+                alert_emails=_alert_emails_for(slug), business_name=_business_name_for_slug(slug),
             )
             return
 
@@ -331,7 +358,7 @@ def process_invoice(file_path):
 
         if duplicate_bill:
             logger.info(f"Duplicate 5-point match for {invoice_data['bill_number']}")
-            increment_status("skipped_duplicates")
+            increment_status(slug, "skipped_duplicates")
             handle_duplicate(file_path, db, reason="5-point identity match (Number, Date, Customer, Total)")
             return
 
@@ -339,7 +366,7 @@ def process_invoice(file_path):
         duplicate_num = db.query(Bill).filter(Bill.bill_number == invoice_data["bill_number"]).first()
         if duplicate_num:
             logger.warning(f"Duplicate Number Skip: {invoice_data['bill_number']} (Partial identity match)")
-            increment_status("skipped_duplicates")
+            increment_status(slug, "skipped_duplicates")
             handle_duplicate(file_path, db, reason="Duplicate Invoice Number match")
             return
 
@@ -432,101 +459,128 @@ def process_invoice(file_path):
             from backend.email_notifier import send_red_alert_email
             send_red_alert_email(
                 subject=f"RED ALERT: Payment Total Mismatch - {new_bill.bill_number}",
-                body=f"Invoice {new_bill.bill_number} for {new_bill.customer_name} has a mismatch.\nBilled Total: {new_bill.total_amount}\nSum of Payments: {total_payments}"
+                body=f"Invoice {new_bill.bill_number} for {new_bill.customer_name} has a mismatch.\nBilled Total: {new_bill.total_amount}\nSum of Payments: {total_payments}",
+                alert_emails=_alert_emails_for(slug), business_name=_business_name_for_slug(slug),
             )
 
         db.commit()
         logger.info(f"Invoice Inserted: {new_bill.bill_number} from {os.path.basename(file_path)}")
-        
+
         # TRIGGER RECONCILIATION RETRY for this new bill
         from backend.reconciliation.logic import reconcile_unreconciled_alerts
         reconcile_unreconciled_alerts(db)
-        
-        increment_status("invoices_inserted")
-        update_status(last_processed_time=datetime.now().isoformat())
+
+        increment_status(slug, "invoices_inserted")
+        update_status(slug, last_processed_time=datetime.now().isoformat())
 
     except Exception as e:
         db.rollback()
         logger.error(f"Database Error processing {file_path}: {e}")
-        update_status(last_error=f"DB Error: {str(e)}")
-        increment_status("failed_files")
+        update_status(slug, last_error=f"DB Error: {str(e)}")
+        increment_status(slug, "failed_files")
     finally:
-        increment_status("files_processed")
+        increment_status(slug, "files_processed")
         db.close()
 
-def perform_scan():
-    if not check_share_health():
+def perform_scan(slug: str, watch_path: str):
+    if not check_share_health(slug, watch_path):
         return
-    
-    logger.info(f"Folder scan started: {WATCH_PATH!r}")
-    exists = os.path.exists(WATCH_PATH)
-    logger.info(f"os.path.exists(WATCH_PATH): {exists}")
-    
+
+    logger.info(f"[{slug}] Folder scan started: {watch_path!r}")
+
     try:
-        all_files = os.listdir(WATCH_PATH)
-        logger.info(f"os.listdir count: {len(all_files)}")
-        logger.info(f"First 5 files: {all_files[:5]}")
-        
+        all_files = os.listdir(watch_path)
         pdf_files = [f for f in all_files if f.lower().endswith(".pdf")]
-        logger.info(f"PDF files count: {len(pdf_files)}")
-        
-        update_status(pdf_files_found=len(pdf_files), path_exists=True)
-        
+        logger.info(f"[{slug}] PDF files count: {len(pdf_files)}")
+
+        update_status(slug, pdf_files_found=len(pdf_files), path_exists=True)
+
         for file in pdf_files:
-            process_invoice(os.path.join(WATCH_PATH, file))
-        
-        logger.info(f"Folder scan complete. Total files in folder: {len(all_files)}.")
+            process_invoice(os.path.join(watch_path, file), slug)
+
+        logger.info(f"[{slug}] Folder scan complete. Total files in folder: {len(all_files)}.")
     except Exception as e:
-        logger.error(f"Error scanning folder {WATCH_PATH}: {e}")
-        update_status(last_error=f"Scan Error: {str(e)}")
+        logger.error(f"[{slug}] Error scanning folder {watch_path}: {e}")
+        update_status(slug, last_error=f"Scan Error: {str(e)}")
         # Keep watcher_running True if path exists as per instructions
-        update_status(path_exists=os.path.exists(WATCH_PATH))
+        update_status(slug, path_exists=os.path.exists(watch_path))
 
 
 class InvoiceHandler(FileSystemEventHandler):
+    def __init__(self, slug: str):
+        self.slug = slug
+
     def on_created(self, event):
         if not event.is_directory:
-            process_invoice(event.src_path)
+            process_invoice(event.src_path, self.slug)
+
     def on_modified(self, event):
         if not event.is_directory:
-            process_invoice(event.src_path)
+            process_invoice(event.src_path, self.slug)
 
-def start_watcher():
-    if not check_share_health():
-        update_status(watcher_running=False)
-        # return # Let it continue to poll health
 
-    event_handler = InvoiceHandler()
+def start_watcher(slug: str, watch_path: str):
+    if not check_share_health(slug, watch_path):
+        update_status(slug, watcher_running=False)
+        # Let it continue to poll health rather than returning
+
+    event_handler = InvoiceHandler(slug)
     observer = Observer()
-    observer.schedule(event_handler, WATCH_PATH, recursive=False)
+    observer.schedule(event_handler, watch_path, recursive=False)
     observer.start()
-    update_status(watcher_running=True)
-    logger.info(f"Realtime watcher/poller active on {WATCH_PATH}")
-    
+    update_status(slug, watcher_running=True)
+    logger.info(f"[{slug}] Realtime watcher/poller active on {watch_path}")
+
     try:
         while True:
-            time.sleep(60) # Re-verify entire list of pdfs in the folder every minute
-            if not os.path.exists(WATCH_PATH):
-                update_status(path_exists=False, watcher_running=False)
+            time.sleep(60)  # Re-verify entire list of pdfs in the folder every minute
+            if not os.path.exists(watch_path):
+                update_status(slug, path_exists=False, watcher_running=False)
             else:
-                if not ingestion_status["path_exists"]:
-                    logger.info("Invoice share re-connected.")
-                update_status(path_exists=True, watcher_running=True)
+                if not _status_for(slug)["path_exists"]:
+                    logger.info(f"[{slug}] Invoice share re-connected.")
+                update_status(slug, path_exists=True, watcher_running=True)
                 # Periodic scan to ensure nothing was missed by watcher
-                perform_scan() 
+                perform_scan(slug, watch_path)
     except Exception as e:
-        logger.error(f"Watcher thread crashed: {e}")
-        update_status(watcher_running=False, last_error=f"Watcher Crash: {str(e)}")
+        logger.error(f"[{slug}] Watcher thread crashed: {e}")
+        update_status(slug, watcher_running=False, last_error=f"Watcher Crash: {str(e)}")
+
+
+def _tenant_watch_path(slug: str) -> str:
+    """Each business's own invoice_share_path from its profile, falling
+    back to the module-level default (env-configurable, business-neutral
+    local folder) if that tenant hasn't set one — same convenience fallback
+    used throughout this conversion for tenants that haven't configured
+    per-tenant ingestion yet."""
+    profile = business_registry.load_profile(slug)
+    return (profile or {}).get("invoice_share_path") or WATCH_PATH
+
 
 def start_ingestion_thread():
-    # Run scan first
-    scan_thread = threading.Thread(target=perform_scan, daemon=True)
-    scan_thread.start()
-    
-    # Run watcher (which now also performs periodic scans)
-    watcher_thread = threading.Thread(target=start_watcher, daemon=True)
-    watcher_thread.start()
+    """Spawns one scan+watcher thread pair PER registered business, each
+    watching that business's own configured invoice share. Used to spawn
+    exactly one pair for one hardcoded WATCH_PATH — under multiple
+    tenants that would have meant every business's invoices got scanned
+    from (and inserted against, via the single shared default-tenant
+    SessionLocal) whichever one hardcoded share happened to be configured.
+
+    New businesses onboarded after this function runs need a process
+    restart to pick up ingestion — not a live-reload loop yet (tracked
+    with the onboarding flow this depends on)."""
+    for slug in business_registry.list_businesses():
+        watch_path = _tenant_watch_path(slug)
+        threading.Thread(target=perform_scan, args=(slug, watch_path), daemon=True).start()
+        threading.Thread(target=start_watcher, args=(slug, watch_path), daemon=True).start()
 
 if __name__ == "__main__":
-    perform_scan()
-    start_watcher()
+    # Direct-invocation debug path only — start_watcher() blocks forever in
+    # its own while-loop, so this only ever actually watches the first
+    # registered business when run standalone like this. The real
+    # multi-tenant path is start_ingestion_thread() above, used by
+    # review_api.py's startup event, which spawns one non-blocking daemon
+    # thread pair per business instead of looping synchronously.
+    for _slug in business_registry.list_businesses():
+        _watch_path = _tenant_watch_path(_slug)
+        perform_scan(_slug, _watch_path)
+        start_watcher(_slug, _watch_path)

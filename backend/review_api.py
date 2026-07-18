@@ -45,7 +45,7 @@ else:
 # Per-tenant now (see database.py's module docstring) — there's no single
 # "the" database to validate at import time, so this checks every
 # currently-registered business instead of one fixed file.
-from backend.database import get_session_factory, check_db_integrity
+from backend.database import get_session_factory, get_engine, check_db_integrity
 from backend import business_registry
 from backend.tenant_context import resolve_tenant_slug
 
@@ -56,7 +56,7 @@ for _slug in business_registry.list_businesses():
 
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event
 from backend.models import User, LoginLog, Bill, BankAlert, SMSAlert
-from backend.pdf_ingestion import start_ingestion_thread, perform_scan, ingestion_status, WATCH_PATH
+from backend.pdf_ingestion import start_ingestion_thread, perform_scan, WATCH_PATH
 from backend.email_poller import start_email_poller, process_emails, email_status
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
 from backend.api_routes import router as api_router
@@ -186,19 +186,24 @@ async def get_payment_bifurcation(
     return report
 
 @app.get("/debug/startup")
-async def get_startup_debug():
+async def get_startup_debug(request: Request):
     from sqlalchemy import inspect
-    inspector = inspect(engine)
-    tables = inspector.get_table_names()
-    
+    from backend.pdf_ingestion import _tenant_watch_path
+    # Was a single hardcoded engine/DB_PATH/WATCH_PATH — now resolved per
+    # request's own tenant, same as every other route (see get_db).
+    slug = resolve_tenant_slug(request)
+    db_path = get_engine(slug).url.database if slug else None
+    tables = inspect(get_engine(slug)).get_table_names() if slug else []
+
     return {
+        "business": slug,
         "project_root": BASE_DIR,
-        "database_path": DB_PATH,
-        "database_exists": os.path.exists(DB_PATH),
+        "database_path": db_path,
+        "database_exists": bool(db_path and os.path.exists(db_path)),
         "env_path": ENV_PATH,
         "env_file_found": env_found,
         "env_loaded": os.getenv("EMAIL_USERNAME") is not None,
-        "invoice_path": WATCH_PATH,
+        "invoice_path": _tenant_watch_path(slug) if slug else None,
         "bills_table_exists": "bills" in tables,
         "bank_alerts_table_exists": "bank_alerts" in tables,
         "sms_alerts_table_exists": "sms_alerts" in tables,
@@ -208,22 +213,26 @@ async def get_startup_debug():
     }
 
 @app.get("/debug/runtime")
-async def get_runtime_debug(db: Session = Depends(get_db)):
+async def get_runtime_debug(db: Session = Depends(get_db), request: Request = None):
+    from backend.pdf_ingestion import _tenant_watch_path
+    slug = resolve_tenant_slug(request) if request else None
     data = {}
+    data["business"] = slug
     data["project_root"] = BASE_DIR
     try: data["cwd"] = os.getcwd()
     except Exception as e: data["cwd"] = f"ERROR: {str(e)}"
-        
-    data["database_path"] = DB_PATH
+
+    data["database_path"] = get_engine(slug).url.database if slug else None
     data["env_file_path"] = ENV_PATH
     data["env_loaded"] = os.getenv("EMAIL_USERNAME") is not None
-    
+
     try:
-        data["invoice_share_path"] = WATCH_PATH
-        exists = os.path.exists(WATCH_PATH)
+        watch_path = _tenant_watch_path(slug) if slug else None
+        data["invoice_share_path"] = watch_path
+        exists = bool(watch_path and os.path.exists(watch_path))
         data["invoice_share_reachable"] = exists
         if exists:
-            data["pdf_count_in_share"] = len([f for f in os.listdir(WATCH_PATH) if f.lower().endswith(".pdf")])
+            data["pdf_count_in_share"] = len([f for f in os.listdir(watch_path) if f.lower().endswith(".pdf")])
         else:
             data["pdf_count_in_share"] = 0
     except Exception as e:
@@ -330,14 +339,17 @@ async def get_system_mode():
     return {"mode": "PRODUCTION", "lan_connected": is_lan, "blocked": not is_lan}
 
 @app.get("/api/system/share-status")
-async def get_share_status():
-    online = os.path.exists(WATCH_PATH)
+async def get_share_status(request: Request):
+    from backend.pdf_ingestion import _tenant_watch_path
+    slug = resolve_tenant_slug(request)
+    watch_path = _tenant_watch_path(slug) if slug else WATCH_PATH
+    online = os.path.exists(watch_path)
     pdf_count = 0
     if online:
-        try: pdf_count = len([f for f in os.listdir(WATCH_PATH) if f.lower().endswith(".pdf")])
+        try: pdf_count = len([f for f in os.listdir(watch_path) if f.lower().endswith(".pdf")])
         except: pass
-            
-    return {"online": online, "path": WATCH_PATH, "label": "Invoice PDF Share", "status_color": "Green" if online else "Red", "pdf_count": pdf_count}
+
+    return {"online": online, "path": watch_path, "label": "Invoice PDF Share", "status_color": "Green" if online else "Red", "pdf_count": pdf_count}
 
 @app.get("/api/invoices/live-feed")
 async def get_live_feed(db: Session = Depends(get_db)):
@@ -450,10 +462,13 @@ async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
         email_confirmed = 0.0
         cheque_collection = 0.0
 
-    online = os.path.exists(WATCH_PATH)
+    from backend.pdf_ingestion import _tenant_watch_path
+    _dash_slug = resolve_tenant_slug(request)
+    _dash_watch_path = _tenant_watch_path(_dash_slug) if _dash_slug else WATCH_PATH
+    online = os.path.exists(_dash_watch_path)
     pdf_count = 0
     if online:
-        try: pdf_count = len([f for f in os.listdir(WATCH_PATH) if f.lower().endswith(".pdf")])
+        try: pdf_count = len([f for f in os.listdir(_dash_watch_path) if f.lower().endswith(".pdf")])
         except: pass
 
     return {
@@ -525,12 +540,21 @@ async def review_invoice(action: ReviewAction, request: Request):
     return {"status": "success", "audit_log": log_path}
 
 @app.get("/api/admin/ingestion-status")
-async def get_ingestion_status(): return ingestion_status
+async def get_ingestion_status(request: Request):
+    from backend.pdf_ingestion import _status_for
+    slug = resolve_tenant_slug(request)
+    if not slug:
+        raise HTTPException(status_code=409, detail="No business context — set X-Business-Slug or complete /setup")
+    return _status_for(slug)
 
 @app.post("/api/scan-now")
-async def trigger_scan():
+async def trigger_scan(request: Request):
     import threading
-    threading.Thread(target=perform_scan, daemon=True).start()
+    from backend.pdf_ingestion import _tenant_watch_path
+    slug = resolve_tenant_slug(request)
+    if not slug:
+        raise HTTPException(status_code=409, detail="No business context — set X-Business-Slug or complete /setup")
+    threading.Thread(target=perform_scan, args=(slug, _tenant_watch_path(slug)), daemon=True).start()
     return {"status": "scan_triggered", "message": "PDF rescan started in background"}
 
 @app.get("/api/admin/email-status")

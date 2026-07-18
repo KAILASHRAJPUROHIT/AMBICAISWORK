@@ -84,6 +84,26 @@ def send_security_alert(event_type: str, details: str, alert_emails: list[str], 
     """
     return all(send_email(addr, subject, body, from_name=business_name) for addr in alert_emails)
 
+def send_red_alert_email(subject: str, body: str, alert_emails: list[str], business_name: str = "Payment Auditor"):
+    """Ingestion-pipeline red alerts (PDF parse failure, payment-total
+    mismatch) — see pdf_ingestion.py's process_invoice. This function was
+    called from two places there but never actually existed anywhere in
+    the codebase; every real call to either would have raised ImportError
+    at the exact moment something needed a human's attention (a parse
+    failure or a payment mismatch on a real invoice)."""
+    if not alert_emails:
+        logger.warning(f"send_red_alert_email: no alert_emails configured, dropping alert: {subject}")
+        return False
+    html_body = f"""
+    <html>
+    <body style="font-family: sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #d32f2f;">RED ALERT — {business_name}</h2>
+        <div style="background: #fff1f0; border-left: 5px solid #d32f2f; padding: 20px; margin: 20px 0; white-space: pre-wrap;">{body}</div>
+    </body>
+    </html>
+    """
+    return all(send_email(addr, subject, html_body, from_name=business_name) for addr in alert_emails)
+
 def send_financial_alert(event_type: str, invoice_no: str, amount: float, alert_emails: list[str], business_name: str = "Payment Auditor"):
     """Notifies a tenant's configured recipients of high-risk financial
     events. See send_security_alert's docstring — same fix, same reason."""
