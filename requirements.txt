@@ -1,0 +1,25 @@
+# Core web application (backend/review_api.py and everything it imports).
+# Python 3.11 (per the original README's setup instructions).
+#
+# NOT included here — Windows-desktop-automation tooling used only by the
+# Prime ERP integration scripts (scripts/prime_*.py), which drive a legacy
+# Windows desktop app via UI automation rather than an API. That's a
+# business-specific local-integration concern, not a dependency of the
+# hosted web app itself. See requirements-prime-integration.txt.
+
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+SQLAlchemy>=2.0
+python-dotenv>=1.0
+Werkzeug>=3.0
+
+# Ingestion / parsing
+pdfplumber>=0.11
+watchdog>=4.0
+pandas>=2.2
+openpyxl>=3.1
+requests>=2.31
+
+# Testing
+pytest>=8.0

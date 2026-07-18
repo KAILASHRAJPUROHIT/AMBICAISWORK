@@ -1,0 +1,8 @@
+# Optional — only needed by scripts/prime_*.py, which automate a legacy
+# Windows desktop ERP application ("Prime") via UI automation rather than an
+# API. This is a business-specific local-integration concern for whichever
+# tenant happens to use that particular desktop ERP, not a dependency of the
+# hosted web app (requirements.txt) itself. Windows-only.
+
+pywinauto>=0.6.8
+pywin32>=306
