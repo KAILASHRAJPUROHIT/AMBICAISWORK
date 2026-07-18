@@ -311,7 +311,7 @@ const LoginPage: React.FC = () => {
                 )}
                 
                 <div className="login-footer">
-                    <p>Tenant-isolated session · OTP protected</p>
+                    <p>Tenant-isolated session · OTP protected · <a href="https://ambicdigital.in/legal/payment-auditor-schedule" target="_blank" rel="noopener noreferrer">Terms</a> · <a href="https://ambicdigital.in/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></p>
                     <div className="lan-indicator online"></div>
                 </div>
             </div>

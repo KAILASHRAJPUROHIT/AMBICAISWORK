@@ -10,6 +10,8 @@ This repository is suitable for local evaluation and a controlled pilot. It is *
 
 The original Aradhana production tool is a separate repository. Files under `docs/legacy-prime-*` and documents explicitly marked as legacy describe that business-specific Windows/Prime integration; they are not hosted-SaaS instructions.
 
+Before any real-business pilot, read `LAUNCH_READINESS_AUDIT.md` and `LEGAL_COMPLIANCE.md`. The public Payment Auditor terms are at https://ambicdigital.in/legal/payment-auditor-schedule.
+
 ## Local setup
 
 ```powershell

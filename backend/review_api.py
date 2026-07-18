@@ -953,6 +953,8 @@ _SETUP_HTML = """<!doctype html>
   .err { color:var(--err); font-size:13px; margin-top:10px; }
   .ok { color:var(--ok); font-size:13px; margin-top:10px; }
   .step2 { display:none; }
+  .legal { color:#8f9298; font-size:11px; line-height:1.5; margin-top:16px; }
+  .legal a { color:var(--gold); }
 </style>
 </head>
 <body>
@@ -963,6 +965,7 @@ _SETUP_HTML = """<!doctype html>
     <label for="business_name">Business name</label>
     <input type="text" id="business_name" autofocus required>
     <button id="saveBiz">Continue</button>
+    <div class="legal">Controlled pilot only. By continuing, the authorised business operator confirms they are 18+ and accepts the <a href="https://ambicdigital.in/terms" target="_blank" rel="noopener noreferrer">Terms</a>, <a href="https://ambicdigital.in/legal/payment-auditor-schedule" target="_blank" rel="noopener noreferrer">Product Schedule</a> and <a href="https://ambicdigital.in/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</div>
     <div class="err" id="err1"></div>
   </div>
   <div class="card step2" id="step2">
