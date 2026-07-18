@@ -603,7 +603,7 @@
 <script>
     const PRODUCTION_MODE = {{ 'true' if production_mode else 'false' }};
     const HAS_VOICE_CLIP = {{ 'true' if (profile and profile.voice_clip_path) else 'false' }};
-    const VOICE_CLIP_URL = {{ ('/setup/voice_clip/' + profile.slug) | tojson if (profile and profile.voice_clip_path) else '""' }};
+    const VOICE_CLIP_URL = {{ (('/setup/voice_clip/' + profile.slug) if (profile and profile.voice_clip_path) else '') | tojson }};
     const HAS_SOCIAL_LINKS = {{ 'true' if (profile and (profile.instagram_handle or profile.facebook_page)) else 'false' }};
 
     // Global state
