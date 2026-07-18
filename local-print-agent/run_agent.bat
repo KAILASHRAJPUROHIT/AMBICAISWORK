@@ -6,6 +6,10 @@
 cd /d "%~dp0"
 
 :: 2. Launch the agent using pythonw.exe so no console window remains open
-"C:\Users\kaila\AppData\Local\Programs\Python\Python311\pythonw.exe" agent.py
+if not exist "%~dp0.venv\Scripts\pythonw.exe" (
+  echo Missing .venv\Scripts\pythonw.exe>> "%~dp0logs\agent-launch-error.log"
+  exit /b 1
+)
+"%~dp0.venv\Scripts\pythonw.exe" agent.py
 
 exit

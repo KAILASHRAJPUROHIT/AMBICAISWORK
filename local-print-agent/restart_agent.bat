@@ -17,9 +17,9 @@ if %errorLevel% neq 0 (
 
 SET "TASK_NAME=AMBIC SmartQR Print Agent"
 
-:: 2. Terminate existing processes
-echo Stopping currently running print agent...
-taskkill /F /IM pythonw.exe >nul 2>&1
+:: 2. Stop only this scheduled task. Never kill every pythonw.exe process
+:: on the machine; other business software may legitimately use Python.
+echo Stopping the AMBIC SmartQR scheduled task...
 schtasks /end /tn "%TASK_NAME%" >nul 2>&1
 
 :: Brief pause to ensure OS releases file locks

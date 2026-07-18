@@ -1,190 +1,71 @@
 # AMBIC SmartQR — System Architecture
 
-This document outlines the technical architecture, workflows, and deployment standards for
-AMBIC SmartQR, a multi-tenant commercial QR print platform.
+## Overview
 
-## 1. High-Level Architecture
+SmartQR separates a public Flask upload/queue service from a Windows print agent installed beside each tenant's printer.
 
-The system uses a decoupled architecture to bridge public web uploads with local physical
-printing, shared across many independent businesses ("tenants") on one deployment.
+```text
+Customer phone -> HTTPS upload -> tenant-scoped queue
+                                      |
+                                      v
+                         outbound polling with X-Agent-Key
+                                      |
+                                      v
+                         Windows agent -> SumatraPDF -> printer
+```
 
-*   **Cloud Server (Central Hub):** A public-facing Flask application that receives files from
-    users, manages the print queue, and hosts a `/setup` wizard for onboarding new businesses.
-*   **Local Print Agent (Edge Worker):** A background service running on each shop's own PC that
-    polls the Cloud Server for **that business's own jobs only**, processes documents, and
-    communicates with the physical printer.
+## Tenant model
 
----
+- Profiles: `cloud-server/tenants/<slug>/profile.json`.
+- Job rows: shared SQLAlchemy database with indexed `tenant_slug`.
+- Tenant discovery: `?tenant=` or `tenant_slug` cookie for browser flows.
+- Agent authentication: rotatable profile `agent_api_key` sent as `X-Agent-Key`.
+- Admin/staff data: queries are scoped by the resolved tenant.
+- Media downloads: tenant-scoped job lookup plus an unguessable per-job access token.
+- Document encryption: uploaded files are encrypted at rest with a per-tenant `encryption_key`
+  (profile secret, alongside `admin_secret`/`agent_api_key`), decrypted only in-memory when
+  serving an authenticated request — plaintext is never written back to disk.
+- Document retention: `document_retention_sweep()` deletes a completed/failed job's files
+  `DOCUMENT_RETENTION_HOURS` (default 2h) after its last update, and stale pending/printing jobs
+  after `STALE_JOB_RETENTION_HOURS` (default 24h); the job row itself is kept for history.
 
-## 2. Multi-Tenant Model
+The JSON profile and SQLite defaults require a single persistent instance. A horizontally scaled or ephemeral deployment needs managed tenant storage, database migrations, object storage, and shared session/secret handling.
 
-*   Each business ("tenant") is a JSON profile at `cloud-server/tenants/<slug>/profile.json`,
-    holding its branding (name, logo, colors), optional social/contact links (Instagram,
-    Facebook, Google review, WhatsApp, phone), an optional welcome voice clip, and three secrets:
-    an `admin_secret` (protects that tenant's `/admin` actions), an `agent_api_key` (what that
-    shop's local print agent authenticates with), and an `encryption_key` (per-tenant Fernet key
-    for document encryption at rest — see section 2a).
+## Queue lifecycle
 
-### 2a. Document encryption & retention
+1. Customer uploads 1–12 supported files.
+2. Server creates a tenant-scoped `pending` job and per-job media token.
+3. That tenant's agent polls `/api/agent/jobs/pending` with `X-Agent-Key`.
+4. Agent patches the job to `printing`.
+5. Agent downloads media, builds any required layout, and invokes SumatraPDF.
+6. Agent patches the job to `completed` or `failed`.
 
-*   Every uploaded file is encrypted on disk with the tenant's `encryption_key`
-    (`app.py`'s `_encrypt_bytes`/`_decrypt_bytes`) — this is always on, not configurable.
-    Decryption happens only in-memory when serving an authenticated, token-verified request
-    (`/media/...`); the plaintext is never written back to disk.
-*   Retention is handled separately by `document_retention_sweep()`, a recurring background
-    thread: a completed/failed job's files are deleted `DOCUMENT_RETENTION_HOURS` (default 2h)
-    after its last status update — long enough for a same-visit admin reprint — and a job stuck
-    pending/printing is cleaned after `STALE_JOB_RETENTION_HOURS` (default 24h) so nothing lingers
-    indefinitely. The job row itself is kept for history/audit; only the document content and its
-    `access_token` are cleared.
-*   The active tenant for a request is resolved via a `?tenant=` query param or a `tenant_slug`
-    cookie (`tenant_profile.resolve_active_slug`), bound once per request onto Flask's
-    request-local `g` object in a `@app.before_request` hook — not module-level globals, which
-    would be unsafe under concurrent requests.
-*   If no tenant can be resolved, customer-facing routes redirect to `/setup`.
-*   Every `PrintJob` row is tagged with `tenant_slug`, and every admin/customer query is scoped by
-    it — one business can never see another's jobs, uploads, check-ins, or social handles.
+States are `pending`, `printing`, `completed`, and `failed`. The edge agent also persists `printing`, `printed`, and `completed` in `agent_state.db`; ambiguous retries are held for manual review. The server still needs an operator-facing stuck-job lease/recovery workflow.
 
----
+## Core endpoints
 
-## 3. Cloud Server Architecture
+| Endpoint | Method | Control |
+|---|---:|---|
+| `/api/agent/jobs/pending` | GET | `X-Agent-Key`; returns only that tenant's jobs |
+| `/api/agent/jobs/<job_id>/status` | PATCH | `X-Agent-Key`; tenant-scoped update |
+| `/media/<job_id>/<filename>` | GET | resolved tenant plus per-job access token |
+| `/setup` | GET/POST flow | creates tenant profile/secrets |
+| `/admin` | browser flow | tenant-scoped staff/admin session |
 
-*   **Framework:** Flask (Python)
-*   **Database:** SQLAlchemy (SQLite) for job tracking and persistence, with `tenant_slug` as an
-    indexed column.
-*   **Storage:** Per-tenant filesystem directories (`tenants/<slug>/uploads`,
-    `tenants/<slug>/checkins`) for uploaded assets and staff check-in photos.
-*   **Core Responsibilities:**
-    *   Hosting the tenant-branded upload interface.
-    *   Validating file types (`.jpg`, `.jpeg`, `.png`, `.pdf`) and batch sizes (max 12 files).
-    *   Generating unique, human-readable Queue IDs derived from the tenant's slug
-        (`<PREFIX>-YYYYMMDD-XXX`).
-    *   Providing an authenticated REST API for each tenant's Local Print Agent.
-    *   Providing an Admin Dashboard (AMBIC's own internal branding) for queue monitoring and
-        maintenance, scoped per tenant.
-    *   Hosting the `/setup` onboarding wizard.
+## Deployment boundaries
 
----
+- Cloud service: HTTPS, managed database/object storage, rate limiting, central logs, backups.
+- Edge agent: Windows 10/11, Python 3.11/3.12, SumatraPDF, outbound HTTPS only.
+- Printer credentials/driver remain on the tenant's PC; they do not belong in the cloud profile.
 
-## 4. Local Print Agent Architecture
+## Release checklist
 
-*   **Framework:** Python (Background Loop)
-*   **Polling Mechanism:** Requests pending jobs every 5-10 seconds via HTTP, authenticating with
-    an `X-Agent-Key` header set to the tenant's `agent_api_key`.
-*   **Layout Engine:**
-    *   **Pillow (PIL):** Used for image rotation, resizing, and normalization.
-    *   **ReportLab:** Used to generate print-ready A4 PDF layouts.
-*   **Print Driver:** **SumatraPDF** (CLI Mode). Used for silent, non-interactive printing to
-    specific Windows printer drivers.
-*   **Core Responsibilities:**
-    *   Securely downloading assets from the Cloud Server (only ones belonging to its own
-        tenant).
-    *   Generating PDF layouts based on the `print_mode` (Standard PDF or ID Card Grid).
-    *   Managing local job state and ensuring idempotency (no double-prints).
-    *   Reporting detailed status/error logs back to the Cloud Server.
+- [ ] Two-tenant isolation test passes.
+- [ ] Upload/media token tests pass.
+- [ ] Agent dependency audit is clean.
+- [ ] Correct printer, tenant slug, and agent key verified.
+- [ ] Crash during download, print, and completion callback tested without duplicate output.
+- [ ] Persistent database/object storage and backup restore verified.
+- [ ] Rate limits, staff auth, secret rotation, monitoring, and retention policy enabled.
 
----
-
-## 5. API Endpoints (Agent Communication)
-
-All `/api/agent/*` endpoints require an `X-Agent-Key` header matching a tenant's `agent_api_key`
-— this is what stops one shop's agent from ever seeing another shop's print jobs.
-
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `/api/agent/jobs/pending` | `GET` | Returns pending jobs for the tenant identified by `X-Agent-Key`. |
-| `/api/agent/jobs/<job_id>/status` | `PATCH` | Updates job status (`printing`, `completed`, `failed`) and attaches error messages, scoped to the authenticated tenant. |
-| `/media/<job_id>/<filename>` | `GET` | Downloads the raw file for processing (tenant-scoped via `?tenant=`). |
-
----
-
-## 6. Print Workflow & Queue Lifecycle
-
-### Flow:
-1.  **Submission:** User uploads 1-12 files via mobile browser, on a page branded for their shop.
-2.  **Creation:** Cloud Server creates a record with `status="pending"` and `tenant_slug` set.
-3.  **Discovery:** That tenant's agent polls the server and fetches only its own job metadata.
-4.  **Acknowledgment:** Agent marks the job as `status="printing"` on the server.
-5.  **Processing:** Agent downloads files, runs the Layout Engine, and generates a temporary PDF.
-6.  **Physical Print:** Agent executes the SumatraPDF command.
-7.  **Finalization:** Agent marks the job as `status="completed"`.
-
-### States:
-*   `pending`: Waiting for agent.
-*   `printing`: In progress (files downloaded/sent to spooler).
-*   `completed`: Successfully sent to printer.
-*   `failed`: Error encountered (logged in `error_message`).
-
----
-
-## 7. Onboarding a New Business
-
-1.  Visit `/setup` on the cloud server (no tenant configured yet).
-2.  Fill in business name, brand colors, and optionally logo, voice clip, Instagram, Facebook,
-    Google review link, WhatsApp number, phone number. Unconfigured optional fields simply don't
-    render on the customer-facing page — nothing is hardcoded to one business.
-3.  Save — this returns an `agent_api_key` and `admin_secret` for that business.
-4.  Paste those into the shop's local print agent `.env` (see `local-print-agent/.env.example`)
-    alongside `TENANT_SLUG`.
-5.  Start the agent (`python agent.py`, or install as a service/scheduled task).
-
----
-
-## 8. Deployment Workflow
-
-1.  **Server Setup:** Deploy `cloud-server/` to a reachable host (starts on a home PC, later a
-    VM), accessible by every onboarded tenant.
-2.  **Environment Config:** Configure `.env` on the server (see `cloud-server/.env.example`) and
-    on each tenant's local agent (see `local-print-agent/.env.example`).
-3.  **Local Dependencies:** Install Python 3.11+ and SumatraPDF on each shop's PC.
-4.  **Agent Installation:** Use `install_service.bat` (NSSM) or `install_autostart.bat` (Task
-    Scheduler) per shop.
-
----
-
-## 9. Startup Automation
-
-The project supports two methods for ensuring each shop's Agent runs 24/7 on Windows:
-
-*   **NSSM (Recommended):** Installs the agent as a true Windows Service. Managed via
-    `local-print-agent/install_service.bat`.
-*   **Task Scheduler:** Runs the agent at system startup under the `SYSTEM` account. Managed via
-    `local-print-agent/install_autostart.bat`.
-
----
-
-## 10. Recovery Procedures
-
-*   **Printer Jams:** The agent will timeout after 60s. Clear the printer queue manually and
-    restart the Agent service.
-*   **Stuck Queue:** Use that tenant's Cloud Server `/admin?tenant=<slug>` dashboard to "Clear
-    Pending Queue" if jobs are backed up.
-*   **Network Failure:** The Agent uses exponential retry/polling logic; it will automatically
-    resume printing once the connection is restored.
-*   **Logs:**
-    *   Agent logs: `local-print-agent/logs/agent.log`
-    *   Service logs: `local-print-agent/logs/nssm_stderr.log`
-
----
-
-## 11. Known Dependencies
-
-*   **Python Libraries:** `flask`, `flask-sqlalchemy`, `requests`, `pillow`, `reportlab`,
-    `python-dotenv`.
-*   **External Binaries:**
-    *   **SumatraPDF:** Required for PDF rendering/printing.
-    *   **NSSM (Optional):** Required for service installation.
-
----
-
-## 12. Production Deployment Checklist
-
-- [ ] Business onboarded via `/setup`; `agent_api_key` and `admin_secret` recorded.
-- [ ] `PRINTER_NAME` matches exactly as shown in Windows "Printers & Scanners".
-- [ ] `SUMATRA_PATH` points to a valid `SumatraPDF.exe`.
-- [ ] `CLOUD_SERVER_URL` is accessible from the shop PC.
-- [ ] `TENANT_SLUG` and `AGENT_API_KEY` set in the agent's `.env` and match the onboarded tenant.
-- [ ] Printer is set as "Online" and has paper/toner.
-- [ ] Agent service is confirmed "Running" via `services.msc` or Task Scheduler.
-- [ ] A second, different test tenant confirmed isolated (its agent never sees the first
-      tenant's jobs).
+See `SAAS_HANDOVER.md` and `LAUNCH_READINESS_AUDIT.md` for current status.

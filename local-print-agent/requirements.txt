@@ -1,5 +1,4 @@
-requests==2.31.0
-python-dotenv==1.0.1
-pypdf==4.0.1
-Pillow==10.2.0
-reportlab==4.1.0
+requests==2.34.2
+python-dotenv==1.2.2
+Pillow==12.3.0
+reportlab==4.5.1
