@@ -103,18 +103,6 @@
     {% if edit_profile and edit_profile.voice_clip_path %}
       <audio class="preview" controls src="/setup/voice_clip/{{ edit_profile.slug }}"></audio>
     {% endif %}
-
-    <label style="display:flex;align-items:center;gap:8px;margin-top:20px">
-      <input type="checkbox" id="secure_documents" style="width:auto"
-             {{ 'checked' if edit_profile and edit_profile.secure_documents else '' }}>
-      Secure document mode
-    </label>
-    <p class="hint" style="margin:2px 0 0">
-      Every uploaded document is always encrypted at rest. With this on, a document is
-      deleted immediately once it's printed instead of being kept for 30 days —
-      recommended for ID cards and other sensitive documents. Print history thumbnails
-      for these jobs will show "Deleted (secure)" instead of the file.
-    </p>
   </div>
 
   <button class="btn btn-primary" onclick="saveAll()">Save &amp; Continue →</button>
@@ -161,7 +149,6 @@ async function saveAll() {
     google_review_url: document.getElementById("google_review_url").value.trim(),
     whatsapp_number: document.getElementById("whatsapp_number").value.trim(),
     phone_number: document.getElementById("phone_number").value.trim(),
-    secure_documents: document.getElementById("secure_documents").checked,
   };
 
   statusEl.textContent = "Saving…";

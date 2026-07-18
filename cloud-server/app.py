@@ -1,20 +1,30 @@
 import base64
+import hmac
 import json
 import mimetypes
 import os
 import random
+import secrets
 import shutil
+import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
-from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for, make_response, Response, abort
+from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for, make_response, session, g, Response
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
 
 import tenant_profile as tp
 
 app = Flask(__name__)
+# Required for the admin session cookie (see _admin_authenticated below) to
+# be signed/tamper-proof. Falls back to a random per-process key so the app
+# still runs without one set, but that invalidates every admin session on
+# restart — set FLASK_SECRET_KEY in production so logins persist.
+app.secret_key = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -37,8 +47,36 @@ class PrintJob(db.Model):
     copies = db.Column(db.Integer, default=1, nullable=False)
     file_paths = db.Column(db.Text, nullable=False, default="[]")
     error_message = db.Column(db.Text, nullable=True)
+    # Unauthenticated download token for /media/<job_id>/<filename>. The
+    # queue_id alone (e.g. "SUN-20260717-042") is deliberately short and
+    # human-readable for the customer to show at the counter — only 999
+    # possible values per business per day, and easily scriptable to
+    # enumerate. Document downloads require this separate, unguessable
+    # token instead, which is only ever revealed to (a) the print agent
+    # via its already-authenticated X-Agent-Key poll and (b) nowhere else.
+    access_token = db.Column(db.String(64), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class StaffUser(db.Model):
+    """A named login for one person on one tenant's staff. Replaces the old
+    single shared admin_secret (still supported as a legacy fallback for
+    tenants that haven't created their first staff account yet — see
+    _admin_authenticated) with real per-person accounts, so a shop can revoke
+    one employee's access without changing a password everyone else shares,
+    and actions are attributable to a person rather than "whoever had the
+    secret". The first account ever created for a tenant is always "owner";
+    only an owner can manage other accounts (see _require_owner)."""
+    __tablename__ = "staff_users"
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_slug = db.Column(db.String(64), nullable=False, index=True)
+    email = db.Column(db.String(255), nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default="staff")  # "owner" or "staff"
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("tenant_slug", "email", name="uq_staff_tenant_email"),)
 
 
 def init_db():
@@ -55,6 +93,20 @@ def init_db():
             if "tenant_slug" not in columns:
                 conn.execute(db.text("ALTER TABLE print_jobs ADD COLUMN tenant_slug VARCHAR(64) DEFAULT ''"))
                 conn.commit()
+            if "access_token" not in columns:
+                conn.execute(db.text("ALTER TABLE print_jobs ADD COLUMN access_token VARCHAR(64)"))
+                conn.commit()
+
+        # Backfill existing rows (from before this column existed) with a
+        # real token instead of leaving them permanently inaccessible —
+        # otherwise every in-flight job at deploy time would 403 forever.
+        unset = PrintJob.query.filter(
+            (PrintJob.access_token.is_(None)) | (PrintJob.access_token == "")
+        ).all()
+        for job in unset:
+            job.access_token = secrets.token_urlsafe(32)
+        if unset:
+            db.session.commit()
 
 def allowed_file(filename):
     return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
@@ -65,9 +117,8 @@ def allowed_file(filename):
 # key (tenant_profile.default_profile's "encryption_key"). Decryption happens
 # only in-memory, on the fly, when serving an authenticated request (customer
 # admin view or the tenant's own print agent) — the plaintext is never
-# written back to disk. This is separate from a tenant's "secure_documents"
-# toggle, which additionally deletes the encrypted file the moment its job
-# completes instead of keeping it for the normal 30-day retention window.
+# written back to disk. Retention itself (how long the encrypted file lives
+# before deletion) is handled separately by document_retention_sweep below.
 
 def _encrypt_bytes(data: bytes, profile: dict) -> bytes:
     key = (profile or {}).get("encryption_key")
@@ -104,11 +155,6 @@ def generate_queue_id(tenant_slug: str):
 # cookie/query-param flow customer browsers use.
 
 TENANTS_DIR = tp.TENANTS_DIR
-ACTIVE_SLUG = None
-ACTIVE_PROFILE = None
-UPLOAD_DIR = None
-CHECKIN_DIR = None
-HANDLES_FILE = None
 
 _SETUP_EXEMPT_ROUTES = {"setup_page", "setup_save", "setup_logo", "setup_voice_clip", "static"}
 _AGENT_EXEMPT_ROUTES = {"get_pending_jobs", "update_job_status"}
@@ -122,8 +168,12 @@ def _tenant_dir(slug: str) -> Path:
 
 @app.before_request
 def _bind_tenant():
-    global ACTIVE_SLUG, ACTIVE_PROFILE, UPLOAD_DIR, CHECKIN_DIR, HANDLES_FILE
-
+    # Bound to flask.g (request-scoped), not module globals. The old code
+    # rebound module-level ACTIVE_SLUG/ACTIVE_PROFILE/UPLOAD_DIR globals here
+    # on every request — two tenants' requests running concurrently on
+    # different worker threads shared that one mutable set, so one request
+    # could read or write through another tenant's paths if their timing
+    # overlapped. g is a fresh object per request; nothing left to race on.
     if request.endpoint in _SETUP_EXEMPT_ROUTES or request.endpoint in _AGENT_EXEMPT_ROUTES:
         return None
 
@@ -133,14 +183,14 @@ def _bind_tenant():
             return jsonify({"error": "No tenant configured yet — visit /setup"}), 409
         return redirect(url_for("setup_page"))
 
-    profile = tp.load_profile(slug)
-    ACTIVE_SLUG, ACTIVE_PROFILE = slug, profile
+    g.slug = slug
+    g.profile = tp.load_profile(slug)
     d = _tenant_dir(slug)
-    UPLOAD_DIR = d / "uploads"
-    UPLOAD_DIR.mkdir(exist_ok=True)
-    CHECKIN_DIR = d / "checkins"
-    CHECKIN_DIR.mkdir(exist_ok=True)
-    HANDLES_FILE = d / "social_handles.csv"
+    g.upload_dir = d / "uploads"
+    g.upload_dir.mkdir(exist_ok=True)
+    g.checkin_dir = d / "checkins"
+    g.checkin_dir.mkdir(exist_ok=True)
+    g.handles_file = d / "social_handles.csv"
     return None
 
 
@@ -171,7 +221,6 @@ def setup_save():
     profile["google_review_url"] = (data.get("google_review_url") or "").strip()
     profile["whatsapp_number"] = (data.get("whatsapp_number") or "").strip()
     profile["phone_number"] = (data.get("phone_number") or "").strip()
-    profile["secure_documents"] = bool(data.get("secure_documents"))
 
     tp.save_profile(profile)
     resp = jsonify({
@@ -251,16 +300,16 @@ def setup_voice_clip_serve(slug):
 
 @app.route("/", methods=["GET"])
 def index():
-    resp = make_response(render_template("index.html", profile=ACTIVE_PROFILE))
-    resp.set_cookie("tenant_slug", ACTIVE_SLUG, max_age=60 * 60 * 24 * 365)
+    resp = make_response(render_template("index.html", profile=g.profile))
+    resp.set_cookie("tenant_slug", g.slug, max_age=60 * 60 * 24 * 365)
     return resp
 
 
 @app.route("/print", methods=["GET"])
 def print_page():
     production_mode = os.environ.get("PRODUCTION_MODE", "false").lower() == "true"
-    resp = make_response(render_template("upload.html", production_mode=production_mode, profile=ACTIVE_PROFILE))
-    resp.set_cookie("tenant_slug", ACTIVE_SLUG, max_age=60 * 60 * 24 * 365)
+    resp = make_response(render_template("upload.html", production_mode=production_mode, profile=g.profile))
+    resp.set_cookie("tenant_slug", g.slug, max_age=60 * 60 * 24 * 365)
     return resp
 
 
@@ -283,8 +332,8 @@ def upload():
     if copies < 1 or copies > 5:
         return jsonify({"error": "Copies must be between 1 and 5."}), 400
 
-    job_id = generate_queue_id(ACTIVE_SLUG)
-    job_dir = UPLOAD_DIR / job_id
+    job_id = generate_queue_id(g.slug)
+    job_dir = g.upload_dir / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     saved_files = []
 
@@ -297,14 +346,15 @@ def upload():
         destination = job_dir / safe_name
         if destination.exists():
             destination = job_dir / f"{destination.stem}_{len(saved_files)+1}{destination.suffix}"
-        destination.write_bytes(_encrypt_bytes(uploaded.read(), ACTIVE_PROFILE))
+        destination.write_bytes(_encrypt_bytes(uploaded.read(), g.profile))
         saved_files.append(destination.name)
 
     if not saved_files:
         return jsonify({"error": "No valid files uploaded."}), 400
 
-    job = PrintJob(id=job_id, tenant_slug=ACTIVE_SLUG, status="pending", print_mode=print_mode,
-                   copies=copies, file_paths=json.dumps(saved_files))
+    job = PrintJob(id=job_id, tenant_slug=g.slug, status="pending", print_mode=print_mode,
+                   copies=copies, file_paths=json.dumps(saved_files),
+                   access_token=secrets.token_urlsafe(32))
     db.session.add(job)
     db.session.commit()
     return jsonify({"success": True, "queue_id": job_id, "status": job.status, "file_count": len(saved_files)})
@@ -312,11 +362,11 @@ def upload():
 
 @app.route("/api/job/<job_id>", methods=["GET"])
 def get_job_status(job_id):
-    job = PrintJob.query.filter_by(id=job_id, tenant_slug=ACTIVE_SLUG).first_or_404()
+    job = PrintJob.query.filter_by(id=job_id, tenant_slug=g.slug).first_or_404()
     position = None
     if job.status == "pending":
         ahead = PrintJob.query.filter(
-            PrintJob.tenant_slug == ACTIVE_SLUG,
+            PrintJob.tenant_slug == g.slug,
             PrintJob.status == "pending",
             PrintJob.created_at < job.created_at
         ).count()
@@ -345,7 +395,7 @@ def get_pending_jobs():
     response = []
     for job in jobs:
         filenames = json.loads(job.file_paths or "[]")
-        files = [{"filename": name, "url": request.url_root.rstrip("/") + f"/media/{job.id}/{name}?tenant={tenant['slug']}"} for name in filenames]
+        files = [{"filename": name, "url": request.url_root.rstrip("/") + f"/media/{job.id}/{name}?tenant={tenant['slug']}&token={job.access_token}"} for name in filenames]
         response.append({"job_id": job.id, "status": job.status, "print_mode": job.print_mode, "copies": job.copies, "files": files, "created_at": job.created_at.isoformat()})
     return jsonify(response)
 
@@ -367,25 +417,26 @@ def update_job_status(job_id):
     if error_message:
         job.error_message = str(error_message)[:2000]
     db.session.commit()
-
-    # Secure-documents tenants: don't wait for the 30-day cleanup sweep —
-    # once the agent confirms printing, the customer's document is deleted
-    # immediately rather than retained.
-    if status == "completed" and tenant.get("secure_documents"):
-        job_dir = _tenant_dir(tenant["slug"]) / "uploads" / secure_filename(job.id)
-        shutil.rmtree(job_dir, ignore_errors=True)
-
     return jsonify({"success": True, "job_id": job.id, "status": job.status})
 
 
 @app.route("/media/<job_id>/<path:filename>", methods=["GET"])
 def media(job_id, filename):
-    job = PrintJob.query.filter_by(id=job_id, tenant_slug=ACTIVE_SLUG).first_or_404()
+    job = PrintJob.query.filter_by(id=job_id, tenant_slug=g.slug).first_or_404()
+    # queue_id alone is not a secret — it's a 3-digit-per-day code shown to
+    # the customer as their pickup reference, trivially enumerable. The
+    # actual document download requires this separate, unguessable token
+    # (see PrintJob.access_token), which only ever reaches the print agent
+    # via its own X-Agent-Key-authenticated poll.
+    token = request.args.get("token", "")
+    if not job.access_token or not hmac.compare_digest(token, job.access_token):
+        return jsonify({"error": "Invalid or missing access token"}), 403
+
     safe_name = secure_filename(filename)
-    file_path = UPLOAD_DIR / secure_filename(job_id) / safe_name
+    file_path = g.upload_dir / secure_filename(job_id) / safe_name
     if not file_path.is_file():
-        abort(404)
-    data = _decrypt_bytes(file_path.read_bytes(), ACTIVE_PROFILE)
+        return jsonify({"error": "File not found"}), 404
+    data = _decrypt_bytes(file_path.read_bytes(), g.profile)
     mimetype = mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
     return Response(
         data, mimetype=mimetype,
@@ -393,72 +444,196 @@ def media(job_id, filename):
     )
 
 
-def _check_admin_secret(data: dict) -> bool:
-    expected = (ACTIVE_PROFILE or {}).get("admin_secret", "")
+def _tenant_has_staff_users() -> bool:
+    return StaffUser.query.filter_by(tenant_slug=g.slug).count() > 0
+
+
+def _current_staff_user() -> StaffUser | None:
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+    user = StaffUser.query.get(user_id)
+    if not user or user.tenant_slug != g.slug:
+        return None
+    return user
+
+
+def _admin_authenticated() -> bool:
+    """Session-based gate for every /admin* VIEW route. Every one of these
+    used to be reachable with no auth at all — only the destructive POST
+    actions (retry/reprint/clear-pending) ever checked a secret. /admin
+    /history in particular renders full-resolution <img> thumbnails of
+    every customer's uploaded document from the last 30 days directly on
+    the page, so an unauthenticated GET there was a much bigger exposure
+    than any single guessed job ID.
+
+    Two auth paths: real per-person StaffUser accounts (preferred), or the
+    legacy shared admin_secret for tenants that haven't created a staff
+    account yet. Once a tenant has at least one StaffUser row the legacy
+    secret path is retired for them — see admin_login."""
+    if _tenant_has_staff_users():
+        return _current_staff_user() is not None
+    expected = (g.profile or {}).get("admin_secret", "")
     if not expected:
-        return True  # tenant hasn't set one — no gate (matches old ADMIN_SECRET-unset behavior)
-    return data.get("secret") == expected
+        return True  # tenant hasn't set a password — matches the existing behavior
+    return session.get("admin_slug") == g.slug
+
+
+def _current_role() -> str:
+    """"owner" or "staff" for the authenticated session, or "" if
+    unauthenticated. Legacy secret-authenticated sessions (pre-StaffUser
+    tenants) are treated as owner — they hold the same secret an owner
+    would set up their first real account with."""
+    user = _current_staff_user()
+    if user:
+        return user.role
+    if session.get("admin_slug") == g.slug:
+        return "owner"
+    return ""
+
+
+def _require_admin():
+    """Call at the top of every /admin* view. Returns a redirect to the
+    login page (preserving where the visitor was headed) if not
+    authenticated, otherwise None so the caller proceeds normally."""
+    if not _admin_authenticated():
+        return redirect(url_for("admin_login", next=request.path))
+    return None
+
+
+def _require_owner():
+    """Call at the top of staff-management routes. Only an owner may add,
+    remove, or view the list of staff accounts."""
+    guard = _require_admin()
+    if guard:
+        return guard
+    if _current_role() != "owner":
+        return jsonify({"error": "Owner access required"}), 403
+    return None
+
+
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    error = None
+    has_users = _tenant_has_staff_users()
+    if request.method == "POST":
+        if has_users:
+            email = (request.form.get("email") or "").strip().lower()
+            password = request.form.get("password") or ""
+            user = StaffUser.query.filter_by(tenant_slug=g.slug, email=email).first()
+            if user and check_password_hash(user.password_hash, password):
+                session["user_id"] = user.id
+                dest = request.args.get("next") or url_for("admin")
+                return redirect(dest)
+            error = "Incorrect email or password."
+        else:
+            expected = (g.profile or {}).get("admin_secret", "")
+            if not expected or request.form.get("secret") == expected:
+                session["admin_slug"] = g.slug
+                dest = request.args.get("next") or url_for("admin")
+                return redirect(dest)
+            error = "Incorrect admin secret."
+    business_name = (g.profile or {}).get("business_name", "")
+    return render_template("admin_login.html", business_name=business_name, error=error,
+                            has_users=has_users, profile=g.profile)
+
+
+@app.route("/admin/logout", methods=["POST"])
+def admin_logout():
+    session.pop("admin_slug", None)
+    session.pop("user_id", None)
+    return redirect(url_for("admin_login"))
+
+
+@app.route("/admin/users", methods=["GET"])
+def admin_users():
+    guard = _require_owner()
+    if guard:
+        return guard
+    users = StaffUser.query.filter_by(tenant_slug=g.slug).order_by(StaffUser.created_at.asc()).all()
+    business_name = (g.profile or {}).get("business_name", "")
+    return render_template("admin_users.html", users=users, business_name=business_name,
+                            current_user_id=session.get("user_id"), profile=g.profile)
+
+
+@app.route("/admin/users/create", methods=["POST"])
+def admin_users_create():
+    # Bootstrapping the first account is allowed on the legacy secret alone
+    # (no StaffUser rows exist yet, so _require_owner's admin check falls
+    # through to the admin_secret session path); every account after that
+    # requires an authenticated owner.
+    guard = _require_owner()
+    if guard:
+        return guard
+    data = request.get_json(silent=True) or request.form
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    role = data.get("role") if data.get("role") in ("owner", "staff") else "staff"
+    if not email or "@" not in email:
+        return jsonify({"error": "Valid email required"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+    if StaffUser.query.filter_by(tenant_slug=g.slug, email=email).first():
+        return jsonify({"error": "That email already has an account"}), 400
+
+    is_first = not _tenant_has_staff_users()
+    user = StaffUser(tenant_slug=g.slug, email=email,
+                      password_hash=generate_password_hash(password),
+                      role="owner" if is_first else role)
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({"ok": True, "id": user.id, "role": user.role})
+
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+def admin_users_delete(user_id):
+    guard = _require_owner()
+    if guard:
+        return guard
+    user = StaffUser.query.filter_by(id=user_id, tenant_slug=g.slug).first_or_404()
+    if user.id == session.get("user_id"):
+        return jsonify({"error": "You can't remove your own account while logged in as it"}), 400
+    if user.role == "owner":
+        remaining_owners = StaffUser.query.filter_by(tenant_slug=g.slug, role="owner").count()
+        if remaining_owners <= 1:
+            return jsonify({"error": "Can't remove the last owner"}), 400
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/admin", methods=["GET"])
 def admin():
-    jobs = (PrintJob.query.filter_by(tenant_slug=ACTIVE_SLUG)
-            .order_by(PrintJob.created_at.desc()).limit(100).all())
-    STATUS_COLOR = {"pending": "#e6a817", "printing": "#5bc0de", "completed": "#5cb85c", "failed": "#d9534f"}
-    cards = ""
-    for job in jobs:
-        file_count = len(json.loads(job.file_paths or "[]"))
-        color = STATUS_COLOR.get(job.status, "#aaa")
-        actions = ""
-        if job.status == "failed":
-            actions += f'<button onclick="retryJob(\'{job.id}\')" style="flex:1;padding:8px;background:#e6a817;color:#000;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">↺ Retry</button>'
-        if job.status in ("completed", "failed"):
-            actions += f'<button onclick="reprintJob(\'{job.id}\')" style="flex:1;padding:8px;background:#5bc0de;color:#000;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">🖨 Reprint</button>'
-        actions_html = f'<div style="display:flex;gap:8px;margin-top:10px">{actions}</div>' if actions else ""
-        error_html = f'<div style="font-size:11px;color:#d9534f;margin-top:6px;word-break:break-word">{job.error_message[:120]}…</div>' if job.error_message else ""
-        cards += f'''<div style="background:#111;border:1px solid #222;border-radius:10px;padding:14px;margin-bottom:12px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                <span style="font-weight:bold;color:#D4AF37;font-size:15px;letter-spacing:1px">{job.id}</span>
-                <span style="color:{color};font-size:12px;font-weight:bold;background:rgba(0,0,0,0.4);padding:3px 8px;border-radius:10px">{job.status.upper()}</span>
-            </div>
-            <div style="font-size:12px;color:#888">{job.created_at.strftime("%d %b %Y, %H:%M")} &nbsp;·&nbsp; {job.print_mode} &nbsp;·&nbsp; {job.copies}x &nbsp;·&nbsp; {file_count} file(s)</div>
-            {error_html}{actions_html}
-        </div>'''
-    business_name = (ACTIVE_PROFILE or {}).get("business_name", "")
-    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AMBIC SmartQR Admin</title>
-<style>
-*{{box-sizing:border-box}}body{{font-family:Arial,sans-serif;background:#0a0a14;color:#ddd;padding:16px;margin:0;max-width:600px;margin:0 auto}}
-h1{{color:#D4AF37;font-family:Georgia,serif;font-size:22px;margin-bottom:4px}}
-.sub{{color:#888;font-size:13px;margin-bottom:16px}}
-.nav{{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}}
-.nav a,.nav button{{padding:9px 14px;border-radius:6px;font-size:13px;font-weight:bold;text-decoration:none;border:none;cursor:pointer}}
-</style>
-<meta http-equiv="refresh" content="10">
-</head><body>
-<h1>🖨 AMBIC SmartQR — Print Queue</h1>
-<div class="sub">{business_name}</div>
-<div class="nav">
-  <a href="/admin/history" style="background:#06142E;color:#D4AF37">📷 History</a>
-  <a href="/admin/checkins" style="background:#1a0a2e;color:#D4AF37">👤 Staff</a>
-  <a href="/admin/social-handles" style="background:#0a2e1a;color:#D4AF37">📱 Handles</a>
-  <button onclick="clearPending()" style="background:#d9534f;color:white">🗑 Clear Pending</button>
-</div>
-<script>
-function clearPending(){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Deleted: "+d.deleted);location.reload();}}}});}}
-function retryJob(id){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/retry/"+id,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Retrying…");location.reload();}}}});}}
-function reprintJob(id){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/reprint/"+id,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Sent to print again!");location.reload();}}}});}}
-</script>
-{cards if cards else "<p style='color:#555'>No jobs yet.</p>"}
-</body></html>"""
+    guard = _require_admin()
+    if guard:
+        return guard
+    db_jobs = (PrintJob.query.filter_by(tenant_slug=g.slug)
+               .order_by(PrintJob.created_at.desc()).limit(100).all())
+    jobs = [{
+        "id": job.id,
+        "status": job.status,
+        "print_mode": job.print_mode,
+        "copies": job.copies,
+        "error_message": job.error_message,
+        "file_count": len(json.loads(job.file_paths or "[]")),
+        "created_display": job.created_at.strftime("%d %b %Y, %H:%M"),
+    } for job in db_jobs]
+    business_name = (g.profile or {}).get("business_name", "")
+    return render_template("admin.html", jobs=jobs, business_name=business_name, profile=g.profile,
+                            is_owner=(_current_role() == "owner"),
+                            legacy_secret_mode=(session.get("admin_slug") == g.slug))
 
 
 @app.route("/admin/retry/<job_id>", methods=["POST"])
 def admin_retry_job(job_id):
-    data = request.get_json(silent=True) or {}
-    if not _check_admin_secret(data):
+    # Gated on the logged-in admin session, not a per-action secret prompt —
+    # once real per-person accounts exist there's no single shared secret to
+    # prompt for, and re-entering it on every click was redundant with the
+    # login the user already has.
+    guard = _require_admin()
+    if guard:
         return jsonify({"error": "Unauthorized"}), 401
-    job = PrintJob.query.filter_by(id=job_id, tenant_slug=ACTIVE_SLUG).first_or_404()
+    job = PrintJob.query.filter_by(id=job_id, tenant_slug=g.slug).first_or_404()
     if job.status != "failed":
         return jsonify({"error": "Only failed jobs can be retried."}), 400
     job.status = "pending"
@@ -470,10 +645,10 @@ def admin_retry_job(job_id):
 
 @app.route("/admin/reprint/<job_id>", methods=["POST"])
 def admin_reprint_job(job_id):
-    data = request.get_json(silent=True) or {}
-    if not _check_admin_secret(data):
+    guard = _require_admin()
+    if guard:
         return jsonify({"error": "Unauthorized"}), 401
-    job = PrintJob.query.filter_by(id=job_id, tenant_slug=ACTIVE_SLUG).first_or_404()
+    job = PrintJob.query.filter_by(id=job_id, tenant_slug=g.slug).first_or_404()
     job.status = "pending"
     job.error_message = None
     job.updated_at = datetime.utcnow()
@@ -483,11 +658,11 @@ def admin_reprint_job(job_id):
 
 @app.route("/admin/clear-pending", methods=["POST"])
 def admin_clear_pending():
-    data = request.get_json(silent=True) or {}
-    if not _check_admin_secret(data):
+    guard = _require_admin()
+    if guard:
         return jsonify({"error": "Unauthorized"}), 401
 
-    deleted = PrintJob.query.filter_by(status="pending", tenant_slug=ACTIVE_SLUG).delete()
+    deleted = PrintJob.query.filter_by(status="pending", tenant_slug=g.slug).delete()
     db.session.commit()
     return jsonify({"deleted": deleted})
 
@@ -499,17 +674,20 @@ def save_social_handle():
     if not handle:
         return jsonify({"error": "No handle"}), 400
     ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-    with open(HANDLES_FILE, "a", encoding="utf-8") as f:
+    with open(g.handles_file, "a", encoding="utf-8") as f:
         f.write(f'{ts},"{handle}"\n')
     return jsonify({"ok": True})
 
 
 @app.route("/admin/social-handles", methods=["GET"])
 def admin_social_handles():
+    guard = _require_admin()
+    if guard:
+        return guard
     rows = ""
     entries = []
-    if HANDLES_FILE.exists():
-        for line in HANDLES_FILE.read_text(encoding="utf-8").splitlines():
+    if g.handles_file.exists():
+        for line in g.handles_file.read_text(encoding="utf-8").splitlines():
             if "," not in line:
                 continue
             ts, handle = line.split(",", 1)
@@ -546,18 +724,27 @@ def staff_checkin():
         return jsonify({"error": "Invalid image data"}), 400
     ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename = f"{ts}_{queue_id}.jpg"
-    (CHECKIN_DIR / filename).write_bytes(raw)
+    (g.checkin_dir / filename).write_bytes(raw)
     return jsonify({"ok": True})
 
 
 @app.route("/checkin-photo/<filename>", methods=["GET"])
 def checkin_photo(filename):
-    return send_from_directory(CHECKIN_DIR, secure_filename(filename))
+    # Only ever linked to from admin_checkins() below — no external agent
+    # needs these the way the print agent needs /media files, so a session
+    # check (rather than a separate token scheme) is enough here.
+    guard = _require_admin()
+    if guard:
+        return guard
+    return send_from_directory(g.checkin_dir, secure_filename(filename))
 
 
 @app.route("/admin/checkins", methods=["GET"])
 def admin_checkins():
-    photos = sorted(CHECKIN_DIR.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
+    guard = _require_admin()
+    if guard:
+        return guard
+    photos = sorted(g.checkin_dir.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
     cutoff = datetime.utcnow() - timedelta(days=30)
     cards = ""
     for photo in photos:
@@ -614,11 +801,82 @@ def cleanup_old_uploads():
         print(f"[cleanup] Removed {removed} upload directories older than 30 days.")
 
 
+# ── Document retention ────────────────────────────────────────────────────────
+# This is the actual technical backing for "we don't keep your documents" —
+# without it that's just marketing copy. A completed/failed job's files are
+# only kept long enough for a same-visit admin reprint (paper jam, wrong
+# tray, etc.), then deleted outright — not just made hard to reach. Jobs
+# stuck pending/printing (customer walked off, agent never picked it up) get
+# a longer safety-net window so nothing lingers forever on an edge case.
+# cleanup_old_uploads() above only ever runs once at process start with a
+# 30-day cutoff; this is the recurring, short-window sweep.
+RETENTION_HOURS = float(os.environ.get("DOCUMENT_RETENTION_HOURS", "2"))
+STALE_JOB_HOURS = float(os.environ.get("STALE_JOB_RETENTION_HOURS", "24"))
+RETENTION_SWEEP_INTERVAL_SECONDS = 15 * 60
+
+
+def _delete_job_files(job) -> bool:
+    """Removes a job's uploaded files from disk and clears the DB references
+    to them (file_paths, access_token) — the job row itself (id, status,
+    timestamps) is kept for history/audit, only the document content goes."""
+    if not job.file_paths or job.file_paths == "[]":
+        return False
+    job_dir = _tenant_dir(job.tenant_slug) / "uploads" / job.id
+    if job_dir.exists():
+        shutil.rmtree(job_dir, ignore_errors=True)
+    job.file_paths = "[]"
+    job.access_token = None
+    return True
+
+
+def document_retention_sweep():
+    """One pass: delete files for jobs past their retention window. Called
+    repeatedly by the background thread below, and safe to call more often
+    than that if ever needed (e.g. manually) — it's just a query + delete,
+    no state carried between calls."""
+    now = datetime.utcnow()
+    resolved_cutoff = now - timedelta(hours=RETENTION_HOURS)
+    stale_cutoff = now - timedelta(hours=STALE_JOB_HOURS)
+    cleaned = 0
+    with app.app_context():
+        resolved_jobs = PrintJob.query.filter(
+            PrintJob.status.in_(("completed", "failed")),
+            PrintJob.updated_at < resolved_cutoff,
+        ).all()
+        stale_jobs = PrintJob.query.filter(
+            PrintJob.status.in_(("pending", "printing")),
+            PrintJob.created_at < stale_cutoff,
+        ).all()
+        for job in resolved_jobs + stale_jobs:
+            if _delete_job_files(job):
+                cleaned += 1
+        if cleaned:
+            db.session.commit()
+    if cleaned:
+        print(f"[retention] Deleted documents for {cleaned} job(s) past their retention window.")
+
+
+def _retention_sweep_loop():
+    while True:
+        try:
+            document_retention_sweep()
+        except Exception as e:
+            print(f"[retention] Sweep failed (will retry next interval): {e}")
+        time.sleep(RETENTION_SWEEP_INTERVAL_SECONDS)
+
+
+def start_retention_sweep_thread():
+    threading.Thread(target=_retention_sweep_loop, daemon=True, name="document-retention-sweep").start()
+
+
 @app.route("/admin/history", methods=["GET"])
 def admin_history():
+    guard = _require_admin()
+    if guard:
+        return guard
     cutoff = datetime.utcnow() - timedelta(days=30)
     jobs = (PrintJob.query
-            .filter(PrintJob.tenant_slug == ACTIVE_SLUG, PrintJob.created_at >= cutoff)
+            .filter(PrintJob.tenant_slug == g.slug, PrintJob.created_at >= cutoff)
             .order_by(PrintJob.created_at.desc())
             .all())
 
@@ -630,11 +888,8 @@ def admin_history():
         thumbs = ""
         for name in filenames:
             ext = Path(name).suffix.lower()
-            media_url = f"/media/{job.id}/{name}"
-            on_disk = (UPLOAD_DIR / secure_filename(job.id) / secure_filename(name)).is_file()
-            if not on_disk:
-                thumbs += f'<div style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:100px;height:100px;background:#1a1a2e;border:1px solid #444;border-radius:4px;color:#666;font-size:11px;text-align:center;padding:6px">🔒<br>Deleted<br>(secure)</div>'
-            elif ext in IMAGE_EXTS:
+            media_url = f"/media/{job.id}/{name}?token={job.access_token or ''}"
+            if ext in IMAGE_EXTS:
                 thumbs += f'<a href="{media_url}" target="_blank"><img src="{media_url}" style="width:100px;height:100px;object-fit:cover;border-radius:4px;border:1px solid #333;cursor:pointer" title="{name}"></a>'
             else:
                 thumbs += f'<a href="{media_url}" target="_blank" style="display:inline-flex;align-items:center;justify-content:center;width:100px;height:100px;background:#1a1a2e;border:1px solid #444;border-radius:4px;color:#D4AF37;font-size:11px;text-align:center;text-decoration:none;padding:6px">📄<br>{name[:20]}</a>'
@@ -666,6 +921,7 @@ a.back{{color:#D4AF37;text-decoration:none;font-size:14px;display:inline-block;m
 
 init_db()
 cleanup_old_uploads()
+start_retention_sweep_thread()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "5000"))

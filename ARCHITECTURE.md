@@ -25,19 +25,22 @@ printing, shared across many independent businesses ("tenants") on one deploymen
     shop's local print agent authenticates with), and an `encryption_key` (per-tenant Fernet key
     for document encryption at rest — see section 2a).
 
-### 2a. Document encryption & secure-documents mode
+### 2a. Document encryption & retention
 
 *   Every uploaded file is encrypted on disk with the tenant's `encryption_key`
     (`app.py`'s `_encrypt_bytes`/`_decrypt_bytes`) — this is always on, not configurable.
-    Decryption happens only in-memory when serving an authenticated request (`/media/...`); the
-    plaintext is never written back to disk.
-    *   A tenant's `secure_documents` toggle (set in `/setup`) additionally deletes a job's
-    encrypted files the moment its status becomes `completed`, instead of keeping them for the
-    normal 30-day retention window. Recommended for ID cards and other sensitive documents.
-    Print history for those jobs shows a "Deleted (secure)" placeholder instead of a thumbnail.
+    Decryption happens only in-memory when serving an authenticated, token-verified request
+    (`/media/...`); the plaintext is never written back to disk.
+*   Retention is handled separately by `document_retention_sweep()`, a recurring background
+    thread: a completed/failed job's files are deleted `DOCUMENT_RETENTION_HOURS` (default 2h)
+    after its last status update — long enough for a same-visit admin reprint — and a job stuck
+    pending/printing is cleaned after `STALE_JOB_RETENTION_HOURS` (default 24h) so nothing lingers
+    indefinitely. The job row itself is kept for history/audit; only the document content and its
+    `access_token` are cleared.
 *   The active tenant for a request is resolved via a `?tenant=` query param or a `tenant_slug`
-    cookie (`tenant_profile.resolve_active_slug`), bound once per request in a
-    `@app.before_request` hook.
+    cookie (`tenant_profile.resolve_active_slug`), bound once per request onto Flask's
+    request-local `g` object in a `@app.before_request` hook — not module-level globals, which
+    would be unsafe under concurrent requests.
 *   If no tenant can be resolved, customer-facing routes redirect to `/setup`.
 *   Every `PrintJob` row is tagged with `tenant_slug`, and every admin/customer query is scoped by
     it — one business can never see another's jobs, uploads, check-ins, or social handles.

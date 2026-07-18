@@ -48,11 +48,10 @@ def default_profile(business_name: str) -> dict:
         "admin_secret": secrets.token_urlsafe(12),
         "agent_api_key": secrets.token_urlsafe(24),
         # Every tenant's uploaded documents are encrypted at rest with this
-        # key regardless of secure_documents — see app.py's _encrypt_bytes /
-        # _decrypt_bytes. secure_documents additionally deletes the file the
-        # moment a job completes instead of keeping it for 30 days.
+        # key — see app.py's _encrypt_bytes / _decrypt_bytes. Retention (how
+        # long a file lives before deletion) is handled separately by
+        # app.py's document_retention_sweep, not by this key.
         "encryption_key": Fernet.generate_key().decode(),
-        "secure_documents": False,
     }
 
 
