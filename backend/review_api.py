@@ -42,12 +42,17 @@ else:
     logger.info(f"STARTUP: ENV_LOADED=true")
 
 # PART A — DATABASE & TABLE VALIDATION
-from backend.database import DB_PATH, DATABASE_URL, SessionLocal, check_db_integrity, engine
-db_integrity_ok, db_error = check_db_integrity()
-logger.info(f"STARTUP: DATABASE_PATH={DB_PATH} (Integrity: {db_integrity_ok})")
+# Per-tenant now (see database.py's module docstring) — there's no single
+# "the" database to validate at import time, so this checks every
+# currently-registered business instead of one fixed file.
+from backend.database import get_session_factory, check_db_integrity
+from backend import business_registry
+from backend.tenant_context import resolve_tenant_slug
 
-if not db_integrity_ok:
-    logger.critical(f"FATAL STARTUP ERROR: {db_error}")
+for _slug in business_registry.list_businesses():
+    _integrity_ok, _integrity_err = check_db_integrity(_slug)
+    logger.info(f"STARTUP: business='{_slug}' integrity={_integrity_ok}" +
+                (f" error={_integrity_err}" if _integrity_err else ""))
 
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event
 from backend.lan_config import lan_health_check
@@ -59,11 +64,19 @@ from backend.api_routes import router as api_router
 from backend.invoice_lifecycle import start_lifecycle_automation
 
 # Initialize FastAPI app
-app = FastAPI(title="Aradhana Review API")
+app = FastAPI(title="AMBIC Payment Auditor")
 
-# Dependency
-def get_db():
-    db = SessionLocal()
+# Dependency — resolves which business this request belongs to (see
+# tenant_context.py) and hands back a session scoped to ONLY that
+# business's own database file. Every existing route below still just
+# does `db: Session = Depends(get_db)` — none of their query code needed
+# to change to become tenant-safe, because the isolation is structural
+# (separate files) rather than a WHERE clause every query has to remember.
+def get_db(request: Request):
+    slug = resolve_tenant_slug(request)
+    if not slug:
+        raise HTTPException(status_code=409, detail="No business context — set X-Business-Slug or complete /setup")
+    db = get_session_factory(slug)()
     try:
         yield db
     finally:
@@ -776,7 +789,15 @@ async def verify(request: VerifyRequest, db: Session = Depends(get_db), req: Req
     # Verify OTP
     if verify_otp(db, target_id, request.otp_code):
         token = create_user_session(db, target_id)
-        
+        # Register this token -> business mapping in the global index so
+        # future requests carrying only the token (no X-Business-Slug
+        # header) can still be routed to the right tenant database — see
+        # tenant_context.py / business_registry.py.
+        if req is not None:
+            slug = resolve_tenant_slug(req)
+            if slug:
+                business_registry.register_session(token, slug)
+
         log_event(db, target_id, "LOGIN_SUCCESS", ip=req.client.host if req else None)
         return {
             "status": "success",
@@ -837,6 +858,7 @@ async def logout(request: Request, db: Session = Depends(get_db)):
         from backend.models import Session as SessionModel
         db.query(SessionModel).filter(SessionModel.session_token == token).delete()
         db.commit()
+        business_registry.forget_session(token)
     return {"status": "success"}
 
 # Recovery Models
@@ -915,7 +937,11 @@ async def security_middleware(request: Request, call_next):
         if not token:
              return JSONResponse(status_code=401, content={"detail": "Authentication required. Please login."})
 
-        db = SessionLocal()
+        slug = resolve_tenant_slug(request)
+        if not slug:
+             return JSONResponse(status_code=409, content={"detail": "No business context for this session."})
+
+        db = get_session_factory(slug)()
         employee_id = validate_session(db, token)
         db.close()
 
@@ -959,8 +985,8 @@ async def get_financial_health(db: Session = Depends(get_db), owner: User = Depe
 
 @app.on_event("startup")
 async def startup_event():
-    integrity, err = check_db_integrity()
-    if not integrity: logger.critical(f"SHUTDOWN: Database integrity failure: {err}")
+    # Per-business integrity was already checked and logged at import time,
+    # above — there's no single database left to re-check here.
     logger.info("Starting Backend Services...")
     start_ingestion_thread()
     start_email_poller()

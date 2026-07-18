@@ -1,6 +1,11 @@
 .env
 *.db
 *.sqlite
+# Per-tenant runtime data — each business's own profile.json (IMAP/SMTP
+# credentials, alert routing config) and its own SQLite database file
+# (already covered by *.db above, but the whole tree including the global
+# session-token index is live per-deployment state, not source).
+businesses/
 __pycache__/
 .venv/
 node_modules/
