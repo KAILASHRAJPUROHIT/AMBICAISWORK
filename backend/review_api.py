@@ -24,7 +24,12 @@ def get_base_dir():
         exe_dir = os.path.dirname(exe_path)
         if os.path.basename(exe_dir).lower() == 'dist':
             return os.path.dirname(exe_dir)
-        return r"C:\Users\kaila\aradhana-payment-auditor\aradhana-payment-auditor"
+        # Was hardcoded to C:\Users\kaila\aradhana-payment-auditor\... — one
+        # specific person's machine. Falls back to the exe's own directory
+        # now, which works for any frozen deployment rather than just that
+        # one, and is irrelevant to the hosted-SaaS deployment path anyway
+        # (this branch only matters for the packaged desktop .exe).
+        return exe_dir
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 BASE_DIR = get_base_dir()
