@@ -57,7 +57,7 @@ for _slug in business_registry.list_businesses():
 from backend.auth_service import create_otp, verify_otp, create_user_session, validate_session, log_event
 from backend.models import User, LoginLog, Bill, BankAlert, SMSAlert
 from backend.pdf_ingestion import start_ingestion_thread, perform_scan, WATCH_PATH
-from backend.email_poller import start_email_poller, process_emails, email_status
+from backend.email_poller import start_email_poller, process_emails
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
 from backend.api_routes import router as api_router
 from backend.invoice_lifecycle import start_lifecycle_automation
@@ -463,8 +463,10 @@ async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
         cheque_collection = 0.0
 
     from backend.pdf_ingestion import _tenant_watch_path
+    from backend.email_poller import _email_status_for
     _dash_slug = resolve_tenant_slug(request)
     _dash_watch_path = _tenant_watch_path(_dash_slug) if _dash_slug else WATCH_PATH
+    _dash_email_status = _email_status_for(_dash_slug) if _dash_slug else {}
     online = os.path.exists(_dash_watch_path)
     pdf_count = 0
     if online:
@@ -478,7 +480,8 @@ async def get_dashboard_stats(request: Request, db: Session = Depends(get_db)):
         "totalCollection": total_collection, "cashCollection": cash_collection, "bankCollection": bank_collection,
         "smsConfirmed": sms_confirmed, "emailConfirmed": email_confirmed, "chequeCollection": cheque_collection,
         "pdfCountInShare": pdf_count, "invoiceWatcherStatus": "READY" if online else "OFFLINE",
-        "emailPollerStatus": email_status.get("status", "IDLE"), "smsRelayStatus": sms_status.get("status", "IDLE"),
+        "emailPollerStatus": _dash_email_status.get("status", "IDLE"),
+        "smsRelayStatus": sms_status.get("status", "IDLE"),
         "matchAccuracy": round((verified_today / total_bills_today * 100), 2) if total_bills_today > 0 else 0.0,
         "is_owner": is_owner
     }
@@ -558,16 +561,27 @@ async def trigger_scan(request: Request):
     return {"status": "scan_triggered", "message": "PDF rescan started in background"}
 
 @app.get("/api/admin/email-status")
-async def get_email_status(): return email_status
+async def get_email_status(request: Request):
+    from backend.email_poller import _email_status_for
+    slug = resolve_tenant_slug(request)
+    if not slug:
+        raise HTTPException(status_code=409, detail="No business context — set X-Business-Slug or complete /setup")
+    return _email_status_for(slug)
 
 @app.post("/api/email-sync-now")
-async def trigger_email_sync():
+async def trigger_email_sync(request: Request):
     import threading
-    threading.Thread(target=process_emails, daemon=True).start()
+    slug = resolve_tenant_slug(request)
+    if not slug:
+        raise HTTPException(status_code=409, detail="No business context — set X-Business-Slug or complete /setup")
+    threading.Thread(target=process_emails, args=(slug,), daemon=True).start()
     return {"status": "sync_triggered", "message": "Email sync started in background"}
 
 @app.get("/api/admin/sms-status")
-async def get_sms_status(): return email_status
+async def get_sms_status():
+    # Was returning email_status (copy-paste bug predating this
+    # conversion) — SMS status endpoint reported email-poller state.
+    return sms_status
 
 @app.post("/api/sms-sync-now")
 async def trigger_sms_sync():

@@ -9,7 +9,8 @@ import hashlib
 from email.header import decode_header
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from backend.database import SessionLocal
+from backend.database import get_session_factory
+from backend import business_registry
 from backend.models import BankAlert, Bill, AuditLog, Payment, Cheque, SMSAlert, SystemSetting
 from backend.sms_parser import parse_bank_sms
 import json
@@ -33,21 +34,47 @@ SMS_FORWARDER_SENDER = os.environ.get("SMS_FORWARDER_SENDER", "")
 # above for the same fix applied to the bank-alert-forwarding rule.
 BANK_ALERT_FORWARDER = os.environ.get("BANK_ALERT_FORWARDER", "")
 
-email_status = {
-    "last_sync": None,
-    "next_sync": None,
-    "events_found": 0,
-    "last_error": None,
-    "is_running": False
-}
-
+# Per-tenant status trackers — see pdf_ingestion.py's equivalent comment
+# for why this stopped being one shared global dict.
+_email_status: dict[str, dict] = {}
 status_lock = threading.Lock()
 
-def update_email_status(**kwargs):
+
+def _email_status_for(slug: str) -> dict:
+    with status_lock:
+        if slug not in _email_status:
+            _email_status[slug] = {
+                "last_sync": None,
+                "next_sync": None,
+                "events_found": 0,
+                "last_error": None,
+                "is_running": False,
+            }
+        return _email_status[slug]
+
+
+def update_email_status(slug: str, **kwargs):
+    st = _email_status_for(slug)
     with status_lock:
         for key, value in kwargs.items():
-            if key in email_status:
-                email_status[key] = value
+            if key in st:
+                st[key] = value
+
+
+def _tenant_imap_config(slug: str) -> dict:
+    """Each business's own IMAP mailbox config from its profile, falling
+    back to the shared env vars (a single deployment-wide mailbox) if that
+    tenant hasn't configured its own — same convenience fallback used
+    throughout this conversion."""
+    profile = business_registry.load_profile(slug)
+    imap = (profile or {}).get("imap") or {}
+    return {
+        "server": imap.get("server") or os.getenv("IMAP_SERVER") or os.getenv("IMAP_HOST") or os.getenv("BANK_IMAP_HOST"),
+        "user": imap.get("user") or os.getenv("IMAP_USER") or os.getenv("BANK_IMAP_USERNAME"),
+        "password": imap.get("password") or os.getenv("IMAP_PASSWORD") or os.getenv("BANK_IMAP_PASSWORD"),
+        "folder": imap.get("folder") or os.getenv("IMAP_FOLDER", "INBOX"),
+        "port": int(imap.get("port") or os.getenv("IMAP_PORT") or os.getenv("BANK_IMAP_PORT") or 993),
+    }
 
 def get_checkpoint(db: Session):
     setting = db.query(SystemSetting).filter(SystemSetting.key == "last_email_checkpoint").first()
@@ -129,15 +156,13 @@ def get_decoded_header(header_value):
 def strip_html(text):
     return re.sub(r'<[^>]+>', ' ', text)
 
-def fetch_real_emails(since_date: datetime):
-    imap_server = os.getenv("IMAP_SERVER") or os.getenv("IMAP_HOST") or os.getenv("BANK_IMAP_HOST")
-    imap_user = os.getenv("IMAP_USER") or os.getenv("BANK_IMAP_USERNAME")
-    imap_pass = os.getenv("IMAP_PASSWORD") or os.getenv("BANK_IMAP_PASSWORD")
-    imap_folder = os.getenv("IMAP_FOLDER", "INBOX")
-    imap_port = int(os.getenv("IMAP_PORT") or os.getenv("BANK_IMAP_PORT") or 993)
+def fetch_real_emails(since_date: datetime, slug: str):
+    cfg = _tenant_imap_config(slug)
+    imap_server, imap_user, imap_pass = cfg["server"], cfg["user"], cfg["password"]
+    imap_folder, imap_port = cfg["folder"], cfg["port"]
 
     if not imap_server or not imap_user or not imap_pass:
-        logger.warning("IMAP credentials not fully configured in .env. Skipping real email fetch.")
+        logger.warning(f"[{slug}] IMAP credentials not configured. Skipping real email fetch.")
         return []
 
     emails_list = []
@@ -204,25 +229,25 @@ def fetch_real_emails(since_date: datetime):
                         })
         mail.logout()
     except Exception as e:
-        logger.error(f"IMAP Fetch Error: {e}")
-        update_email_status(last_error=f"IMAP Error: {str(e)}")
+        logger.error(f"[{slug}] IMAP Fetch Error: {e}")
+        update_email_status(slug, last_error=f"IMAP Error: {str(e)}")
     return emails_list
 
 from backend.email_parser import parse_bank_email
 from backend.schemas import RawEmail
 
-def process_emails():
-    logger.info("Polling bank emails via IMAP...")
-    update_email_status(is_running=True)
-    
-    db = SessionLocal()
+def process_emails(slug: str):
+    logger.info(f"[{slug}] Polling bank emails via IMAP...")
+    update_email_status(slug, is_running=True)
+
+    db = get_session_factory(slug)()
     events_found = 0
     try:
         checkpoint = get_checkpoint(db)
-        logger.info(f"Using checkpoint: {checkpoint}")
-        
-        real_emails = fetch_real_emails(checkpoint)
-        logger.info(f"Fetched {len(real_emails)} emails since checkpoint.")
+        logger.info(f"[{slug}] Using checkpoint: {checkpoint}")
+
+        real_emails = fetch_real_emails(checkpoint, slug)
+        logger.info(f"[{slug}] Fetched {len(real_emails)} emails since checkpoint.")
         
         newest_ts = checkpoint
         for email_data in real_emails:
@@ -371,24 +396,30 @@ def process_emails():
 
         db.commit()
         update_email_status(
+            slug,
             last_sync=datetime.now().isoformat(),
             next_sync=(datetime.now().timestamp() + 300),
             events_found=events_found
         )
     except Exception as e:
         db.rollback()
-        logger.error(f"Email Polling Error: {e}")
-        update_email_status(last_error=str(e))
+        logger.error(f"[{slug}] Email Polling Error: {e}")
+        update_email_status(slug, last_error=str(e))
     finally:
         db.close()
-        update_email_status(is_running=False)
+        update_email_status(slug, is_running=False)
 
 def start_email_poller():
-    def run():
+    """Spawns one polling loop thread PER registered business — used to
+    spawn exactly one loop against one shared default-tenant session. New
+    businesses onboarded after this runs need a process restart to pick up
+    polling, same as pdf_ingestion.py's equivalent."""
+    def run(slug):
         while True:
-            process_emails()
-            time.sleep(300) 
-            
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
-    logger.info("Email poller thread started.")
+            process_emails(slug)
+            time.sleep(300)
+
+    for slug in business_registry.list_businesses():
+        thread = threading.Thread(target=run, args=(slug,), daemon=True)
+        thread.start()
+        logger.info(f"[{slug}] Email poller thread started.")
