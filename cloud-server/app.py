@@ -18,6 +18,28 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CHECKIN_DIR = BASE_DIR / "checkins"
 CHECKIN_DIR.mkdir(parents=True, exist_ok=True)
 
+# ── Default printer targeting ────────────────────────────────────────────────
+# printer_name is only ever set (via /admin/set-printer) to a value that has
+# actually appeared in available_printers, which the agent itself reports
+# from its own PC (see /api/agent/printers). The agent refuses to print at
+# all if the name it's told to use doesn't match one of its own currently
+# installed printers — see local-print-agent/agent.py's process_job.
+PRINTER_CONFIG_FILE = BASE_DIR / "printer_config.json"
+
+
+def load_printer_config() -> dict:
+    if not PRINTER_CONFIG_FILE.exists():
+        return {"printer_name": "", "available_printers": [], "printers_reported_at": None}
+    with open(PRINTER_CONFIG_FILE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_printer_config(config: dict) -> None:
+    tmp = PRINTER_CONFIG_FILE.with_suffix(".json.tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+    os.replace(tmp, PRINTER_CONFIG_FILE)
+
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'jobs.db'}")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_MB", "50")) * 1024 * 1024
@@ -142,7 +164,31 @@ def get_pending_jobs():
         filenames = json.loads(job.file_paths or "[]")
         files = [{"filename": name, "url": request.url_root.rstrip("/") + f"/media/{job.id}/{name}"} for name in filenames]
         response.append({"job_id": job.id, "status": job.status, "print_mode": job.print_mode, "copies": job.copies, "files": files, "created_at": job.created_at.isoformat()})
-    return jsonify(response)
+    # printer_name is the admin's selected default (see /admin/set-printer) —
+    # the agent must not print anywhere else once this is set. An older
+    # agent that only understands a bare list still works fine; it just
+    # never looks at this key and falls back to its local .env value.
+    printer_name = load_printer_config().get("printer_name") or ""
+    return jsonify({"printer_name": printer_name, "jobs": response})
+
+
+@app.route("/api/agent/printers", methods=["POST"])
+def report_agent_printers():
+    """The polling agent reports the Windows printers it can actually see on
+    its own PC — this is what populates the dropdown in /admin so an owner
+    picks from real, currently-installed printers instead of typing a name
+    that might not match (the exact mismatch — "HP Laser MFP 330" vs
+    "HP Laser MFP 355sdnw" — that caused real duplicate printing here)."""
+    data = request.get_json(silent=True) or {}
+    printers = data.get("printers")
+    if not isinstance(printers, list) or not all(isinstance(p, str) for p in printers):
+        return jsonify({"error": "printers must be a list of strings"}), 400
+
+    config = load_printer_config()
+    config["available_printers"] = sorted(set(p.strip() for p in printers if p.strip()))
+    config["printers_reported_at"] = datetime.utcnow().isoformat()
+    save_printer_config(config)
+    return jsonify({"ok": True, "count": len(config["available_printers"])})
 
 
 @app.route("/api/agent/jobs/<job_id>/status", methods=["POST", "PATCH"])
@@ -189,6 +235,32 @@ def admin():
             <div style="font-size:12px;color:#888">{job.created_at.strftime("%d %b %Y, %H:%M")} &nbsp;·&nbsp; {job.print_mode} &nbsp;·&nbsp; {job.copies}x &nbsp;·&nbsp; {file_count} file(s)</div>
             {error_html}{actions_html}
         </div>'''
+
+    printer_config = load_printer_config()
+    available_printers = printer_config.get("available_printers") or []
+    current_printer = printer_config.get("printer_name") or ""
+    if available_printers:
+        options = '<option value="">— None selected —</option>' + "".join(
+            f'<option value="{p}" {"selected" if p == current_printer else ""}>{p}</option>'
+            for p in available_printers
+        )
+        status_line = (
+            f'<div style="font-size:12px;color:#5cb85c;margin-top:8px">✓ Locked to "{current_printer}" — jobs will only print there.</div>'
+            if current_printer else
+            '<div style="font-size:12px;color:#e6a817;margin-top:8px">⚠ No default printer selected — the agent falls back to its local .env setting, if any.</div>'
+        )
+        printer_html = f'''<div style="background:#111;border:1px solid #222;border-radius:10px;padding:14px;margin-bottom:16px">
+            <div style="font-weight:bold;color:#D4AF37;font-size:13px;margin-bottom:10px">🖨️ Default Printer</div>
+            <select id="printerSelect" style="width:100%;padding:9px 10px;border-radius:6px;border:1px solid #333;background:#0a0a14;color:#ddd;font-size:13px;margin-bottom:8px">{options}</select>
+            <button onclick="savePrinter()" style="width:100%;padding:9px;background:#D4AF37;color:#000;border:none;border-radius:6px;font-weight:bold;font-size:13px;cursor:pointer">Save Default Printer</button>
+            {status_line}
+            <div id="printerSaveMsg" style="font-size:12px;margin-top:6px"></div>
+        </div>'''
+    else:
+        printer_html = '''<div style="background:#111;border:1px solid #222;border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:#888">
+            🖨️ Waiting for the print agent to report its printers. Make sure it's running, then refresh this page.
+        </div>'''
+
     return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Aradhana Print Admin</title>
 <style>
@@ -206,10 +278,22 @@ h1{{color:#D4AF37;font-family:Georgia,serif;font-size:22px;margin-bottom:16px}}
   <a href="/admin/social-handles" style="background:#0a2e1a;color:#D4AF37">📱 Handles</a>
   <button onclick="clearPending()" style="background:#d9534f;color:white">🗑 Clear Pending</button>
 </div>
+{printer_html}
 <script>
 function clearPending(){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Deleted: "+d.deleted);location.reload();}}}});}}
 function retryJob(id){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/retry/"+id,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Retrying…");location.reload();}}}});}}
 function reprintJob(id){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/reprint/"+id,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Sent to print again!");location.reload();}}}});}}
+function savePrinter(){{
+    const select=document.getElementById("printerSelect");
+    const msg=document.getElementById("printerSaveMsg");
+    if(!select)return;
+    const s=prompt("Admin Secret (leave blank if none set):")||"";
+    msg.textContent="Saving…";msg.style.color="#888";
+    fetch("/admin/set-printer",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{printer_name:select.value,secret:s}})}})
+        .then(r=>r.json())
+        .then(d=>{{if(d.error){{msg.textContent="✗ "+d.error;msg.style.color="#d9534f";}}else{{location.reload();}}}})
+        .catch(e=>{{msg.textContent="✗ Request failed: "+e;msg.style.color="#d9534f";}});
+}}
 </script>
 {cards if cards else "<p style='color:#555'>No jobs yet.</p>"}
 </body></html>"""
@@ -259,6 +343,25 @@ def admin_clear_pending():
     deleted = PrintJob.query.filter_by(status="pending").delete()
     db.session.commit()
     return jsonify({"deleted": deleted})
+
+
+@app.route("/admin/set-printer", methods=["POST"])
+def admin_set_printer():
+    expected_secret = os.environ.get("ADMIN_SECRET")
+    data = request.get_json(silent=True) or {}
+    if expected_secret:
+        if data.get("secret") != expected_secret:
+            return jsonify({"error": "Unauthorized"}), 401
+
+    printer_name = (data.get("printer_name") or "").strip()
+    config = load_printer_config()
+    available = config.get("available_printers") or []
+    if printer_name and printer_name not in available:
+        return jsonify({"error": "That printer isn't in the reported printer list. Make sure the print agent is running and has reported its printers."}), 400
+
+    config["printer_name"] = printer_name  # "" clears it, deliberately allowed
+    save_printer_config(config)
+    return jsonify({"success": True, "printer_name": printer_name})
 
 
 HANDLES_FILE = BASE_DIR / "social_handles.csv"
