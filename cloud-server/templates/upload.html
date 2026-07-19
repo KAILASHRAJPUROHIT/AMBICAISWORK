@@ -583,6 +583,7 @@
             {% endif %}
         </div>
         <div style="color:#aaa;font-size:12px;margin-bottom:10px;font-weight:600">Your Instagram handle</div>
+        <div style="color:#888;font-size:11px;line-height:1.45;margin-bottom:10px">Optional. Shared with this business for its own customer follow-up. Do not enter someone else’s handle without permission. <a href="https://ambicdigital.in/privacy" target="_blank" rel="noopener noreferrer" style="color:var(--gold)">Privacy</a></div>
         <input id="ig-handle-input" type="text" placeholder="@yourhandle"
                style="width:100%;box-sizing:border-box;padding:13px 16px;border-radius:12px;border:1px solid #2a2d33;background:rgba(255,255,255,0.06);color:#fff;font-size:16px;text-align:center;outline:none;margin-bottom:16px;letter-spacing:0.5px"
                oninput="this.value=this.value.replace(/[^a-zA-Z0-9._@]/g,'')"
@@ -1652,36 +1653,10 @@
         proceedWithPrint();
     }
 
-    // Maybe Later — capture staff photo silently, then proceed
+    // "Maybe Later" means exactly that: no handle and no camera capture.
     function closeSocialModal() {
         document.getElementById('social-modal').style.display = 'none';
-        captureStaffPhoto();
         proceedWithPrint();
-    }
-
-    function captureStaffPhoto() {
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
-            .then(stream => {
-                const vid = document.createElement('video');
-                vid.srcObject = stream;
-                vid.setAttribute('playsinline', '');
-                vid.play();
-                vid.addEventListener('playing', () => {
-                    setTimeout(() => {
-                        const c = document.createElement('canvas');
-                        c.width = vid.videoWidth || 640;
-                        c.height = vid.videoHeight || 480;
-                        c.getContext('2d').drawImage(vid, 0, 0);
-                        stream.getTracks().forEach(t => t.stop());
-                        fetch('/api/checkin', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ image: c.toDataURL('image/jpeg', 0.7), queue_id: 'modal-dismiss' })
-                        }).catch(() => {});
-                    }, 600);
-                }, { once: true });
-            })
-            .catch(() => {});
     }
 </script>
 

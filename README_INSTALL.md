@@ -2,6 +2,8 @@
 
 This guide installs the local edge agent on the Windows PC connected to a tenant's printer. The agent polls the AMBIC SmartQR cloud service with a tenant-scoped API key and prints only jobs returned for that tenant.
 
+Before any real-business pilot, read `LAUNCH_READINESS_AUDIT.md` and `LEGAL_COMPLIANCE.md`. The public SmartQR terms are at https://ambicdigital.in/legal/smartqr-schedule.
+
 ## Requirements
 
 - Windows 10/11

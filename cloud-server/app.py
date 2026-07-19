@@ -1,4 +1,3 @@
-import base64
 import hmac
 import json
 import mimetypes
@@ -761,22 +760,7 @@ th{{background:#06142E;color:#D4AF37}}a.back{{color:#D4AF37;text-decoration:none
 
 @app.route("/api/checkin", methods=["POST"])
 def staff_checkin():
-    data = request.get_json(silent=True) or {}
-    img_data = data.get("image", "")
-    queue_id = data.get("queue_id", "unknown")
-    if not img_data:
-        return jsonify({"error": "No image"}), 400
-    # Strip data URI prefix if present
-    if "," in img_data:
-        img_data = img_data.split(",", 1)[1]
-    try:
-        raw = base64.b64decode(img_data)
-    except Exception:
-        return jsonify({"error": "Invalid image data"}), 400
-    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    filename = f"{ts}_{queue_id}.jpg"
-    (g.checkin_dir / filename).write_bytes(raw)
-    return jsonify({"ok": True})
+    return jsonify({"error": "Staff photo capture is disabled; explicit, purpose-specific consent is required"}), 410
 
 
 @app.route("/checkin-photo/<filename>", methods=["GET"])
