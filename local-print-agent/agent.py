@@ -27,6 +27,15 @@ AGENT_API_KEY = os.getenv("AGENT_API_KEY")
 AGENT_HEADERS = {"X-Agent-Key": AGENT_API_KEY or ""}
 LEDGER_PATH = SCRIPT_DIR / "agent_state.db"
 
+# Printer targeting: the admin panel's selected default printer (reported
+# via /api/agent/printers, returned to us in every /api/agent/jobs/pending
+# poll) is the source of truth once an admin has set one. PRINTER_NAME from
+# .env is only a fallback for tenants that haven't opened /admin yet. See
+# process_job/print_pdf for the enforcement that makes this an actual
+# guarantee, not just a default.
+_LAST_KNOWN_PRINTERS = []
+PRINTER_REPORT_EVERY_N_POLLS = 12  # ~60s at the 5s poll interval below
+
 
 def init_ledger():
     """Create the durable local execution ledger used to prevent reprints."""
@@ -109,8 +118,6 @@ def validate_config():
     missing = []
     if not CLOUD_SERVER_URL:
         missing.append("CLOUD_SERVER_URL")
-    if not PRINTER_NAME:
-        missing.append("PRINTER_NAME")
     if not SUMATRA_PATH:
         missing.append("SUMATRA_PATH")
     if not TENANT_SLUG:
@@ -122,6 +129,57 @@ def validate_config():
         logging.critical(f"Missing required environment variables: {', '.join(missing)}")
         sys.exit(1)
 
+    # PRINTER_NAME is now optional here — the admin panel's default-printer
+    # selection (see process_job) is the primary path. .env's PRINTER_NAME
+    # only matters as a fallback for a tenant that hasn't opened /admin yet.
+    if not PRINTER_NAME:
+        logging.warning(
+            "PRINTER_NAME not set in .env — this agent will only print once "
+            "a default printer is selected in the admin panel."
+        )
+
+def list_local_printers():
+    """Enumerates this Windows PC's installed printers via PowerShell (same
+    shell-out pattern already used for toast notifications — no extra
+    binary dependency). Returns [] on any failure rather than raising, since
+    a transient enumeration failure shouldn't crash the poll loop."""
+    try:
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-Printer | Select-Object -ExpandProperty Name"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode != 0:
+            logging.warning(f"Could not list local printers: {result.stderr.strip()}")
+            return []
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    except Exception as e:
+        logging.warning(f"Could not list local printers: {e}")
+        return []
+
+
+def report_printers():
+    """Sends this PC's printer list to the cloud server so the admin panel
+    can offer a real dropdown instead of free-text entry, and caches it
+    locally so process_job can double-check a job's target printer still
+    actually exists before printing."""
+    global _LAST_KNOWN_PRINTERS
+    printers = list_local_printers()
+    if not printers:
+        return
+    _LAST_KNOWN_PRINTERS = printers
+    try:
+        requests.post(
+            f"{CLOUD_SERVER_URL}/api/agent/printers",
+            json={"printers": printers},
+            headers=AGENT_HEADERS,
+            timeout=10,
+        ).raise_for_status()
+        logging.info(f"Reported {len(printers)} local printer(s) to server: {', '.join(printers)}")
+    except Exception as e:
+        logging.warning(f"Failed to report printers to server: {e}")
+
+
 def download_file(url, target_path):
     logging.info(f"Downloading file from {url} to {target_path}")
     response = requests.get(url, timeout=30)
@@ -129,11 +187,11 @@ def download_file(url, target_path):
     with open(target_path, 'wb') as f:
         f.write(response.content)
 
-def print_pdf(pdf_path):
-    logging.info(f"Printing PDF: {pdf_path}")
+def print_pdf(pdf_path, printer_name):
+    logging.info(f"Printing PDF: {pdf_path} -> printer '{printer_name}'")
     command = [
         SUMATRA_PATH,
-        "-print-to", PRINTER_NAME,
+        "-print-to", printer_name,
         "-silent",
         str(pdf_path)
     ]
@@ -143,13 +201,59 @@ def print_pdf(pdf_path):
         raise Exception(f"Print command failed with exit code {result.returncode}: {result.stderr}")
     logging.info("Print command executed successfully")
 
-def process_job(job):
+def process_job(job, printer_name):
     job_id = job.get("job_id")
     if not job_id:
         logging.error("Job missing job_id")
         return
 
     logging.info(f"Processing job {job_id}")
+
+    # Hard gate: never print anywhere unless we know exactly where. No
+    # silent fallback to the OS's default printer — that's precisely the
+    # kind of ambiguity that lets a job land on the wrong device.
+    if not printer_name:
+        message = (
+            "No default printer configured for this job. Set one in the "
+            "admin panel (Printer section) — or PRINTER_NAME in .env as a "
+            "fallback — before this agent can print."
+        )
+        logging.critical(message)
+        _notify("Print blocked — no printer set", job_id)
+        try:
+            requests.patch(
+                f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
+                json={"status": "failed", "error": message},
+                headers=AGENT_HEADERS,
+                timeout=10,
+            ).raise_for_status()
+        except Exception as api_err:
+            logging.error(f"Could not report missing-printer hold for {job_id}: {api_err}")
+        return
+
+    # Refuse to print to a name that doesn't match anything this PC has ever
+    # actually reported as installed — catches a stale/renamed/mistyped
+    # printer instead of letting Sumatra do something unpredictable with it.
+    # Only enforced when we have positive knowledge of the local printer
+    # list (an enumeration hiccup shouldn't brick an otherwise-working agent).
+    if _LAST_KNOWN_PRINTERS and printer_name not in _LAST_KNOWN_PRINTERS:
+        message = (
+            f"Configured printer '{printer_name}' does not match any of this "
+            f"PC's currently installed printers ({', '.join(_LAST_KNOWN_PRINTERS)}). "
+            "Refusing to print rather than risk sending the job to the wrong device."
+        )
+        logging.critical(message)
+        _notify("Print blocked — printer mismatch", job_id)
+        try:
+            requests.patch(
+                f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
+                json={"status": "failed", "error": message},
+                headers=AGENT_HEADERS,
+                timeout=10,
+            ).raise_for_status()
+        except Exception as api_err:
+            logging.error(f"Could not report printer-mismatch hold for {job_id}: {api_err}")
+        return
 
     previous_state = ledger_state(job_id)
     if previous_state in {"printing", "printed", "completed"}:
@@ -213,18 +317,18 @@ def process_job(job):
                     logging.info("Converting image(s) to A4 PDF")
                     create_full_page_layout(downloaded_files, output_pdf, temp_dir_path)
                     for _ in range(copies):
-                        print_pdf(output_pdf)
+                        print_pdf(output_pdf, printer_name)
                 else:
                     logging.info("Printing original PDF file(s)")
                     for pdf_file in downloaded_files:
                         for _ in range(copies):
-                            print_pdf(pdf_file)
+                            print_pdf(pdf_file, printer_name)
 
             elif print_mode == "id_card":
                 logging.info("Generating ID card layout PDF")
                 create_id_layout(downloaded_files, output_pdf, temp_dir_path)
                 for _ in range(copies):
-                    print_pdf(output_pdf)
+                    print_pdf(output_pdf, printer_name)
             else:
                 raise Exception(f"Unsupported print_mode: {print_mode}")
 
@@ -262,8 +366,13 @@ def process_job(job):
             logging.error(f"Failed to send error state for job {job_id}: {api_err}")
 
 def main_loop():
+    poll_count = 0
     while True:
         try:
+            if poll_count % PRINTER_REPORT_EVERY_N_POLLS == 0:
+                report_printers()
+            poll_count += 1
+
             logging.info("Polling for pending jobs...")
             resp = requests.get(
                 f"{CLOUD_SERVER_URL}/api/agent/jobs/pending",
@@ -271,15 +380,23 @@ def main_loop():
                 timeout=10
             )
             resp.raise_for_status()
-            jobs = resp.json()
+            data = resp.json()
 
-            if not isinstance(jobs, list):
-                logging.error(f"Expected a list of jobs, got {type(jobs).__name__}. Skipping cycle.")
+            if isinstance(data, list):
+                # Older server without printer_name support — fall back to
+                # the .env printer entirely.
+                jobs, printer_name = data, PRINTER_NAME
+            elif isinstance(data, dict):
+                jobs = data.get("jobs", [])
+                printer_name = data.get("printer_name") or PRINTER_NAME
             else:
-                if jobs:
-                    logging.info(f"Found {len(jobs)} pending jobs.")
-                for job in jobs:
-                    process_job(job)
+                logging.error(f"Unexpected response shape from /api/agent/jobs/pending: {type(data).__name__}. Skipping cycle.")
+                jobs, printer_name = [], None
+
+            if jobs:
+                logging.info(f"Found {len(jobs)} pending jobs. Printer: '{printer_name}'")
+            for job in jobs:
+                process_job(job, printer_name)
         except requests.exceptions.RequestException as e:
             logging.error(f"Network error during polling: {e}")
         except Exception as e:

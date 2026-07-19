@@ -157,7 +157,7 @@ def generate_queue_id(tenant_slug: str):
 TENANTS_DIR = tp.TENANTS_DIR
 
 _SETUP_EXEMPT_ROUTES = {"setup_page", "setup_save", "setup_logo", "setup_voice_clip", "static"}
-_AGENT_EXEMPT_ROUTES = {"get_pending_jobs", "update_job_status"}
+_AGENT_EXEMPT_ROUTES = {"get_pending_jobs", "update_job_status", "report_agent_printers"}
 
 
 def _tenant_dir(slug: str) -> Path:
@@ -397,7 +397,35 @@ def get_pending_jobs():
         filenames = json.loads(job.file_paths or "[]")
         files = [{"filename": name, "url": request.url_root.rstrip("/") + f"/media/{job.id}/{name}?tenant={tenant['slug']}&token={job.access_token}"} for name in filenames]
         response.append({"job_id": job.id, "status": job.status, "print_mode": job.print_mode, "copies": job.copies, "files": files, "created_at": job.created_at.isoformat()})
-    return jsonify(response)
+    # printer_name is the admin's selected default (see /admin/printer) — the
+    # agent must not print anywhere else once this is set. Older agents that
+    # only understand a bare list still work: they just never look at this key.
+    return jsonify({"printer_name": tenant.get("printer_name") or "", "jobs": response})
+
+
+@app.route("/api/agent/printers", methods=["POST"])
+def report_agent_printers():
+    """A polling agent reports the Windows printers it can actually see on
+    its own PC — this is what populates the dropdown in /admin so an owner
+    picks from real, currently-installed printers instead of typing a name
+    that might not match (see the printer_name comment in
+    tenant_profile.default_profile for why that match matters)."""
+    tenant = _authenticate_agent()
+    if not tenant:
+        return jsonify({"error": "Invalid or missing agent key"}), 401
+
+    data = request.get_json(silent=True) or {}
+    printers = data.get("printers")
+    if not isinstance(printers, list) or not all(isinstance(p, str) for p in printers):
+        return jsonify({"error": "printers must be a list of strings"}), 400
+
+    profile = tp.load_profile(tenant["slug"])
+    if not profile:
+        return jsonify({"error": "Unknown tenant"}), 404
+    profile["available_printers"] = sorted(set(p.strip() for p in printers if p.strip()))
+    profile["printers_reported_at"] = datetime.utcnow().isoformat()
+    tp.save_profile(profile)
+    return jsonify({"ok": True, "count": len(profile["available_printers"])})
 
 
 @app.route("/api/agent/jobs/<job_id>/status", methods=["POST", "PATCH"])
@@ -622,6 +650,29 @@ def admin():
     return render_template("admin.html", jobs=jobs, business_name=business_name, profile=g.profile,
                             is_owner=(_current_role() == "owner"),
                             legacy_secret_mode=(session.get("admin_slug") == g.slug))
+
+
+@app.route("/admin/printer", methods=["POST"])
+def admin_set_printer():
+    """Sets this tenant's default printer. Only accepts a name that's
+    actually in available_printers (reported by this tenant's own agent via
+    /api/agent/printers) — no free-text entry, so an admin can't accidentally
+    lock printing to a mistyped or stale printer name that doesn't exist."""
+    guard = _require_admin()
+    if guard:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json(silent=True) or {}
+    printer_name = (data.get("printer_name") or "").strip()
+
+    profile = tp.load_profile(g.slug)
+    available = profile.get("available_printers") or []
+    if printer_name and printer_name not in available:
+        return jsonify({"error": "That printer isn't in this tenant's reported printer list. Make sure the print agent is running and has reported its printers."}), 400
+
+    profile["printer_name"] = printer_name  # "" clears it, deliberately allowed
+    tp.save_profile(profile)
+    return jsonify({"success": True, "printer_name": printer_name})
 
 
 @app.route("/admin/retry/<job_id>", methods=["POST"])

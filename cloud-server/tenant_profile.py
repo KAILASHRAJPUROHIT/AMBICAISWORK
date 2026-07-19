@@ -47,6 +47,15 @@ def default_profile(business_name: str) -> dict:
         "voice_clip_path": "",
         "admin_secret": secrets.token_urlsafe(12),
         "agent_api_key": secrets.token_urlsafe(24),
+        # Default printer targeting (see app.py's /api/agent/printers and
+        # /admin/printer). printer_name is only ever set to a value that has
+        # actually appeared in available_printers — the print agent refuses
+        # to print at all if it doesn't match one of its own currently
+        # installed printers, so a stale/mistyped name can't silently send
+        # jobs to the wrong device.
+        "printer_name": "",
+        "available_printers": [],
+        "printers_reported_at": None,
         # Every tenant's uploaded documents are encrypted at rest with this
         # key — see app.py's _encrypt_bytes / _decrypt_bytes. Retention (how
         # long a file lives before deletion) is handled separately by

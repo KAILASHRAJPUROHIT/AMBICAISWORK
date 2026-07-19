@@ -155,6 +155,56 @@
             text-align: center;
             padding: 40px 0;
         }
+
+        .printer-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+        }
+
+        .printer-card h2 {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--fg-subtle);
+            margin-bottom: 10px;
+        }
+
+        .printer-card select {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--fg);
+            font-size: 13.5px;
+            margin-bottom: 10px;
+        }
+
+        .printer-card button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 10px;
+            background: var(--brand-accent);
+            color: #0a0b0d;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .printer-status {
+            font-size: 12px;
+            color: var(--fg-subtle);
+            margin-top: 8px;
+            line-height: 1.5;
+        }
+
+        .printer-status.locked { color: var(--completed); }
+        .printer-status.unlocked { color: var(--pending); }
     </style>
 </head>
 <body>
@@ -177,6 +227,28 @@
         You're signed in with the shared admin secret. <a href="/admin/users" style="color:var(--brand-accent);font-weight:600">Set up individual staff logins</a> so each person has their own account.
     </div>
     {% endif %}
+
+    <div class="printer-card">
+        <h2>🖨️ Default printer</h2>
+        {% set available = profile.available_printers if profile else [] %}
+        {% if available %}
+            <select id="printerSelect">
+                <option value="">— None selected —</option>
+                {% for p in available %}
+                <option value="{{ p }}" {{ 'selected' if profile.printer_name == p else '' }}>{{ p }}</option>
+                {% endfor %}
+            </select>
+            <button onclick="savePrinter()">Save default printer</button>
+            {% if profile.printer_name %}
+                <div class="printer-status locked">✓ Locked to "{{ profile.printer_name }}" — jobs will only print there.</div>
+            {% else %}
+                <div class="printer-status unlocked">⚠ No default printer selected — the agent falls back to its local .env setting, if any.</div>
+            {% endif %}
+        {% else %}
+            <div class="printer-status">Waiting for the print agent to report its printers. Make sure it's running and connected, then refresh this page.</div>
+        {% endif %}
+        <div id="printerSaveMsg" class="printer-status"></div>
+    </div>
 
     {% if jobs %}
         {% for job in jobs %}
@@ -218,6 +290,28 @@
         function reprintJob(id) {
             fetch("/admin/reprint/" + id, {method: "POST"})
                 .then(r => r.json()).then(d => { if (d.error) alert(d.error); else { alert("Sent to print again!"); location.reload(); } });
+        }
+        function savePrinter() {
+            const select = document.getElementById("printerSelect");
+            const msg = document.getElementById("printerSaveMsg");
+            if (!select) return;
+            msg.textContent = "Saving…";
+            msg.className = "printer-status";
+            fetch("/admin/printer", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({printer_name: select.value}),
+            })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.error) {
+                        msg.textContent = "✗ " + d.error;
+                        msg.className = "printer-status unlocked";
+                    } else {
+                        location.reload();
+                    }
+                })
+                .catch(e => { msg.textContent = "✗ Request failed: " + e; msg.className = "printer-status unlocked"; });
         }
     </script>
 </body>
