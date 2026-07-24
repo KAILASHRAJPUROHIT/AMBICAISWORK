@@ -18,28 +18,6 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 CHECKIN_DIR = BASE_DIR / "checkins"
 CHECKIN_DIR.mkdir(parents=True, exist_ok=True)
 
-# ── Default printer targeting ────────────────────────────────────────────────
-# printer_name is only ever set (via /admin/set-printer) to a value that has
-# actually appeared in available_printers, which the agent itself reports
-# from its own PC (see /api/agent/printers). The agent refuses to print at
-# all if the name it's told to use doesn't match one of its own currently
-# installed printers — see local-print-agent/agent.py's process_job.
-PRINTER_CONFIG_FILE = BASE_DIR / "printer_config.json"
-
-
-def load_printer_config() -> dict:
-    if not PRINTER_CONFIG_FILE.exists():
-        return {"printer_name": "", "available_printers": [], "printers_reported_at": None}
-    with open(PRINTER_CONFIG_FILE, encoding="utf-8") as f:
-        return json.load(f)
-
-
-def save_printer_config(config: dict) -> None:
-    tmp = PRINTER_CONFIG_FILE.with_suffix(".json.tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2)
-    os.replace(tmp, PRINTER_CONFIG_FILE)
-
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'jobs.db'}")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_MB", "50")) * 1024 * 1024
@@ -62,6 +40,50 @@ class PrintJob(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+# ── Default printer targeting ────────────────────────────────────────────────
+# Stored in the same SQLite database as everything else — not a standalone
+# file — because a standalone file on disk is not reliably shared if this
+# service ever runs as more than one instance/dyno (each gets its own local
+# disk); the database is the one thing already proven consistent here.
+# printer_name is only ever set (via /admin/set-printer) to a value that has
+# actually appeared in available_printers, which the agent itself reports
+# from its own PC (see /api/agent/printers). The agent refuses to print at
+# all if the name it's told to use doesn't match one of its own currently
+# installed printers — see local-print-agent/agent.py's process_job.
+class PrinterConfig(db.Model):
+    __tablename__ = "printer_config"
+    id = db.Column(db.Integer, primary_key=True)
+    printer_name = db.Column(db.String(255), nullable=False, default="")
+    available_printers = db.Column(db.Text, nullable=False, default="[]")
+    printers_reported_at = db.Column(db.DateTime, nullable=True)
+
+
+def load_printer_config() -> dict:
+    row = PrinterConfig.query.get(1)
+    if not row:
+        return {"printer_name": "", "available_printers": [], "printers_reported_at": None}
+    return {
+        "printer_name": row.printer_name or "",
+        "available_printers": json.loads(row.available_printers or "[]"),
+        "printers_reported_at": row.printers_reported_at.isoformat() if row.printers_reported_at else None,
+    }
+
+
+def save_printer_config(config: dict) -> None:
+    row = PrinterConfig.query.get(1)
+    if not row:
+        row = PrinterConfig(id=1)
+        db.session.add(row)
+    row.printer_name = config.get("printer_name", "") or ""
+    row.available_printers = json.dumps(config.get("available_printers") or [])
+    reported_at = config.get("printers_reported_at")
+    if reported_at:
+        row.printers_reported_at = (
+            reported_at if isinstance(reported_at, datetime) else datetime.fromisoformat(reported_at)
+        )
+    db.session.commit()
+
+
 def init_db():
     with app.app_context():
         db.create_all()
@@ -73,6 +95,10 @@ def init_db():
             if "error_message" not in columns:
                 conn.execute(db.text("ALTER TABLE print_jobs ADD COLUMN error_message TEXT"))
                 conn.commit()
+
+        if not PrinterConfig.query.get(1):
+            db.session.add(PrinterConfig(id=1, printer_name="", available_printers="[]"))
+            db.session.commit()
 
 def allowed_file(filename):
     return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
