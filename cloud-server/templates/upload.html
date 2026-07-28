@@ -505,6 +505,11 @@
                     <button id="btn-manual-crop" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="enableManualCrop()">Manual Crop</button>
                 </div>
 
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <button id="btn-rotate-left" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="rotateCurrentImage(-90)">⟲ Rotate Left</button>
+                    <button id="btn-rotate-right" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="rotateCurrentImage(90)">⟳ Rotate Right</button>
+                </div>
+
                 <button id="btn-use-original" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="useOriginal()">Use Original</button>
                 <button id="btn-discard" class="btn-master" style="background: #444; color: white;" onclick="retakePhoto()">Discard & Retake</button>
             </div>
@@ -1291,6 +1296,41 @@
         } catch (e) {
             showToast('Auto crop failed — use Manual Crop', 'error');
         }
+    }
+
+    function rotateCurrentImage(degrees) {
+        // Manual-crop mode: Cropper.js has native rotate support, and
+        // getCroppedCanvas() in confirmCrop() already reflects it — nothing
+        // else to do.
+        if (cropper) {
+            cropper.rotate(degrees);
+            return;
+        }
+
+        // Auto Crop / Use Original modes render straight into #crop-image
+        // with no Cropper instance — rotate the active canvas by hand and
+        // persist the result so a second rotate, or switching modes, builds
+        // on the already-rotated image rather than the original.
+        const sourceCanvas = currentWarpedCanvas || currentPreviewCanvas;
+        if (!sourceCanvas) return;
+
+        const swapDimensions = Math.abs(degrees % 180) === 90;
+        const w = sourceCanvas.width, h = sourceCanvas.height;
+        const rotated = document.createElement('canvas');
+        rotated.width = swapDimensions ? h : w;
+        rotated.height = swapDimensions ? w : h;
+
+        const ctx = rotated.getContext('2d');
+        ctx.translate(rotated.width / 2, rotated.height / 2);
+        ctx.rotate(degrees * Math.PI / 180);
+        ctx.drawImage(sourceCanvas, -w / 2, -h / 2);
+
+        if (currentWarpedCanvas) {
+            currentWarpedCanvas = rotated;
+        } else {
+            currentPreviewCanvas = rotated;
+        }
+        updateCropPreview(rotated);
     }
 
     function useOriginal() {
