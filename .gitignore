@@ -25,6 +25,9 @@ temp/
 /cloud-server/jobs.db
 /local-print-agent/agent_state.db
 
+# Runtime config (which printer is selected) — not source
+/cloud-server/printer_config.json
+
 # Installer output
 /package/
 

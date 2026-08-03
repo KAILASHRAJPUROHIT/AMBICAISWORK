@@ -1,7 +1,9 @@
+import base64
 import json
 import os
 import random
-from datetime import datetime
+import shutil
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, request, jsonify, render_template, send_from_directory
@@ -13,6 +15,8 @@ app = Flask(__name__)
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+CHECKIN_DIR = BASE_DIR / "checkins"
+CHECKIN_DIR.mkdir(parents=True, exist_ok=True)
 
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'jobs.db'}")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -36,6 +40,50 @@ class PrintJob(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+# ── Default printer targeting ────────────────────────────────────────────────
+# Stored in the same SQLite database as everything else — not a standalone
+# file — because a standalone file on disk is not reliably shared if this
+# service ever runs as more than one instance/dyno (each gets its own local
+# disk); the database is the one thing already proven consistent here.
+# printer_name is only ever set (via /admin/set-printer) to a value that has
+# actually appeared in available_printers, which the agent itself reports
+# from its own PC (see /api/agent/printers). The agent refuses to print at
+# all if the name it's told to use doesn't match one of its own currently
+# installed printers — see local-print-agent/agent.py's process_job.
+class PrinterConfig(db.Model):
+    __tablename__ = "printer_config"
+    id = db.Column(db.Integer, primary_key=True)
+    printer_name = db.Column(db.String(255), nullable=False, default="")
+    available_printers = db.Column(db.Text, nullable=False, default="[]")
+    printers_reported_at = db.Column(db.DateTime, nullable=True)
+
+
+def load_printer_config() -> dict:
+    row = PrinterConfig.query.get(1)
+    if not row:
+        return {"printer_name": "", "available_printers": [], "printers_reported_at": None}
+    return {
+        "printer_name": row.printer_name or "",
+        "available_printers": json.loads(row.available_printers or "[]"),
+        "printers_reported_at": row.printers_reported_at.isoformat() if row.printers_reported_at else None,
+    }
+
+
+def save_printer_config(config: dict) -> None:
+    row = PrinterConfig.query.get(1)
+    if not row:
+        row = PrinterConfig(id=1)
+        db.session.add(row)
+    row.printer_name = config.get("printer_name", "") or ""
+    row.available_printers = json.dumps(config.get("available_printers") or [])
+    reported_at = config.get("printers_reported_at")
+    if reported_at:
+        row.printers_reported_at = (
+            reported_at if isinstance(reported_at, datetime) else datetime.fromisoformat(reported_at)
+        )
+    db.session.commit()
+
+
 def init_db():
     with app.app_context():
         db.create_all()
@@ -47,6 +95,10 @@ def init_db():
             if "error_message" not in columns:
                 conn.execute(db.text("ALTER TABLE print_jobs ADD COLUMN error_message TEXT"))
                 conn.commit()
+
+        if not PrinterConfig.query.get(1):
+            db.session.add(PrinterConfig(id=1, printer_name="", available_printers="[]"))
+            db.session.commit()
 
 def allowed_file(filename):
     return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
@@ -117,6 +169,19 @@ def upload():
     return jsonify({"success": True, "queue_id": job_id, "status": job.status, "file_count": len(saved_files)})
 
 
+@app.route("/api/job/<job_id>", methods=["GET"])
+def get_job_status(job_id):
+    job = PrintJob.query.get_or_404(job_id)
+    position = None
+    if job.status == "pending":
+        ahead = PrintJob.query.filter(
+            PrintJob.status == "pending",
+            PrintJob.created_at < job.created_at
+        ).count()
+        position = ahead + 1
+    return jsonify({"job_id": job.id, "status": job.status, "queue_position": position, "updated_at": job.updated_at.isoformat()})
+
+
 @app.route("/api/agent/jobs/pending", methods=["GET"])
 def get_pending_jobs():
     jobs = PrintJob.query.filter_by(status="pending").order_by(PrintJob.created_at.asc()).limit(5).all()
@@ -125,7 +190,31 @@ def get_pending_jobs():
         filenames = json.loads(job.file_paths or "[]")
         files = [{"filename": name, "url": request.url_root.rstrip("/") + f"/media/{job.id}/{name}"} for name in filenames]
         response.append({"job_id": job.id, "status": job.status, "print_mode": job.print_mode, "copies": job.copies, "files": files, "created_at": job.created_at.isoformat()})
-    return jsonify(response)
+    # printer_name is the admin's selected default (see /admin/set-printer) —
+    # the agent must not print anywhere else once this is set. An older
+    # agent that only understands a bare list still works fine; it just
+    # never looks at this key and falls back to its local .env value.
+    printer_name = load_printer_config().get("printer_name") or ""
+    return jsonify({"printer_name": printer_name, "jobs": response})
+
+
+@app.route("/api/agent/printers", methods=["POST"])
+def report_agent_printers():
+    """The polling agent reports the Windows printers it can actually see on
+    its own PC — this is what populates the dropdown in /admin so an owner
+    picks from real, currently-installed printers instead of typing a name
+    that might not match (the exact mismatch — "HP Laser MFP 330" vs
+    "HP Laser MFP 355sdnw" — that caused real duplicate printing here)."""
+    data = request.get_json(silent=True) or {}
+    printers = data.get("printers")
+    if not isinstance(printers, list) or not all(isinstance(p, str) for p in printers):
+        return jsonify({"error": "printers must be a list of strings"}), 400
+
+    config = load_printer_config()
+    config["available_printers"] = sorted(set(p.strip() for p in printers if p.strip()))
+    config["printers_reported_at"] = datetime.utcnow().isoformat()
+    save_printer_config(config)
+    return jsonify({"ok": True, "count": len(config["available_printers"])})
 
 
 @app.route("/api/agent/jobs/<job_id>/status", methods=["POST", "PATCH"])
@@ -179,13 +268,87 @@ def dailyprice_media(filename):
 def admin():
     jobs = PrintJob.query.order_by(PrintJob.created_at.desc()).limit(100).all()
     STATUS_COLOR = {"pending": "#e6a817", "printing": "#5bc0de", "completed": "#5cb85c", "failed": "#d9534f"}
-    rows = ""
+    cards = ""
     for job in jobs:
         file_count = len(json.loads(job.file_paths or "[]"))
         color = STATUS_COLOR.get(job.status, "#aaa")
-        retry_btn = f'<button onclick="retryJob(\'{job.id}\')" style="padding:3px 10px;background:#e6a817;color:#000;border:none;border-radius:3px;cursor:pointer;font-size:12px;font-weight:bold">↺ Retry</button>' if job.status == "failed" else ""
-        rows += f'<tr><td>{job.id}</td><td style="color:{color};font-weight:bold">{job.status}</td><td>{job.print_mode}</td><td>{job.copies}</td><td>{file_count}</td><td>{job.created_at.strftime("%d-%m-%Y %H:%M")}</td><td>{retry_btn}</td></tr>'
-    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aradhana Print Admin</title><style>body{{font-family:Arial;background:#f7f5f0;padding:20px}}h1{{color:#06142E}}table{{width:100%;border-collapse:collapse;background:white}}th,td{{padding:10px;border-bottom:1px solid #ddd;font-size:14px}}th{{background:#06142E;color:#D4AF37;text-align:left}}</style><meta http-equiv="refresh" content="10"></head><body><h1>Aradhana Print Queue</h1><button onclick="clearPending()" style="margin-bottom:20px;padding:10px 15px;background:#d9534f;color:white;border:none;border-radius:4px;cursor:pointer;font-size:14px">[Clear Pending Queue]</button><script>function clearPending(){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Deleted: "+data.deleted);location.reload();}}}}).catch(e=>alert("Request failed"));}}function retryJob(jobId){{const secret=prompt("Enter Admin Secret:");if(secret===null)return;fetch("/admin/retry/"+jobId,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:secret}})}}).then(r=>r.json()).then(data=>{{if(data.error)alert("Error: "+data.error);else{{alert("Job queued for retry");location.reload();}}}}).catch(e=>alert("Request failed"));}}</script><table><tr><th>Queue ID</th><th>Status</th><th>Mode</th><th>Copies</th><th>Files</th><th>Created</th><th>Actions</th></tr>{rows}</table></body></html>"""
+        actions = ""
+        if job.status == "failed":
+            actions += f'<button onclick="retryJob(\'{job.id}\')" style="flex:1;padding:8px;background:#e6a817;color:#000;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">↺ Retry</button>'
+        if job.status in ("completed", "failed"):
+            actions += f'<button onclick="reprintJob(\'{job.id}\')" style="flex:1;padding:8px;background:#5bc0de;color:#000;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:bold">🖨 Reprint</button>'
+        actions_html = f'<div style="display:flex;gap:8px;margin-top:10px">{actions}</div>' if actions else ""
+        error_html = f'<div style="font-size:11px;color:#d9534f;margin-top:6px;word-break:break-word">{job.error_message[:120]}…</div>' if job.error_message else ""
+        cards += f'''<div style="background:#111;border:1px solid #222;border-radius:10px;padding:14px;margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <span style="font-weight:bold;color:#D4AF37;font-size:15px;letter-spacing:1px">{job.id}</span>
+                <span style="color:{color};font-size:12px;font-weight:bold;background:rgba(0,0,0,0.4);padding:3px 8px;border-radius:10px">{job.status.upper()}</span>
+            </div>
+            <div style="font-size:12px;color:#888">{job.created_at.strftime("%d %b %Y, %H:%M")} &nbsp;·&nbsp; {job.print_mode} &nbsp;·&nbsp; {job.copies}x &nbsp;·&nbsp; {file_count} file(s)</div>
+            {error_html}{actions_html}
+        </div>'''
+
+    printer_config = load_printer_config()
+    available_printers = printer_config.get("available_printers") or []
+    current_printer = printer_config.get("printer_name") or ""
+    if available_printers:
+        options = '<option value="">— None selected —</option>' + "".join(
+            f'<option value="{p}" {"selected" if p == current_printer else ""}>{p}</option>'
+            for p in available_printers
+        )
+        status_line = (
+            f'<div style="font-size:12px;color:#5cb85c;margin-top:8px">✓ Locked to "{current_printer}" — jobs will only print there.</div>'
+            if current_printer else
+            '<div style="font-size:12px;color:#e6a817;margin-top:8px">⚠ No default printer selected — the agent falls back to its local .env setting, if any.</div>'
+        )
+        printer_html = f'''<div style="background:#111;border:1px solid #222;border-radius:10px;padding:14px;margin-bottom:16px">
+            <div style="font-weight:bold;color:#D4AF37;font-size:13px;margin-bottom:10px">🖨️ Default Printer</div>
+            <select id="printerSelect" style="width:100%;padding:9px 10px;border-radius:6px;border:1px solid #333;background:#0a0a14;color:#ddd;font-size:13px;margin-bottom:8px">{options}</select>
+            <button onclick="savePrinter()" style="width:100%;padding:9px;background:#D4AF37;color:#000;border:none;border-radius:6px;font-weight:bold;font-size:13px;cursor:pointer">Save Default Printer</button>
+            {status_line}
+            <div id="printerSaveMsg" style="font-size:12px;margin-top:6px"></div>
+        </div>'''
+    else:
+        printer_html = '''<div style="background:#111;border:1px solid #222;border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:#888">
+            🖨️ Waiting for the print agent to report its printers. Make sure it's running, then refresh this page.
+        </div>'''
+
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aradhana Print Admin</title>
+<style>
+*{{box-sizing:border-box}}body{{font-family:Arial,sans-serif;background:#0a0a14;color:#ddd;padding:16px;margin:0;max-width:600px;margin:0 auto}}
+h1{{color:#D4AF37;font-family:Georgia,serif;font-size:22px;margin-bottom:16px}}
+.nav{{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}}
+.nav a,.nav button{{padding:9px 14px;border-radius:6px;font-size:13px;font-weight:bold;text-decoration:none;border:none;cursor:pointer}}
+</style>
+<meta http-equiv="refresh" content="10">
+</head><body>
+<h1>🖨 Print Queue</h1>
+<div class="nav">
+  <a href="/admin/history" style="background:#06142E;color:#D4AF37">📷 History</a>
+  <a href="/admin/checkins" style="background:#1a0a2e;color:#D4AF37">👤 Staff</a>
+  <a href="/admin/social-handles" style="background:#0a2e1a;color:#D4AF37">📱 Handles</a>
+  <button onclick="clearPending()" style="background:#d9534f;color:white">🗑 Clear Pending</button>
+</div>
+{printer_html}
+<script>
+function clearPending(){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/clear-pending",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Deleted: "+d.deleted);location.reload();}}}});}}
+function retryJob(id){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/retry/"+id,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Retrying…");location.reload();}}}});}}
+function reprintJob(id){{const s=prompt("Admin Secret:");if(!s)return;fetch("/admin/reprint/"+id,{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{secret:s}})}}).then(r=>r.json()).then(d=>{{if(d.error)alert(d.error);else{{alert("Sent to print again!");location.reload();}}}});}}
+function savePrinter(){{
+    const select=document.getElementById("printerSelect");
+    const msg=document.getElementById("printerSaveMsg");
+    if(!select)return;
+    const s=prompt("Admin Secret (leave blank if none set):")||"";
+    msg.textContent="Saving…";msg.style.color="#888";
+    fetch("/admin/set-printer",{{method:"POST",headers:{{"Content-Type":"application/json"}},body:JSON.stringify({{printer_name:select.value,secret:s}})}})
+        .then(r=>r.json())
+        .then(d=>{{if(d.error){{msg.textContent="✗ "+d.error;msg.style.color="#d9534f";}}else{{location.reload();}}}})
+        .catch(e=>{{msg.textContent="✗ Request failed: "+e;msg.style.color="#d9534f";}});
+}}
+</script>
+{cards if cards else "<p style='color:#555'>No jobs yet.</p>"}
+</body></html>"""
 
 
 @app.route("/admin/retry/<job_id>", methods=["POST"])
@@ -198,6 +361,21 @@ def admin_retry_job(job_id):
     job = PrintJob.query.get_or_404(job_id)
     if job.status != "failed":
         return jsonify({"error": "Only failed jobs can be retried."}), 400
+    job.status = "pending"
+    job.error_message = None
+    job.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"success": True, "job_id": job.id})
+
+
+@app.route("/admin/reprint/<job_id>", methods=["POST"])
+def admin_reprint_job(job_id):
+    expected_secret = os.environ.get("ADMIN_SECRET")
+    if expected_secret:
+        data = request.get_json(silent=True) or {}
+        if data.get("secret") != expected_secret:
+            return jsonify({"error": "Unauthorized"}), 401
+    job = PrintJob.query.get_or_404(job_id)
     job.status = "pending"
     job.error_message = None
     job.updated_at = datetime.utcnow()
@@ -219,7 +397,195 @@ def admin_clear_pending():
     return jsonify({"deleted": deleted})
 
 
+@app.route("/admin/set-printer", methods=["POST"])
+def admin_set_printer():
+    expected_secret = os.environ.get("ADMIN_SECRET")
+    data = request.get_json(silent=True) or {}
+    if expected_secret:
+        if data.get("secret") != expected_secret:
+            return jsonify({"error": "Unauthorized"}), 401
+
+    printer_name = (data.get("printer_name") or "").strip()
+    config = load_printer_config()
+    available = config.get("available_printers") or []
+    if printer_name and printer_name not in available:
+        return jsonify({"error": "That printer isn't in the reported printer list. Make sure the print agent is running and has reported its printers."}), 400
+
+    config["printer_name"] = printer_name  # "" clears it, deliberately allowed
+    save_printer_config(config)
+    return jsonify({"success": True, "printer_name": printer_name})
+
+
+HANDLES_FILE = BASE_DIR / "social_handles.csv"
+
+
+@app.route("/api/social-handle", methods=["POST"])
+def save_social_handle():
+    data = request.get_json(silent=True) or {}
+    handle = (data.get("handle") or "").strip()[:60]
+    if not handle:
+        return jsonify({"error": "No handle"}), 400
+    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    with open(HANDLES_FILE, "a", encoding="utf-8") as f:
+        f.write(f'{ts},"{handle}"\n')
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/social-handles", methods=["GET"])
+def admin_social_handles():
+    rows = ""
+    entries = []
+    if HANDLES_FILE.exists():
+        for line in HANDLES_FILE.read_text(encoding="utf-8").splitlines():
+            if "," not in line:
+                continue
+            ts, handle = line.split(",", 1)
+            entries.append((ts.strip(), handle.strip().strip('"')))
+    for ts, handle in reversed(entries):
+        ig_url = f"https://www.instagram.com/{handle.lstrip('@').replace('@', '')}/"
+        rows += f'<tr><td>{ts}</td><td><a href="{ig_url}" target="_blank" style="color:#D4AF37">{handle}</a></td></tr>'
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Customer Handles</title>
+<style>body{{font-family:Arial;background:#0a0a14;color:#ddd;padding:20px}}h1{{color:#D4AF37;font-family:Georgia,serif}}
+table{{width:100%;border-collapse:collapse;background:#111}}th,td{{padding:10px 14px;border-bottom:1px solid #222;font-size:14px;text-align:left}}
+th{{background:#06142E;color:#D4AF37}}a.back{{color:#D4AF37;text-decoration:none;font-size:14px;display:inline-block;margin-bottom:20px}}</style>
+</head><body>
+<a class="back" href="/admin">← Back to Admin</a>
+<h1>Customer Instagram Handles</h1>
+<p style="color:#888;font-size:13px;margin-bottom:16px">{len(entries)} collected</p>
+<table><tr><th>Time (UTC)</th><th>Handle</th></tr>{rows if rows else "<tr><td colspan='2' style='color:#555'>None yet.</td></tr>"}</table>
+</body></html>"""
+
+
+@app.route("/api/checkin", methods=["POST"])
+def staff_checkin():
+    data = request.get_json(silent=True) or {}
+    img_data = data.get("image", "")
+    queue_id = data.get("queue_id", "unknown")
+    if not img_data:
+        return jsonify({"error": "No image"}), 400
+    # Strip data URI prefix if present
+    if "," in img_data:
+        img_data = img_data.split(",", 1)[1]
+    try:
+        raw = base64.b64decode(img_data)
+    except Exception:
+        return jsonify({"error": "Invalid image data"}), 400
+    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"{ts}_{queue_id}.jpg"
+    (CHECKIN_DIR / filename).write_bytes(raw)
+    return jsonify({"ok": True})
+
+
+@app.route("/checkin-photo/<filename>", methods=["GET"])
+def checkin_photo(filename):
+    return send_from_directory(CHECKIN_DIR, secure_filename(filename))
+
+
+@app.route("/admin/checkins", methods=["GET"])
+def admin_checkins():
+    photos = sorted(CHECKIN_DIR.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    cards = ""
+    for photo in photos:
+        mtime = datetime.utcfromtimestamp(photo.stat().st_mtime)
+        if mtime < cutoff:
+            continue
+        parts = photo.stem.split("_", 3)
+        try:
+            ts_str = f"{parts[0][:4]}-{parts[0][4:6]}-{parts[0][6:]} {parts[1][:2]}:{parts[1][2:4]}:{parts[1][4:]}"
+        except Exception:
+            ts_str = photo.stem
+        queue_id = "_".join(parts[2:]) if len(parts) > 2 else "—"
+        img_url = f"/checkin-photo/{photo.name}"
+        cards += f'''<div style="background:#111;border:1px solid #2a2a2a;border-radius:10px;overflow:hidden;break-inside:avoid;margin-bottom:16px">
+            <img src="{img_url}" style="width:100%;display:block;object-fit:cover;max-height:260px">
+            <div style="padding:10px 12px">
+                <div style="color:#D4AF37;font-size:12px;font-weight:bold;margin-bottom:3px">{ts_str} UTC</div>
+                <div style="color:#666;font-size:11px">Job: {queue_id}</div>
+            </div>
+        </div>'''
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Staff Checkins</title>
+<style>
+body{{font-family:Arial,sans-serif;background:#0a0a14;color:#ddd;padding:20px;margin:0}}
+h1{{color:#D4AF37;font-family:Georgia,serif;letter-spacing:2px}}
+.grid{{columns:1;column-gap:16px}}
+@media(min-width:500px){{.grid{{columns:2}}}}
+@media(min-width:800px){{.grid{{columns:3}}}}
+a.back{{color:#D4AF37;text-decoration:none;font-size:14px;display:inline-block;margin-bottom:20px}}
+</style></head><body>
+<a class="back" href="/admin">← Back to Admin</a>
+<h1>Staff Activity — Last 30 Days</h1>
+<p style="color:#888;font-size:13px;margin-bottom:20px">{len([p for p in photos if datetime.utcfromtimestamp(p.stat().st_mtime) >= cutoff])} photo(s)</p>
+<div class="grid">{cards if cards else "<p style='color:#555'>No activity captured yet.</p>"}</div>
+</body></html>"""
+
+
+def cleanup_old_uploads():
+    """Delete upload directories for jobs older than 30 days."""
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    with app.app_context():
+        old_jobs = PrintJob.query.filter(PrintJob.created_at < cutoff).all()
+        removed = 0
+        for job in old_jobs:
+            job_dir = UPLOAD_DIR / job.id
+            if job_dir.exists():
+                shutil.rmtree(job_dir, ignore_errors=True)
+                removed += 1
+    if removed:
+        print(f"[cleanup] Removed {removed} upload directories older than 30 days.")
+
+
+@app.route("/admin/history", methods=["GET"])
+def admin_history():
+    cutoff = datetime.utcnow() - timedelta(days=30)
+    jobs = (PrintJob.query
+            .filter(PrintJob.created_at >= cutoff)
+            .order_by(PrintJob.created_at.desc())
+            .all())
+
+    IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+    cards = ""
+    for job in jobs:
+        filenames = json.loads(job.file_paths or "[]")
+        status_color = {"pending": "#e6a817", "printing": "#5bc0de", "completed": "#5cb85c", "failed": "#d9534f"}.get(job.status, "#aaa")
+        thumbs = ""
+        for name in filenames:
+            ext = Path(name).suffix.lower()
+            media_url = f"/media/{job.id}/{name}"
+            if ext in IMAGE_EXTS:
+                thumbs += f'<a href="{media_url}" target="_blank"><img src="{media_url}" style="width:100px;height:100px;object-fit:cover;border-radius:4px;border:1px solid #333;cursor:pointer" title="{name}"></a>'
+            else:
+                thumbs += f'<a href="{media_url}" target="_blank" style="display:inline-flex;align-items:center;justify-content:center;width:100px;height:100px;background:#1a1a2e;border:1px solid #444;border-radius:4px;color:#D4AF37;font-size:11px;text-align:center;text-decoration:none;padding:6px">📄<br>{name[:20]}</a>'
+        cards += f'''<div style="background:#111;border:1px solid #2a2a2a;border-radius:8px;padding:14px;break-inside:avoid;margin-bottom:16px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <span style="font-weight:bold;color:#D4AF37;letter-spacing:1px">{job.id}</span>
+                <span style="color:{status_color};font-size:12px;font-weight:bold">{job.status.upper()}</span>
+            </div>
+            <div style="font-size:11px;color:#888;margin-bottom:10px">{job.created_at.strftime("%d %b %Y, %H:%M")} &nbsp;·&nbsp; {job.print_mode} &nbsp;·&nbsp; {job.copies}x</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">{thumbs if thumbs else "<span style='color:#555;font-size:12px'>No files found on disk</span>"}</div>
+        </div>'''
+
+    return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aradhana Print History</title>
+<style>
+body{{font-family:Arial,sans-serif;background:#0a0a14;color:#ddd;padding:20px;margin:0}}
+h1{{color:#D4AF37;font-family:Georgia,serif;letter-spacing:2px}}
+.grid{{columns:1;column-gap:16px}}
+@media(min-width:600px){{.grid{{columns:2}}}}
+@media(min-width:900px){{.grid{{columns:3}}}}
+a.back{{color:#D4AF37;text-decoration:none;font-size:14px;display:inline-block;margin-bottom:20px}}
+</style></head><body>
+<a class="back" href="/admin">← Back to Admin</a>
+<h1>Print History — Last 30 Days</h1>
+<p style="color:#888;font-size:13px;margin-bottom:20px">{len(jobs)} job(s) found</p>
+<div class="grid">{cards if cards else "<p style='color:#666'>No print jobs in the last 30 days.</p>"}</div>
+</body></html>"""
+
+
 init_db()
+cleanup_old_uploads()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "5000"))
