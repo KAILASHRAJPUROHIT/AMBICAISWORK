@@ -238,6 +238,9 @@ def media(job_id, filename):
     return send_from_directory(UPLOAD_DIR / secure_filename(job_id), filename, as_attachment=True)
 
 
+# LOCKED 2026-08-03 — verified working live at print.aradhanajewellers.com/dailyprice.
+# Covered by test_dailyprice.py. Re-run that suite and re-check the live page
+# before changing this route, gold_rate_renderer.py, or templates/dailyprice.html.
 @app.route("/dailyprice", methods=["GET", "POST"])
 def dailyprice():
     from gold_rate_renderer import RateImageRenderer, parse_rate
