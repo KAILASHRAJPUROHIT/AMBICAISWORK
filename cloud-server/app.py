@@ -149,6 +149,32 @@ def media(job_id, filename):
     return send_from_directory(UPLOAD_DIR / secure_filename(job_id), filename, as_attachment=True)
 
 
+@app.route("/dailyprice", methods=["GET", "POST"])
+def dailyprice():
+    from gold_rate_renderer import RateImageRenderer, parse_rate
+
+    error = None
+    image_url = None
+    if request.method == "POST":
+        rate = parse_rate(request.form.get("rate", ""))
+        if not rate:
+            error = "Enter a valid rate, e.g. 135000"
+        else:
+            renderer = RateImageRenderer(
+                BASE_DIR / "assets" / "gold_rate_template.png",
+                BASE_DIR / "uploads" / "dailyprice",
+                "Asia/Kolkata",
+            )
+            result = renderer.render(rate)
+            image_url = f"/dailyprice/media/{result.path.name}"
+    return render_template("dailyprice.html", error=error, image_url=image_url)
+
+
+@app.route("/dailyprice/media/<path:filename>", methods=["GET"])
+def dailyprice_media(filename):
+    return send_from_directory(UPLOAD_DIR / "dailyprice", secure_filename(filename))
+
+
 @app.route("/admin", methods=["GET"])
 def admin():
     jobs = PrintJob.query.order_by(PrintJob.created_at.desc()).limit(100).all()

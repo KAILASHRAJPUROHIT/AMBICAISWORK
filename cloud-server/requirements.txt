@@ -4,3 +4,4 @@ SQLAlchemy>=2.0.35
 python-dotenv>=1.0
 Werkzeug>=3.0
 gunicorn>=21.2
+Pillow>=10.0
