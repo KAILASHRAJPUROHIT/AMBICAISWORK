@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from flask import Flask, jsonify, redirect, render_template, request, send_from_directory, session, url_for
+from werkzeug.exceptions import HTTPException
 import win32crypt
 
 import email_2fa
