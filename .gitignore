@@ -121,3 +121,9 @@ _reset_backup_*/
 # API key for the Sonnet design reader - never commit
 anthropic_key.txt
 tools/cloudflared.exe
+
+# ── Machine-bound encrypted credentials (DPAPI, tied to this Windows user) ────
+config/azure_flux2_pro_key.dpapi
+config/azure_flux2_pro_key.clixml
+config/cloudflare_tunnel_token.dpapi
+config/email_2fa_smtp.dpapi
