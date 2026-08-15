@@ -1,0 +1,15 @@
+Edit this jewellery photo into a clean catalogue product shot. Keep every design detail of the piece from Image 1 exactly as it is: the same piece count, silhouette, stone count and colours, cuts, settings, chains, dangles, prongs, engraving, filigree, and every gold bead, stud, ball and dangling drop at its own exact count and position. Keep every plain gold surface exactly gold, with colour only where Image 1 itself already shows a coloured gemstone or enamel fill at that specific spot -- where Image 1 shows only bare gold at a centre, tip, panel or border, keep that spot exactly bare gold, matching Image 1 precisely.
+
+Remove the price tag, QR-code sticker, and display stand from the shot entirely, isolating the jewellery alone on a seamless pure white background (hex #FFFFFF) that stays one flat, uniform tone all the way to every edge of the frame, with the piece suspended centrally in open studio space. Photograph it like a Joyalukkas catalogue product shot: macro product-photography lens (100mm f/11), bright even studio softbox lighting, sharp focus throughout, with a generous white margin so the piece's tallest dimension fills about half the frame height.
+
+Straighten the piece so its main vertical axis runs perfectly plumb and centred in frame, regardless of how it was angled in Image 1. Hang every dangling chain, drop and tip element directly vertical along that same plumb axis, including the centre chain and its end drop; every link shares the same central x-coordinate and stacks directly above the one below it. For a matched pair (earrings, jhumkas), keep both sides level and mirror-symmetric -- the same height, scale and straight-down angle, with the left and right ornament built from exactly the same shape, detail and openings as true mirror images of each other.
+
+Render every metal surface as genuine high-polish {KARAT}-karat gold with real photographed specular highlights, the way a macro photograph of polished gold looks under studio light:
+- Warm gold-cream highlight (hex #D4C17A) on every raised ridge, dome and bead top, sharpening into a crisp, bright specular glint with a hard core on each strongly convex point.
+- Rich, saturated amber-gold base tone (hex #C39B47) across the main surface.
+- Deep, saturated burnt-orange-brown shadow tone (hex #A14F0E) inside every groove, engraved line, filigree gap and the underside of each raised motif.
+Blend these three tones along the piece's actual surface geometry for real dimensional depth and mirror-polish brilliance across the whole product. Keep gemstones and enamel in their true, clean, saturated colours from Image 1.
+
+Keep every round element -- domes, medallions, studs, discs -- a true, evenly curved circle at its original proportions.
+
+If an item-specific instruction assigns a role to Image 2, follow that role exactly. Otherwise, use Image 2's background, framing or display surface as the new scene, placing the Image-1 jewellery naturally within it.

@@ -1,0 +1,123 @@
+# ── Secrets & credentials ─────────────────────────────────────────────────────
+keys.py
+chatgpt_session.json
+copilot_session.json
+*.env
+adobe_token.json
+firefly_ims_token.json
+flask_secret_key.txt
+capture_secret_key.txt
+_gw2a_cookie_header.txt
+*_cookie_header.txt
+
+# ── Runtime state (regenerated on every run) ──────────────────────────────────
+port.txt
+slot_log.json
+chatgpt_config.json
+progress_*.json
+catalogue_db.json
+backups/
+supervisor_state.json
+auto2_config.json
+auto2_progress.json
+capture_current_tray.json
+capture_dedup.json
+capture_purge_audit.jsonl
+engine_advisor_state.json
+pipeline_runtime_state.json
+capture_port.txt
+replicate_progress.json
+# Per-account pool state. The un-suffixed forms were already ignored, but the
+# _2.._5 variants were committed before those rules existed, so gitignore alone
+# never untracked them — gitignore is only consulted for files git isn't already
+# tracking. They were removed from the index with `git rm --cached` in a7ea561
+# (2026-07-31); the files themselves stay on disk, since the running pool needs
+# them. Note engine_stats.jsonl (data) is ignored while engine_stats.py (code)
+# stays tracked.
+copilot_session_*.json
+copilot_cooldown*.json
+engine_stats.jsonl
+engine_stats_archived.jsonl
+run.log*
+supervisor.log*
+supervisor_state.json.conflict*
+_chatgpt_imagegen_tmp/
+_auto2_temp/
+service_*_stdout.log*
+service_*_stderr.log*
+app_server*.log
+scratch_*
+*.bak
+debug_*.json
+gemini_cooldown*.json
+
+# ── Image data (too large for git) ────────────────────────────────────────────
+input/
+output_aradhana/
+processing/
+_input_originals/
+dataset/
+backgrounds/
+*.jpg
+*.jpeg
+*.png
+# Reviewed, SKU-scoped catalogue geometry guides are application assets.
+!assets/geometry_guides/bali/BL22_43_front45.jpg
+!assets/geometry_guides/bali/compact_huggie_45.jpg
+!assets/geometry_guides/bali/round_hoop_45.jpg
+*.pt
+*.safetensors
+# Blanket archive block -- raw capture zips (e.g. capture_intake/**/*.zip) must
+# never enter git history. Already-tracked third-party tool zips (tools/exiftool*)
+# are unaffected since gitignore only governs untracked files.
+*.zip
+
+# ── Logs & temp ───────────────────────────────────────────────────────────────
+*.log
+*.err
+*.err.log
+*.out.log
+server.log
+server.err
+engine_run.log
+test_out.txt
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+
+# ── Chrome & Selenium ─────────────────────────────────────────────────────────
+chromedriver.exe
+
+# ── XML screen dumps ──────────────────────────────────────────────────────────
+*.xml
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+Pair/
+tap/
+.agents/
+_gemini_web_to_api/
+_diag_*.py
+_cal*.py
+_watch*.py
+_fix_*.py
+_switch_*.py
+_test_*.py
+_gemini_calibration.png
+_cal_with_text.png
+
+# local verifier debug crops / evidence sheets
+_seg/
+_bad_output_evidence/
+_reset_backup_*/
+
+# API key for the Sonnet design reader - never commit
+anthropic_key.txt
+tools/cloudflared.exe

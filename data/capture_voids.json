@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "voids": {
+    "37 LOCKET 22/LC22_36.jpg": {
+      "category": "locket_22",
+      "folder": "37 LOCKET 22",
+      "primary_path": "37 LOCKET 22/LC22_36.jpg",
+      "primary_size": 464686,
+      "reason": "operator_undo",
+      "tag_code": "LC22/36",
+      "tag_path": "37 LOCKET 22/_tag_archive/LC22_36_tag.jpg",
+      "tag_size": 436255,
+      "voided_at": 1785562715.2500322
+    },
+    "40 LOCKET 22/LC22_59.jpg": {
+      "category": "locket_22",
+      "folder": "40 LOCKET 22",
+      "primary_path": "40 LOCKET 22/LC22_59.jpg",
+      "primary_size": 726179,
+      "reason": "operator_undo",
+      "tag_code": "LC22/59",
+      "tag_path": "40 LOCKET 22/_tag_archive/LC22_59_tag.jpg",
+      "tag_size": 574314,
+      "voided_at": 1785579756.288846
+    },
+    "58 PENDENT 22/PD22_113.jpg": {
+      "category": "pendent_22",
+      "folder": "58 PENDENT 22",
+      "primary_path": "58 PENDENT 22/PD22_113.jpg",
+      "primary_size": 2102305,
+      "reason": "operator_undo",
+      "tag_code": "PD22/113",
+      "tag_path": "58 PENDENT 22/_tag_archive/PD22_113_tag.jpg",
+      "tag_size": 2393646,
+      "voided_at": 1785740523.8748648
+    },
+    "58 PENDENT 22/PD22_50.jpg": {
+      "category": "pendent_22",
+      "folder": "58 PENDENT 22",
+      "primary_path": "58 PENDENT 22/PD22_50.jpg",
+      "primary_size": 2211881,
+      "reason": "operator_undo",
+      "tag_code": "PD22/50",
+      "tag_path": "58 PENDENT 22/_tag_archive/PD22_50_tag.jpg",
+      "tag_size": 2261298,
+      "voided_at": 1785739159.2895873
+    },
+    "58 PENDENT 22/PD22_64.jpg": {
+      "category": "pendent_22",
+      "folder": "58 PENDENT 22",
+      "primary_path": "58 PENDENT 22/PD22_64.jpg",
+      "primary_size": 2596871,
+      "reason": "operator_undo",
+      "tag_code": "PD22/64",
+      "tag_path": "58 PENDENT 22/_tag_archive/PD22_64_tag.jpg",
+      "tag_size": 2508381,
+      "voided_at": 1785737951.9675503
+    }
+  }
+}

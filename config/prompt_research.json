@@ -1,0 +1,17 @@
+{
+  "engine": "azure_flux2_pro",
+  "model": "FLUX.2-pro",
+  "researched_at": "2026-08-11",
+  "sources": [
+    {"title": "Black Forest Labs: FLUX.2 prompting guide", "url": "https://docs.bfl.ai/guides/prompting_guide_flux2"},
+    {"title": "Black Forest Labs: single-reference editing", "url": "https://docs.bfl.ai/guides/prompting_editing_single_reference"},
+    {"title": "Microsoft Foundry: deploy and use FLUX models", "url": "https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-flux"}
+  ],
+  "guidelines": [
+    "Describe the desired result directly; FLUX.2 does not use negative prompts.",
+    "State exactly how the supplied reference image must be used.",
+    "Use precise object, colour, composition and lighting language.",
+    "Keep prompt upsampling disabled when the production prompt is already specific.",
+    "Use dimensions that are multiples of 16 and stay inside model pixel limits."
+  ]
+}

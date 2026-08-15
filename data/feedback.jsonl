@@ -1,0 +1,606 @@
+{"label": "TEST_X", "verdict": "rejected", "reason": "pair_mismatch", "note": "chains differ", "ts": 1786171915.3845875}
+{"label": "JB22_1", "verdict": "approved", "reason": null, "note": null, "ts": 1786172477.9316168, "crop_method": "colour_gold", "crop_occupancy": 0.9239, "jewel_score": 0.9992, "jewellery_pieces": 2}
+{"label": "JB22_100", "verdict": "approved", "reason": null, "note": null, "ts": 1786172485.028636, "crop_method": "colour_gold", "crop_occupancy": 0.5228, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_101", "verdict": "approved", "reason": null, "note": null, "ts": 1786172488.7837348, "crop_method": "colour_gold", "crop_occupancy": 0.5061, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_11", "verdict": "approved", "reason": null, "note": null, "ts": 1786172493.1279428, "crop_method": "colour_gold", "crop_occupancy": 0.5266, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786172495.7315395, "crop_method": "colour_gold", "crop_occupancy": 0.8566, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_13", "verdict": "approved", "reason": null, "note": null, "ts": 1786172507.064371, "crop_method": "colour_gold", "crop_occupancy": 0.7498, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_24", "verdict": "approved", "reason": null, "note": null, "ts": 1786182639.5737987, "crop_method": "colour_gold", "crop_occupancy": 1.0, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_26", "verdict": "approved", "reason": null, "note": null, "ts": 1786182662.544443, "crop_method": "colour_gold", "crop_occupancy": 0.7546, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_27", "verdict": "approved", "reason": null, "note": null, "ts": 1786182671.7488036, "crop_method": "colour_gold", "crop_occupancy": 0.9708, "jewel_score": 0.9989, "jewellery_pieces": 2}
+{"label": "JB22_28", "verdict": "approved", "reason": null, "note": null, "ts": 1786182678.3431761, "crop_method": "colour_gold", "crop_occupancy": 0.8604, "jewel_score": 0.9998, "jewellery_pieces": 2}
+{"label": "JB22_29", "verdict": "approved", "reason": null, "note": null, "ts": 1786182684.2685905, "crop_method": "colour_gold", "crop_occupancy": 0.8137, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_30", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786182726.014207, "crop_method": "colour_gold", "crop_occupancy": 1.0, "jewel_score": 0.9999, "jewellery_pieces": 2}
+{"label": "JB22_31", "verdict": "rejected", "reason": "stones_wrong", "note": "left item stone missing", "ts": 1786182752.719699, "crop_method": "colour_gold", "crop_occupancy": 0.6323, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_32", "verdict": "rejected", "reason": "stones_wrong", "note": "right item stone missing", "ts": 1786182765.4229665, "crop_method": "colour_gold", "crop_occupancy": 0.9766, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_34", "verdict": "approved", "reason": null, "note": null, "ts": 1786182770.952246, "crop_method": "colour_gold", "crop_occupancy": 0.742, "jewel_score": 0.9989, "jewellery_pieces": 2}
+{"label": "JB22_37", "verdict": "approved", "reason": null, "note": null, "ts": 1786182837.6580608, "crop_method": "colour_gold", "crop_occupancy": 0.6175, "jewel_score": 0.9999, "jewellery_pieces": 2}
+{"label": "JB22_39", "verdict": "approved", "reason": null, "note": null, "ts": 1786182846.3936658, "crop_method": "colour_gold", "crop_occupancy": 0.7853, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_40", "verdict": "approved", "reason": null, "note": null, "ts": 1786182852.072701, "crop_method": "colour_gold", "crop_occupancy": 0.4049, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_42", "verdict": "approved", "reason": null, "note": null, "ts": 1786182874.2141454, "crop_method": "colour_gold", "crop_occupancy": 0.7547, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_44", "verdict": "approved", "reason": null, "note": null, "ts": 1786182888.1471586, "crop_method": "colour_gold", "crop_occupancy": 0.5508, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_49", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786182907.5927157, "crop_method": "colour_gold", "crop_occupancy": 0.9118, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_50", "verdict": "approved", "reason": null, "note": null, "ts": 1786182913.7600288, "crop_method": "colour_gold", "crop_occupancy": 0.648, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_51", "verdict": "approved", "reason": null, "note": null, "ts": 1786182917.6063063, "crop_method": "colour_gold", "crop_occupancy": 0.9893, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_52", "verdict": "approved", "reason": null, "note": null, "ts": 1786182924.3770711, "crop_method": "colour_gold", "crop_occupancy": 0.7812, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_54", "verdict": "rejected", "reason": "stones_wrong", "note": null, "ts": 1786182947.871344, "crop_method": "colour_gold", "crop_occupancy": 0.5642, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_55", "verdict": "approved", "reason": null, "note": null, "ts": 1786182958.1955118, "crop_method": "colour_gold", "crop_occupancy": 0.4318, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_56", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786182978.944225, "crop_method": "colour_gold", "crop_occupancy": 0.602, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_57", "verdict": "approved", "reason": null, "note": null, "ts": 1786182985.300163, "crop_method": "colour_gold", "crop_occupancy": 0.2879, "jewel_score": 0.9879, "jewellery_pieces": 2}
+{"label": "JB22_58", "verdict": "approved", "reason": null, "note": null, "ts": 1786182990.9877946, "crop_method": "colour_gold", "crop_occupancy": 0.3603, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_59", "verdict": "approved", "reason": null, "note": null, "ts": 1786182994.7488284, "crop_method": "colour_gold", "crop_occupancy": 0.9295, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_60", "verdict": "approved", "reason": null, "note": null, "ts": 1786183004.1592224, "crop_method": "colour_gold", "crop_occupancy": 0.9082, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_61", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183011.750872, "crop_method": "colour_gold", "crop_occupancy": 0.6679, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_62", "verdict": "approved", "reason": null, "note": null, "ts": 1786183020.016899, "crop_method": "colour_gold", "crop_occupancy": 0.978, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_65", "verdict": "approved", "reason": null, "note": null, "ts": 1786183037.1707532, "crop_method": "colour_gold", "crop_occupancy": 0.7955, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_66", "verdict": "approved", "reason": null, "note": null, "ts": 1786183043.2970228, "crop_method": "colour_gold", "crop_occupancy": 0.7016, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_67", "verdict": "approved", "reason": null, "note": null, "ts": 1786183048.2468615, "crop_method": "colour_gold", "crop_occupancy": 0.6604, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_69", "verdict": "approved", "reason": null, "note": null, "ts": 1786183055.4568057, "crop_method": "colour_gold", "crop_occupancy": 0.5723, "jewel_score": 0.9495, "jewellery_pieces": 2}
+{"label": "JB22_71", "verdict": "approved", "reason": null, "note": null, "ts": 1786183060.3756247, "crop_method": "colour_gold", "crop_occupancy": 0.8726, "jewel_score": 0.9998, "jewellery_pieces": 2}
+{"label": "JB22_73", "verdict": "approved", "reason": null, "note": null, "ts": 1786183063.0113194, "crop_method": "colour_gold", "crop_occupancy": 0.4502, "jewel_score": 0.9999, "jewellery_pieces": 2}
+{"label": "JB22_91", "verdict": "approved", "reason": null, "note": null, "ts": 1786183067.6126657, "crop_method": "colour_gold", "crop_occupancy": 0.6847, "jewel_score": 0.9997, "jewellery_pieces": 2}
+{"label": "JB22_93", "verdict": "approved", "reason": null, "note": null, "ts": 1786183070.21559, "crop_method": "colour_gold", "crop_occupancy": 0.4672, "jewel_score": 0.9987, "jewellery_pieces": 2}
+{"label": "JB22_98", "verdict": "approved", "reason": null, "note": null, "ts": 1786183075.0547695, "crop_method": "colour_gold", "crop_occupancy": 0.7552, "jewel_score": 0.999, "jewellery_pieces": 2}
+{"label": "JB22_98", "verdict": "approved", "reason": null, "note": null, "ts": 1786183078.8159084, "crop_method": "colour_gold", "crop_occupancy": 0.7552, "jewel_score": 0.999, "jewellery_pieces": 2}
+{"label": "JB22_98", "verdict": "approved", "reason": null, "note": null, "ts": 1786183081.4329548, "crop_method": "colour_gold", "crop_occupancy": 0.7552, "jewel_score": 0.999, "jewellery_pieces": 2}
+{"label": "JB22_100", "verdict": "approved", "reason": null, "note": null, "ts": 1786183093.912688, "crop_method": "colour_gold", "crop_occupancy": 0.5228, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_101", "verdict": "approved", "reason": null, "note": null, "ts": 1786183099.0860887, "crop_method": "colour_gold", "crop_occupancy": 0.5061, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_24", "verdict": "approved", "reason": null, "note": null, "ts": 1786183104.076146, "crop_method": "colour_gold", "crop_occupancy": 1.0, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_26", "verdict": "approved", "reason": null, "note": null, "ts": 1786183110.754585, "crop_method": "colour_gold", "crop_occupancy": 0.7546, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_27", "verdict": "approved", "reason": null, "note": null, "ts": 1786183113.892047, "crop_method": "colour_gold", "crop_occupancy": 0.9708, "jewel_score": 0.9989, "jewellery_pieces": 2}
+{"label": "JB22_28", "verdict": "approved", "reason": null, "note": null, "ts": 1786183119.3494873, "crop_method": "colour_gold", "crop_occupancy": 0.8604, "jewel_score": 0.9998, "jewellery_pieces": 2}
+{"label": "JB22_29", "verdict": "approved", "reason": null, "note": null, "ts": 1786183124.830989, "crop_method": "colour_gold", "crop_occupancy": 0.8137, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_30", "verdict": "approved", "reason": null, "note": null, "ts": 1786183136.0185068, "crop_method": "colour_gold", "crop_occupancy": 1.0, "jewel_score": 0.9999, "jewellery_pieces": 2}
+{"label": "JB22_31", "verdict": "approved", "reason": null, "note": null, "ts": 1786183148.1401575, "crop_method": "colour_gold", "crop_occupancy": 0.6323, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_32", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183154.179984, "crop_method": "colour_gold", "crop_occupancy": 0.9766, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_34", "verdict": "approved", "reason": null, "note": null, "ts": 1786183164.8094907, "crop_method": "colour_gold", "crop_occupancy": 0.742, "jewel_score": 0.9989, "jewellery_pieces": 2}
+{"label": "JB22_37", "verdict": "approved", "reason": null, "note": null, "ts": 1786183167.2007067, "crop_method": "colour_gold", "crop_occupancy": 0.6175, "jewel_score": 0.9999, "jewellery_pieces": 2}
+{"label": "JB22_39", "verdict": "approved", "reason": null, "note": null, "ts": 1786183336.2213635, "crop_method": "colour_gold", "crop_occupancy": 0.7853, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_40", "verdict": "approved", "reason": null, "note": null, "ts": 1786183345.9570246, "crop_method": "colour_gold", "crop_occupancy": 0.4049, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_42", "verdict": "approved", "reason": null, "note": null, "ts": 1786183358.5357003, "crop_method": "colour_gold", "crop_occupancy": 0.7547, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_44", "verdict": "approved", "reason": null, "note": null, "ts": 1786183366.0913548, "crop_method": "colour_gold", "crop_occupancy": 0.5508, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_49", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786183378.4628913, "crop_method": "colour_gold", "crop_occupancy": 0.9118, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_50", "verdict": "approved", "reason": null, "note": null, "ts": 1786183380.484694, "crop_method": "colour_gold", "crop_occupancy": 0.648, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_51", "verdict": "approved", "reason": null, "note": null, "ts": 1786183382.209874, "crop_method": "colour_gold", "crop_occupancy": 0.9893, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_52", "verdict": "approved", "reason": null, "note": null, "ts": 1786183395.251461, "crop_method": "colour_gold", "crop_occupancy": 0.7812, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_54", "verdict": "approved", "reason": null, "note": null, "ts": 1786183398.712223, "crop_method": "colour_gold", "crop_occupancy": 0.5642, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_55", "verdict": "approved", "reason": null, "note": null, "ts": 1786183401.5510986, "crop_method": "colour_gold", "crop_occupancy": 0.4318, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_56", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183406.0968227, "crop_method": "colour_gold", "crop_occupancy": 0.602, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_57", "verdict": "approved", "reason": null, "note": null, "ts": 1786183413.107762, "crop_method": "colour_gold", "crop_occupancy": 0.2879, "jewel_score": 0.9879, "jewellery_pieces": 2}
+{"label": "JB22_58", "verdict": "approved", "reason": null, "note": null, "ts": 1786183417.2789059, "crop_method": "colour_gold", "crop_occupancy": 0.3603, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_59", "verdict": "approved", "reason": null, "note": null, "ts": 1786183422.4243417, "crop_method": "colour_gold", "crop_occupancy": 0.9295, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_60", "verdict": "approved", "reason": null, "note": null, "ts": 1786183427.2004752, "crop_method": "colour_gold", "crop_occupancy": 0.9082, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_61", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183435.7256947, "crop_method": "colour_gold", "crop_occupancy": 0.6679, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_62", "verdict": "approved", "reason": null, "note": null, "ts": 1786183438.7943902, "crop_method": "colour_gold", "crop_occupancy": 0.978, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_65", "verdict": "approved", "reason": null, "note": null, "ts": 1786183446.705568, "crop_method": "colour_gold", "crop_occupancy": 0.7955, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_66", "verdict": "approved", "reason": null, "note": null, "ts": 1786183448.4190876, "crop_method": "colour_gold", "crop_occupancy": 0.7016, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_67", "verdict": "approved", "reason": null, "note": null, "ts": 1786183451.519942, "crop_method": "colour_gold", "crop_occupancy": 0.6604, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_69", "verdict": "approved", "reason": null, "note": null, "ts": 1786183457.4503376, "crop_method": "colour_gold", "crop_occupancy": 0.5723, "jewel_score": 0.9495, "jewellery_pieces": 2}
+{"label": "JB22_71", "verdict": "approved", "reason": null, "note": null, "ts": 1786183467.1553226, "crop_method": "colour_gold", "crop_occupancy": 0.8726, "jewel_score": 0.9998, "jewellery_pieces": 2}
+{"label": "JB22_73", "verdict": "approved", "reason": null, "note": null, "ts": 1786183470.8615458, "crop_method": "colour_gold", "crop_occupancy": 0.4502, "jewel_score": 0.9999, "jewellery_pieces": 2}
+{"label": "JB22_91", "verdict": "approved", "reason": null, "note": null, "ts": 1786183474.165891, "crop_method": "colour_gold", "crop_occupancy": 0.6847, "jewel_score": 0.9997, "jewellery_pieces": 2}
+{"label": "JB22_93", "verdict": "approved", "reason": null, "note": null, "ts": 1786183475.1843226, "crop_method": "colour_gold", "crop_occupancy": 0.4672, "jewel_score": 0.9987, "jewellery_pieces": 2}
+{"label": "JB22_98", "verdict": "approved", "reason": null, "note": null, "ts": 1786183580.5454144, "crop_method": "colour_gold", "crop_occupancy": 0.7552, "jewel_score": 0.999, "jewellery_pieces": 2}
+{"label": "JB22_98", "verdict": "approved", "reason": null, "note": null, "ts": 1786183582.5717854, "crop_method": "colour_gold", "crop_occupancy": 0.7552, "jewel_score": 0.999, "jewellery_pieces": 2}
+{"label": "JB22_14", "verdict": "approved", "reason": null, "note": null, "ts": 1786183594.4222925, "crop_method": "colour_gold", "crop_occupancy": 0.6431, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_16", "verdict": "approved", "reason": null, "note": null, "ts": 1786183597.4965396, "crop_method": "colour_gold", "crop_occupancy": 0.6806, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_17", "verdict": "approved", "reason": null, "note": null, "ts": 1786183599.9809566, "crop_method": "colour_gold", "crop_occupancy": 0.8711, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_18", "verdict": "approved", "reason": null, "note": null, "ts": 1786183602.1464686, "crop_method": "colour_gold", "crop_occupancy": 0.5971, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_19", "verdict": "approved", "reason": null, "note": null, "ts": 1786183605.1063318, "crop_method": "colour_gold", "crop_occupancy": 0.6065, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_2", "verdict": "approved", "reason": null, "note": null, "ts": 1786183606.585605, "crop_method": "colour_gold", "crop_occupancy": 0.6013, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_20", "verdict": "approved", "reason": null, "note": null, "ts": 1786183610.3272948, "crop_method": "colour_gold", "crop_occupancy": 0.6752, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_21", "verdict": "approved", "reason": null, "note": null, "ts": 1786183611.7255373, "crop_method": "colour_gold", "crop_occupancy": 0.7152, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_22", "verdict": "approved", "reason": null, "note": null, "ts": 1786183615.121717, "crop_method": "colour_gold", "crop_occupancy": 0.7509, "jewel_score": 0.9999, "jewellery_pieces": 2}
+{"label": "JB22_23", "verdict": "approved", "reason": null, "note": null, "ts": 1786183617.7862365, "crop_method": "colour_gold", "crop_occupancy": 0.9124, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_3", "verdict": "approved", "reason": null, "note": null, "ts": 1786183619.8720593, "crop_method": "colour_gold", "crop_occupancy": 0.7764, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_4", "verdict": "approved", "reason": null, "note": null, "ts": 1786183622.893695, "crop_method": "colour_gold", "crop_occupancy": 0.7785, "jewel_score": 0.9999, "jewellery_pieces": 2}
+{"label": "JB22_5", "verdict": "approved", "reason": null, "note": null, "ts": 1786183626.4034216, "crop_method": "colour_gold", "crop_occupancy": 0.8687, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_6", "verdict": "approved", "reason": null, "note": null, "ts": 1786183629.6531832, "crop_method": "colour_gold", "crop_occupancy": 0.7312, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_7", "verdict": "approved", "reason": null, "note": null, "ts": 1786183633.25146, "crop_method": "colour_gold", "crop_occupancy": 0.9004, "jewel_score": 0.999, "jewellery_pieces": 2}
+{"label": "JB22_9", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183651.4131432, "crop_method": "colour_gold", "crop_occupancy": 0.5632, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_9", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183656.5425084, "crop_method": "colour_gold", "crop_occupancy": 0.5632, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_9", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183661.083981, "crop_method": "colour_gold", "crop_occupancy": 0.5632, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_9", "verdict": "approved", "reason": null, "note": null, "ts": 1786183673.9736292, "crop_method": "colour_gold", "crop_occupancy": 0.5632, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_100", "verdict": "approved", "reason": null, "note": null, "ts": 1786183683.987499, "crop_method": "colour_gold", "crop_occupancy": 0.5228, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_101", "verdict": "approved", "reason": null, "note": null, "ts": 1786183688.520006, "crop_method": "colour_gold", "crop_occupancy": 0.5061, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_24", "verdict": "approved", "reason": null, "note": null, "ts": 1786183694.6089275, "crop_method": "colour_gold", "crop_occupancy": 1.0, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_26", "verdict": "approved", "reason": null, "note": null, "ts": 1786183700.2982159, "crop_method": "colour_gold", "crop_occupancy": 0.7546, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_27", "verdict": "approved", "reason": null, "note": null, "ts": 1786183705.7630954, "crop_method": "colour_gold", "crop_occupancy": 0.9708, "jewel_score": 0.9989, "jewellery_pieces": 2}
+{"label": "JB22_28", "verdict": "approved", "reason": null, "note": null, "ts": 1786183708.728703, "crop_method": "colour_gold", "crop_occupancy": 0.8604, "jewel_score": 0.9998, "jewellery_pieces": 2}
+{"label": "JB22_29", "verdict": "approved", "reason": null, "note": null, "ts": 1786183716.2313995, "crop_method": "colour_gold", "crop_occupancy": 0.8137, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_30", "verdict": "approved", "reason": null, "note": null, "ts": 1786183718.981131, "crop_method": "colour_gold", "crop_occupancy": 1.0, "jewel_score": 0.9999, "jewellery_pieces": 2}
+{"label": "WT22_1", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184613.7870939, "crop_method": "colour_gold", "crop_occupancy": 0.825, "jewel_score": 0.9822, "jewellery_pieces": 1}
+{"label": "WT22_107", "verdict": "rejected", "reason": "other", "note": "pieces not joined", "ts": 1786184651.7478273, "crop_method": "colour_gold", "crop_occupancy": 0.2397, "jewel_score": 1.0, "jewellery_pieces": 1}
+{"label": "WT22_111", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184669.874442, "crop_method": "colour_gold", "crop_occupancy": 0.7608, "jewel_score": 0.9996, "jewellery_pieces": 1}
+{"label": "WT22_12", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184673.8399007, "crop_method": "colour_gold", "crop_occupancy": 0.7715, "jewel_score": 0.9976, "jewellery_pieces": 1}
+{"label": "WT22_127", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184682.961283, "crop_method": "colour_gold", "crop_occupancy": 0.8942, "jewel_score": 0.9746, "jewellery_pieces": 1}
+{"label": "WT22_18", "verdict": "rejected", "reason": "other", "note": "objects not joined", "ts": 1786184698.098081, "crop_method": "sam2_focus", "crop_occupancy": 1.0, "jewel_score": 0.9157, "jewellery_pieces": null}
+{"label": "WT22_19", "verdict": "rejected", "reason": "other", "note": "ohjects not joined", "ts": 1786184713.4850285, "crop_method": "sam2_focus", "crop_occupancy": 0.991, "jewel_score": 0.9999, "jewellery_pieces": null}
+{"label": "WT22_2", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184717.27294, "crop_method": "sam2_focus", "crop_occupancy": 0.987, "jewel_score": 0.9199, "jewellery_pieces": null}
+{"label": "WT22_22", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184721.1535282, "crop_method": "colour_gold", "crop_occupancy": 0.6698, "jewel_score": 0.9903, "jewellery_pieces": 1}
+{"label": "WT22_26", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184729.7177377, "crop_method": "colour_gold", "crop_occupancy": 0.8186, "jewel_score": 0.9925, "jewellery_pieces": 1}
+{"label": "WT22_32", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184737.6110916, "crop_method": "sam2_focus", "crop_occupancy": 0.8223, "jewel_score": 0.9959, "jewellery_pieces": null}
+{"label": "WT22_34", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184747.9037993, "crop_method": "sam2_focus", "crop_occupancy": 1.0, "jewel_score": 0.9976, "jewellery_pieces": null}
+{"label": "WT22_4", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184755.7534556, "crop_method": "colour_gold", "crop_occupancy": 0.7779, "jewel_score": 0.9747, "jewellery_pieces": 1}
+{"label": "WT22_44", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184762.0211873, "crop_method": "colour_gold", "crop_occupancy": 0.8415, "jewel_score": 0.9969, "jewellery_pieces": 1}
+{"label": "WT22_45", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184767.08739, "crop_method": "sam2_focus", "crop_occupancy": 0.934, "jewel_score": 0.9613, "jewellery_pieces": null}
+{"label": "WT22_46", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184769.3839555, "crop_method": "colour_gold", "crop_occupancy": 0.7578, "jewel_score": 0.9842, "jewellery_pieces": 1}
+{"label": "WT22_49", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184775.6399536, "crop_method": "colour_gold", "crop_occupancy": 0.792, "jewel_score": 0.6072, "jewellery_pieces": 1}
+{"label": "WT22_50", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184782.1480823, "crop_method": "colour_gold", "crop_occupancy": 0.8085, "jewel_score": 0.9989, "jewellery_pieces": 1}
+{"label": "WT22_51", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184784.747524, "crop_method": "sam2_focus", "crop_occupancy": 1.0, "jewel_score": 0.9111, "jewellery_pieces": null}
+{"label": "WT22_53", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184788.075136, "crop_method": "sam2_focus", "crop_occupancy": 1.0, "jewel_score": 1.0, "jewellery_pieces": null}
+{"label": "WT22_54", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184797.9216297, "crop_method": "colour_gold", "crop_occupancy": 0.8313, "jewel_score": 0.9999, "jewellery_pieces": 1}
+{"label": "WT22_55", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184805.0410438, "crop_method": "colour_gold", "crop_occupancy": 0.7458, "jewel_score": 0.9957, "jewellery_pieces": 1}
+{"label": "WT22_59", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184811.5834613, "crop_method": "colour_gold", "crop_occupancy": 0.7482, "jewel_score": 0.9881, "jewellery_pieces": 1}
+{"label": "WT22_6", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184814.21696, "crop_method": "colour_gold", "crop_occupancy": 0.9895, "jewel_score": 0.9998, "jewellery_pieces": 1}
+{"label": "WT22_60", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184826.8578014, "crop_method": "colour_gold", "crop_occupancy": 0.9715, "jewel_score": 0.9818, "jewellery_pieces": 1}
+{"label": "WT22_7", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184833.9560163, "crop_method": "sam2_focus", "crop_occupancy": 0.9953, "jewel_score": 0.9997, "jewellery_pieces": null}
+{"label": "WT22_8", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184847.7268682, "crop_method": "sam2_focus", "crop_occupancy": 0.966, "jewel_score": 0.9725, "jewellery_pieces": null}
+{"label": "WT22_81", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184852.1865819, "crop_method": "colour_gold", "crop_occupancy": 0.8407, "jewel_score": 0.9533, "jewellery_pieces": 1}
+{"label": "WT22_81", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184854.9215636, "crop_method": "colour_gold", "crop_occupancy": 0.8407, "jewel_score": 0.9533, "jewellery_pieces": 1}
+{"label": "JB22_40", "verdict": "approved", "reason": null, "note": null, "ts": 1786447219.0976593, "crop_method": "colour_gold", "crop_occupancy": 0.4049, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_40", "verdict": "approved", "reason": null, "note": null, "ts": 1786447220.3269348, "crop_method": "colour_gold", "crop_occupancy": 0.4049, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_40", "verdict": "approved", "reason": null, "note": null, "ts": 1786447220.5770996, "crop_method": "colour_gold", "crop_occupancy": 0.4049, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_40", "verdict": "approved", "reason": null, "note": null, "ts": 1786447220.762244, "crop_method": "colour_gold", "crop_occupancy": 0.4049, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_40", "verdict": "approved", "reason": null, "note": null, "ts": 1786447220.9398026, "crop_method": "colour_gold", "crop_occupancy": 0.4049, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_40", "verdict": "approved", "reason": null, "note": null, "ts": 1786447221.1116211, "crop_method": "colour_gold", "crop_occupancy": 0.4049, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_40", "verdict": "approved", "reason": null, "note": null, "ts": 1786447221.272289, "crop_method": "colour_gold", "crop_occupancy": 0.4049, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_40", "verdict": "approved", "reason": null, "note": null, "ts": 1786447221.439623, "crop_method": "colour_gold", "crop_occupancy": 0.4049, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_1", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786525002.366835, "crop_method": "colour_gold", "crop_occupancy": 0.9239, "jewel_score": 0.9992, "jewellery_pieces": 2}
+{"label": "JB22_100", "verdict": "approved", "reason": null, "note": null, "ts": 1786525015.7063026, "crop_method": "colour_gold", "crop_occupancy": 0.5228, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_101", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786525019.1544442, "crop_method": "colour_gold", "crop_occupancy": 0.5061, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_11", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786525024.988843, "crop_method": "colour_gold", "crop_occupancy": 0.5266, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786525030.2868452, "crop_method": "colour_gold", "crop_occupancy": 0.8566, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786525032.0957305, "crop_method": "colour_gold", "crop_occupancy": 0.8566, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786525032.346644, "crop_method": "colour_gold", "crop_occupancy": 0.8566, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786525032.442809, "crop_method": "colour_gold", "crop_occupancy": 0.8566, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786525032.5870771, "crop_method": "colour_gold", "crop_occupancy": 0.8566, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786525032.8889318, "crop_method": "colour_gold", "crop_occupancy": 0.8566, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "JB22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786525032.9902213, "crop_method": "colour_gold", "crop_occupancy": 0.8566, "jewel_score": 1.0, "jewellery_pieces": 2}
+{"label": "ER22_1", "verdict": "approved", "reason": null, "note": null, "ts": 1786692915.4207323}
+{"label": "ER22_10", "verdict": "rejected", "reason": "other", "note": "round shape not proper", "ts": 1786692963.0311847}
+{"label": "ER22_105", "verdict": "rejected", "reason": "other", "note": "red color not present in design", "ts": 1786692985.6749039}
+{"label": "ER22_107", "verdict": "approved", "reason": null, "note": null, "ts": 1786692990.510061}
+{"label": "ER22_108", "verdict": "approved", "reason": null, "note": null, "ts": 1786693013.022314}
+{"label": "ER22_109", "verdict": "rejected", "reason": "other", "note": "studs not shining", "ts": 1786693026.9793353}
+{"label": "ER22_11", "verdict": "approved", "reason": null, "note": null, "ts": 1786693030.7880838}
+{"label": "ER22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786693034.8904338}
+{"label": "ER22_13", "verdict": "rejected", "reason": "other", "note": "shine missing", "ts": 1786693051.122095}
+{"label": "ER22_15", "verdict": "rejected", "reason": "other", "note": null, "ts": 1786693059.5441449}
+{"label": "ER22_16", "verdict": "approved", "reason": null, "note": null, "ts": 1786693064.39084}
+{"label": "ER22_19", "verdict": "rejected", "reason": "other", "note": "stud color changed", "ts": 1786693074.2844}
+{"label": "ER22_2", "verdict": "rejected", "reason": "other", "note": null, "ts": 1786693081.5073113}
+{"label": "ER22_20", "verdict": "approved", "reason": null, "note": null, "ts": 1786693084.0155685}
+{"label": "ER22_21", "verdict": "approved", "reason": null, "note": null, "ts": 1786693086.3909237}
+{"label": "ER22_22", "verdict": "approved", "reason": null, "note": null, "ts": 1786693090.5669806}
+{"label": "ER22_24", "verdict": "approved", "reason": null, "note": null, "ts": 1786693092.7223127}
+{"label": "ER22_25", "verdict": "approved", "reason": null, "note": null, "ts": 1786693105.421945}
+{"label": "ER22_26", "verdict": "rejected", "reason": "other", "note": "pink not present in original design", "ts": 1786693120.1223016}
+{"label": "ER22_3", "verdict": "rejected", "reason": "other", "note": "STUDDS MISSING", "ts": 1786694722.6976016}
+{"label": "ER22_30", "verdict": "approved", "reason": null, "note": null, "ts": 1786694728.7206635}
+{"label": "ER22_31", "verdict": "approved", "reason": null, "note": null, "ts": 1786694737.1871872}
+{"label": "ER22_32", "verdict": "approved", "reason": null, "note": null, "ts": 1786694741.2002687}
+{"label": "ER22_34", "verdict": "approved", "reason": null, "note": null, "ts": 1786694746.6720881}
+{"label": "ER22_35", "verdict": "rejected", "reason": "other", "note": "CENTER PIECE SHOULD NOT HAVE PEARL", "ts": 1786694768.4063072}
+{"label": "ER22_39", "verdict": "rejected", "reason": "other", "note": "original design doesnt have red stud", "ts": 1786694893.6287086}
+{"label": "ER22_4", "verdict": "approved", "reason": null, "note": null, "ts": 1786694904.2621975}
+{"label": "ER22_42", "verdict": "approved", "reason": null, "note": null, "ts": 1786694915.6835027}
+{"label": "ER22_43", "verdict": "rejected", "reason": "other", "note": "design fidelity missing", "ts": 1786694935.7584436}
+{"label": "ER22_45", "verdict": "approved", "reason": null, "note": null, "ts": 1786694944.4427948}
+{"label": "ER22_46", "verdict": "approved", "reason": null, "note": null, "ts": 1786694954.4838722}
+{"label": "ER22_47", "verdict": "approved", "reason": null, "note": null, "ts": 1786694964.744728}
+{"label": "ER22_48", "verdict": "approved", "reason": null, "note": null, "ts": 1786695005.5193303}
+{"label": "ER22_49", "verdict": "approved", "reason": null, "note": null, "ts": 1786695019.457006}
+{"label": "ER22_52", "verdict": "rejected", "reason": "other", "note": "design mismtach", "ts": 1786695043.5296671}
+{"label": "ER22_53", "verdict": "approved", "reason": null, "note": null, "ts": 1786695078.4562883}
+{"label": "ER22_55", "verdict": "approved", "reason": null, "note": null, "ts": 1786695082.6365504}
+{"label": "ER22_56", "verdict": "rejected", "reason": "other", "note": "this design has no studds and tag piece is still there in the finished image", "ts": 1786695147.8578382}
+{"label": "ER22_57", "verdict": "approved", "reason": null, "note": null, "ts": 1786695154.6464407}
+{"label": "ER22_58", "verdict": "rejected", "reason": "other", "note": "shining design elements also shown as matte", "ts": 1786695181.046001}
+{"label": "ER22_59", "verdict": "rejected", "reason": "other", "note": "shining also shown as matte", "ts": 1786695195.381401}
+{"label": "ER22_61", "verdict": "rejected", "reason": "other", "note": "design doesnt have colors", "ts": 1786695218.4834535}
+{"label": "ER22_65", "verdict": "rejected", "reason": "other", "note": "green area not present in original design", "ts": 1786695239.53111}
+{"label": "ER22_66", "verdict": "approved", "reason": null, "note": null, "ts": 1786695246.165909}
+{"label": "ER22_7", "verdict": "approved", "reason": null, "note": null, "ts": 1786695250.8587067}
+{"label": "ER22_71", "verdict": "approved", "reason": null, "note": null, "ts": 1786695257.202524}
+{"label": "ER22_72", "verdict": "rejected", "reason": "other", "note": "shine also shown as matte", "ts": 1786695267.4628236}
+{"label": "ER22_73", "verdict": "rejected", "reason": "other", "note": "shining also shown as matte", "ts": 1786695291.9578226}
+{"label": "ER22_74", "verdict": "rejected", "reason": "other", "note": "shining also shown as matte", "ts": 1786695303.0163853}
+{"label": "ER22_75", "verdict": "rejected", "reason": "other", "note": "top circle has no studds in original design and this design doesnt have smaller studd\\s in the main area", "ts": 1786695356.441038}
+{"label": "ER22_8", "verdict": "approved", "reason": null, "note": null, "ts": 1786695359.6992655}
+{"label": "ER22_81", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786695370.919685}
+{"label": "ER22_83", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786695374.6785305}
+{"label": "ER22_85", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786695377.9514537}
+{"label": "ER22_86", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786695385.0900323}
+{"label": "ER22_88", "verdict": "approved", "reason": null, "note": null, "ts": 1786695392.8180056}
+{"label": "ER22_91", "verdict": "approved", "reason": null, "note": null, "ts": 1786695399.8351433}
+{"label": "ER22_92", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786695409.933984}
+{"label": "ER22_93", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786695413.1985145}
+{"label": "ER22_97", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786695418.5641103}
+{"label": "ER22_10", "verdict": "rejected", "reason": "other", "note": null, "ts": 1786707727.381255}
+{"label": "ER22_105", "verdict": "rejected", "reason": "other", "note": "not straight", "ts": 1786707744.2491765}
+{"label": "ER22_109", "verdict": "approved", "reason": null, "note": null, "ts": 1786707753.7918482}
+{"label": "ER22_13", "verdict": "rejected", "reason": "other", "note": "no shine", "ts": 1786707762.1366036}
+{"label": "ER22_15", "verdict": "rejected", "reason": "other", "note": "no shine", "ts": 1786707770.4580193}
+{"label": "BL18_10", "verdict": "rejected", "reason": "other", "note": "need 45 degree angle", "ts": 1786774175.2902126}
+{"label": "BL18_16", "verdict": "rejected", "reason": "other", "note": "green diamonds ?", "ts": 1786774190.3947713}
+{"label": "BG22_1", "verdict": "approved", "reason": null, "note": null, "ts": 1786775200.4098933}
+{"label": "BG22_3", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786775205.7783237}
+{"label": "BL18_2", "verdict": "approved", "reason": null, "note": null, "ts": 1786775211.8769686}
+{"label": "BL18_10", "verdict": "approved", "reason": null, "note": null, "ts": 1786775949.4663336}
+{"label": "BL18_16", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786775952.4189575}
+{"label": "BG22_10", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786775960.9142869}
+{"label": "BG22_11", "verdict": "approved", "reason": null, "note": null, "ts": 1786775967.7135782}
+{"label": "BG22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786775970.501486}
+{"label": "BG22_18", "verdict": "approved", "reason": null, "note": null, "ts": 1786775972.381546}
+{"label": "BG22_26", "verdict": "approved", "reason": null, "note": null, "ts": 1786775975.0220973}
+{"label": "BG22_27", "verdict": "approved", "reason": null, "note": null, "ts": 1786775977.1454153}
+{"label": "BG22_28", "verdict": "approved", "reason": null, "note": null, "ts": 1786775978.8744738}
+{"label": "BG22_3", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786775982.1951716}
+{"label": "BG22_31", "verdict": "approved", "reason": null, "note": null, "ts": 1786775984.193975}
+{"label": "BG22_32", "verdict": "approved", "reason": null, "note": null, "ts": 1786775985.5930123}
+{"label": "BG22_38", "verdict": "approved", "reason": null, "note": null, "ts": 1786775987.467354}
+{"label": "BG22_39", "verdict": "approved", "reason": null, "note": null, "ts": 1786775992.752507}
+{"label": "BG22_41", "verdict": "approved", "reason": null, "note": null, "ts": 1786775994.8199024}
+{"label": "BG22_42", "verdict": "approved", "reason": null, "note": null, "ts": 1786775997.5497763}
+{"label": "BG22_43", "verdict": "approved", "reason": null, "note": null, "ts": 1786775999.9147718}
+{"label": "BG22_44", "verdict": "approved", "reason": null, "note": null, "ts": 1786776002.5644658}
+{"label": "BG22_45", "verdict": "approved", "reason": null, "note": null, "ts": 1786776007.5833862}
+{"label": "BG22_47", "verdict": "approved", "reason": null, "note": null, "ts": 1786776011.7775528}
+{"label": "BG22_49", "verdict": "approved", "reason": null, "note": null, "ts": 1786776020.5384665}
+{"label": "BL18_2", "verdict": "approved", "reason": null, "note": null, "ts": 1786776022.7656887}
+{"label": "BL18_10", "verdict": "approved", "reason": null, "note": null, "ts": 1786776028.492695}
+{"label": "BL18_16", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786776031.5943077}
+{"label": "BG22_51", "verdict": "approved", "reason": null, "note": null, "ts": 1786779685.407642}
+{"label": "BG22_52", "verdict": "approved", "reason": null, "note": null, "ts": 1786779691.405428}
+{"label": "BG22_54", "verdict": "rejected", "reason": "other", "note": "design has no red accents", "ts": 1786779704.6393461}
+{"label": "BG22_57", "verdict": "rejected", "reason": "other", "note": "design has no red accents", "ts": 1786779719.4577746}
+{"label": "BG22_58", "verdict": "approved", "reason": null, "note": null, "ts": 1786779722.639489}
+{"label": "BG22_60", "verdict": "approved", "reason": null, "note": null, "ts": 1786779727.7231903}
+{"label": "BG22_63", "verdict": "approved", "reason": null, "note": null, "ts": 1786779732.5725358}
+{"label": "BG22_66", "verdict": "approved", "reason": null, "note": null, "ts": 1786779735.5514247}
+{"label": "BG22_67", "verdict": "rejected", "reason": "other", "note": "design has no blue accents", "ts": 1786779752.3103802}
+{"label": "BG22_68", "verdict": "rejected", "reason": "other", "note": "design has no red accents", "ts": 1786779763.9830673}
+{"label": "BG22_69", "verdict": "approved", "reason": null, "note": null, "ts": 1786779766.615658}
+{"label": "BG22_70", "verdict": "approved", "reason": null, "note": null, "ts": 1786779769.535818}
+{"label": "BG22_73", "verdict": "approved", "reason": null, "note": null, "ts": 1786779772.078273}
+{"label": "BG22_77", "verdict": "approved", "reason": null, "note": null, "ts": 1786779774.2969804}
+{"label": "BG22_78", "verdict": "approved", "reason": null, "note": null, "ts": 1786779777.005537}
+{"label": "BG22_79", "verdict": "rejected", "reason": "other", "note": "this is a studless design", "ts": 1786779789.9370296}
+{"label": "BG22_8", "verdict": "approved", "reason": null, "note": null, "ts": 1786779796.1744194}
+{"label": "BG22_81", "verdict": "approved", "reason": null, "note": null, "ts": 1786779800.020919}
+{"label": "BG22_82", "verdict": "rejected", "reason": "other", "note": "this is a studless design", "ts": 1786779813.8705168}
+{"label": "BG22_83", "verdict": "approved", "reason": null, "note": null, "ts": 1786779823.5705404}
+{"label": "BG22_84", "verdict": "rejected", "reason": "other", "note": "left bangle has blue accents when it should be red", "ts": 1786779849.7624905}
+{"label": "BG22_85", "verdict": "rejected", "reason": "other", "note": "blue accents instead of red", "ts": 1786779861.297367}
+{"label": "BG22_87", "verdict": "approved", "reason": null, "note": null, "ts": 1786779865.6916997}
+{"label": "BG22_88", "verdict": "rejected", "reason": "other", "note": "no blue accents needed and edited item doesnt look like a bangle", "ts": 1786780001.9139094}
+{"label": "BG22_89", "verdict": "approved", "reason": null, "note": null, "ts": 1786780009.0368814}
+{"label": "BG22_9", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786780016.3368132}
+{"label": "BG22_90", "verdict": "approved", "reason": null, "note": null, "ts": 1786780024.2846475}
+{"label": "BG22_92", "verdict": "approved", "reason": null, "note": null, "ts": 1786780035.3321486}
+{"label": "BG22_93", "verdict": "approved", "reason": null, "note": null, "ts": 1786780040.3267379}
+{"label": "BG22_94", "verdict": "approved", "reason": null, "note": null, "ts": 1786780042.0575771}
+{"label": "BG22_9", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 piece_count: restored exactly four bangles", "ts": 1786780475.064317}
+{"label": "BG22_88", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 other: removed blue accents and restored circular bangle geometry", "ts": 1786780475.0778975}
+{"label": "BG22_85", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 other: restored red enamel only", "ts": 1786780475.0889692}
+{"label": "BG22_84", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 other: restored matching red enamel on both bangles", "ts": 1786780475.1010737}
+{"label": "BG22_84", "verdict": "approved", "reason": null, "note": null, "ts": 1786780749.6116502}
+{"label": "BG22_85", "verdict": "approved", "reason": null, "note": null, "ts": 1786780752.812002}
+{"label": "BG22_88", "verdict": "approved", "reason": null, "note": null, "ts": 1786780754.561758}
+{"label": "BG22_9", "verdict": "approved", "reason": null, "note": null, "ts": 1786780755.5678158}
+{"label": "ER22_10", "verdict": "approved", "reason": null, "note": null, "ts": 1786780758.1103032}
+{"label": "ER22_105", "verdict": "approved", "reason": null, "note": null, "ts": 1786780760.8185418}
+{"label": "ER22_13", "verdict": "approved", "reason": null, "note": null, "ts": 1786780764.8558736}
+{"label": "ER22_15", "verdict": "approved", "reason": null, "note": null, "ts": 1786780767.9417975}
+{"label": "ER22_19", "verdict": "approved", "reason": null, "note": null, "ts": 1786780770.947975}
+{"label": "ER22_2", "verdict": "approved", "reason": null, "note": null, "ts": 1786780775.1684778}
+{"label": "ER22_26", "verdict": "approved", "reason": null, "note": null, "ts": 1786780827.7568536}
+{"label": "ER22_3", "verdict": "approved", "reason": null, "note": null, "ts": 1786780835.7145896}
+{"label": "ER22_35", "verdict": "approved", "reason": null, "note": null, "ts": 1786780838.4128666}
+{"label": "ER22_39", "verdict": "approved", "reason": null, "note": null, "ts": 1786780843.412371}
+{"label": "ER22_43", "verdict": "approved", "reason": null, "note": null, "ts": 1786780847.5048769}
+{"label": "ER22_52", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786780855.1078768}
+{"label": "ER22_56", "verdict": "approved", "reason": null, "note": null, "ts": 1786780858.241043}
+{"label": "ER22_58", "verdict": "approved", "reason": null, "note": null, "ts": 1786780861.4011269}
+{"label": "ER22_59", "verdict": "approved", "reason": null, "note": null, "ts": 1786780864.8263004}
+{"label": "ER22_61", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786780868.199596}
+{"label": "ER22_65", "verdict": "approved", "reason": null, "note": null, "ts": 1786780872.6245372}
+{"label": "ER22_72", "verdict": "approved", "reason": null, "note": null, "ts": 1786780877.1285036}
+{"label": "ER22_73", "verdict": "approved", "reason": null, "note": null, "ts": 1786780881.062499}
+{"label": "ER22_74", "verdict": "approved", "reason": null, "note": null, "ts": 1786780883.5243485}
+{"label": "ER22_75", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786780887.5120761}
+{"label": "ER22_81", "verdict": "rejected", "reason": "other", "note": "design has no studds", "ts": 1786780898.625917}
+{"label": "ER22_83", "verdict": "rejected", "reason": "other", "note": "blue elements arre not a part of the original design", "ts": 1786780918.4038432}
+{"label": "ER22_85", "verdict": "approved", "reason": null, "note": null, "ts": 1786780922.9845552}
+{"label": "ER22_86", "verdict": "rejected", "reason": "other", "note": "center stone is red", "ts": 1786780931.6452286}
+{"label": "BG22_82", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 preserved the studless all-gold design.", "ts": 1786780940.5022984}
+{"label": "BG22_79", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 preserved the studless all-gold design.", "ts": 1786780940.516496}
+{"label": "BG22_68", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 removed invented red accents.", "ts": 1786780940.5280359}
+{"label": "BG22_67", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 removed invented blue accents.", "ts": 1786780940.5411358}
+{"label": "BG22_57", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 removed invented red accents.", "ts": 1786780940.5542223}
+{"label": "BG22_54", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 removed invented red accents.", "ts": 1786780940.5663772}
+{"label": "ER22_92", "verdict": "rejected", "reason": "other", "note": "why the text on left earring", "ts": 1786780947.1576004}
+{"label": "BG22_82", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - preserved the studless all-gold design.", "ts": 1786780950.6543415}
+{"label": "BG22_79", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - preserved the studless all-gold design.", "ts": 1786780950.6618783}
+{"label": "BG22_68", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented red accents.", "ts": 1786780950.6684456}
+{"label": "BG22_67", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented blue accents.", "ts": 1786780950.676141}
+{"label": "BG22_57", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented red accents.", "ts": 1786780950.6834466}
+{"label": "BG22_54", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented red accents.", "ts": 1786780950.6913085}
+{"label": "ER22_93", "verdict": "rejected", "reason": "other", "note": "this is a studless design", "ts": 1786780967.6930933}
+{"label": "ER22_97", "verdict": "rejected", "reason": "other", "note": "original design has no green or red elements", "ts": 1786780991.1671696}
+{"label": "BL18_16", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - corrected design fidelity and enforced true 45-degree Bali presentation.", "ts": 1786781305.8407874}
+{"label": "BG22_3", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - restored the original all-gold woven and rosette design.", "ts": 1786781305.8589149}
+{"label": "BG22_10", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - corrected piece count to exactly four matching bangles.", "ts": 1786781305.8731174}
+{"label": "ER22_52", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - restored the compact all-gold teardrop and dome-cluster design", "ts": 1786781689.849559}
+{"label": "ER22_61", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - restored the all-gold flower, chain, and pointed-drop construction", "ts": 1786781690.1665952}
+{"label": "ER22_75", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - restored the studless all-gold four-leaf top and lattice plaque", "ts": 1786781690.4818397}
+{"label": "ER22_81", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented studs and preserved the gemstone-free crescent design", "ts": 1786781690.7973607}
+{"label": "ER22_83", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented blue elements and preserved the all-gold crescent design", "ts": 1786781691.1576588}
+{"label": "ER22_86", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - restored the original red center stone and removed the wrong blue", "ts": 1786781920.1083033}
+{"label": "ER22_92", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed the stray text while preserving the original red and green enamel design", "ts": 1786781920.4218998}
+{"label": "ER22_93", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented studs and restored the all-gold openwork design", "ts": 1786781920.746811}
+{"label": "ER22_97", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented red and green elements and restored the all-gold design", "ts": 1786781921.067843}
+{"label": "JB22_1", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - restored the original all-gold floral, medallion, and bell-jhumka design", "ts": 1786782134.5884857}
+{"label": "JB22_11", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - restored the original all-gold open-flower and scalloped bell-jhumka design", "ts": 1786782134.7878387}
+{"label": "JB22_101", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - restored the original two-tier all-gold cage jhumka design without invented crystals", "ts": 1786782134.986077}
+{"label": "GR22_100", "verdict": "rejected", "reason": "other", "note": "this is a studless design ai drew studs in blank areas", "ts": 1786783066.4439538}
+{"label": "GR22_103", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783072.283905}
+{"label": "GR22_104", "verdict": "approved", "reason": null, "note": null, "ts": 1786783075.513575}
+{"label": "GR22_107", "verdict": "approved", "reason": null, "note": null, "ts": 1786783079.2968554}
+{"label": "GR22_108", "verdict": "approved", "reason": null, "note": null, "ts": 1786783081.5528555}
+{"label": "GR22_116", "verdict": "approved", "reason": null, "note": null, "ts": 1786783083.165001}
+{"label": "GR22_117", "verdict": "approved", "reason": null, "note": null, "ts": 1786783085.4817882}
+{"label": "GR22_119", "verdict": "approved", "reason": null, "note": null, "ts": 1786783090.6102464}
+{"label": "GR22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786783092.5991511}
+{"label": "GR22_120", "verdict": "approved", "reason": null, "note": null, "ts": 1786783094.331566}
+{"label": "GR22_122", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783099.4384727}
+{"label": "GR22_125", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783102.9914098}
+{"label": "GR22_127", "verdict": "approved", "reason": null, "note": null, "ts": 1786783110.3554254}
+{"label": "GR22_130", "verdict": "approved", "reason": null, "note": null, "ts": 1786783112.2470615}
+{"label": "GR22_131", "verdict": "approved", "reason": null, "note": null, "ts": 1786783120.5306945}
+{"label": "GR22_132", "verdict": "rejected", "reason": "other", "note": "no blue accent in original", "ts": 1786783132.9978175}
+{"label": "GR22_133", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783138.3318675}
+{"label": "GR22_134", "verdict": "approved", "reason": null, "note": null, "ts": 1786783141.0666037}
+{"label": "GR22_135", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783145.879713}
+{"label": "GR22_139", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783150.7840788}
+{"label": "GR22_14", "verdict": "rejected", "reason": "other", "note": "no blue accent needed", "ts": 1786783161.158909}
+{"label": "GR22_144", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783167.6684258}
+{"label": "GR22_145", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783170.8963666}
+{"label": "GR22_146", "verdict": "approved", "reason": null, "note": null, "ts": 1786783175.8614368}
+{"label": "GR22_147", "verdict": "approved", "reason": null, "note": null, "ts": 1786783180.8095868}
+{"label": "GR22_148", "verdict": "approved", "reason": null, "note": null, "ts": 1786783183.69288}
+{"label": "GR22_149", "verdict": "approved", "reason": null, "note": null, "ts": 1786783188.4229429}
+{"label": "GR22_152", "verdict": "rejected", "reason": "other", "note": "no blue red accents present in real design", "ts": 1786783207.4554386}
+{"label": "GR22_154", "verdict": "approved", "reason": null, "note": null, "ts": 1786783218.090067}
+{"label": "GR22_156", "verdict": "rejected", "reason": "other", "note": "no blue accent in real deisgn", "ts": 1786783228.9485443}
+{"label": "GR22_158", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783232.2422917}
+{"label": "GR22_159", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783240.071418}
+{"label": "GR22_16", "verdict": "rejected", "reason": "other", "note": null, "ts": 1786783243.8885653}
+{"label": "GR22_160", "verdict": "rejected", "reason": "other", "note": "no blue accents in real design", "ts": 1786783255.3652198}
+{"label": "GR22_161", "verdict": "rejected", "reason": "proportion", "note": null, "ts": 1786783263.2172663}
+{"label": "GR22_162", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783267.0123746}
+{"label": "GR22_164", "verdict": "approved", "reason": null, "note": null, "ts": 1786783268.9428933}
+{"label": "GR22_166", "verdict": "rejected", "reason": "other", "note": "no red blue cues present in original design", "ts": 1786783288.2316198}
+{"label": "GR22_167", "verdict": "rejected", "reason": "other", "note": "no blue accents in real deisgn", "ts": 1786783307.5013072}
+{"label": "JB22_100", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.8978417}
+{"label": "JB22_12", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.904128}
+{"label": "JB22_13", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9101725}
+{"label": "JB22_14", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9154644}
+{"label": "JB22_16", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9224856}
+{"label": "JB22_17", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9290903}
+{"label": "JB22_18", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9356828}
+{"label": "JB22_19", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9408715}
+{"label": "JB22_2", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.946684}
+{"label": "JB22_20", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9518328}
+{"label": "JB22_21", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.95797}
+{"label": "JB22_22", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.963729}
+{"label": "JB22_23", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.969237}
+{"label": "JB22_24", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9747472}
+{"label": "JB22_26", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9812534}
+{"label": "JB22_27", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9867609}
+{"label": "JB22_28", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9927778}
+{"label": "JB22_29", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.000836}
+{"label": "JB22_3", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.007349}
+{"label": "JB22_30", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0133543}
+{"label": "JB22_31", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0191815}
+{"label": "JB22_34", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0248287}
+{"label": "JB22_37", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.029878}
+{"label": "JB22_39", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0351064}
+{"label": "JB22_4", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0412025}
+{"label": "JB22_40", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0468419}
+{"label": "JB22_42", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0528471}
+{"label": "JB22_44", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0588684}
+{"label": "JB22_5", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0638695}
+{"label": "JB22_50", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0703778}
+{"label": "JB22_51", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0753791}
+{"label": "JB22_52", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0808902}
+{"label": "JB22_54", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.086742}
+{"label": "JB22_55", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0917604}
+{"label": "JB22_57", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.098303}
+{"label": "JB22_58", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.105309}
+{"label": "JB22_59", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1113548}
+{"label": "JB22_6", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1168585}
+{"label": "JB22_60", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1228895}
+{"label": "JB22_62", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.128982}
+{"label": "JB22_65", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1339872}
+{"label": "JB22_66", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1403656}
+{"label": "JB22_67", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1453643}
+{"label": "JB22_69", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1508753}
+{"label": "JB22_7", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.157403}
+{"label": "JB22_71", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.163146}
+{"label": "JB22_73", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.168651}
+{"label": "JB22_9", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1746504}
+{"label": "JB22_91", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1811607}
+{"label": "JB22_93", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.186694}
+{"label": "JB22_98", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1937196}
+{"label": "GR22_168", "verdict": "rejected", "reason": "other", "note": "no blue accent in original design", "ts": 1786783374.163674}
+{"label": "GR22_171", "verdict": "approved", "reason": null, "note": null, "ts": 1786783377.5786483}
+{"label": "GR22_174", "verdict": "rejected", "reason": "other", "note": "random red and blue colors added which arte not a part of the original design", "ts": 1786783534.0757458}
+{"label": "GR22_177", "verdict": "approved", "reason": null, "note": null, "ts": 1786783539.3869221}
+{"label": "GR22_18", "verdict": "approved", "reason": null, "note": null, "ts": 1786783545.778481}
+{"label": "GR22_180", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783550.4710882}
+{"label": "GR22_181", "verdict": "approved", "reason": null, "note": null, "ts": 1786783553.7103496}
+{"label": "GR22_187", "verdict": "approved", "reason": null, "note": null, "ts": 1786783556.7730389}
+{"label": "GR22_189", "verdict": "rejected", "reason": "other", "note": "random blue color added", "ts": 1786783568.398305}
+{"label": "GR22_192", "verdict": "approved", "reason": null, "note": null, "ts": 1786783570.5705068}
+{"label": "GR22_196", "verdict": "rejected", "reason": "other", "note": "random blue color added", "ts": 1786783581.2311964}
+{"label": "GR22_202", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783591.6368296}
+{"label": "GR22_205", "verdict": "approved", "reason": null, "note": null, "ts": 1786783620.6606295}
+{"label": "GR22_208", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783623.9781604}
+{"label": "GR22_208_2_detail", "verdict": "rejected", "reason": "finish", "note": null, "ts": 1786783630.9776042}
+{"label": "GR22_209", "verdict": "approved", "reason": null, "note": null, "ts": 1786783634.9725597}
+{"label": "GR22_210", "verdict": "approved", "reason": null, "note": null, "ts": 1786783637.4361432}
+{"label": "GR22_22", "verdict": "approved", "reason": null, "note": null, "ts": 1786783640.3448908}
+{"label": "GR22_233", "verdict": "approved", "reason": null, "note": null, "ts": 1786783646.5779328}
+{"label": "GR22_235", "verdict": "approved", "reason": null, "note": null, "ts": 1786783651.3439717}
+{"label": "GR22_237", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783654.2601604}
+{"label": "GR22_239", "verdict": "approved", "reason": null, "note": null, "ts": 1786783661.553212}
+{"label": "GR22_24", "verdict": "rejected", "reason": "stones_wrong", "note": null, "ts": 1786783674.8122134}
+{"label": "GR22_27", "verdict": "approved", "reason": null, "note": null, "ts": 1786783677.5138106}
+{"label": "GR22_33", "verdict": "rejected", "reason": "other", "note": "randowm blue added", "ts": 1786783686.3102777}
+{"label": "GR22_35", "verdict": "approved", "reason": null, "note": null, "ts": 1786783688.6541665}
+{"label": "GR22_36", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783693.1979306}
+{"label": "GR22_37", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783697.6755438}
+{"label": "GR22_38", "verdict": "approved", "reason": null, "note": null, "ts": 1786783701.676712}
+{"label": "GR22_42", "verdict": "approved", "reason": null, "note": null, "ts": 1786783703.0149436}
+{"label": "GR22_43", "verdict": "rejected", "reason": "other", "note": "random blue color added", "ts": 1786783711.5091097}
+{"label": "GR22_44", "verdict": "approved", "reason": null, "note": null, "ts": 1786783761.4401217}
+{"label": "GR22_45", "verdict": "rejected", "reason": "other", "note": "random blue added", "ts": 1786783769.951717}
+{"label": "GR22_47", "verdict": "approved", "reason": null, "note": null, "ts": 1786783773.6585002}
+{"label": "GR22_5", "verdict": "rejected", "reason": "other", "note": "random blue added", "ts": 1786783782.779555}
+{"label": "GR22_50", "verdict": "approved", "reason": null, "note": null, "ts": 1786783786.136895}
+{"label": "GR22_54", "verdict": "rejected", "reason": "other", "note": "this is a studless design and stones were still aded by ai", "ts": 1786783805.0379624}
+{"label": "GR22_55", "verdict": "approved", "reason": null, "note": null, "ts": 1786783807.1372871}
+{"label": "GR22_58", "verdict": "approved", "reason": null, "note": null, "ts": 1786783809.483221}
+{"label": "GR22_62", "verdict": "rejected", "reason": "other", "note": "random blue added", "ts": 1786783817.09829}
+{"label": "GR22_63", "verdict": "approved", "reason": null, "note": null, "ts": 1786783819.719499}
+{"label": "GR22_66", "verdict": "rejected", "reason": "other", "note": "random blue added", "ts": 1786783831.5127423}
+{"label": "GR22_67", "verdict": "approved", "reason": null, "note": null, "ts": 1786783834.8025956}
+{"label": "GR22_68", "verdict": "approved", "reason": null, "note": null, "ts": 1786783836.068588}
+{"label": "GR22_7", "verdict": "rejected", "reason": "other", "note": "random blue added", "ts": 1786783843.4593668}
+{"label": "GR22_70", "verdict": "approved", "reason": null, "note": null, "ts": 1786783854.65779}
+{"label": "GR22_73", "verdict": "rejected", "reason": "detail_lost", "note": null, "ts": 1786783859.940063}
+{"label": "GR22_74", "verdict": "approved", "reason": null, "note": null, "ts": 1786783863.0552328}
+{"label": "GR22_77", "verdict": "approved", "reason": null, "note": null, "ts": 1786783865.290367}
+{"label": "GR22_78", "verdict": "rejected", "reason": "other", "note": "random blue added", "ts": 1786783872.72227}
+{"label": "GR22_79", "verdict": "approved", "reason": null, "note": null, "ts": 1786783877.7918684}
+{"label": "GR22_8", "verdict": "approved", "reason": null, "note": null, "ts": 1786783879.375662}
+{"label": "GR22_80", "verdict": "rejected", "reason": "other", "note": "random blue added", "ts": 1786783887.5405052}
+{"label": "GR22_81", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783892.214753}
+{"label": "GR22_86", "verdict": "rejected", "reason": "other", "note": "random blue added", "ts": 1786783901.968766}
+{"label": "GR22_9", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783906.5256052}
+{"label": "GR22_93", "verdict": "rejected", "reason": "other", "note": "random colors added", "ts": 1786783916.4060388}
+{"label": "GR22_96", "verdict": "rejected", "reason": "other", "note": "random colors added", "ts": 1786783926.3786004}
+{"label": "JB22_1", "verdict": "approved", "reason": null, "note": null, "ts": 1786783930.8579652}
+{"label": "JB22_101", "verdict": "approved", "reason": null, "note": null, "ts": 1786783932.9237907}
+{"label": "JB22_11", "verdict": "approved", "reason": null, "note": null, "ts": 1786783934.3313546}
+{"label": "BG22_53", "verdict": "approved", "reason": null, "note": null, "ts": 1786785158.9702263}
+{"label": "BG22_55", "verdict": "approved", "reason": null, "note": null, "ts": 1786785165.7237651}
+{"label": "GR22_1", "verdict": "approved", "reason": null, "note": null, "ts": 1786786173.312895}
+{"label": "GR22_100", "verdict": "rejected", "reason": "stones_wrong", "note": null, "ts": 1786786178.6252587}
+{"label": "GR22_103", "verdict": "approved", "reason": null, "note": null, "ts": 1786786184.5816555}
+{"label": "GR22_122", "verdict": "approved", "reason": null, "note": null, "ts": 1786786187.9685419}
+{"label": "GR22_125", "verdict": "approved", "reason": null, "note": null, "ts": 1786786189.8802123}
+{"label": "GR22_132", "verdict": "rejected", "reason": "stones_wrong", "note": null, "ts": 1786786196.9230478}
+{"label": "GR22_133", "verdict": "approved", "reason": null, "note": null, "ts": 1786786202.267211}
+{"label": "GR22_135", "verdict": "approved", "reason": null, "note": null, "ts": 1786786331.4675055}
+{"label": "GR22_14", "verdict": "approved", "reason": null, "note": null, "ts": 1786786335.7862532}
+{"label": "GR22_144", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786343.5676584}
+{"label": "GR22_145", "verdict": "approved", "reason": null, "note": null, "ts": 1786786346.0223851}
+{"label": "GR22_152", "verdict": "rejected", "reason": "stones_wrong", "note": null, "ts": 1786786350.8156347}
+{"label": "GR22_156", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786355.0247612}
+{"label": "GR22_158", "verdict": "approved", "reason": null, "note": null, "ts": 1786786360.1881316}
+{"label": "GR22_159", "verdict": "approved", "reason": null, "note": null, "ts": 1786786365.6269262}
+{"label": "GR22_16", "verdict": "approved", "reason": null, "note": null, "ts": 1786786368.7666504}
+{"label": "GR22_160", "verdict": "approved", "reason": null, "note": null, "ts": 1786786371.2278626}
+{"label": "GR22_161", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786376.1922653}
+{"label": "GR22_162", "verdict": "approved", "reason": null, "note": null, "ts": 1786786378.4750838}
+{"label": "GR22_166", "verdict": "rejected", "reason": "stones_wrong", "note": null, "ts": 1786786628.6212134}
+{"label": "GR22_167", "verdict": "approved", "reason": null, "note": null, "ts": 1786786632.3645635}
+{"label": "GR22_168", "verdict": "approved", "reason": null, "note": null, "ts": 1786786634.5151834}
+{"label": "GR22_174", "verdict": "approved", "reason": null, "note": null, "ts": 1786786638.104159}
+{"label": "GR22_180", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786643.8245778}
+{"label": "GR22_189", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786649.4242508}
+{"label": "GR22_196", "verdict": "approved", "reason": null, "note": null, "ts": 1786786651.5781028}
+{"label": "GR22_202", "verdict": "approved", "reason": null, "note": null, "ts": 1786786653.7215178}
+{"label": "GR22_208", "verdict": "approved", "reason": null, "note": null, "ts": 1786786656.1214774}
+{"label": "GR22_208_2_detail", "verdict": "rejected", "reason": "proportion", "note": null, "ts": 1786786667.8360746}
+{"label": "GR22_237", "verdict": "rejected", "reason": "proportion", "note": null, "ts": 1786786672.1117344}
+{"label": "GR22_24", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786677.0119064}
+{"label": "GR22_33", "verdict": "approved", "reason": null, "note": null, "ts": 1786786679.7813592}
+{"label": "GR22_34", "verdict": "approved", "reason": null, "note": null, "ts": 1786786681.5777333}
+{"label": "GR22_36", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786684.5557194}
+{"label": "GR22_37", "verdict": "approved", "reason": null, "note": null, "ts": 1786786686.6290562}
+{"label": "GR22_43", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786689.5705633}
+{"label": "GR22_45", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786692.8977995}
+{"label": "GR22_5", "verdict": "approved", "reason": null, "note": null, "ts": 1786786694.7456205}
+{"label": "GR22_54", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786696.8376286}
+{"label": "GR22_62", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786699.298184}
+{"label": "GR22_66", "verdict": "approved", "reason": null, "note": null, "ts": 1786786702.7236848}
+{"label": "GR22_7", "verdict": "approved", "reason": null, "note": null, "ts": 1786786705.361335}
+{"label": "GR22_73", "verdict": "approved", "reason": null, "note": null, "ts": 1786786706.7003908}
+{"label": "GR22_78", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786709.2305007}
+{"label": "GR22_80", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786711.5982935}
+{"label": "GR22_81", "verdict": "approved", "reason": null, "note": null, "ts": 1786786717.0902443}
+{"label": "GR22_86", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786719.2121637}
+{"label": "GR22_9", "verdict": "approved", "reason": null, "note": null, "ts": 1786786723.6376257}
+{"label": "GR22_93", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786728.9427059}
+{"label": "GR22_96", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786731.7857153}
+{"label": "BL18_29", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786789213.6348195}
+{"label": "BL18_31", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786789217.1829028}
+{"label": "BL18_4", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786789220.6623397}
+{"label": "BL18_45", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786789224.1169884}
+{"label": "BL18_51", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786789228.6369646}
+{"label": "LR18_10", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786790160.2112262}
+{"label": "LR18_13", "verdict": "approved", "reason": null, "note": null, "ts": 1786790166.6210687}
+{"label": "LR18_15", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786790176.9594235}
+{"label": "LR18_16", "verdict": "approved", "reason": null, "note": null, "ts": 1786790181.409405}
+{"label": "LR18_17", "verdict": "approved", "reason": null, "note": null, "ts": 1786790186.82006}
+{"label": "LR18_18", "verdict": "rejected", "reason": "other", "note": "this is a studless design and ai has drawn studs", "ts": 1786790207.0399787}
+{"label": "LR18_19", "verdict": "rejected", "reason": "other", "note": "this is a studless design and ai has drawn studs", "ts": 1786790226.925354}
+{"label": "LR18_2", "verdict": "approved", "reason": null, "note": null, "ts": 1786790232.5270326}
+{"label": "LR18_20", "verdict": "approved", "reason": null, "note": null, "ts": 1786790236.4541814}
+{"label": "LR18_22", "verdict": "approved", "reason": null, "note": null, "ts": 1786790239.1878552}
+{"label": "LR18_23", "verdict": "approved", "reason": null, "note": null, "ts": 1786790243.163529}
+{"label": "LR18_25", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786790247.9503844}
+{"label": "LR18_26", "verdict": "approved", "reason": null, "note": null, "ts": 1786790251.014954}
+{"label": "LR18_27", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786790254.306257}
+{"label": "LR18_28", "verdict": "approved", "reason": null, "note": null, "ts": 1786790256.6243978}
+{"label": "LR18_29", "verdict": "approved", "reason": null, "note": null, "ts": 1786790258.4987721}
+{"label": "LR18_30", "verdict": "approved", "reason": null, "note": null, "ts": 1786790259.7419705}
+{"label": "LR18_31", "verdict": "approved", "reason": null, "note": null, "ts": 1786790261.4541333}
+{"label": "LR18_35", "verdict": "approved", "reason": null, "note": null, "ts": 1786790265.510466}
+{"label": "LR18_37", "verdict": "approved", "reason": null, "note": null, "ts": 1786790267.678775}
+{"label": "LR18_38", "verdict": "approved", "reason": null, "note": null, "ts": 1786790269.399946}
+{"label": "LR18_39", "verdict": "approved", "reason": null, "note": null, "ts": 1786790273.2571838}
+{"label": "LR18_4", "verdict": "approved", "reason": null, "note": null, "ts": 1786790276.734373}
+{"label": "LR18_5", "verdict": "approved", "reason": null, "note": null, "ts": 1786790292.4110548}
+{"label": "LR18_6", "verdict": "approved", "reason": null, "note": null, "ts": 1786790301.2902358}
+{"label": "LR18_7", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786790306.0312915}
+{"label": "LR18_11", "verdict": "approved", "reason": null, "note": null, "ts": 1786790372.086832}
+{"label": "LR18_13", "verdict": "approved", "reason": null, "note": null, "ts": 1786790375.2076967}
+{"label": "LR18_15", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786790380.0507658}
+{"label": "LR18_16", "verdict": "approved", "reason": null, "note": null, "ts": 1786790382.453742}
+{"label": "LR18_17", "verdict": "approved", "reason": null, "note": null, "ts": 1786790386.8563888}
+{"label": "LR18_18", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786790389.5043044}
+{"label": "LR18_19", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786790393.3923886}
+{"label": "LR18_2", "verdict": "approved", "reason": null, "note": null, "ts": 1786790395.3613057}
+{"label": "LR18_20", "verdict": "approved", "reason": null, "note": null, "ts": 1786790398.8805962}
+{"label": "LR18_22", "verdict": "approved", "reason": null, "note": null, "ts": 1786790400.3023071}
+{"label": "LR18_23", "verdict": "approved", "reason": null, "note": null, "ts": 1786790405.338901}
+{"label": "LR18_25", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786790408.5095444}
+{"label": "LR18_26", "verdict": "approved", "reason": null, "note": null, "ts": 1786790411.7475705}
+{"label": "LR18_27", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786790414.4516473}
+{"label": "LR18_28", "verdict": "approved", "reason": null, "note": null, "ts": 1786790416.091373}
+{"label": "LR18_29", "verdict": "approved", "reason": null, "note": null, "ts": 1786790417.3495045}
+{"label": "LR18_30", "verdict": "approved", "reason": null, "note": null, "ts": 1786790418.8868349}
+{"label": "LR18_31", "verdict": "approved", "reason": null, "note": null, "ts": 1786790421.6950517}
+{"label": "LR18_35", "verdict": "approved", "reason": null, "note": null, "ts": 1786790423.1988454}
+{"label": "LR18_37", "verdict": "approved", "reason": null, "note": null, "ts": 1786790424.9507694}
+{"label": "LR18_38", "verdict": "approved", "reason": null, "note": null, "ts": 1786790426.2109299}
+{"label": "LR18_39", "verdict": "approved", "reason": null, "note": null, "ts": 1786790429.2092772}
+{"label": "LR18_4", "verdict": "approved", "reason": null, "note": null, "ts": 1786790431.5860665}
+{"label": "LR18_5", "verdict": "approved", "reason": null, "note": null, "ts": 1786790433.391276}
+{"label": "LR18_6", "verdict": "approved", "reason": null, "note": null, "ts": 1786790434.7663589}
+{"label": "LR18_7", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786790438.2732003}

@@ -1,0 +1,192 @@
+[
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\16 GENTS RING 22\\GR22_34.jpg",
+  "existing_target": "capture_intake\\GENTS RING 22\\GR22_34.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\16 GENTS RING 22\\GR22_36.jpg",
+  "existing_target": "capture_intake\\GENTS RING 22\\GR22_36.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\37 LOCKET 22\\LC22_36.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_36.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\38 LADIES RING 22\\LR22_392.jpg",
+  "existing_target": "capture_intake\\Ladies Ring 22\\LR22_392.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\38 LADIES RING 22\\LR22_393.jpg",
+  "existing_target": "capture_intake\\Ladies Ring 22\\LR22_393.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\40 LOCKET 22\\LC22_130.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_130.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\40 LOCKET 22\\LC22_36.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_36.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\55 TOPS 18\\TP18_8.jpg",
+  "existing_target": "capture_intake\\TOPS 18\\TP18_8.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\56 TOPS 22\\TP22_30.jpg",
+  "existing_target": "capture_intake\\TOPS 22\\TP22_30.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\76 GENTS RING 22\\GR22_145.Jpg",
+  "existing_target": "capture_intake\\GENTS RING 22\\GR22_145.Jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\76 GENTS RING 22\\GR22_80.Jpg",
+  "existing_target": "capture_intake\\GENTS RING 22\\GR22_80.Jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\76 GENTS RING 22\\GR22_81.Jpg",
+  "existing_target": "capture_intake\\GENTS RING 22\\GR22_81.Jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\76 GENTS RING 22\\GR22_93.Jpg",
+  "existing_target": "capture_intake\\GENTS RING 22\\GR22_93.Jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\92 JHUMKA 22\\JB22_52.Jpg",
+  "existing_target": "capture_intake\\JHUMKA 22\\JB22_52.Jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\JHUMKA 16\\JB22_23.jpg",
+  "existing_target": "capture_intake\\JHUMKA 22\\JB22_23.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\JHUMKA 16\\JB22_44.jpg",
+  "existing_target": "capture_intake\\JHUMKA 22\\JB22_44.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Ladies Ring 24\\LR22_169.jpg",
+  "existing_target": "capture_intake\\Ladies Ring 22\\LR22_169.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Ladies Ring 24\\LR22_2.jpg",
+  "existing_target": "capture_intake\\Ladies Ring 22\\LR22_2.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Ladies Ring 24\\LR22_226.jpg",
+  "existing_target": "capture_intake\\Ladies Ring 22\\LR22_226.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Ladies Ring 24\\LR22_73.jpg",
+  "existing_target": "capture_intake\\Ladies Ring 22\\LR22_73.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Ladies Ring 26\\LR22_267.jpg",
+  "existing_target": "capture_intake\\Ladies Ring 22\\LR22_267.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Ladies Ring 28\\LR22_28.jpg",
+  "existing_target": "capture_intake\\Ladies Ring 22\\LR22_28.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 2\\LC22_11.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_11.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 2\\LC22_12.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_12.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_102.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_102.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_11.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_11.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_12.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_12.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_126.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_126.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_13.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_13.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_14.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_14.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_44.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_44.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_58.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_58.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_71.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_71.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_78.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_78.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_79.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_79.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\Locket 3\\LC22_80.jpg",
+  "existing_target": "capture_intake\\LOCKET 22\\LC22_80.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\TOPS 1\\TP22_131.jpg",
+  "existing_target": "capture_intake\\TOPS 22\\TP22_131.jpg"
+ },
+ {
+  "type": "NAME_CONFLICT_DIFFERENT_CONTENT",
+  "source": "capture_intake\\TOPS 5\\TP22_356.jpg",
+  "existing_target": "capture_intake\\TOPS 22\\TP22_356.jpg"
+ }
+]

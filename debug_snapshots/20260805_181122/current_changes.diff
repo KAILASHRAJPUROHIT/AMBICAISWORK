@@ -1,0 +1,3242 @@
+﻿git : warning: in the working copy of 'LAUNCH_CATALOG_UI.bat', LF will be replaced by CRLF the next time Git touches it
+At line:1 char:1
++ git diff 2>&1 | Out-File ".\debug_snapshots\$stamp\current_changes.di ...
++ ~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: in the... Git touches it:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+warning: in the working copy of 'item_routing.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'pipeline2_loop.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'processing_engine.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'requirements.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_engine_wiring.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_item_routing.py', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/test_manual_variety_routing.py', LF will be replaced by CRLF the next time Git 
+touches it
+warning: in the working copy of 'tests/test_processing_engine.py', LF will be replaced by CRLF the next time Git 
+touches it
+warning: in the working copy of 'tests/test_routing_preview.py', LF will be replaced by CRLF the next time Git touches 
+it
+warning: in the working copy of 'tests/test_stock_category_routes.py', LF will be replaced by CRLF the next time Git 
+touches it
+warning: in the working copy of 'tests/test_variety_output_integration.py', LF will be replaced by CRLF the next time 
+Git touches it
+diff --git a/LAUNCH_CATALOG_UI.bat b/LAUNCH_CATALOG_UI.bat
+index c1bb98d..a2e9415 100644
+--- a/LAUNCH_CATALOG_UI.bat
++++ b/LAUNCH_CATALOG_UI.bat
+@@ -1,7 +1,46 @@
+ @echo off
+ REM ====== Auto Catalogue Tool ΓÇö Aradhana Jewellers ======
++setlocal enabledelayedexpansion
+ cd /d "%~dp0"
+ 
++REM ΓöÇΓöÇ ComfyUI (Klein/Variant C local engine) ΓÇö start FIRST, tool waits on it ΓöÇΓöÇ
++REM Local generation is now the primary engine (cloud/browser engines are
++REM being sunset), so ComfyUI must be up before the tool is opened.
++echo Checking ComfyUI...
++netstat -ano | findstr ":8188" | findstr LISTENING >nul 2>&1
++if errorlevel 1 (
++    echo Starting ComfyUI backend - Aradhana workspace...
++    start "ComfyUI-Aradhana" /D "C:\Users\kaila\ComfyUI-Installs\Aradhana" ^
++        "C:\Users\kaila\ComfyUI-Installs\Aradhana\ComfyUI\.venv\Scripts\python.exe" ^
++        -s ComfyUI\main.py --feature-flag show_signin_button=true --enable-manager ^
++        --extra-model-paths-config "C:\Users\kaila\AppData\Roaming\Comfy Desktop\shared_model_paths.yaml" ^
++        --input-directory "C:\Users\kaila\ComfyUI-Shared\input" ^
++        --output-directory "C:\Users\kaila\ComfyUI-Shared\output"
++
++    echo Waiting for ComfyUI to come up (up to 120s)...
++    powershell -NoProfile -Command ^
++        "$deadline = (Get-Date).AddSeconds(120); while ((Get-Date) -lt $deadline) { try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8188/system_stats' -UseBasicParsing -TimeoutSec 3; if ($r.StatusCode -eq 200) { exit 0 } } catch {}; Start-Sleep -Seconds 2 }; exit 1"
++    if errorlevel 1 (
++        echo   WARNING: ComfyUI did not respond within 120s - continuing anyway.
++    ) else (
++        echo   ComfyUI is up.
++    )
++) else (
++    echo ComfyUI already running on 8188
++)
++
++REM Open ComfyUI's own UI in a dedicated, persistent Chrome profile so it
++REM keeps auto-restoring the last-open Aradhana workflow across restarts.
++REM ComfyUI has no server-side "current workflow" concept ΓÇö the browser
++REM profile's own local storage is what remembers it, so reusing the same
++REM profile every launch is what keeps the right workspace open. First time
++REM only: open the "aradhana_klein_tests" workflow manually in this window.
++start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
++    --user-data-dir="%LOCALAPPDATA%\ComfyUIMonitorChrome" ^
++    --no-first-run --no-default-browser-check ^
++    --window-position=-32000,-32000 --window-size=1280,900 ^
++    http://127.0.0.1:8188
++
+ REM Resolve a Python interpreter portably ΓÇö prefer the py launcher (present
+ REM on nearly every Windows Python install) pinned to 3.11, fall back to
+ REM whatever "python" resolves to on PATH. No hardcoded per-machine path.
+diff --git a/app.py b/app.py
+index 8739864..d1457e9 100644
+--- a/app.py
++++ b/app.py
+@@ -35,11 +35,9 @@ _LEGACY_TYPES = [
+ # The 47 real stock categories (stock_category_map.py, verified 2026-07-31
+ # against Stock/31072026.xls) are ADDED alongside the legacy keys above,
+ # not swapped in to replace them ΓÇö unlike capture_tool.py's category list,
+-# TYPES here gates real validation checks (/api/auto2/... assignment saves,
+-# category-defaults) against ALREADY-PERSISTED config (auto2_config.json's
+-# "assignments" list is saved with the legacy keys today). Removing them
+-# would reject an operator's existing saved Auto Mode setup the next time
+-# anything touches it.
++# TYPES here gates real validation checks against already-persisted per-run
++# config using the legacy keys. Removing them would reject an operator's
++# existing saved setup the next time anything touches it.
+ import stock_category_map as _scm
+ 
+ TYPES = _LEGACY_TYPES + [c.key for c in _scm.CATEGORIES]
+@@ -370,10 +368,10 @@ def img(where, name):
+ def api_backgrounds():
+     # The old flat backgrounds/watermarked/ picker is retired ΓÇö backgrounds
+     # now come from named style folders (backgrounds/<Style>/bg_<category>.jpg),
+-    # one style set per CATEGORY_BG_SETS entry (see autonomous_pipeline.py).
+-    import autonomous_pipeline as auto2
++    # one style set per CATEGORY_BG_SETS entry (see engine_cascade.py).
++    import engine_cascade
+     return jsonify({"backgrounds": [
+-        {"key": k, "label": v["label"]} for k, v in auto2.CATEGORY_BG_SETS.items()
++        {"key": k, "label": v["label"]} for k, v in engine_cascade.CATEGORY_BG_SETS.items()
+     ]})
+ 
+ # ΓöÇΓöÇ Step 2 ΓÇö upload images to input\ ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+@@ -597,9 +595,7 @@ def _group_for_category(category: str) -> str:
+ def _auto_select_model_images(category: str, n: int = 7) -> list:
+     """
+     Auto-pick up to n model reference images for a category with zero
+-    manual selection ΓÇö the "smart" per-category default Auto Mode uses
+-    the first time it sees a new ornament category (see
+-    autonomous_pipeline.ensure_category_defaults). Prefers images whose
++    manual selection. Prefers images whose
+     filename zone keyword matches the category's expected zone, then fills
+     any remaining slots with zone-agnostic images (full-body/portrait shots
+     with no zone keyword in the name ΓÇö those work for any category).
+@@ -722,9 +718,9 @@ def _resolve_bg_path(bg_name: str, category: str = "") -> str | None:
+     """
+     if not bg_name:
+         return None
+-    import autonomous_pipeline as _auto2_bg
+-    if bg_name in _auto2_bg.CATEGORY_BG_SETS:
+-        return _auto2_bg.resolve_category_bg_path(category, bg_name)
++    import engine_cascade as _bg_sets
++    if bg_name in _bg_sets.CATEGORY_BG_SETS:
++        return _bg_sets.resolve_category_bg_path(category, bg_name)
+     if not bg_name.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+         for ext in (".png", ".jpg", ".jpeg", ".webp"):
+             if os.path.exists(os.path.join(BACKGROUNDS_DIR, bg_name + ext)):
+@@ -772,8 +768,7 @@ def _resolve_pair_assets(
+     turned this on.
+ 
+     When variety_auto is True, a stock-variety match for this pair's tag
+-    (mirrors autonomous_pipeline._select_pair_assets ΓÇö same
+-    variety_routing.resolve() call, same fail-safe contract: it never
++    (same variety_routing.resolve() call, same fail-safe contract: it never
+     raises, so an unknown tag or unresolvable asset silently keeps the
+     cycling baseline) overrides bg_path and, via modelPath, the model
+     reference. allowPoseOverride is set alongside a variety-resolved
+@@ -825,8 +820,8 @@ def _resolve_out_dir(category: str) -> str:
+     return os.path.join(OUTPUT, category)
+ 
+ 
+-def _resolve_variety_output(label: str):
+-    """Resolve one authoritative captured label to output/<VARIETY>.
++def _resolve_variety_output(label: str, category: str):
++    """Resolve one authoritative captured label to output/<CATEGORY>/<VARIETY>.
+ 
+     Exact stock labels and their capture-safe filename forms (``/`` -> ``_``)
+     are both accepted. Unknown labels fail visibly; only a stock row whose
+@@ -842,7 +837,7 @@ def _resolve_variety_output(label: str):
+         raise item_routing.RoutingError(
+             f"tag {label!r} is not present in the validated stock workbook"
+         )
+-    return item_routing.variety_output_paths(record)
++    return item_routing.variety_output_paths(record, category)
+ 
+ 
+ def _preserve_unrouted_output(raw_output: str, safe_label: str) -> str:
+@@ -903,10 +898,11 @@ def _move_generated_to_variety_output(
+     raw_output: str,
+     label: str,
+     safe_label: str,
++    category: str,
+ ):
+     """Atomically publish a generated studio image under its stock variety."""
+ 
+-    variety_paths = _resolve_variety_output(label)
++    variety_paths = _resolve_variety_output(label, category)
+     output_dir = str(variety_paths.studio_output.parent)
+     os.makedirs(output_dir, exist_ok=True)
+     output_path = os.path.join(output_dir, f"{safe_label}.jpg")
+@@ -1175,7 +1171,7 @@ def _finalise_output(raw_output, jewel, tag, bg_path,
+     # the successful deliverable folder.
+     try:
+         out_path, out_dir, variety_paths = _move_generated_to_variety_output(
+-            raw_output, label, safe
++            raw_output, label, safe, category
+         )
+     except Exception as routing_error:
+         try:
+@@ -1195,6 +1191,14 @@ def _finalise_output(raw_output, jewel, tag, bg_path,
+         return entry
+ 
+     output_bucket = variety_paths.output_bucket
++    # Derived from where the file actually landed (out_path), not
++    # reconstructed from output_bucket alone ΓÇö variety_output_paths() nests
++    # under output/<category>/<variety>/, and hand-building "<variety>/
++    # <file>.jpg" here silently drops the category segment, producing a
++    # /img/output/... URL that 404s (real 2026-08-05 regression: result
++    # cards saved fine but showed no preview image).
++    import paths as _pipeline_paths
++    rel_output = os.path.relpath(out_path, _pipeline_paths.OUTPUT_DIR).replace(os.sep, "/")
+ 
+     seen_tags.add(clean)
+ 
+@@ -1245,7 +1249,7 @@ def _finalise_output(raw_output, jewel, tag, bg_path,
+                catalogue_db.check_only(label, out_path, category)
+ 
+     if model_ok:
+-        _save_progress(category, pair_key, label, f"{output_bucket}/{safe}.jpg")
++        _save_progress(category, pair_key, label, rel_output)
+         if entry["sku_unread"]:
+             CGPT_JOB["current"] = f"ΓÜá {label} saved ΓÇö SKU NOT READ, needs manual rename"
+         elif ms.get("model_permanently_unavailable"):
+@@ -1258,7 +1262,7 @@ def _finalise_output(raw_output, jewel, tag, bg_path,
+ 
+     entry.update({
+         "ok": model_ok,
+-        "output": f"{output_bucket}/{safe}.jpg",
++        "output": rel_output,
+         "output_path": out_path,
+         "output_variety": variety_paths.variety,
+         "error": None if model_ok else f"MODEL_SHOOT_FAILED: {ms.get('model_error','')}",
+@@ -1405,7 +1409,7 @@ def _do_model_shoot(jewel, bg_path, category, label, safe, out_dir, model_cfg):
+             # step in this cascade puts it there ΓÇö so model_watermark_top_left
+             # failed on every single model shot regardless of design
+             # correctness (real production cases: TP22_8, TP22_151, TP22_13,
+-            # TP22_55). Auto2 (autonomous_pipeline.py) already does this exact
++            # TP22_55). engine_cascade.run_pair already does this exact
+             # stamp before its own verify_model_image call; mirror it here.
+             import generate_bg as _gbg
+             try:
+@@ -1474,8 +1478,8 @@ def _do_model_shoot(jewel, bg_path, category, label, safe, out_dir, model_cfg):
+             )
+             return False, False, warning
+ 
+-        import autonomous_pipeline as _auto2_mod
+-        if _auto2_mod.AUTO2_CONFIG.get("engine_mode") == "local":
++        import engine_cascade as _engine_cfg
++        if _engine_cfg.ENGINE_CONFIG.get("engine_mode") == "local":
+             # Local engine switch (2026-08-03) ΓÇö one attempt, no cloud
+             # fallback. See comfy_local_img.py / HANDOVER_2026-08-03.md.
+             # Must use generate_model_shoot(), NOT generate() ΓÇö generate()
+@@ -1962,9 +1966,9 @@ def _run_copilot_job(pairs, category, bg_names, model_cfg=None,
+         # cascade and uses ComfyUI/FLUX Kontext GGUF instead ΓÇö see
+         # comfy_local_img.py and HANDOVER_2026-08-03.md ┬º10-12. No account
+         # pool/fallback for local ΓÇö it's one engine, one attempt per pair.
+-        import autonomous_pipeline as _auto2_mod
+-        if _auto2_mod.AUTO2_CONFIG.get("engine_mode") == "local":
+-            import comfy_local_img as _local
++        import engine_cascade as _engine_cfg
++        if _engine_cfg.ENGINE_CONFIG.get("engine_mode") == "local":
++            import variant_c_pipeline as _local
+             _status(f"≡ƒûÑ∩╕Å Local ComfyUI ┬╖ pair {s['pair']}")
+             result = _local.generate(
+                 jewel_path=jewel, tag_path=tag or jewel, bg_path=bg_path,
+@@ -1982,6 +1986,7 @@ def _run_copilot_job(pairs, category, bg_names, model_cfg=None,
+             )
+             if not (result.get("output") and os.path.exists(result.get("output", ""))) and result.get("error"):
+                 fin["error"] = result["error"]
++            _write_variant_c_report(result, fin, category, label, out_dir)
+             return {"pair": s["pair"], **fin}
+ 
+         # L1: Copilot (fastest / free) ΓÇö generate() itself walks every
+@@ -2574,8 +2579,8 @@ def api_shutdown():
+     whole server outright ΓÇö losing every pair not yet finished ΓÇö instead of
+     just letting the tab go while processing continued in the background.
+     """
+-    import autonomous_pipeline as _auto2_sd
+-    if AUTO_CONFIG.get("enabled") or _auto2_sd.AUTO2_CONFIG.get("enabled") or CGPT_JOB.get("running"):
++    import pipeline2_loop as _pl2_sd
++    if AUTO_CONFIG.get("enabled") or _pl2_sd.PIPELINE2_CONFIG.get("enabled") or CGPT_JOB.get("running"):
+         return jsonify({"ok": True, "skipped": "job or auto-mode active"})
+ 
+     def _do():
+@@ -2681,6 +2686,9 @@ def api_new_chat():
+ 
+ @app.route("/api/chatgpt_run", methods=["POST"])
+ def api_chatgpt_run():
++    import engine_cascade as _ec_lock
++    if _ec_lock.CLOUD_LOCKDOWN:
++        return jsonify({"error": "Cloud engines (ChatGPT) are temporarily disabled ΓÇö local Klein only."}), 403
+     if CGPT_JOB["running"]:
+         return jsonify({"error": "already running"}), 409
+     data      = request.get_json(force=True)
+@@ -2718,6 +2726,11 @@ def api_chatgpt_progress():
+     eta     = None
+     if j["running"] and done > 0 and total > done:
+         eta = int((elapsed / done) * (total - done))
++    import engine_cascade as _engine_cfg
++    comfy_progress = None
++    if _engine_cfg.ENGINE_CONFIG.get("engine_mode") == "local":
++        import variant_c_pipeline as _vc
++        comfy_progress = _vc.get_progress()
+     return jsonify({
+         "running": j["running"],
+         "done": done, "total": total,
+@@ -2728,6 +2741,7 @@ def api_chatgpt_progress():
+         "oauth_alert": bool(j.get("oauth_alert")),
+         "copilot_alert": bool(j.get("copilot_alert")),
+         "rate_limit_alert": j.get("rate_limit_alert"),   # None or {engine,reset_at,reset_str,chosen}
++        "comfy_progress": comfy_progress,   # {label,prompt_id,value,max,stage} or None when not on local engine
+     })
+ 
+ 
+@@ -2794,6 +2808,9 @@ def api_codex_choose_fallback():
+ 
+ @app.route("/api/codex_run", methods=["POST"])
+ def api_codex_run():
++    import engine_cascade as _ec_lock
++    if _ec_lock.CLOUD_LOCKDOWN:
++        return jsonify({"error": "Cloud engines (Codex) are temporarily disabled ΓÇö local Klein only."}), 403
+     if CGPT_JOB["running"]:
+         return jsonify({"error": "Already running"}), 400
+     data      = request.json or {}
+@@ -3057,231 +3074,39 @@ def api_model_images():
+     return jsonify({"images": images, "expected_zone": expected_zone})
+ 
+ 
+-# ΓöÇΓöÇ AUTONOMOUS FOLDER-WISE PIPELINE (v2) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+-# A separate, independent engine from the legacy category-based auto-mode
+-# below ΓÇö see autonomous_pipeline.py. Kept fully apart so Manual Mode's
+-# existing behavior (still using the legacy AUTO_CONFIG/_auto_watcher) is
+-# never affected by this.
++# ΓöÇΓöÇ Shared engine config (local Klein vs cloud Copilot/Gemini cascade) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
++# Used by Manual Mode's own per-pair runner (_process_one/_do_model_shoot)
++# and by engine_cascade.run_pair (pipeline2's generation call). Retired
++# AUTO2 (2026-08-05) used to own this setting via /api/auto2/config; this
++# route replaces it so an already-configured "local" setting keeps working.
+ 
+-@app.route("/api/auto2/config", methods=["GET", "POST"])
+-def api_auto2_config():
+-    import autonomous_pipeline as auto2
++@app.route("/api/engine/config", methods=["GET", "POST"])
++def api_engine_config():
++    import engine_cascade as ec
+     if request.method == "GET":
+-        return jsonify(auto2.AUTO2_CONFIG)
++        return jsonify(ec.ENGINE_CONFIG)
+ 
+     data = request.json or {}
+-    if "master_dir" in data:
+-        md = data["master_dir"]
+-        if md and not os.path.isdir(md):
+-            return jsonify({"ok": False, "error": f"Master folder not found: {md}"}), 400
+-        auto2.AUTO2_CONFIG["master_dir"] = md
+-    if "output_dir" in data:
+-        od = data["output_dir"]
+-        if od:
+-            try:
+-                os.makedirs(od, exist_ok=True)
+-            except Exception as e:
+-                return jsonify({"ok": False, "error": f"Can't create output folder: {e}"}), 400
+-        auto2.AUTO2_CONFIG["output_dir"] = od
+-    if "process_mode" in data:
+-        pm = data["process_mode"]
+-        if pm not in ("two_image", "ai_only"):
+-            return jsonify({"ok": False, "error": f"Unknown process_mode: {pm}"}), 400
+-        # Route through the same authority as every other entry point, so a
+-        # saved config can't reintroduce two-image mode behind the switch.
+-        auto2.AUTO2_CONFIG["process_mode"] = _resolve_process_mode(pm)
+     if "engine_mode" in data:
+         em = data["engine_mode"]
+         if em not in ("cloud", "local"):
+             return jsonify({"ok": False, "error": f"Unknown engine_mode: {em}"}), 400
+-        auto2.AUTO2_CONFIG["engine_mode"] = em
+-    if "notify_every" in data:
+-        try:
+-            n = int(data["notify_every"])
+-        except (TypeError, ValueError):
+-            return jsonify({"ok": False, "error": "notify_every must be a number"}), 400
+-        if n < 0:
+-            return jsonify({"ok": False, "error": "notify_every can't be negative"}), 400
+-        auto2.AUTO2_CONFIG["notify_every"] = n
+-    if "varietyAuto" in data:
+-        va = data["varietyAuto"]
+-        if not isinstance(va, bool):
+-            return jsonify({"ok": False, "error": "varietyAuto must be a boolean"}), 400
+-        auto2.AUTO2_CONFIG["varietyAuto"] = va
++        if ec.CLOUD_LOCKDOWN and em == "cloud":
++            return jsonify({"ok": False, "error": "Cloud engines are temporarily disabled ΓÇö local Klein only."}), 403
++        ec.ENGINE_CONFIG["engine_mode"] = em
+     if "model_shoot_enabled" in data:
+         mse = data["model_shoot_enabled"]
+         if not isinstance(mse, bool):
+             return jsonify({"ok": False, "error": "model_shoot_enabled must be a boolean"}), 400
+-        auto2.AUTO2_CONFIG["model_shoot_enabled"] = mse
+-    auto2.save_config()
+-    return jsonify({"ok": True, "config": auto2.AUTO2_CONFIG})
+-
+-
+-@app.route("/api/auto2/category_defaults", methods=["GET", "POST"])
+-def api_auto2_category_defaults():
+-    """The smart, not-folder-dependent bg/model system: GET lists every
+-    category Auto Mode has auto-configured so far (or that's been manually
+-    set), POST overrides one category's bg_styles/model_images list. Every
+-    folder of a given ornament category shares whatever's set here ΓÇö see
+-    autonomous_pipeline.ensure_category_defaults."""
+-    import autonomous_pipeline as auto2
+-    if request.method == "GET":
+-        return jsonify({"categories": auto2.AUTO2_CONFIG.get("category_bg_model_sets", {})})
+-
+-    data = request.json or {}
+-    category = data.get("category", "").strip()
+-    if not category or category not in TYPES:
+-        return jsonify({"ok": False, "error": f"Unknown category: {category}"}), 400
+-    try:
+-        category = _resolve_stock_category(category)
+-    except ValueError as e:
+-        return jsonify({"ok": False, "error": str(e)}), 400
+-    bg_styles = data.get("bg_styles", [])
+-    model_images = data.get("model_images", [])
+-    unknown_styles = [s for s in bg_styles if s not in auto2.CATEGORY_BG_SETS]
+-    if unknown_styles:
+-        return jsonify({"ok": False, "error": f"Unknown style(s): {unknown_styles}"}), 400
+-    if not bg_styles or not model_images:
+-        return jsonify({"ok": False, "error": "Need at least one background style and one model image"}), 400
+-    sets = auto2.AUTO2_CONFIG.setdefault("category_bg_model_sets", {})
+-    sets[category] = {"bg_styles": bg_styles, "model_images": model_images}
+-    auto2.save_config()
+-    return jsonify({"ok": True})
+-
+-
+-@app.route("/api/auto2/discover_folders")
+-def api_auto2_discover_folders():
+-    import autonomous_pipeline as auto2
+-    folders = auto2.discover_master_folders(auto2.AUTO2_CONFIG["master_dir"])
+-    return jsonify({"folders": folders})
+-
+-
+-@app.route("/api/auto2/bg_style", methods=["GET", "POST"])
+-def api_auto2_bg_style():
+-    """
+-    'manual' = each assignment row picks its own background (legacy flow).
+-    Any other value = auto-select the placement-correct, category-matched
+-    background from one of the 3 generated sets by the row's ornament_type,
+-    ignoring the row's own background field entirely.
+-    """
+-    import autonomous_pipeline as auto2
+-    if request.method == "GET":
+-        return jsonify({"bg_style": auto2.AUTO2_CONFIG.get("bg_style", "manual"),
+-                        "sets": {k: v["label"] for k, v in auto2.CATEGORY_BG_SETS.items()}})
+-
+-    style = (request.json or {}).get("bg_style", "manual")
+-    if style != "manual" and style not in auto2.CATEGORY_BG_SETS:
+-        return jsonify({"ok": False, "error": f"Unknown style: {style}"}), 400
+-    auto2.AUTO2_CONFIG["bg_style"] = style
+-    auto2.save_config()
+-    return jsonify({"ok": True})
+-
+-
+-@app.route("/api/auto2/category_backgrounds")
+-def api_auto2_category_backgrounds():
+-    """Preview grid data for a given style: category -> thumbnail URL, for
+-    every category that actually has a generated file (all 21 should, but
+-    this stays honest if one's ever missing)."""
+-    import autonomous_pipeline as auto2
+-    style = request.args.get("style", "")
+-    set_info = auto2.CATEGORY_BG_SETS.get(style)
+-    if not set_info:
+-        return jsonify({"ok": False, "error": f"Unknown style: {style}"}), 400
+-
+-    items = []
+-    for cat in TYPES:
+-        path = os.path.join(set_info["dir"], f"bg_{cat}.jpg")
+-        if os.path.exists(path):
+-            from urllib.parse import quote
+-            items.append({"category": cat, "url": f"/img/bg/{quote(style)}/bg_{cat}.jpg"})
+-    return jsonify({"ok": True, "items": items})
+-
+-
+-@app.route("/api/auto2/assignments", methods=["GET", "POST"])
+-def api_auto2_assignments():
+-    import autonomous_pipeline as auto2
+-    if request.method == "GET":
+-        return jsonify({"assignments": auto2.AUTO2_CONFIG["assignments"]})
+-
+-    data = request.json or {}
+-    rows = data.get("assignments", [])
+-    # Validate shape ΓÇö background/model_image are no longer per-row fields;
+-    # they're fully automatic per CATEGORY now (see category_bg_model_sets),
+-    # so a row only needs to say which folder it is and what it contains.
+-    required = {"folder", "ornament_type"}
+-    for row in rows:
+-        missing = required - set(row.keys())
+-        if missing:
+-            return jsonify({"ok": False, "error": f"Row missing fields: {missing}"}), 400
+-    auto2.AUTO2_CONFIG["assignments"] = rows
+-    auto2.save_config()
+-    return jsonify({"ok": True, "count": len(rows)})
+-
+-
+-@app.route("/api/auto2/start", methods=["POST"])
+-def api_auto2_start():
+-    """
+-    body.folders (optional): restrict this run to specific folder names ΓÇö
+-    "Process one" sends a single-item list, "Process checked" sends
+-    whichever rows are checked in the UI. Omitted/empty means "Process all"
+-    ΓÇö every assigned folder, the normal behaviour.
+-    """
+-    import autonomous_pipeline as auto2
+-    if not auto2.AUTO2_CONFIG["master_dir"] or not auto2.AUTO2_CONFIG["output_dir"]:
+-        return jsonify({"ok": False, "error": "Set master and output folders first"}), 400
+-    if not auto2.AUTO2_CONFIG["assignments"]:
+-        return jsonify({"ok": False, "error": "No folder assignments configured"}), 400
+-
+-    data = request.json or {}
+-    folders = data.get("folders")
+-    if folders:
+-        known = {row["folder"] for row in auto2.AUTO2_CONFIG["assignments"]}
+-        unknown = [f for f in folders if f not in known]
+-        if unknown:
+-            return jsonify({"ok": False, "error": f"Not assigned: {unknown}"}), 400
+-        auto2.AUTO2_CONFIG["active_folders"] = folders
+-    else:
+-        auto2.AUTO2_CONFIG["active_folders"] = None
+-
+-    auto2.AUTO2_CONFIG["enabled"] = True
+-    auto2.save_config()
+-    return jsonify({"ok": True})
+-
+-
+-@app.route("/api/auto2/folder_progress")
+-def api_auto2_folder_progress():
+-    """Per-folder completion status for the assignment table ΓÇö done/
+-    partial/pending, with remaining-item counts, so the UI can grey out
+-    finished folders and offer "process remaining" on partial ones."""
+-    import autonomous_pipeline as auto2
+-    summary = auto2.folder_status_summary(auto2.AUTO2_CONFIG["master_dir"], auto2.AUTO2_CONFIG["assignments"])
+-    return jsonify({"folders": summary})
+-
+-
+-@app.route("/api/auto2/pause", methods=["POST"])
+-def api_auto2_pause():
+-    import autonomous_pipeline as auto2
+-    auto2.AUTO2_CONFIG["enabled"] = False
+-    auto2.save_config()
+-    return jsonify({"ok": True})
+-
+-
+-@app.route("/api/auto2/status")
+-def api_auto2_status():
+-    import autonomous_pipeline as auto2
+-    state = dict(auto2.AUTO2_STATE)
+-    state.pop("_last_pause_reason", None)
+-    state.pop("_since_last_notify", None)
+-    state["error_log"] = list(reversed(state.get("error_log", [])))[:20]
+-    state["enabled"] = auto2.AUTO2_CONFIG["enabled"]
+-    return jsonify(state)
++        ec.ENGINE_CONFIG["model_shoot_enabled"] = mse
++    ec.save_engine_config()
++    return jsonify({"ok": True, "config": ec.ENGINE_CONFIG})
+ 
+ 
+ @app.route("/api/pipeline2/config", methods=["GET", "POST"])
+ def api_pipeline2_config():
+-    """The new lifecycle pipeline's on/off switch ΓÇö independent of AUTO2's,
+-    same enabled=False default and same explicit-boolean validation as
+-    AUTO2's varietyAuto field."""
++    """The lifecycle pipeline's on/off switch ΓÇö enabled=False default,
++    explicit-boolean validation on the enabled field."""
+     import pipeline2_loop as pl2
+     if request.method == "GET":
+         return jsonify(pl2.PIPELINE2_CONFIG)
+@@ -4032,11 +3857,11 @@ def api_pipeline_category_breakdown():
+ 
+ def _processed_reset_blocked():
+     """A reset can never race an active manual or unattended worker."""
+-    import autonomous_pipeline as _auto_reset
++    import pipeline2_loop as _pl2_reset
+     return bool(
+         CGPT_JOB.get("running")
+         or AUTO_CONFIG.get("enabled")
+-        or _auto_reset.AUTO2_CONFIG.get("enabled")
++        or _pl2_reset.PIPELINE2_CONFIG.get("enabled")
+     )
+ 
+ 
+@@ -4418,6 +4243,97 @@ def _enforce_single_instance():
+         f.write(str(my_pid))
+ 
+ 
++from edit_report_service import build_report_record, save_item_report, upsert_batch_record, create_report_zip, open_report_folder
++
++def _write_variant_c_report(result, fin, category, label, out_dir):
++    """Auto-write a Category/Verdict/Reason record for every Variant C item
++    (handover ┬º15/┬º24: 'never treat clean output as proof of design fidelity',
++    'operator review mandatory'). No review UI exists yet, so every item is
++    recorded as VISUAL_REVIEW_REQUIRED (or a specific failure verdict) rather
++    than silently disappearing into the output folder unflagged."""
++    try:
++        if result.get('error') == 'REFERENCE_HASH_FAILED':
++            verdict, reason = 'REFERENCE_HASH_FAILED', f"Upload pixel-hash mismatch: {result.get('hash_detail') or 'unknown'}"
++        elif result.get('error'):
++            verdict, reason = 'INFERENCE_FAILED', str(result['error'])[:500]
++        elif not fin.get('ok'):
++            verdict, reason = 'INFERENCE_FAILED', str(fin.get('error') or 'finalise_output rejected the candidate')[:500]
++        elif result.get('shadow_check') == 'SHADOW_CHECK_FAIL':
++            verdict, reason = 'REJECTED_SHADOW', 'Shadow QA failed on both the default seed and the shadow-retry seed.'
++        else:
++            verdict, reason = 'VISUAL_REVIEW_REQUIRED', (
++                f"Variant C candidate generated (hash={result.get('hash_check')}, "
++                f"shadow={result.get('shadow_check')}, seed={result.get('seed')}); "
++                "pending operator review."
++            )
++        record = build_report_record(
++            category, verdict, reason, item_label=label, run_id=category,
++            edited_path=fin.get('output') or '', shadow_check=result.get('shadow_check') or '',
++            hash_check=result.get('hash_check') or '',
++            visible_piece_count=result.get('count'), relationship=result.get('relationship') or '',
++            seed=result.get('seed') or 19951995,
++        )
++        item_folder = os.path.join(out_dir, "_edit_reports", re.sub(r'[/\\:*?"<>|]', '_', str(label)))
++        os.makedirs(item_folder, exist_ok=True)
++        save_item_report(item_folder, record)
++        batch_folder = os.path.join(out_dir, "_edit_reports", "_batch")
++        os.makedirs(batch_folder, exist_ok=True)
++        upsert_batch_record(batch_folder, record)
++    except Exception as e:
++        print(f"[{ts()}] WARN: _write_variant_c_report failed for {label}: {e}")
++
++@app.route('/api/edit-report/save', methods=['POST'])
++def save_edit_report():
++    data = request.json
++    item_id = data.get('item_id', 'unknown_item')
++    run_id = data.get('run_id', 'unknown_run')
++    category = data.get('category', 'unknown_category')
++    verdict = data.get('verdict')
++    reason = data.get('reason')
++    
++    try:
++        record = build_report_record(category, verdict, reason, item_label=item_id, run_id=run_id)
++        
++        # Determine paths
++        base = r"C:\Users\kaila\Desktop\JewelleryCatalogTool"
++        item_folder = os.path.join(base, "output_aradhana", category, item_id)
++        os.makedirs(item_folder, exist_ok=True)
++        
++        save_item_report(item_folder, record)
++        
++        batch_folder = os.path.join(base, run_id, "reports")
++        os.makedirs(batch_folder, exist_ok=True)
++        upsert_batch_record(batch_folder, record)
++        zip_path = create_report_zip(batch_folder)
++        
++        return jsonify({
++            "success": True, 
++            "item_report_path": item_folder,
++            "batch_report_path": batch_folder,
++            "download_path": f"/api/edit-report/download/{run_id}"
++        })
++    except Exception as e:
++        return jsonify({"success": False, "error": str(e)}), 400
++
++@app.route('/api/edit-report/download/<run_id>', methods=['GET'])
++def download_edit_report(run_id):
++    from flask import send_file
++    base = r"C:\Users\kaila\Desktop\JewelleryCatalogTool"
++    batch_folder = os.path.join(base, run_id, "reports")
++    zip_path = os.path.join(batch_folder, "EDITED_FILES_REPORT.zip")
++    if os.path.exists(zip_path):
++        return send_file(zip_path, as_attachment=True)
++    return "Report ZIP not found", 404
++
++@app.route('/api/edit-report/open-folder', methods=['POST'])
++def open_report_folder_api():
++    data = request.json
++    folder_path = data.get('folder_path')
++    if folder_path and os.path.exists(folder_path):
++        open_report_folder(folder_path)
++        return jsonify({"success": True})
++    return jsonify({"success": False, "error": "Invalid folder path"})
++
+ if __name__ == "__main__":
+     import socket as _sock
+ 
+@@ -4451,11 +4367,6 @@ if __name__ == "__main__":
+     # Start always-on auto-watcher daemon
+     threading.Thread(target=_auto_watcher,      daemon=True, name="auto-watcher").start()
+     threading.Thread(target=_heartbeat_watcher, daemon=True, name="heartbeat-watcher").start()
+-    # New folder-wise autonomous engine (separate from the legacy category-
+-    # based auto-mode above) ΓÇö inert until AUTO2_CONFIG["enabled"] is set
+-    # via the UI, so starting this thread has no effect until then.
+-    import autonomous_pipeline as _auto2
+-    threading.Thread(target=_auto2.autonomous_loop, daemon=True, name="auto2-loop").start()
+     # Keeps "master backup" (renamed 2026-07-31 from "raw images final" and
+     # moved inside the tool folder) as an always-current additive mirror of
+     # capture_intake ΓÇö see raw_intake_sync.py. (FINAL CATALOGUE DND
+@@ -4463,9 +4374,9 @@ if __name__ == "__main__":
+     # frozen, so it could never contribute anything new.)
+     import raw_intake_sync as _ris
+     threading.Thread(target=_ris.sync_loop, daemon=True, name="raw-intake-sync").start()
+-    # The new lifecycle pipeline (processing/ -> processed/needs_review/
++    # The main autonomous pipeline (processing/ -> processed/needs_review/
+     # rejected, item_routing's variety-based asset selection, image_spec's
+-    # crop-to-spec conformance). Runs alongside AUTO2, independently gated ΓÇö
++    # crop-to-spec conformance). Independently gated ΓÇö
+     # inert until PIPELINE2_CONFIG["enabled"] is set, so starting this thread
+     # has no effect until then. Deliberately a THREAD here, not its own
+     # process (unlike AradhanaPipelineRuntime, which only mirrors intake and
+diff --git a/autonomous_pipeline.py b/autonomous_pipeline.py
+deleted file mode 100644
+index 0f8379a..0000000
+--- a/autonomous_pipeline.py
++++ /dev/null
+@@ -1,867 +0,0 @@
+-"""
+-autonomous_pipeline.py ΓÇö the folder-wise, 24/7 autonomous engine.
+-
+-Kept as its own module rather than growing app.py further (matches the
+-job-runner consolidation done earlier this session). Reuses app.py's
+-existing, already-proven building blocks ΓÇö the engine modules'
+-`.generate()` calls, `_finalise_output`'s 10-step validation+model-shoot
+-pipeline, `ENGINE_HEALTH`/alerts ΓÇö via a deferred `import app` inside each
+-function (app.py imports THIS module at startup to wire routes and launch
+-the daemon thread, so a module-level import here would be circular; every
+-other cross-engine call in this codebase already uses the same deferred-
+-import pattern for the same reason).
+-
+-Design, per the approved plan:
+-  - Master folder is READ-ONLY, always. Nothing in this module ever calls
+-    os.remove/shutil.move on anything under the configured master_dir.
+-  - Each source subfolder is copied to a temp working dir ONCE, processed
+-    entirely from the copy, then the temp copy is deleted once every pair
+-    in that folder is handled (complete OR quarantined).
+-  - "Complete" requires passing _finalise_output's existing checks AND the
+-    new verification.py checks (11 total, studio + model).
+-  - A failed item retries up to 2 total attempts, escalating through the
+-    universal engine order (all Copilot accounts, then all Gemini web-chat
+-    accounts ΓÇö same sequence used everywhere else in the tool; Codex/
+-    ChatGPT conv are intentionally out of the cascade entirely) -
+-    verification failure is a QUALITY problem, not necessarily an engine
+-    health problem, so retries don't penalise engine health the way a real
+-    generation error does.
+-  - Still failing after 3 attempts -> quarantine (moved to _needs_review,
+-    desktop+phone alert fired) and the loop moves on to the next item.
+-  - Systemic conditions (no engine available, no internet, dirs missing)
+-    pause the whole loop (with one alert, not a flood) until they clear -
+-    never a permanent halt, since nobody may be there to un-halt it.
+-"""
+-import os
+-import re
+-import time
+-import shutil
+-import threading
+-import json
+-
+-import desktop_alert
+-from logutil import ts
+-
+-BASE = os.path.dirname(os.path.abspath(__file__))
+-TEMP_ROOT = os.path.join(BASE, "_auto2_temp")
+-PROGRESS_PATH = os.path.join(BASE, "auto2_progress.json")
+-CONFIG_PATH = os.path.join(BASE, "auto2_config.json")
+-
+-_ENGINE_ORDER = ["copilot", "gemini_headless"]
+-_MAX_ATTEMPTS = 2  # universal sequence: all Copilot accounts, then all Gemini accounts
+-
+-
+-def _engine_order_for_pair(pair_num: int) -> list:
+-    """Alternate which engine goes first per pair (2026-08-03, user directive):
+-    previously every pair tried Copilot first and only reached Gemini as a
+-    fallback on failure, so Gemini's pool sat mostly idle while Copilot's
+-    5 accounts absorbed the whole batch's load and hit its rate limits/daily
+-    quota first. Odd pairs try Copilot first, even pairs try Gemini first ΓÇö
+-    both engines get used as the PRIMARY attempt roughly equally across a
+-    batch, not just one as primary and the other as backup."""
+-    return _ENGINE_ORDER if pair_num % 2 == 1 else list(reversed(_ENGINE_ORDER))
+-
+-_DEFAULT_CONFIG = {
+-    "enabled":     False,
+-    "master_dir":  "",
+-    "output_dir":  "",
+-    # "cloud" (Copilot/Gemini/Codex/ChatGPT cascade, default) or "local"
+-    # (ComfyUI/FLUX Kontext GGUF, see comfy_local_img.py). Added 2026-08-03
+-    # after validating local generation doesn't crash on the RTX 5070 8GB
+-    # laptop GPU. Read by _process_one in app.py's _run_copilot_job.
+-    "engine_mode": "cloud",
+-    # User-facing switch (2026-08-03): when False, only the studio edit runs
+-    # for every pair ΓÇö the model-worn shot is skipped entirely, not just
+-    # attempted-and-discarded. Defaults True so existing behaviour is
+-    # unchanged unless someone explicitly turns it off.
+-    "model_shoot_enabled": True,
+-    # One row per master subfolder: {"folder": name, "ornament_type": category}.
+-    # No background/model fields any more ΓÇö those are fully automatic per
+-    # CATEGORY now (see category_bg_model_sets below), not picked per folder.
+-    "assignments": [],
+-    # "manual"/bg_style (the old single-style-for-the-whole-run picker) has
+-    # been retired in favour of category_bg_model_sets ΓÇö kept here only so
+-    # an old persisted config doesn't crash on load.
+-    "bg_style": "manual",
+-    # Auto-populated the first time each ornament category is encountered ΓÇö
+-    # see ensure_category_defaults(). {category: {"bg_styles": [7 style
+-    # keys, cycling per pair], "model_images": [5-7 rel paths, cycling per
+-    # pair]}}. Nothing folder-specific ΓÇö every folder of the same category
+-    # shares these, so there's no manual per-folder bg/model picking at all.
+-    # Still fully editable per category in the UI if the auto pick is wrong.
+-    "category_bg_model_sets": {},
+-    # Fire a phone/desktop notification every N successfully-processed items
+-    # (across the whole run, not per folder) ΓÇö a progress ping, never a
+-    # pause; the run keeps going regardless. User-configurable in the UI.
+-    "notify_every": 50,
+-    # null = process every assigned folder (default). A list = restrict this
+-    # run to just those folder names ΓÇö how "Process one" / "Process checked"
+-    # work from the UI, without touching the assignments themselves. Cleared
+-    # back to null by /api/auto2/start when the UI's mode is "all".
+-    "active_folders": None,
+-    # "two_image" = classic behaviour: each folder holds alternating
+-    # jewel/tag image pairs by camera shot order, and the tag photo's label
+-    # is read via Gemma OCR and used to rename the finished output.
+-    # "ai_only" = every image directly in the folder is ALREADY a finished,
+-    # correctly-tag-named single item (see FINAL CATALOGUE DND (tag-named) /
+-    # capture_intake's shared convention, now unified under "raw images
+-    # final") ΓÇö no pairing, no OCR, the filename itself IS the label.
+-    # Two-image mode is switched off system-wide (see app.TWO_IMAGE_MODE_ENABLED)
+-    # ΓÇö the master archive is already renamed to tag numbers.
+-    "process_mode": "ai_only",
+-    # Opt-in, defaults False so nothing changes for an existing run that
+-    # doesn't turn it on. When True, each pair's tag is looked up in the
+-    # validated stock workbook and, if a variety-appropriate background/model
+-    # asset exists (see variety_routing.resolve / item_routing.py), THAT is
+-    # used instead of the category's cycling bg_styles/model_images below.
+-    # Any lookup/resolution failure (unknown tag, missing asset) falls back
+-    # to the existing cycling selection untouched ΓÇö this can never stall or
+-    # fail a pair, only fail to improve its asset choice.
+-    "varietyAuto": False,
+-}
+-
+-# Each folder under backgrounds/ holds one bg_<category>.jpg per ornament
+-# type (21 files) ΓÇö the manually-curated style sets that replaced the old
+-# single flat backgrounds/watermarked/ picker. Keys are the literal folder
+-# names so they double as the URL path segment (see /img/bg/<key>/...) with
+-# no separate name-mapping needed.
+-CATEGORY_BG_SETS = {
+-    "Antique":        {"label": "Antique",        "dir": os.path.join(BASE, "backgrounds", "Antique")},
+-    "Highlight":      {"label": "Highlight",       "dir": os.path.join(BASE, "backgrounds", "Highlight")},
+-    "Modern Diamond": {"label": "Modern Diamond",  "dir": os.path.join(BASE, "backgrounds", "Modern Diamond")},
+-    "Regular":        {"label": "Regular",         "dir": os.path.join(BASE, "backgrounds", "Regular")},
+-    "Silver":         {"label": "Silver",          "dir": os.path.join(BASE, "backgrounds", "Silver")},
+-    "Silver2":        {"label": "Silver 2",        "dir": os.path.join(BASE, "backgrounds", "Silver2")},
+-    "Traditional":    {"label": "Traditional",     "dir": os.path.join(BASE, "backgrounds", "Traditional")},
+-    # Plain white/seamless e-commerce product shot (2026-08-03, user
+-    # directive) ΓÇö no props, no scene, just the ornament floating on flat
+-    # white, matching a typical e-commerce product-listing photo. The same
+-    # blank white plate is reused for every category (unlike the other
+-    # style sets' per-category scene compositions) since a plain white
+-    # background has no scene geometry to vary by ornament type.
+-    "Studio Mode White": {"label": "Studio Mode White",
+-                          "dir": os.path.join(BASE, "backgrounds", "Studio Mode White")},
+-}
+-
+-
+-def resolve_category_bg_path(category: str, style: str) -> str | None:
+-    """Look up the pre-generated, placement-correct background for a given
+-    ornament category under the chosen style set. Returns None if the style
+-    is unknown/manual or the category has no matching file."""
+-    set_info = CATEGORY_BG_SETS.get(style)
+-    if not set_info or not category:
+-        return None
+-    from ornament_placement import background_asset_category
+-
+-    asset_category = background_asset_category(category)
+-    path = os.path.join(set_info["dir"], f"bg_{asset_category}.jpg")
+-    return path if os.path.exists(path) else None
+-
+-
+-def ensure_category_defaults(category: str) -> dict:
+-    """
+-    The "smart, not folder-dependent" system: the first time Auto Mode
+-    encounters a given ornament category, auto-assign it all 7 background
+-    style sets (cycling per pair ΓÇö see resolve_category_bg_path) plus up to
+-    7 auto-selected model images (see app._auto_select_model_images), fire
+-    ONE notification about it, and persist so every future folder of that
+-    same category reuses the same sets with zero manual picking. Still
+-    fully editable afterward via /api/auto2/category_defaults.
+-    """
+-    import app
+-    sets = AUTO2_CONFIG.setdefault("category_bg_model_sets", {})
+-    if category in sets and sets[category].get("bg_styles") and sets[category].get("model_images"):
+-        return sets[category]
+-
+-    bg_styles = list(CATEGORY_BG_SETS.keys())
+-    model_images = app._auto_select_model_images(category, n=7)
+-    sets[category] = {"bg_styles": bg_styles, "model_images": model_images}
+-    save_config()
+-
+-    label = category.replace("_", " ").title()
+-    if model_images:
+-        desktop_alert.alert(
+-            "Aradhana: new category auto-configured",
+-            f"'{label}' ΓÇö auto-assigned {len(bg_styles)} background styles + "
+-            f"{len(model_images)} model image(s). Review/change anytime in "
+-            f"Auto Mode's Category Defaults panel.",
+-            priority="default",
+-        )
+-    else:
+-        desktop_alert.alert(
+-            "Aradhana: new category needs model images",
+-            f"'{label}' ΓÇö no matching model images were found in the library "
+-            f"for this category. Pick some manually in Auto Mode's Category "
+-            f"Defaults panel before folders of this type can process.",
+-            priority="high",
+-        )
+-    return sets[category]
+-
+-
+-def _load_config() -> dict:
+-    """
+-    Load persisted config on import, so Auto Mode survives a server restart
+-    (crash, tab-close relaunch, manual restart) instead of silently
+-    resetting to enabled=False every time ΓÇö a "24/7 unattended" pipeline
+-    that forgets it was turned on isn't actually 24/7. Also lets
+-    supervisor.ps1 read enabled state directly off disk without needing the
+-    server to be up at all (see api_shutdown's matching guard in app.py).
+-    """
+-    if os.path.exists(CONFIG_PATH):
+-        try:
+-            with open(CONFIG_PATH, encoding="utf-8") as f:
+-                data = json.load(f)
+-            merged = dict(_DEFAULT_CONFIG)
+-            merged.update({k: v for k, v in data.items() if k in _DEFAULT_CONFIG})
+-            return merged
+-        except Exception:
+-            pass
+-    return dict(_DEFAULT_CONFIG)
+-
+-
+-def save_config():
+-    """Persist AUTO2_CONFIG after every change (start/pause/config/assignments)."""
+-    import app
+-    app._atomic_write_json(CONFIG_PATH, AUTO2_CONFIG)
+-
+-
+-AUTO2_CONFIG = _load_config()
+-
+-AUTO2_STATE = {
+-    "status":  "off",   # off | watching | processing | paused | quarantining
+-    "current": "",
+-    "current_folder": "",
+-    "current_file": None,
+-    "current_check": "",
+-    "current_variety": "",  # set only when varietyAuto resolved a real match
+-    "engine": None,
+-    "attempt": 0,
+-    "done_total": 0,
+-    "quarantined_total": 0,
+-    "unverified_total": 0,
+-    "error_log": [],
+-    "_last_pause_reason": None,  # de-dupes repeated pause alerts
+-    "_since_last_notify": 0,     # counts toward AUTO2_CONFIG["notify_every"]
+-}
+-
+-_ERROR_LOG_MAX = 100
+-
+-
+-def _log(msg: str):
+-    AUTO2_STATE["error_log"].append({"ts": time.time(), "msg": msg})
+-    if len(AUTO2_STATE["error_log"]) > _ERROR_LOG_MAX:
+-        AUTO2_STATE["error_log"] = AUTO2_STATE["error_log"][-_ERROR_LOG_MAX:]
+-    print(f"[{ts()}] [AUTO2] {msg}")
+-
+-
+-# ΓöÇΓöÇ Folder discovery ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+-
+-def _natural_key(name: str):
+-    """'Folder 2' before 'Folder 10' ΓÇö split into text/number chunks and
+-    compare numbers numerically, not as strings."""
+-    return [int(chunk) if chunk.isdigit() else chunk.lower()
+-            for chunk in re.split(r"(\d+)", name)]
+-
+-
+-def discover_master_folders(master_dir: str) -> list:
+-    """Immediate subfolders of master_dir, natural-sorted."""
+-    if not master_dir or not os.path.isdir(master_dir):
+-        return []
+-    names = [n for n in os.listdir(master_dir)
+-             if os.path.isdir(os.path.join(master_dir, n))]
+-    names.sort(key=_natural_key)
+-    return names
+-
+-
+-# ΓöÇΓöÇ Temp-copy handling ΓÇö master_dir is READ-ONLY, always ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+-
+-def copy_folder_to_temp(master_dir: str, folder_name: str) -> str:
+-    """
+-    Copy one source subfolder into a scratch working directory. Only ever
+-    READS from master_dir (shutil.copytree copies, never moves/deletes the
+-    source). Returns the temp folder path.
+-    """
+-    src = os.path.join(master_dir, folder_name)
+-    dst = os.path.join(TEMP_ROOT, folder_name)
+-    if os.path.isdir(dst):
+-        shutil.rmtree(dst, ignore_errors=True)
+-    os.makedirs(TEMP_ROOT, exist_ok=True)
+-    shutil.copytree(src, dst)
+-    return dst
+-
+-
+-def cleanup_temp_folder(folder_name: str):
+-    dst = os.path.join(TEMP_ROOT, folder_name)
+-    shutil.rmtree(dst, ignore_errors=True)
+-
+-
+-# ΓöÇΓöÇ Progress tracking ΓÇö folder + file-number granularity ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+-
+-def _load_progress() -> dict:
+-    if os.path.exists(PROGRESS_PATH):
+-        try:
+-            with open(PROGRESS_PATH, encoding="utf-8") as f:
+-                return json.load(f)
+-        except Exception:
+-            pass
+-    return {}
+-
+-
+-def _save_progress(data: dict):
+-    import app
+-    app._atomic_write_json(PROGRESS_PATH, data)
+-
+-
+-def _folder_progress(folder_name: str) -> dict:
+-    data = _load_progress()
+-    return data.get(folder_name, {"handled_up_to": 0, "quarantined": []})
+-
+-
+-def _mark_handled(folder_name: str, pair_num: int, quarantined: bool = False):
+-    """
+-    Advance handled_up_to for this folder. A quarantined item still counts
+-    as "handled" for resume purposes ΓÇö it's already been retried 3 times
+-    and needs a human, not an endless auto-retry loop on every restart.
+-    """
+-    data = _load_progress()
+-    entry = data.get(folder_name, {"handled_up_to": 0, "quarantined": []})
+-    if pair_num > entry["handled_up_to"]:
+-        entry["handled_up_to"] = pair_num
+-    if quarantined and pair_num not in entry["quarantined"]:
+-        entry["quarantined"].append(pair_num)
+-    data[folder_name] = entry
+-    _save_progress(data)
+-
+-
+-def _folder_total_pairs(master_dir: str, folder: str) -> int:
+-    import app
+-    ai_only = AUTO2_CONFIG.get("process_mode") == "ai_only"
+-    n_files = len(app._list_imgs(os.path.join(master_dir, folder)))
+-    # ai_only: one item per file. two_image: alternating jewel/tag pairs.
+-    return n_files if ai_only else (n_files + 1) // 2
+-
+-
+-def get_resume_point(master_dir: str, assignments: list) -> dict | None:
+-    """
+-    First folder (in assignment order) with unhandled pairs, and the next
+-    pair number to process in it. Returns None if every assigned folder is
+-    fully handled. Counts total pairs by listing the MASTER folder directly
+-    (read-only glob, no copy needed just to check "is this folder done").
+-
+-    Restricted to AUTO2_CONFIG["active_folders"] when set ΓÇö this is how
+-    "Process one" / "Process checked" scope a run to specific folders
+-    without touching the saved assignments list itself.
+-    """
+-    active = AUTO2_CONFIG.get("active_folders")
+-    for row in assignments:
+-        folder = row["folder"]
+-        if active is not None and folder not in active:
+-            continue
+-        prog = _folder_progress(folder)
+-        total_pairs = _folder_total_pairs(master_dir, folder)
+-        if prog["handled_up_to"] < total_pairs:
+-            return {"folder": folder, "next_pair": prog["handled_up_to"] + 1,
+-                   "row": row, "total_pairs": total_pairs}
+-    return None
+-
+-
+-def folder_status_summary(master_dir: str, assignments: list) -> list:
+-    """Per-folder completion status for the assignment table UI: how many
+-    of each folder's items are done/quarantined vs total, so the UI can
+-    grey out finished folders and offer "process remaining" on partial
+-    ones. Read-only ΓÇö just listing + progress.json lookups, no processing."""
+-    out = []
+-    for row in assignments:
+-        folder = row["folder"]
+-        prog = _folder_progress(folder)
+-        total = _folder_total_pairs(master_dir, folder) if master_dir else 0
+-        handled = prog["handled_up_to"]
+-        quarantined = len(prog.get("quarantined", []))
+-        if total == 0:
+-            status = "empty"
+-        elif handled >= total:
+-            status = "done"
+-        elif handled > 0:
+-            status = "partial"
+-        else:
+-            status = "pending"
+-        out.append({
+-            "folder": folder, "total": total, "handled": handled,
+-            "quarantined": quarantined, "remaining": max(0, total - handled),
+-            "status": status,
+-        })
+-    return out
+-
+-
+-# ΓöÇΓöÇ Pre-flight ΓÇö systemic conditions that pause (not halt) the whole loop ΓöÇΓöÇΓöÇΓöÇ
+-
+-def preflight_ok() -> tuple:
+-    """Returns (ok: bool, reason: str)."""
+-    cfg = AUTO2_CONFIG
+-    if not cfg["master_dir"] or not os.path.isdir(cfg["master_dir"]):
+-        return False, f"Master folder not found: {cfg['master_dir']!r}"
+-    if not cfg["output_dir"]:
+-        return False, "No output folder configured"
+-    try:
+-        os.makedirs(cfg["output_dir"], exist_ok=True)
+-    except Exception as e:
+-        return False, f"Output folder not writable: {e}"
+-
+-    try:
+-        import requests
+-        requests.head("https://www.gstatic.com/generate_204", timeout=5)
+-    except Exception:
+-        return False, "No internet connectivity"
+-
+-    import app
+-    # Check the engines THIS pipeline actually cascades through, not simply
+-    # "any engine app.py knows about" ΓÇö app._select_best_engine() also counts
+-    # codex/conv_l1, which _ENGINE_ORDER deliberately excludes. A global
+-    # "some engine is fine" answer would let the loop run on with nothing it
+-    # can actually call, quarantining every pair instead of pausing.
+-    usable = [e for e in _ENGINE_ORDER
+-              if app._engine_has_capacity(e)
+-              and app.ENGINE_HEALTH.get(e, {}).get("rate_limit_reset", 0) <= time.time()]
+-    if not usable:
+-        unconfigured = [e for e in _ENGINE_ORDER if not app._engine_has_capacity(e)]
+-        if unconfigured:
+-            return False, ("No usable engine ΓÇö not set up: " + ", ".join(unconfigured) +
+-                           ". Log in / add accounts, then processing resumes automatically.")
+-        return False, "No AI engine currently available (all rate-limited ΓÇö will resume on reset)"
+-
+-    return True, ""
+-
+-
+-# ΓöÇΓöÇ Per-item orchestration ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+-
+-def _run_engine_attempt(engine: str, jewel: str, tag: str, bg_path: str,
+-                        category: str, pair_num: int, model_ref: str, out_dir: str,
+-                        seen_tags: set, seen_hashes: set, seen_hashes_lock,
+-                        label_override: str = None) -> dict:
+-    """
+-    One generation attempt with a specific engine, through app.py's
+-    existing, unchanged _finalise_output pipeline (studio validation +
+-    model shoot in one call). The label passed INTO generate() is just a
+-    placeholder for the engine's own bookkeeping ΓÇö the REAL SKU is resolved
+-    afterward via app._resolve_label (engine's parsed LABEL: response, else
+-    a synchronous Gemma tag re-read, else the AJ-NNN fallback), same pattern
+-    already used by _auto_process_pair.
+-
+-    label_override, when set (ai_only mode ΓÇö see _derive_single_items), is
+-    the filename's own already-correct tag label. It's used verbatim for
+-    both the engine-facing placeholder and the final SKU, skipping Gemma
+-    OCR entirely ΓÇö there's nothing to read, the name already IS the label.
+-    """
+-    import app
+-    model_cfg = {"enabled": AUTO2_CONFIG.get("model_shoot_enabled", True), "modelPath": model_ref}
+-    placeholder = label_override or f"AJ-{pair_num:03d}"
+-
+-    try:
+-        if engine == "copilot":
+-            import copilot_img as _cop
+-            r = _cop.generate(jewel_path=jewel, tag_path=tag, bg_path=bg_path,
+-                              category=category, label=placeholder)
+-            app._check_copilot_alert(r.get("error"))
+-        else:  # bounded, non-browser Gemini cookie session
+-            import gemini_headless as _gwc
+-            r = _gwc.generate(jewel_path=jewel, tag_path=tag, bg_path=bg_path,
+-                              category=category, label=placeholder)
+-    except Exception as e:
+-        app._record_engine_failure(engine, str(e))
+-        return {"ok": False, "error": str(e)}
+-
+-    err = r.get("error") or ""
+-    if "RATE_LIMIT" in err:
+-        app._record_engine_failure(engine, err)
+-        return {"ok": False, "error": err}
+-
+-    if not (r.get("output") and os.path.exists(r["output"])):
+-        app._record_engine_failure(engine, err or "no output")
+-        return {"ok": False, "error": err or "no output from engine"}
+-
+-    app._record_engine_success(engine)
+-    label = label_override or app._resolve_label(r.get("label"), tag, pair_num)
+-    fin = app._finalise_output(
+-        r["output"], jewel, tag, bg_path, category, label, f"auto2_{pair_num}",
+-        out_dir, model_cfg, seen_tags, seen_hashes, seen_hashes_lock, engine=engine,
+-    )
+-    return fin
+-
+-
+-def run_pair(pair_info: dict, folder_name: str, category: str, bg_path: str,
+-            model_ref: str, out_dir: str,
+-            seen_tags: set, seen_hashes: set, seen_hashes_lock) -> dict:
+-    """
+-    Full pipeline for one pair: generation (escalating engines on failure)
+-    -> app._finalise_output's existing checks -> NEW top-left model
+-    watermark -> NEW verification.py checks. Returns a result dict with
+-    "ok" and, on failure, "quarantined": True plus the failure detail.
+-    """
+-    import app
+-    import verification
+-    import generate_bg
+-
+-    folder = pair_info["folder"]
+-    jewel  = os.path.join(folder, pair_info["jewel"])
+-    tag    = os.path.join(folder, pair_info["tag"]) if pair_info.get("tag") else jewel
+-
+-    attempts_log = []
+-    engine_order = _engine_order_for_pair(pair_info["pair"])
+-    for attempt, engine in enumerate(engine_order[:_MAX_ATTEMPTS], start=1):
+-        health = app.ENGINE_HEALTH.get(engine, {})
+-        if health.get("rate_limit_reset", 0) > time.time():
+-            continue  # skip a currently rate-limited engine, doesn't count as a used attempt
+-
+-        AUTO2_STATE["engine"] = engine
+-        AUTO2_STATE["attempt"] = attempt
+-        AUTO2_STATE["current_check"] = "generating"
+-        AUTO2_STATE["current"] = f"ΓÜí [{engine}] {folder_name} ┬╖ pair {pair_info['pair']} ┬╖ attempt {attempt}"
+-
+-        fin = _run_engine_attempt(engine, jewel, tag, bg_path, category, pair_info["pair"],
+-                                  model_ref, out_dir, seen_tags, seen_hashes, seen_hashes_lock,
+-                                  label_override=pair_info.get("label"))
+-        if not fin.get("ok"):
+-            attempts_log.append({"attempt": attempt, "engine": engine, **fin})
+-            continue  # _finalise_output's own checks already rejected this ΓÇö try next engine
+-
+-        # _finalise_output succeeded (studio + model both produced and
+-        # passed ITS checks). Now run the NEW top-left watermark + the NEW
+-        # 11-check verification gate on top.
+-        studio_path = fin.get("output_path")
+-        model_paths = fin.get("model_output_paths") or []
+-        model_path = model_paths[0] if model_paths else None
+-        if not (studio_path and os.path.isfile(studio_path)):
+-            attempts_log.append({
+-                "attempt": attempt,
+-                "engine": engine,
+-                "ok": False,
+-                "error": "final output path missing after successful finalisation",
+-            })
+-            continue
+-
+-        AUTO2_STATE["current_check"] = "verifying studio image"
+-        studio_result = verification.verify_studio_image(jewel, studio_path, fin["sku"], category)
+-
+-        model_result = {"ok": True, "checks": {}, "unverified": False}
+-        if model_path and os.path.exists(model_path):
+-            AUTO2_STATE["current_check"] = "applying model watermark"
+-            try:
+-                generate_bg._apply_watermark(model_path, model_path, opacity=0.5,
+-                                            position="top_left", logo_scale=0.13)
+-            except Exception as e:
+-                _log(f"Model watermark failed for {folder_name}#{pair_info['pair']}: {e}")
+-
+-            AUTO2_STATE["current_check"] = "verifying model image"
+-            model_result = verification.verify_model_image(jewel, model_path, fin["sku"], category)
+-
+-        if studio_result["ok"] and model_result["ok"]:
+-            return {"ok": True, "sku": fin["sku"], "engine": engine,
+-                    "output_path": studio_path,
+-                    "model_output_paths": model_paths,
+-                    "output_variety": fin.get("output_variety"),
+-                    "studio_checks": studio_result["checks"], "model_checks": model_result["checks"],
+-                    "unverified": studio_result.get("unverified") or model_result.get("unverified")}
+-
+-        # Verification failed ΓÇö clean up this attempt's output and try the
+-        # next engine (quality issue, not necessarily an engine failure, so
+-        # engine health isn't penalised here).
+-        for p in (studio_path, model_path):
+-            if p and os.path.exists(p):
+-                try: os.remove(p)
+-                except OSError: pass
+-        attempts_log.append({"attempt": attempt, "engine": engine, "ok": False,
+-                             "error": "verification failed",
+-                             "studio_checks": studio_result["checks"],
+-                             "model_checks": model_result["checks"]})
+-
+-    return {"ok": False, "quarantined": True,
+-           "detail": attempts_log[-1] if attempts_log else None,
+-           "all_attempts": attempts_log}
+-
+-
+-def _move_to_unverified_review(result: dict):
+-    """A passing item where Gemini itself was unreachable during verification
+-    (fail-open ΓÇö see verification.py) still ships, but gets set aside in its
+-    own top-level review root rather than mixed in with verified output, so
+-    a human can spot-check it later without slowing the run down now."""
+-    output_paths = [
+-        result.get("output_path"),
+-        *(result.get("model_output_paths") or []),
+-    ]
+-    output_paths = [path for path in output_paths if path]
+-    if not output_paths:
+-        return
+-    import paths as _pipeline_paths
+-    variety = result.get("output_variety") or "GENERAL"
+-    review_dir = os.path.join(_pipeline_paths.NEEDS_REVIEW_DIR, variety)
+-    os.makedirs(review_dir, exist_ok=True)
+-    for source in output_paths:
+-        if os.path.isfile(source):
+-            destination = os.path.join(review_dir, os.path.basename(source))
+-            if os.path.exists(destination):
+-                _log(f"Review destination already exists; leaving output in place: {destination}")
+-                continue
+-            try:
+-                os.rename(source, destination)
+-            except OSError as e:
+-                _log(
+-                    f"Could not move unverified '{os.path.basename(source)}' "
+-                    f"to review folder: {e}"
+-                )
+-
+-
+-def _maybe_notify_progress():
+-    """Every AUTO2_CONFIG['notify_every'] successfully-handled items (done or
+-    quarantined ΓÇö both count as "processed"), fire ONE progress ping. Never
+-    pauses or waits ΓÇö the run keeps going regardless, this is purely
+-    informational (confirmed with user)."""
+-    AUTO2_STATE["_since_last_notify"] += 1
+-    every = AUTO2_CONFIG.get("notify_every", 50)
+-    if every <= 0 or AUTO2_STATE["_since_last_notify"] < every:
+-        return
+-    AUTO2_STATE["_since_last_notify"] = 0
+-    desktop_alert.alert(
+-        "Aradhana Catalogue ΓÇö progress update",
+-        f"{AUTO2_STATE['done_total']} done, {AUTO2_STATE['quarantined_total']} quarantined, "
+-        f"{AUTO2_STATE['unverified_total']} unverified (needs spot-check) so far.",
+-        priority="default",
+-    )
+-
+-
+-def _quarantine(folder_name: str, pair_info: dict, out_dir: str, detail: dict):
+-    qdir = os.path.join(out_dir, "_needs_review", f"pair_{pair_info['pair']:03d}")
+-    os.makedirs(qdir, exist_ok=True)
+-    try:
+-        with open(os.path.join(qdir, "reason.json"), "w", encoding="utf-8") as f:
+-            json.dump(detail, f, indent=2, default=str)
+-    except Exception:
+-        pass
+-    msg = (f"Aradhana Catalogue ΓÇö item needs review\n"
+-          f"Folder: {folder_name}, pair {pair_info['pair']}\n"
+-          f"Failed after {_MAX_ATTEMPTS} attempts across all engines. "
+-          f"Details saved to {qdir}")
+-    desktop_alert.alert("Aradhana: item quarantined", msg, priority="high")
+-    _log(f"QUARANTINED {folder_name}#{pair_info['pair']} ΓÇö see {qdir}")
+-
+-
+-# ΓöÇΓöÇ Main autonomous loop ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+-
+-_seen_tags_lifetime  = set()
+-_seen_hashes_lifetime = set()
+-_seen_hashes_lock     = threading.Lock()
+-
+-
+-def _derive_pairs(temp_folder: str) -> list:
+-    import app
+-    files = [os.path.basename(f) for f in app._list_imgs(temp_folder)]
+-    pairs = []
+-    for i in range(0, len(files), 2):
+-        pairs.append({
+-            "pair":  i // 2 + 1,
+-            "jewel": files[i],
+-            "tag":   files[i + 1] if i + 1 < len(files) else None,
+-            "folder": temp_folder,
+-        })
+-    return pairs
+-
+-
+-def _derive_single_items(temp_folder: str) -> list:
+-    """ai_only mode: every image directly in the folder is already a
+-    finished, correctly-tag-named single item ΓÇö no jewel+tag pairing or
+-    Gemma OCR needed, the filename stem IS the label. The matching tag
+-    photo, if archived under _tag_archive/<stem>_tag.*, is still passed
+-    through as a secondary reference image when present (same role it plays
+-    in two_image mode's generation call)."""
+-    import app
+-    files = [os.path.basename(f) for f in app._list_imgs(temp_folder)]
+-    archive_dir = os.path.join(temp_folder, "_tag_archive")
+-    items = []
+-    for i, fname in enumerate(files, start=1):
+-        stem = os.path.splitext(fname)[0]
+-        tag_rel = None
+-        if os.path.isdir(archive_dir):
+-            for tag_ext in (".jpg", ".jpeg", ".png", ".webp"):
+-                candidate = f"{stem}_tag{tag_ext}"
+-                if os.path.exists(os.path.join(archive_dir, candidate)):
+-                    tag_rel = os.path.join("_tag_archive", candidate)
+-                    break
+-        items.append({
+-            "pair":   i,
+-            "jewel":  fname,
+-            "tag":    tag_rel,
+-            "folder": temp_folder,
+-            "label":  stem,
+-        })
+-    return items
+-
+-
+-def _select_pair_assets(
+-    pair_info: dict, category: str, bg_styles: list, model_images: list,
+-) -> tuple:
+-    """Resolve (bg_path, model_ref, variety) for one pair.
+-
+-    Per-PAIR cycling through the category's own bg styles and model images is
+-    the baseline ΓÇö nothing folder-specific, every folder of this category
+-    shares the same rotating sets. When AUTO2_CONFIG['varietyAuto'] is on,
+-    that baseline is overridden IF the pair's tag has a stock match with a
+-    resolvable variety-specific asset; variety_routing.resolve() never
+-    raises, so any failure (unknown tag, no matching asset) silently keeps
+-    the cycling baseline instead ΓÇö this can only improve the choice, never
+-    break a pair that would otherwise have worked. ``variety`` is "" unless
+-    a real override was applied.
+-    """
+-    idx = pair_info["pair"] - 1
+-    bg_path = resolve_category_bg_path(category, bg_styles[idx % len(bg_styles)])
+-    model_ref = model_images[idx % len(model_images)]
+-    variety = ""
+-
+-    if AUTO2_CONFIG.get("varietyAuto"):
+-        import variety_routing
+-        variety_assets = variety_routing.resolve(pair_info.get("label", ""), category)
+-        if variety_assets:
+-            bg_path = variety_assets.background_path
+-            model_ref = variety_assets.model_path
+-            variety = variety_assets.variety
+-
+-    return bg_path, model_ref, variety
+-
+-
+-def autonomous_loop():
+-    """Daemon thread body. Inert until AUTO2_CONFIG['enabled'] is True."""
+-    while True:
+-        try:
+-            if not AUTO2_CONFIG["enabled"]:
+-                AUTO2_STATE["status"] = "off"
+-                AUTO2_STATE["current"] = ""
+-                AUTO2_STATE["_last_pause_reason"] = None
+-                time.sleep(5)
+-                continue
+-
+-            ok, reason = preflight_ok()
+-            if not ok:
+-                AUTO2_STATE["status"] = "paused"
+-                AUTO2_STATE["current"] = f"ΓÅ╕ Paused ΓÇö {reason}"
+-                if AUTO2_STATE["_last_pause_reason"] != reason:
+-                    desktop_alert.alert("Aradhana Catalogue paused", reason, priority="high")
+-                    _log(f"Paused: {reason}")
+-                    AUTO2_STATE["_last_pause_reason"] = reason
+-                time.sleep(30)
+-                continue
+-            AUTO2_STATE["_last_pause_reason"] = None
+-
+-            assignments = AUTO2_CONFIG["assignments"]
+-            if not assignments:
+-                AUTO2_STATE["status"] = "watching"
+-                AUTO2_STATE["current"] = "≡ƒæü No folder assignments configured yet"
+-                time.sleep(10)
+-                continue
+-
+-            master_dir = AUTO2_CONFIG["master_dir"]
+-            output_dir = AUTO2_CONFIG["output_dir"]
+-
+-            resume = get_resume_point(master_dir, assignments)
+-            if resume is None:
+-                AUTO2_STATE["status"] = "watching"
+-                AUTO2_STATE["current"] = "Γ£à All assigned folders fully handled ΓÇö watching for changes"
+-                time.sleep(15)
+-                continue
+-
+-            folder_name = resume["folder"]
+-            row = resume["row"]
+-            AUTO2_STATE["status"] = "processing"
+-            AUTO2_STATE["current_folder"] = folder_name
+-
+-            # Exact mirror of raw images final's own folder name ΓÇö no
+-            # "_processed" suffix ΓÇö so any issue can be backtracked by
+-            # comparing the same relative path/sequence in both places.
+-            out_dir = os.path.join(output_dir, folder_name)
+-            os.makedirs(out_dir, exist_ok=True)
+-
+-            category = row.get("ornament_type", "")
+-            cat_defaults = ensure_category_defaults(category)
+-            bg_styles = cat_defaults.get("bg_styles") or []
+-            model_images = cat_defaults.get("model_images") or []
+-
+-            if not model_images:
+-                AUTO2_STATE["status"] = "paused"
+-                mi_reason = f"no model images configured for category '{category}'"
+-                AUTO2_STATE["current"] = f"ΓÅ╕ No model images for '{category}' ΓÇö {folder_name} can't process"
+-                if AUTO2_STATE["_last_pause_reason"] != mi_reason:
+-                    desktop_alert.alert("Aradhana Catalogue paused",
+-                                        f"Category '{category}' (from {folder_name}) has no model "
+-                                        f"images assigned ΓÇö pick some in Auto Mode's Category "
+-                                        f"Defaults panel and it'll resume automatically.",
+-                                        priority="high")
+-                    AUTO2_STATE["_last_pause_reason"] = mi_reason
+-                time.sleep(30)
+-                continue
+-
+-            pairs = []
+-            temp_folder = copy_folder_to_temp(master_dir, folder_name)
+-            try:
+-                pairs = (_derive_single_items(temp_folder)
+-                        if AUTO2_CONFIG.get("process_mode") == "ai_only"
+-                        else _derive_pairs(temp_folder))
+-                remaining = [p for p in pairs if p["pair"] >= resume["next_pair"]]
+-
+-                for pair_info in remaining:
+-                    if not AUTO2_CONFIG["enabled"]:
+-                        break
+-                    AUTO2_STATE["current_file"] = pair_info["pair"]
+-
+-                    idx = pair_info["pair"] - 1
+-                    bg_path, model_ref, variety = _select_pair_assets(
+-                        pair_info, category, bg_styles, model_images
+-                    )
+-                    if variety:
+-                        AUTO2_STATE["current_variety"] = variety
+-
+-                    if not bg_path:
+-                        AUTO2_STATE["status"] = "paused"
+-                        bg_reason = f"missing bg_{category}.jpg in style '{bg_styles[idx % len(bg_styles)]}'"
+-                        AUTO2_STATE["current"] = f"ΓÅ╕ {bg_reason}"
+-                        if AUTO2_STATE["_last_pause_reason"] != bg_reason:
+-                            desktop_alert.alert("Aradhana Catalogue paused", bg_reason, priority="high")
+-                            AUTO2_STATE["_last_pause_reason"] = bg_reason
+-                        time.sleep(30)
+-                        break
+-
+-                    result = run_pair(pair_info, folder_name, category,
+-                                     bg_path, model_ref, out_dir,
+-                                     _seen_tags_lifetime, _seen_hashes_lifetime, _seen_hashes_lock)
+-
+-                    if result.get("ok"):
+-                        AUTO2_STATE["done_total"] += 1
+-                        AUTO2_STATE["current"] = f"Γ£à {folder_name} pair {pair_info['pair']} complete"
+-                        if result.get("unverified"):
+-                            AUTO2_STATE["unverified_total"] += 1
+-                            _move_to_unverified_review(result)
+-                        _mark_handled(folder_name, pair_info["pair"], quarantined=False)
+-                        _maybe_notify_progress()
+-                    else:
+-                        AUTO2_STATE["quarantined_total"] += 1
+-                        _quarantine(folder_name, pair_info, out_dir,
+-                                   {"detail": result.get("detail"), "all_attempts": result.get("all_attempts", [])})
+-                        _mark_handled(folder_name, pair_info["pair"], quarantined=True)
+-                        _maybe_notify_progress()
+-
+-                    # Re-check pre-flight between items ΓÇö a systemic issue
+-                    # (connectivity drop, all engines going down) should
+-                    # pause immediately rather than burning through the
+-                    # rest of the folder first.
+-                    ok, reason = preflight_ok()
+-                    if not ok:
+-                        break
+-            finally:
+-                # Only clean up the temp copy once every pair in THIS folder
+-                # is handled ΓÇö if we broke out early (disabled/paused), the
+-                # partially-processed folder's copy is left in place so the
+-                # next resume doesn't need to re-copy from master_dir.
+-                prog = _folder_progress(folder_name)
+-                if pairs and prog["handled_up_to"] >= pairs[-1]["pair"]:
+-                    cleanup_temp_folder(folder_name)
+-
+-        except Exception as exc:
+-            AUTO2_STATE["current"] = f"ΓÜá Autonomous loop error: {exc}"
+-            _log(f"Loop error: {exc}")
+-            time.sleep(15)
+diff --git a/capture_tool.py b/capture_tool.py
+index 5aa2562..b3ddd95 100644
+--- a/capture_tool.py
++++ b/capture_tool.py
+@@ -6,13 +6,13 @@ capture.html) ΓÇö this module just receives the already-decoded code string
+ alongside the two images.
+ 
+ Kept as its own module rather than growing app.py further, matching the
+-pattern already used for autonomous_pipeline.py / verification.py.
++pattern already used for engine_cascade.py / verification.py.
+ 
+ SAVE FORMAT: only the jewellery photo is kept as the primary deliverable,
+ named directly from the confirmed tag code (e.g. tag "JB22/8" -> file
+ "JB22_8.jpg" ΓÇö "/" isn't legal in a Windows filename, so it's replaced with
+ "_", matching the same substitution the main catalogue pipeline already uses
+-when turning a resolved SKU into a filename, see autonomous_pipeline.py's
++when turning a resolved SKU into a filename, see engine_cascade.py's
+ `re.sub(r'[/\\:*?"<>|]', "_", fin["sku"])`). No more sequential NNN_jewel /
+ NNN_tag pairs. The tag photo isn't thrown away though ΓÇö it's archived into a
+ hidden `_tag_archive/` subfolder alongside the jewellery photos, so there's
+diff --git a/catalogue_tool.lock b/catalogue_tool.lock
+index ad99f60..e76cc2d 100644
+--- a/catalogue_tool.lock
++++ b/catalogue_tool.lock
+@@ -1 +1 @@
+-28280
+\ No newline at end of file
++19692
+\ No newline at end of file
+diff --git a/comfy_local_img.py b/comfy_local_img.py
+index 30971e6..d8c5d51 100644
+--- a/comfy_local_img.py
++++ b/comfy_local_img.py
+@@ -3,8 +3,8 @@ TWO-STAGE pipeline.
+ 
+ Drop-in engine matching copilot_img.generate()/gemini_web_chat.generate()'s
+ interface, so it can be selected instead of the cloud cascade via the
+-engine_mode switch (app.py's AUTO2_CONFIG["engine_mode"], read by both Auto
+-Mode and Manual Mode ΓÇö see app.py's _process_one/_do_model_shoot).
++engine_mode switch (engine_cascade.ENGINE_CONFIG["engine_mode"], read by
++Manual Mode ΓÇö see app.py's _process_one/_do_model_shoot).
+ 
+ REWRITTEN 2026-08-03 (session breakthrough, HANDOVER_2026-08-03.md ┬º27-28):
+ replaces the original single-stage FLUX.1 Kontext Stitch approach with a
+@@ -55,8 +55,13 @@ def _health_check() -> bool:
+ 
+ 
+ def _copy_to_comfy_input(src_path: str, dest_name: str) -> str:
+-    dest = os.path.join(COMFY_INPUT_DIR, dest_name)
+-    shutil.copy(src_path, dest)
++    import requests
++    with open(src_path, "rb") as f:
++        files = {"image": (dest_name, f, "image/jpeg")}
++        data = {"type": "input", "overwrite": "true"}
++        r = requests.post(f"{COMFY_URL}/upload/image", files=files, data=data, timeout=60)
++        if r.status_code != 200:
++            print(f"[COMFY-LOCAL] Upload failed: {r.text}")
+     return dest_name
+ 
+ 
+diff --git a/copilot_session.json b/copilot_session.json
+index 2f8d603..9cd7246 100644
+--- a/copilot_session.json
++++ b/copilot_session.json
+@@ -1 +1 @@
+-{"date": "2026-08-04"}
+\ No newline at end of file
++{"date": "2026-08-05"}
+\ No newline at end of file
+diff --git a/item_routing.py b/item_routing.py
+index f758f37..6f5e539 100644
+--- a/item_routing.py
++++ b/item_routing.py
+@@ -89,15 +89,22 @@ class VarietyOutputPaths:
+ 
+ def variety_output_paths(
+     record: stock_excel.StockRecord,
++    ornament_type: str,
+     *,
+     output_root: str | os.PathLike[str] = paths.OUTPUT_DIR,
+ ) -> VarietyOutputPaths:
+-    """Resolve successful deliverables without inspecting generation assets."""
++    """Resolve successful deliverables without inspecting generation assets.
++
++    Layout is ``output_root/<category>/<variety>/<tag>.jpg`` ΓÇö category is
++    the ornament type (e.g. ``ladies_rings``), variety is the stock
++    workbook's variety cell (e.g. ``GENERAL``, a specific design line).
++    """
+ 
+     variety = record.routing_variety
+     output_bucket = _safe_component(variety)
++    category_bucket = _safe_component(ornament_type)
+     tag_name = _safe_component(record.label_no)
+-    output_dir = Path(output_root) / output_bucket
++    output_dir = Path(output_root) / category_bucket / output_bucket
+     return VarietyOutputPaths(
+         variety=variety,
+         output_bucket=output_bucket,
+@@ -137,7 +144,7 @@ class ItemRouter:
+     ) -> RoutingDecision:
+         ornament = _normalise_ornament_type(ornament_type)
+         variety = record.routing_variety
+-        outputs = variety_output_paths(record, output_root=self.output_root)
++        outputs = variety_output_paths(record, ornament, output_root=self.output_root)
+ 
+         profile = _general_profile(ornament)
+         profile.update(self.manifest["general_by_ornament"].get(ornament, {}))
+diff --git a/pipeline2_loop.py b/pipeline2_loop.py
+index 8831681..f988129 100644
+--- a/pipeline2_loop.py
++++ b/pipeline2_loop.py
+@@ -10,15 +10,15 @@ anything that calls them in a loop. This module is that loop. Nothing else.
+ RUNS AS A THREAD INSIDE app.py, deliberately not as its own process (unlike
+ the AradhanaPipelineRuntime service, which only mirrors intake and refreshes
+ stock ΓÇö it never touches an engine). copilot_img.py's per-account locks are
+-plain in-memory threading.Locks, scoped to one Python process. AUTO2
+-(autonomous_pipeline.py) already runs as a thread in app.py; running this loop
+-the same way means both share those locks and can never race for the same
+-Copilot/Gemini account. Running this as a second OS process instead would
+-have no such protection.
+-
+-Inert until PIPELINE2_CONFIG["enabled"] is True ΓÇö defaults False, exactly
+-like AUTO2, so importing or starting this thread has no effect until someone
+-deliberately turns it on.
++plain in-memory threading.Locks, scoped to one Python process ΓÇö running this
++loop as a thread inside the same process means it shares those locks with
++every other engine caller and can never race for the same Copilot/Gemini
++account. Running this as a second OS process instead would have no such
++protection.
++
++Inert until PIPELINE2_CONFIG["enabled"] is True ΓÇö defaults False, so
++importing or starting this thread has no effect until someone deliberately
++turns it on.
+ """
+ from __future__ import annotations
+ 
+@@ -39,9 +39,8 @@ _DEFAULT_CONFIG = {
+ 
+ 
+ def _load_config() -> dict:
+-    """Mirrors autonomous_pipeline._load_config's exact contract: persisted
+-    config survives a restart, and unknown/stale keys are dropped rather than
+-    blindly merged in."""
++    """Persisted config survives a restart; unknown/stale keys are dropped
++    rather than blindly merged in."""
+     if os.path.exists(CONFIG_PATH):
+         try:
+             with open(CONFIG_PATH, encoding="utf-8") as f:
+diff --git a/processing_engine.py b/processing_engine.py
+index c9b84da..bfc73c6 100644
+--- a/processing_engine.py
++++ b/processing_engine.py
+@@ -57,7 +57,7 @@ class AutonomousItemProcessor:
+             )
+ 
+         import app
+-        import autonomous_pipeline as auto2
++        import engine_cascade as auto2
+ 
+         selection = _stable_selection_index(item.relative_path)
+         try:
+diff --git a/requirements.txt b/requirements.txt
+index 7e884bc..5a7b921 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -5,6 +5,7 @@ google-genai
+ openai
+ ImageHash
+ websockets
++websocket-client
+ pywin32
+ cryptography
+ pytest
+diff --git a/templates/index.html b/templates/index.html
+index 4011e0e..a0a8927 100644
+--- a/templates/index.html
++++ b/templates/index.html
+@@ -675,15 +675,7 @@ select option { background: #1a1d26; }
+   <div style="font-size:13px;color:var(--text-muted);text-transform:uppercase;
+        letter-spacing:1.2px;margin-bottom:22px">Choose how to run today</div>
+   <div class="mode-select-grid">
+-    <button class="btn mode-select-card" onclick="selectMode('auto')" style="background:var(--gold);
+-        color:#fff;box-shadow:0 8px 32px rgba(109,94,248,0.4)">
+-      <i class="fa-solid fa-robot"></i>
+-      Auto Mode
+-      <span style="font-size:12px;font-weight:400;opacity:0.85">
+-        Unattended ΓÇö works through your master archive 24/7
+-      </span>
+-    </button>
+-    <button class="btn btn-ghost mode-select-card" onclick="selectMode('manual')" style="border-color:var(--border-lit)">
++    <button class="btn btn-ghost mode-select-card" onclick="selectMode('manual')" style="border-color:var(--border-lit);background:var(--gold);color:#fff">
+       <i class="fa-solid fa-hand" style="color:var(--teal)"></i>
+       Manual Mode
+       <span style="font-size:12px;font-weight:400;color:var(--text-muted)">
+@@ -700,17 +692,14 @@ select option { background: #1a1d26; }
+     </button>
+   </div>
+ 
+-  <!-- 24/7 keep-alive indicator: Auto Mode's enabled flag is what the
+-       supervisor checks (see supervisor.ps1's Get-Auto2Enabled) before
+-       deciding whether to relaunch a closed tool ΓÇö this makes that state
+-       visible from the very first screen instead of buried in the Auto
+-       Mode panel. -->
++  <!-- Pipeline (pipeline2) 24/7 keep-alive indicator ΓÇö shown on the very
++       first screen instead of buried in a settings panel. -->
+   <div id="a2KeepAliveBadge" style="margin-top:28px;display:inline-flex;align-items:center;
+        gap:10px;padding:10px 18px;border-radius:100px;border:1px solid var(--border-lit);
+        font-size:13px;color:var(--text-muted)">
+     <span class="dot" id="a2KeepAliveDot" style="width:8px;height:8px;border-radius:50%;
+          background:var(--text-dim);display:inline-block"></span>
+-    <span id="a2KeepAliveText">Checking Auto Mode statusΓÇª</span>
++    <span id="a2KeepAliveText">Checking Pipeline statusΓÇª</span>
+   </div>
+ 
+   <!-- Read-only operational overview. It never starts, stops, or mutates the
+@@ -996,10 +985,10 @@ select option { background: #1a1d26; }
+     <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;
+                   color:var(--gold);cursor:pointer;padding:8px;margin-bottom:10px;
+                   border:1px solid var(--gold);border-radius:6px;background:rgba(212,175,55,0.08)">
+-      <input type="checkbox" id="manualLocalEngine" onchange="manualSaveEngineMode()"
+-             style="width:20px;height:20px;accent-color:var(--gold);cursor:pointer">
+-      ≡ƒûÑ∩╕Å Use LOCAL ComfyUI engine (offline, no Copilot/Gemini) ΓÇö only applies when
+-      run method below is set to "Copilot"
++      <input type="checkbox" id="manualLocalEngine" checked disabled
++             style="width:20px;height:20px;accent-color:var(--gold);cursor:not-allowed">
++      ≡ƒûÑ∩╕Å LOCAL ComfyUI engine (Klein) ΓÇö locked ON. Cloud engines (Copilot/Gemini/
++      Codex/ChatGPT) are temporarily disabled tool-wide.
+     </label>
+     <!-- Opt-in, off by default. When on, each pair's tag is looked up in the
+          validated stock workbook and its variety picks the background/model
+@@ -1180,6 +1169,15 @@ select option { background: #1a1d26; }
+         <span id="statusElapsed"></span>
+         <span class="slots-badge" id="statusSlots" style="display:none"></span>
+       </div>
++      <div id="comfyProgressRow" style="display:none;margin-top:6px">
++        <div class="progress-wrap" style="height:6px">
++          <div class="progress-fill" id="comfyProgressFill" style="background:var(--gold,#c9a86a)"></div>
++        </div>
++        <div class="progress-row">
++          <span class="progress-status" id="comfyProgressLabel"></span>
++          <span id="comfyProgressPct"></span>
++        </div>
++      </div>
+     </div>
+ 
+     <!-- FOOTER ACTIONS ΓÇö everything below is maintenance, not daily workflow,
+@@ -1388,194 +1386,6 @@ select option { background: #1a1d26; }
+ </div><!-- /main -->
+ </div><!-- /manualModeView -->
+ 
+-<!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ AUTO MODE VIEW ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
+-<div id="autoModeView" style="display:none">
+-<div class="main">
+-
+-  <button class="btn btn-ghost btn-sm" onclick="selectMode('landing')" style="align-self:flex-start">
+-    <i class="fa-solid fa-arrow-left"></i> Back to menu
+-  </button>
+-
+-  <!-- FOLDERS PANEL -->
+-  <div class="panel">
+-    <div class="panel-title"><i class="fa-solid fa-folder-tree" style="color:var(--gold)"></i> Master &amp; Output Folders</div>
+-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+-      <div>
+-        <label style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px">Master Folder (never modified)</label>
+-        <div style="display:flex;gap:8px;margin-top:6px">
+-          <input type="text" id="a2MasterDir" placeholder="C:\...\Master Archive"
+-                 style="flex:1">
+-          <button class="btn btn-ghost btn-sm" onclick="a2SaveConfig()">Set</button>
+-        </div>
+-      </div>
+-      <div>
+-        <label style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px">Output Folder</label>
+-        <div style="display:flex;gap:8px;margin-top:6px">
+-          <input type="text" id="a2OutputDir" placeholder="C:\...\Catalogue Output"
+-                 style="flex:1">
+-          <button class="btn btn-ghost btn-sm" onclick="a2SaveConfig()">Set</button>
+-        </div>
+-      </div>
+-    </div>
+-    <div id="a2ConfigMsg" style="font-size:12px;margin-top:10px;color:var(--text-muted)"></div>
+-
+-    <!-- PROCESSING MODE ΓÇö applies to the whole run, every assigned folder.
+-         "2 Image Mode": each folder holds alternating jewel/tag pairs, tag
+-         OCR'd and used to rename the output. "AI Process Only": every image
+-         is already a finished, correctly tag-named single item (raw images
+-         final / capture_intake's shared convention) ΓÇö no pairing, no OCR. -->
+-    <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;
+-                letter-spacing:0.6px;margin:14px 0 6px">Processing Mode (applies to the whole run)</div>
+-    <div class="method-pills" id="a2ProcessModePills">
+-      <div class="method-pill" id="a2pill-mode-two_image" title="Disabled ΓÇö the master archive is already renamed to tag numbers"
+-           style="opacity:0.4;cursor:not-allowed;pointer-events:none">
+-        <span class="pill-check" id="a2chk-mode-two_image" style="display:none">Γ£ô</span>
+-        <i class="fa-solid fa-image"></i> 2 Image Mode <span style="font-size:10px">(off)</span>
+-      </div>
+-      <div class="method-pill active-codex" id="a2pill-mode-ai_only" onclick="a2SelectProcessMode('ai_only')">
+-        <span class="pill-check" id="a2chk-mode-ai_only">Γ£ô</span>
+-        <i class="fa-solid fa-wand-magic-sparkles"></i> AI Process Only
+-      </div>
+-    </div>
+-
+-    <!-- NOTIFY EVERY N ΓÇö a progress ping only, never pauses the run. -->
+-    <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;
+-                letter-spacing:0.6px;margin:14px 0 6px">Notify me every N images processed</div>
+-    <div style="display:flex;gap:8px;align-items:center">
+-      <input type="number" id="a2NotifyEvery" min="0" step="1" value="50" style="width:100px">
+-      <button class="btn btn-ghost btn-sm" onclick="a2SaveNotifyEvery()">Save</button>
+-      <span id="a2NotifyMsg" style="font-size:12px;color:var(--text-muted)"></span>
+-    </div>
+-
+-    <!-- Opt-in, off by default. When on, each pair's tag is looked up in the
+-         validated stock workbook and its variety picks the background/model
+-         automatically ΓÇö falling back to the Category Defaults below,
+-         untouched, for any tag not found or with no matching asset. -->
+-    <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;
+-                letter-spacing:0.6px;margin:14px 0 6px">Variety-Aware Asset Selection</div>
+-    <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;
+-                  color:var(--text);cursor:pointer;padding:6px 0">
+-      <input type="checkbox" id="a2VarietyAuto" onchange="a2SaveVarietyAuto()"
+-             style="width:20px;height:20px;accent-color:var(--gold);cursor:pointer">
+-      Auto-select background &amp; model by stock variety
+-    </label>
+-    <div style="font-size:11.5px;color:var(--text-dim);line-height:1.5">
+-      When on: a pair whose tag is in today's stock workbook uses its variety
+-      to pick the background/model. A tag with no stock match, or no
+-      matching asset for that variety, uses the Category Defaults below ΓÇö
+-      exactly as if this were off.
+-    </div>
+-
+-    <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;
+-                letter-spacing:0.6px;margin:14px 0 6px">Model Shoot</div>
+-    <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;
+-                  color:var(--text);cursor:pointer;padding:6px 0">
+-      <input type="checkbox" id="a2ModelShootEnabled" onchange="a2SaveModelShootEnabled()"
+-             style="width:20px;height:20px;accent-color:var(--gold);cursor:pointer">
+-      Run model shoot after the studio edit
+-    </label>
+-    <div style="font-size:11.5px;color:var(--text-dim);line-height:1.5">
+-      When off: only the studio catalogue image is produced for every pair ΓÇö
+-      the model-worn shot is skipped entirely, not attempted and discarded.
+-    </div>
+-
+-    <div style="font-size:10px;color:var(--text-muted);font-weight:700;text-transform:uppercase;
+-                letter-spacing:0.6px;margin:14px 0 6px">Generation Engine</div>
+-    <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;
+-                  color:var(--text);cursor:pointer;padding:6px 0">
+-      <input type="checkbox" id="a2LocalEngine" onchange="a2SaveEngineMode()"
+-             style="width:20px;height:20px;accent-color:var(--gold);cursor:pointer">
+-      Use local ComfyUI (FLUX Kontext GGUF) instead of Copilot/Gemini
+-    </label>
+-    <div style="font-size:11.5px;color:var(--text-dim);line-height:1.5">
+-      Off (default): Copilot ΓåÆ Gemini ΓåÆ Codex ΓåÆ ChatGPT cloud cascade.
+-      On: local generation only, no cloud fallback ΓÇö requires ComfyUI Desktop
+-      running with the GGUF/CLIP/VAE models loaded. Much slower per image
+-      (~3-9 min vs ~10-30s) but works fully offline.
+-    </div>
+-  </div>
+-
+-  <!-- CATEGORY DEFAULTS ΓÇö the "smart, not folder-dependent" system: the
+-       FIRST time Auto Mode sees a new ornament category, it auto-assigns
+-       all 7 background styles + up to 7 matching model images with zero
+-       manual picking. This panel is only for reviewing/overriding a
+-       category's auto-picked sets ΓÇö it is NOT required before starting. -->
+-  <div class="panel">
+-    <div class="panel-title"><i class="fa-solid fa-wand-magic-sparkles" style="color:var(--gold)"></i> Category Defaults
+-      <span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--text-muted)">auto-assigned per category ΓÇö review or override here</span>
+-    </div>
+-    <select id="a2CatDefaultsSelect" onchange="a2LoadCategoryDefaults()" style="margin-bottom:12px">
+-      <option value="">ΓÇö pick a category to review ΓÇö</option>
+-      {% for t in types %}
+-      <option value="{{ t }}">{{ t.replace('_',' ').title() }}</option>
+-      {% endfor %}
+-    </select>
+-    <div id="a2CatDefaultsBody" style="display:none">
+-      <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:6px">Background Styles (click to toggle, cycles per pair)</div>
+-      <div id="a2CatBgGrid" class="bg-grid" style="margin-bottom:16px"></div>
+-      <div style="font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;margin-bottom:6px">Model Images (click to toggle, cycles per pair)</div>
+-      <div style="display:flex;gap:10px;margin-bottom:10px">
+-        <select id="a2ModelGroupSelect" onchange="a2OnModelGroupChange()" style="flex:1">
+-          <option value="">ΓÇö model category ΓÇö</option>
+-        </select>
+-        <select id="a2ModelStyleSelect" onchange="a2OnModelStyleChange()" style="flex:1;display:none">
+-          <option value="">ΓÇö style ΓÇö</option>
+-        </select>
+-      </div>
+-      <div id="a2ModelGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;max-height:340px;overflow-y:auto"></div>
+-      <div style="margin-top:14px">
+-        <button class="btn btn-ghost btn-sm" onclick="a2SaveCategoryDefaults()">Save this category's defaults</button>
+-        <span id="a2CatDefaultsMsg" style="font-size:12px;color:var(--text-muted);margin-left:10px"></span>
+-      </div>
+-    </div>
+-  </div>
+-
+-  <!-- ASSIGNMENT PREVIEW TABLE ΓÇö just folder + ornament type; background
+-       and model images are fully automatic per category (see above). -->
+-  <div class="panel">
+-    <div class="panel-title"><i class="fa-solid fa-table" style="color:var(--gold)"></i> Folder Assignments
+-      <button class="btn btn-ghost btn-sm" onclick="a2BuildAssignments()" style="margin-left:auto">
+-        <i class="fa-solid fa-wand-magic-sparkles"></i> Discover folders
+-      </button>
+-    </div>
+-    <div id="a2AssignTable" style="overflow-x:auto"></div>
+-    <div style="display:flex;gap:10px;margin-top:14px;align-items:center">
+-      <button class="btn btn-ghost btn-sm" onclick="a2SaveAssignments()">Save Assignments</button>
+-      <select id="a2ProcessMode" onchange="a2OnProcessModeChange()" style="width:auto;padding:8px 12px">
+-        <option value="all">Process All</option>
+-        <option value="checked">Process Checked</option>
+-        <option value="one">Process One</option>
+-      </select>
+-      <button class="btn" id="a2ProcessBtn" onclick="a2Start()" style="background:var(--gold);color:#fff;font-weight:700">
+-        <i class="fa-solid fa-play"></i> Process All
+-      </button>
+-      <button class="btn btn-ghost btn-sm" id="a2PauseBtn" onclick="a2Pause()" style="display:none;color:var(--danger)">
+-        <i class="fa-solid fa-pause"></i> Pause
+-      </button>
+-    </div>
+-  </div>
+-
+-  <!-- DETAILED PROGRESS -->
+-  <div class="panel" id="a2ProgressPanel" style="display:none">
+-    <div class="panel-title"><i class="fa-solid fa-gauge-high" style="color:var(--gold)"></i> Live Progress</div>
+-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px">
+-      <div class="stat-card gold"><div class="stat-label">Status</div><div class="stat-value" id="a2StatStatus" style="font-size:16px">ΓÇö</div></div>
+-      <div class="stat-card teal"><div class="stat-label">Folder</div><div class="stat-value" id="a2StatFolder" style="font-size:16px">ΓÇö</div></div>
+-      <div class="stat-card info"><div class="stat-label">Completed</div><div class="stat-value" id="a2StatDone">0</div></div>
+-      <div class="stat-card purple"><div class="stat-label">Quarantined</div><div class="stat-value" id="a2StatQuarantined">0</div></div>
+-      <div class="stat-card" style="background:rgba(234,179,8,0.1)"><div class="stat-label">Unverified</div><div class="stat-value" id="a2StatUnverified">0</div></div>
+-    </div>
+-    <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px" id="a2CurrentLine">ΓÇö</div>
+-    <div style="font-size:11px;color:var(--text-dim)" id="a2CheckLine"></div>
+-
+-    <div style="margin-top:16px">
+-      <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px">Recent Activity</div>
+-      <div id="a2ErrorLog" style="max-height:200px;overflow-y:auto;font-size:12px;color:var(--text-muted)"></div>
+-    </div>
+-  </div>
+-
+-</div>
+-</div><!-- /autoModeView -->
+ 
+ <script>
+ // ΓöÇΓöÇ GENERATE BG ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+@@ -2032,8 +1842,7 @@ init();
+ let _selModelPaths = [];   // ordered list of selected model reference images ΓÇö cycles per pair
+ 
+ function selectModel(path, el) {
+-  // Ordered multi-select, same pattern as AUTO2's a2ToggleModel/a2RefreshOrderBadges
+-  // below ΓÇö pair 1 uses the 1st selected model, pair 2 the 2nd, wrapping back to
++  // Ordered multi-select ΓÇö pair 1 uses the 1st selected model, pair 2 the 2nd, wrapping back to
+   // the 1st once every selected reference has been used (see app.py cycling).
+   const idx = _selModelPaths.indexOf(path);
+   if (idx !== -1) {
+@@ -2556,6 +2365,25 @@ async function pollProgress() {
+       errs.map(r => `<div>Pair ${r.pair} [${r.sku||'?'}]: ${r.error}</div>`).join('');
+   }
+ 
++  // Per-image ComfyUI progress (Klein/Variant C local engine only) ΓÇö mirrors
++  // ComfyUI's own step-by-step sampling bar (e.g. "step 2/4") so the operator
++  // never needs ComfyUI's own window open to see live generation progress.
++  const cp = j.comfy_progress;
++  const cpRow = document.getElementById('comfyProgressRow');
++  if (cp && j.running) {
++    cpRow.style.display = 'block';
++    const cpPct = cp.max > 0 ? Math.round(cp.value / cp.max * 100) : 0;
++    document.getElementById('comfyProgressFill').style.width = cpPct + '%';
++    const stageText = cp.stage === 'sampling' ? `Klein sampling ${cp.value}/${cp.max}`
++                     : cp.stage === 'disconnected' ? 'ComfyUI connection lost ΓÇö retrying'
++                     : cp.stage === 'connected' ? 'Waiting for next step'
++                     : 'Idle';
++    document.getElementById('comfyProgressLabel').textContent = cp.label ? `${stageText} ┬╖ ${cp.label}` : stageText;
++    document.getElementById('comfyProgressPct').textContent = cp.max > 0 ? `${cpPct}%` : '';
++  } else {
++    cpRow.style.display = 'none';
++  }
++
+   if (!j.running) {
+     clearInterval(_polling); _polling = null;
+     _setRunning(false);
+@@ -2932,13 +2760,11 @@ function shutdownTool() {
+ function selectMode(mode) {
+   document.getElementById('landingView').style.display   = mode === 'landing' ? 'flex' : 'none';
+   document.getElementById('manualModeView').style.display = mode === 'manual'  ? 'block' : 'none';
+-  document.getElementById('autoModeView').style.display    = mode === 'auto'    ? 'block' : 'none';
+-  if (mode === 'auto') a2Init();
+   // Reconnect to an already-running batch instead of showing the "start a
+   // new run" form ΓÇö opening Manual Mode must never look like a blank slate
+   // when a run is actually already in progress (see the DOMContentLoaded
+   // handler above for the same reasoning).
+-  if (mode === 'manual') manualReconnectIfActive();
++  if (mode === 'manual') { manualReconnectIfActive(); manualLoadEngineMode(); }
+   if (mode === 'landing') a2RefreshKeepAliveBadge();
+ }
+ 
+@@ -2949,528 +2775,46 @@ async function manualReconnectIfActive() {
+   } catch (e) {}
+ }
+ 
+-async function a2RefreshKeepAliveBadge() {
+-  const dot  = document.getElementById('a2KeepAliveDot');
+-  const text = document.getElementById('a2KeepAliveText');
+-  try {
+-    const cfg = await fetch('/api/auto2/config').then(r => r.json());
+-    if (cfg.enabled) {
+-      dot.style.background = 'var(--gold)';
+-      text.innerHTML = '<strong style="color:var(--text)">Auto Mode: ON</strong> ΓÇö running 24/7, the tool will keep coming back if closed';
+-    } else {
+-      dot.style.background = 'var(--text-dim)';
+-      text.innerHTML = '<strong style="color:var(--text)">Auto Mode: OFF</strong> ΓÇö closing the tool keeps it closed';
+-    }
+-  } catch (e) {
+-    text.textContent = 'Auto Mode status unavailable';
+-  }
+-}
+-
+-let _a2SelectedModels = [];  // {"path","group"}, in click order ΓÇö Category Defaults editor
+-let _a2SelectedCatBgs = [];  // style keys, in click order ΓÇö Category Defaults editor
+-let _a2CategorySets = {};    // full {category: {bg_styles, model_images}} from the server
+-let _a2Poll = null;
+-let _a2Initialized = false;
+-
+-async function a2LoadCategoryDefaults() {
+-  const category = document.getElementById('a2CatDefaultsSelect').value;
+-  const body = document.getElementById('a2CatDefaultsBody');
+-  if (!category) { body.style.display = 'none'; return; }
+-  body.style.display = 'block';
+-
+-  const r = await fetch('/api/auto2/category_defaults').then(x => x.json());
+-  _a2CategorySets = r.categories || {};
+-  const existing = _a2CategorySets[category] || {bg_styles: [], model_images: []};
+-  _a2SelectedCatBgs = [...(existing.bg_styles || [])];
+-  _a2SelectedModels = (existing.model_images || []).map(path => ({path}));
+-
+-  await a2RenderCatBgGrid(category);
+-
+-  // Restore the model group/style dropdowns to match this category's saved
+-  // images (derived from the first path, e.g. "female/legacy/x.jpg") ΓÇö
+-  // without this, switching categories left whatever group/style the
+-  // PREVIOUS category had selected, silently showing the wrong model
+-  // library slice for the category you're actually looking at.
+-  const groupSelect = document.getElementById('a2ModelGroupSelect');
+-  const styleSelect = document.getElementById('a2ModelStyleSelect');
+-  const firstPath = (existing.model_images || [])[0] || '';
+-  const parts = firstPath.split('/');
+-  const group = parts.length > 1 ? parts[0] : '';
+-  const style = parts.length > 2 ? parts[1] : '';
+-  groupSelect.value = group;
+-  if (group) {
+-    await a2OnModelGroupChange(style || undefined);
+-  } else {
+-    styleSelect.innerHTML = '<option value="">ΓÇö style ΓÇö</option>';
+-    styleSelect.style.display = 'none';
+-    await a2LoadModelImages();
+-  }
+-
+-  document.getElementById('a2CatDefaultsMsg').textContent = existing.bg_styles && existing.bg_styles.length
+-    ? '' : 'Not yet auto-configured ΓÇö will be assigned automatically the first time Auto Mode reaches this category, or set it manually now.';
+-}
+-
+-async function a2RenderCatBgGrid(category) {
+-  const bgs = await fetch('/api/backgrounds').then(r => r.json());
+-  const grid = document.getElementById('a2CatBgGrid');
+-  grid.innerHTML = (bgs.backgrounds || []).map(bg => `
+-    <div class="bg-tile ${_a2SelectedCatBgs.includes(bg.key) ? 'selected' : ''}" data-name="${bg.key}" onclick="a2ToggleCatBg('${bg.key}', this)">
+-      <img src="/img/bg/${encodeURIComponent(bg.key)}/bg_${encodeURIComponent(category)}.jpg" loading="lazy" onerror="this.style.display='none'">
+-      <div class="tile-name">${bg.label}</div>
+-      <div class="a2-order-badge" style="display:none"></div>
+-    </div>`).join('');
+-  a2RefreshOrderBadges('a2CatBgGrid', _a2SelectedCatBgs, t => t.dataset.name);
+-}
+-
+-function a2ToggleCatBg(key, el) {
+-  const idx = _a2SelectedCatBgs.indexOf(key);
+-  if (idx >= 0) { _a2SelectedCatBgs.splice(idx, 1); el.classList.remove('selected'); }
+-  else { _a2SelectedCatBgs.push(key); el.classList.add('selected'); }
+-  a2RefreshOrderBadges('a2CatBgGrid', _a2SelectedCatBgs, t => t.dataset.name);
+-}
+-
+-async function a2SaveCategoryDefaults() {
+-  const category = document.getElementById('a2CatDefaultsSelect').value;
+-  if (!category) return;
+-  if (!_a2SelectedCatBgs.length || !_a2SelectedModels.length) {
+-    alert('Pick at least one background style and one model image.');
+-    return;
+-  }
+-  const r = await fetch('/api/auto2/category_defaults', {
+-    method: 'POST', headers: {'Content-Type': 'application/json'},
+-    body: JSON.stringify({
+-      category,
+-      bg_styles: _a2SelectedCatBgs,
+-      model_images: _a2SelectedModels.map(m => m.path),
+-    }),
+-  }).then(x => x.json());
+-  const msg = document.getElementById('a2CatDefaultsMsg');
+-  msg.textContent = r.ok ? 'Γ£ô Saved' : 'Γ¥î ' + r.error;
+-  msg.style.color = r.ok ? 'var(--success)' : 'var(--danger)';
+-}
+-
+-async function a2SaveNotifyEvery() {
+-  const n = parseInt(document.getElementById('a2NotifyEvery').value, 10) || 0;
+-  const r = await fetch('/api/auto2/config', {
+-    method: 'POST', headers: {'Content-Type': 'application/json'},
+-    body: JSON.stringify({notify_every: n}),
+-  }).then(x => x.json());
+-  const msg = document.getElementById('a2NotifyMsg');
+-  msg.textContent = r.ok ? 'Γ£ô Saved' : 'Γ¥î ' + r.error;
+-  msg.style.color = r.ok ? 'var(--success)' : 'var(--danger)';
+-}
+-
+-async function a2SaveVarietyAuto() {
+-  const on = document.getElementById('a2VarietyAuto').checked;
++async function manualLoadEngineMode() {
++  const toggle = document.getElementById('manualLocalEngine');
++  if (!toggle) return;
+   try {
+-    const r = await fetch('/api/auto2/config', {
+-      method: 'POST', headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({varietyAuto: on}),
+-    }).then(x => x.json());
+-    if (!r.ok) throw new Error(r.error || 'save failed');
+-    // Reflect what the server actually stored, not the click ΓÇö a failed
+-    // save must not leave the switch showing a state that isn't real.
+-    document.getElementById('a2VarietyAuto').checked = !!(r.config && r.config.varietyAuto);
+-  } catch (e) {
+-    document.getElementById('a2VarietyAuto').checked = !on;
+-  }
+-}
+-
+-async function a2SaveModelShootEnabled() {
+-  const on = document.getElementById('a2ModelShootEnabled').checked;
+-  try {
+-    const r = await fetch('/api/auto2/config', {
+-      method: 'POST', headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({model_shoot_enabled: on}),
+-    }).then(x => x.json());
+-    if (!r.ok) throw new Error(r.error || 'save failed');
+-    document.getElementById('a2ModelShootEnabled').checked = !!(r.config && r.config.model_shoot_enabled);
+-  } catch (e) {
+-    document.getElementById('a2ModelShootEnabled').checked = !on;
+-  }
+-}
+-
+-async function a2SaveEngineMode() {
+-  const on = document.getElementById('a2LocalEngine').checked;
+-  try {
+-    const r = await fetch('/api/auto2/config', {
+-      method: 'POST', headers: {'Content-Type': 'application/json'},
+-      body: JSON.stringify({engine_mode: on ? 'local' : 'cloud'}),
+-    }).then(x => x.json());
+-    if (!r.ok) throw new Error(r.error || 'save failed');
+-    const isLocal = (r.config && r.config.engine_mode) === 'local';
+-    document.getElementById('a2LocalEngine').checked = isLocal;
+-    const manualToggle = document.getElementById('manualLocalEngine');
+-    if (manualToggle) manualToggle.checked = isLocal;
+-  } catch (e) {
+-    document.getElementById('a2LocalEngine').checked = !on;
+-  }
++    const cfg = await fetch('/api/engine/config').then(r => r.json());
++    toggle.checked = cfg.engine_mode === 'local';
++  } catch (e) {}
+ }
+ 
+-// Same underlying engine_mode setting as a2SaveEngineMode() above ΓÇö this is
+-// just a second, equally visible switch inside Manual Mode's panel so the
+-// user doesn't have to go find it in Auto Mode's panel first.
++// Local-vs-cloud generation switch ΓÇö shared setting, also read by Manual
++// Mode's own per-pair runner and engine_cascade.run_pair (pipeline2).
+ async function manualSaveEngineMode() {
+   const on = document.getElementById('manualLocalEngine').checked;
+   try {
+-    const r = await fetch('/api/auto2/config', {
++    const r = await fetch('/api/engine/config', {
+       method: 'POST', headers: {'Content-Type': 'application/json'},
+       body: JSON.stringify({engine_mode: on ? 'local' : 'cloud'}),
+     }).then(x => x.json());
+     if (!r.ok) throw new Error(r.error || 'save failed');
+-    const isLocal = (r.config && r.config.engine_mode) === 'local';
+-    document.getElementById('manualLocalEngine').checked = isLocal;
+-    document.getElementById('a2LocalEngine').checked = isLocal;
++    document.getElementById('manualLocalEngine').checked = (r.config && r.config.engine_mode) === 'local';
+   } catch (e) {
+     document.getElementById('manualLocalEngine').checked = !on;
+   }
+ }
+ 
+-async function a2LoadModelImages() {
+-  const group = document.getElementById('a2ModelGroupSelect').value;
+-  const style = document.getElementById('a2ModelStyleSelect').value;
+-  const params = new URLSearchParams();
+-  if (group) params.set('group', group);
+-  if (group && style) params.set('style', style);
+-  const qs = params.toString();
+-  const models = await fetch(qs ? `/api/model_images?${qs}` : '/api/model_images').then(r => r.json());
+-  const modelGrid = document.getElementById('a2ModelGrid');
+-  modelGrid.innerHTML = (models.images || []).map(m => `
+-    <div class="bg-tile" data-path="${m.path}" onclick='a2ToggleModel(${JSON.stringify(m).replace(/'/g, "&#39;")}, this)'>
+-      <img src="/img/models/${encodeURIComponent(m.path)}" loading="lazy">
+-      <div class="tile-name">${m.path.split('/').pop()}</div>
+-      <div class="a2-order-badge" style="display:none"></div>
+-    </div>`).join('');
+-  a2RefreshOrderBadges('a2ModelGrid', _a2SelectedModels, t => t.dataset.path, x => x.path);
+-}
+-
+-async function a2OnModelGroupChange(preferredStyle) {
+-  const group = document.getElementById('a2ModelGroupSelect').value;
+-  const styleSelect = document.getElementById('a2ModelStyleSelect');
+-  styleSelect.innerHTML = '<option value="">ΓÇö style ΓÇö</option>';
+-  styleSelect.style.display = 'none';
+-  if (group) {
+-    const r = await fetch(`/api/model_styles?group=${encodeURIComponent(group)}`).then(x => x.json());
+-    if (r.styles && r.styles.length) {
+-      styleSelect.style.display = '';
+-      r.styles.forEach(s => {
+-        const opt = document.createElement('option');
+-        opt.value = s;
+-        opt.textContent = s.replace(/_/g, ' ');
+-        styleSelect.appendChild(opt);
+-      });
+-      // Restore a previously SAVED style, but never invent one: the old
+-      // fallback to styles[0] landed on the alphabetically-first name, which
+-      // is underscore-prefixed ("_gallery_ear_zone_v2"), and the category zone
+-      // filter then emptied the grid for every non-earring ornament. Leaving
+-      // it blank now means "all of this group's images".
+-      if (preferredStyle && r.styles.includes(preferredStyle)) styleSelect.value = preferredStyle;
+-    }
+-  }
+-  await a2LoadModelImages();
+-}
+-
+-function a2OnModelStyleChange() {
+-  a2LoadModelImages();
+-}
+-
+-async function a2Init() {
+-  if (_a2Initialized) { a2StartPoll(); return; }
+-  _a2Initialized = true;
+-
+-  const cfg = await fetch('/api/auto2/config').then(r => r.json());
+-  document.getElementById('a2MasterDir').value = cfg.master_dir || '';
+-  document.getElementById('a2OutputDir').value = cfg.output_dir || '';
+-  document.getElementById('a2NotifyEvery').value = cfg.notify_every != null ? cfg.notify_every : 50;
+-  document.getElementById('a2VarietyAuto').checked = !!cfg.varietyAuto;
+-  document.getElementById('a2ModelShootEnabled').checked = cfg.model_shoot_enabled !== false;
+-  document.getElementById('a2LocalEngine').checked = cfg.engine_mode === 'local';
+-  const manualLocalToggle = document.getElementById('manualLocalEngine');
+-  if (manualLocalToggle) manualLocalToggle.checked = cfg.engine_mode === 'local';
+-  a2SetProcessModePill(cfg.process_mode === 'two_image' ? 'two_image' : 'ai_only');
+-
+-  const groupSelect = document.getElementById('a2ModelGroupSelect');
+-  const gr = await fetch('/api/model_groups').then(x => x.json()).catch(() => ({groups:[]}));
+-  (gr.groups || []).forEach(g => {
+-    const opt = document.createElement('option');
+-    opt.value = g;
+-    opt.textContent = g.charAt(0).toUpperCase() + g.slice(1);
+-    groupSelect.appendChild(opt);
+-  });
+-
+-  const assignRes = await fetch('/api/auto2/assignments').then(r => r.json());
+-  if (assignRes.assignments && assignRes.assignments.length) {
+-    await a2RenderAssignTable(assignRes.assignments);
+-  }
+-
+-  a2StartPoll();
+-}
+-
+-function a2ToggleModel(m, el) {
+-  const idx = _a2SelectedModels.findIndex(x => x.path === m.path);
+-  if (idx >= 0) { _a2SelectedModels.splice(idx, 1); el.classList.remove('selected'); }
+-  else { _a2SelectedModels.push(m); el.classList.add('selected'); }
+-  a2RefreshOrderBadges('a2ModelGrid', _a2SelectedModels, t => t.dataset.path, x => x.path);
+-}
+-
+-function a2SetProcessModePill(m) {
+-  ['two_image','ai_only'].forEach(k => {
+-    const pill = document.getElementById('a2pill-mode-' + k);
+-    const chk  = document.getElementById('a2chk-mode-' + k);
+-    pill.className = 'method-pill' + (k === m ? ' active-codex' : '');
+-    chk.style.display = k === m ? '' : 'none';
+-  });
+-}
+-
+-async function a2SelectProcessMode(m) {
+-  const r = await fetch('/api/auto2/config', {
+-    method: 'POST', headers: {'Content-Type': 'application/json'},
+-    body: JSON.stringify({process_mode: m}),
+-  }).then(x => x.json());
+-  if (!r.ok) { alert('Γ¥î ' + r.error); return; }
+-  a2SetProcessModePill(m);
+-}
+-
+-function a2RefreshOrderBadges(gridId, selectedList, keyFn, itemKeyFn, tileSelector) {
+-  const tiles = document.querySelectorAll(`#${gridId} ${tileSelector || '.bg-tile'}`);
+-  tiles.forEach(t => {
+-    const key = keyFn(t);
+-    const idx = selectedList.findIndex(x => (itemKeyFn ? itemKeyFn(x) : x) === key);
+-    const badge = t.querySelector('.a2-order-badge');
+-    if (idx >= 0) {
+-      badge.style.display = 'flex';
+-      badge.textContent = idx + 1;
++async function a2RefreshKeepAliveBadge() {
++  const dot  = document.getElementById('a2KeepAliveDot');
++  const text = document.getElementById('a2KeepAliveText');
++  try {
++    const cfg = await fetch('/api/pipeline2/config').then(r => r.json());
++    if (cfg.enabled) {
++      dot.style.background = 'var(--gold)';
++      text.innerHTML = '<strong style="color:var(--text)">Pipeline: ON</strong> ΓÇö running 24/7, the tool will keep coming back if closed';
+     } else {
+-      badge.style.display = 'none';
++      dot.style.background = 'var(--text-dim)';
++      text.innerHTML = '<strong style="color:var(--text)">Pipeline: OFF</strong> ΓÇö closing the tool keeps it closed';
+     }
+-  });
+-}
+-
+-async function a2SaveConfig() {
+-  const master_dir = document.getElementById('a2MasterDir').value.trim();
+-  const output_dir = document.getElementById('a2OutputDir').value.trim();
+-  const r = await fetch('/api/auto2/config', {
+-    method: 'POST', headers: {'Content-Type':'application/json'},
+-    body: JSON.stringify({master_dir, output_dir})
+-  }).then(x => x.json());
+-  const msg = document.getElementById('a2ConfigMsg');
+-  msg.textContent = r.ok ? 'Γ£ô Saved' : 'Γ¥î ' + r.error;
+-  msg.style.color = r.ok ? 'var(--success)' : 'var(--danger)';
+-}
+-
+-function a2GetOrnamentTypes() {
+-  return [...document.getElementById('catSelect').options]
+-    .map(o => o.value).filter(v => v);
+-}
+-
+-// Ordered most-specific-first ΓÇö folder names like "Ladies Ring 22" or
+-// "Gents Kada 3" need the two-word phrase checked before a bare one-word
+-// fallback (e.g. "bali" alone) would grab it first and get the gender wrong.
+-const A2_FOLDER_TYPE_RULES = [
+-  [/ladies\s*rings?/,        'ladies_rings'],
+-  [/gents?\s*rings?/,        'gents_rings'],
+-  [/ladies\s*chains?/,       'ladies_chains'],
+-  [/gents?\s*chains?/,       'gents_chains'],
+-  [/ladies\s*bracelets?/,    'ladies_bracelet'],
+-  [/gents?\s*bracelets?/,    'gents_bracelet'],
+-  [/ladies\s*kada/,          'ladies_kada'],
+-  [/gents?\s*kada/,          'gents_kada'],
+-  [/mens?\s*bali/,           'mens_bali'],
+-  [/ladies\s*bali/,          'ladies_bali'],
+-  [/\bbali\b/,               'ladies_bali'],
+-  [/mangalsutra\s*short/,    'mangalsutra_short'],
+-  [/mangalsutra\s*long/,     'mangalsutra_long'],
+-  [/mangalsutra/,            'mangalsutra_short'],
+-  [/bangles?/,               'bangles'],
+-  [/necklace/,               'necklace'],
+-  [/locket/,                 'locket'],
+-  [/pendant/,                'pendant'],
+-  [/\bwati\b/,               'wati'],
+-  [/\bsilver\b/,             'silver'],
+-  [/\bdiamond\b/,            'diamond'],
+-  [/\btops?\b/,              'tops'],
+-  [/jhumk[ai]/,              'earrings'],
+-  [/\bearrings?\b/,          'earrings'],
+-];
+-
+-function a2GuessOrnamentType(folderName) {
+-  const name = folderName.toLowerCase();
+-  const validTypes = a2GetOrnamentTypes();
+-  for (const [pattern, type] of A2_FOLDER_TYPE_RULES) {
+-    if (pattern.test(name) && validTypes.includes(type)) return type;
+-  }
+-  return validTypes[0] || 'earrings';
+-}
+-
+-async function a2BuildAssignments() {
+-  const master_dir = document.getElementById('a2MasterDir').value.trim();
+-  if (!master_dir) { alert('Set the master folder first.'); return; }
+-  await a2SaveConfig();
+-
+-  const folders = await fetch('/api/auto2/discover_folders').then(r => r.json());
+-  if (!folders.folders || !folders.folders.length) {
+-    alert('No subfolders found in the master folder.');
+-    return;
+-  }
+-
+-  // Background + model images are fully automatic per ornament category now
+-  // (see Category Defaults panel) ΓÇö a row only needs the folder and what
+-  // ornament type it actually contains. Ornament type is auto-guessed from
+-  // the folder name (e.g. "Ladies Ring 22" -> ladies_rings) ΓÇö still fully
+-  // editable per row afterward if the guess is wrong.
+-  const rows = folders.folders.map(folder => ({
+-    folder,
+-    ornament_type: a2GuessOrnamentType(folder),
+-  }));
+-  await a2RenderAssignTable(rows);
+-}
+-
+-let _a2CheckedFolders = new Set();
+-
+-async function a2RenderAssignTable(rows) {
+-  window.a2AssignRows = rows;
+-  const types = a2GetOrnamentTypes();
+-  const table = document.getElementById('a2AssignTable');
+-
+-  let statusByFolder = {};
+-  try {
+-    const pr = await fetch('/api/auto2/folder_progress').then(x => x.json());
+-    (pr.folders || []).forEach(f => { statusByFolder[f.folder] = f; });
+-  } catch (e) {}
+-
+-  const statusBadge = st => {
+-    if (!st || st.status === 'empty') return '';
+-    if (st.status === 'done') return `<span style="color:var(--success);font-size:11px">Γ£ô Done (${st.total})</span>`;
+-    if (st.status === 'partial') return `<span style="color:var(--gold);font-size:11px">ΓùÉ ${st.remaining} remaining of ${st.total}</span>`;
+-    return `<span style="color:var(--text-dim);font-size:11px">${st.total} pending</span>`;
+-  };
+-
+-  table.innerHTML = `
+-    <table style="width:100%;border-collapse:collapse;font-size:13px">
+-      <thead><tr style="text-align:left;color:var(--text-muted);font-size:11px;text-transform:uppercase">
+-        <th style="padding:6px 6px"><input type="checkbox" onchange="a2ToggleAllChecked(this)"></th>
+-        <th style="padding:6px 10px">Folder</th><th>Ornament Type</th><th>Background + Model</th><th>Status</th><th></th>
+-      </tr></thead>
+-      <tbody>
+-        ${rows.map((r, i) => {
+-          const st = statusByFolder[r.folder];
+-          const done = st && st.status === 'done';
+-          return `
+-          <tr style="border-top:1px solid var(--border)${done ? ';opacity:0.45' : ''}">
+-            <td style="padding:8px 6px"><input type="checkbox" data-folder="${r.folder}"
+-                onchange="a2ToggleFolderChecked('${r.folder}', this.checked)"
+-                ${_a2CheckedFolders.has(r.folder) ? 'checked' : ''}></td>
+-            <td style="padding:8px 10px;font-weight:600">${r.folder}</td>
+-            <td style="padding:8px 10px">
+-              <select onchange="a2AssignRows[${i}].ornament_type=this.value" style="width:auto;padding:4px 8px;font-size:12px">
+-                ${types.map(t => `<option value="${t}" ${t===r.ornament_type?'selected':''}>${t.replace(/_/g,' ')}</option>`).join('')}
+-              </select>
+-            </td>
+-            <td style="padding:8px 10px;color:var(--text-muted)">Γ£¿ Auto per category ΓÇö see Category Defaults</td>
+-            <td style="padding:8px 10px">${statusBadge(st)}</td>
+-            <td style="padding:8px 10px">
+-              <button class="btn btn-ghost btn-sm" onclick="a2ProcessOneFolder('${r.folder}')" title="Process just this folder">Γû╢</button>
+-            </td>
+-          </tr>`;
+-        }).join('')}
+-      </tbody>
+-    </table>`;
+-}
+-
+-function a2ToggleFolderChecked(folder, checked) {
+-  if (checked) _a2CheckedFolders.add(folder);
+-  else _a2CheckedFolders.delete(folder);
+-}
+-
+-function a2ToggleAllChecked(headerCheckbox) {
+-  document.querySelectorAll('#a2AssignTable tbody input[type=checkbox]').forEach(cb => {
+-    cb.checked = headerCheckbox.checked;
+-    a2ToggleFolderChecked(cb.dataset.folder, headerCheckbox.checked);
+-  });
+-}
+-
+-function a2OnProcessModeChange() {
+-  const mode = document.getElementById('a2ProcessMode').value;
+-  const btn = document.getElementById('a2ProcessBtn');
+-  const label = {all: 'Process All', checked: 'Process Checked', one: 'Process One'}[mode];
+-  btn.innerHTML = `<i class="fa-solid fa-play"></i> ${label}`;
+-}
+-
+-async function a2SaveAssignments() {
+-  if (!window.a2AssignRows || !window.a2AssignRows.length) {
+-    alert('Build the assignment table first.');
+-    return;
++  } catch (e) {
++    text.textContent = 'Pipeline status unavailable';
+   }
+-  const r = await fetch('/api/auto2/assignments', {
+-    method: 'POST', headers: {'Content-Type':'application/json'},
+-    body: JSON.stringify({assignments: window.a2AssignRows})
+-  }).then(x => x.json());
+-  alert(r.ok ? `Γ£ô Saved ${r.count} folder assignment(s)` : 'Γ¥î ' + r.error);
+-}
+-
+-async function a2StartWithFolders(folders) {
+-  const r = await fetch('/api/auto2/start', {
+-    method: 'POST', headers: {'Content-Type': 'application/json'},
+-    body: JSON.stringify(folders && folders.length ? {folders} : {}),
+-  }).then(x => x.json());
+-  if (!r.ok) { alert('Γ¥î ' + r.error); return; }
+-  document.getElementById('a2ProcessBtn').style.display = 'none';
+-  document.getElementById('a2PauseBtn').style.display = 'inline-flex';
+-  document.getElementById('a2ProgressPanel').style.display = 'block';
+-}
+-
+-async function a2Start() {
+-  const mode = document.getElementById('a2ProcessMode').value;
+-  if (mode === 'all') { return a2StartWithFolders(null); }
+-  const checked = [...(_a2CheckedFolders || [])];
+-  if (!checked.length) { alert(`Check at least one folder first (mode: ${mode === 'one' ? 'Process One' : 'Process Checked'}).`); return; }
+-  if (mode === 'one' && checked.length > 1) { alert('Process One expects exactly one checked folder ΓÇö uncheck the rest, or switch to Process Checked.'); return; }
+-  return a2StartWithFolders(checked);
+-}
+-
+-async function a2ProcessOneFolder(folder) {
+-  await a2StartWithFolders([folder]);
+-}
+-
+-async function a2Pause() {
+-  await fetch('/api/auto2/pause', {method: 'POST'});
+-  document.getElementById('a2ProcessBtn').style.display = 'inline-flex';
+-  document.getElementById('a2PauseBtn').style.display = 'none';
+-}
+-
+-function a2StartPoll() {
+-  if (_a2Poll) return;
+-  _a2Poll = setInterval(a2PollStatus, 2000);
+-  a2PollStatus();
+-}
+-
+-async function a2PollStatus() {
+-  try {
+-    const s = await fetch('/api/auto2/status').then(r => r.json());
+-    window.__autoRunActive = !!s.status && s.status !== 'off';
+-    document.getElementById('a2StatStatus').textContent = s.status || 'ΓÇö';
+-    document.getElementById('a2StatFolder').textContent = s.current_folder || 'ΓÇö';
+-    document.getElementById('a2StatDone').textContent = s.done_total || 0;
+-    document.getElementById('a2StatQuarantined').textContent = s.quarantined_total || 0;
+-    document.getElementById('a2StatUnverified').textContent = s.unverified_total || 0;
+-    document.getElementById('a2CurrentLine').textContent = s.current || 'ΓÇö';
+-    document.getElementById('a2CheckLine').textContent =
+-      s.engine ? `Engine: ${s.engine} ┬╖ attempt ${s.attempt} ┬╖ check: ${s.current_check}` : '';
+-
+-    if (s.enabled) {
+-      document.getElementById('a2ProcessBtn').style.display = 'none';
+-      document.getElementById('a2PauseBtn').style.display = 'inline-flex';
+-      document.getElementById('a2ProgressPanel').style.display = 'block';
+-    }
+-
+-    const log = document.getElementById('a2ErrorLog');
+-    log.innerHTML = (s.error_log || []).map(e => {
+-      const t = new Date(e.ts * 1000).toLocaleTimeString();
+-      return `<div style="padding:3px 0;border-bottom:1px solid var(--border)">
+-        <span style="color:var(--text-dim)">${t}</span> ΓÇö ${e.msg}
+-      </div>`;
+-    }).join('') || '<div style="color:var(--text-dim)">No activity yet</div>';
+-  } catch (e) {}
+ }
+ 
+ // ΓöÇΓöÇ Read-only pipeline dashboard ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+@@ -4244,12 +3588,8 @@ async function fetchPipelineLiveSnapshot(force = false) {
+ // run that's already going.
+ document.addEventListener('DOMContentLoaded', async () => {
+   try {
+-    const [manualStatus, autoStatus] = await Promise.all([
+-      fetch('/api/chatgpt_progress').then(r => r.json()).catch(() => null),
+-      fetch('/api/auto2/status').then(r => r.json()).catch(() => null),
+-    ]);
++    const manualStatus = await fetch('/api/chatgpt_progress').then(r => r.json()).catch(() => null);
+     if (manualStatus && manualStatus.running) { selectMode('manual'); return; }
+-    if (autoStatus && autoStatus.status && autoStatus.status !== 'off') { selectMode('auto'); return; }
+   } catch (e) { /* fall through to landing */ }
+   selectMode('landing');
+ });
+diff --git a/tests/test_auto2_variety_route.py b/tests/test_auto2_variety_route.py
+deleted file mode 100644
+index 82c8a64..0000000
+--- a/tests/test_auto2_variety_route.py
++++ /dev/null
+@@ -1,59 +0,0 @@
+-"""/api/auto2/config's varietyAuto field: must validate strictly (bool only)
+-and never leave AUTO2_CONFIG changed on a rejected request ΓÇö same convention
+-as every other field on this route (master_dir, process_mode, notify_every)."""
+-import os
+-import sys
+-
+-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+-
+-import pytest
+-
+-
+-@pytest.fixture
+-def client():
+-    import app
+-    import autonomous_pipeline as auto2
+-
+-    saved = dict(auto2.AUTO2_CONFIG)
+-    monkeypatch_save = auto2.save_config
+-    auto2.save_config = lambda: None  # don't touch the real auto2_config.json
+-    app.app.config["TESTING"] = True
+-    c = app.app.test_client()
+-    with c.session_transaction() as s:
+-        s["authed"] = True
+-    yield c
+-    auto2.save_config = monkeypatch_save
+-    auto2.AUTO2_CONFIG.clear()
+-    auto2.AUTO2_CONFIG.update(saved)
+-
+-
+-def test_variety_auto_can_be_turned_on(client):
+-    r = client.post("/api/auto2/config", json={"varietyAuto": True})
+-    assert r.status_code == 200
+-    body = r.get_json()
+-    assert body["ok"] is True
+-    assert body["config"]["varietyAuto"] is True
+-
+-
+-def test_variety_auto_can_be_turned_off(client):
+-    client.post("/api/auto2/config", json={"varietyAuto": True})
+-    r = client.post("/api/auto2/config", json={"varietyAuto": False})
+-    assert r.get_json()["config"]["varietyAuto"] is False
+-
+-
+-@pytest.mark.parametrize("bad", ["true", 1, "1", None, [], {}])
+-def test_variety_auto_rejects_non_boolean(client, bad):
+-    import autonomous_pipeline as auto2
+-
+-    before = auto2.AUTO2_CONFIG["varietyAuto"]
+-    r = client.post("/api/auto2/config", json={"varietyAuto": bad})
+-    assert r.status_code == 400
+-    assert auto2.AUTO2_CONFIG["varietyAuto"] == before, (
+-        "a rejected request must not change the stored value"
+-    )
+-
+-
+-def test_get_reflects_current_value(client):
+-    client.post("/api/auto2/config", json={"varietyAuto": True})
+-    r = client.get("/api/auto2/config")
+-    assert r.get_json()["varietyAuto"] is True
+diff --git a/tests/test_autonomous_pipeline.py b/tests/test_autonomous_pipeline.py
+deleted file mode 100644
+index cd2fa7a..0000000
+--- a/tests/test_autonomous_pipeline.py
++++ /dev/null
+@@ -1,305 +0,0 @@
+-"""
+-Tests for the new folder-wise autonomous pipeline (autonomous_pipeline.py):
+-natural-sort folder discovery, master-data immutability of the temp-copy
+-step, and resume-point calculation from a synthetic auto2_progress.json ΓÇö
+-mirrors the existing tests/test_atomic_write.py monkeypatch style.
+-"""
+-import sys, os, hashlib
+-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+-
+-import pytest
+-
+-import autonomous_pipeline as auto2
+-
+-
+-@pytest.fixture(autouse=True)
+-def isolated_auto2_config():
+-    """
+-    AUTO2_CONFIG is a live module-level singleton loaded from the REAL
+-    auto2_config.json at import time, so without this every test silently
+-    inherits whatever the production tool was last set to. That is not a
+-    hypothetical: a live run that set process_mode="ai_only" broke the
+-    pair-counting tests, and a later run that scoped active_folders to one
+-    folder broke the resume tests (every "Folder 1" fixture was skipped as
+-    out-of-scope, so get_resume_point returned None).
+-
+-    Patching one key per incident just moves the tripwire to the next key
+-    added, so restore the whole dict around each test instead.
+-    """
+-    saved = dict(auto2.AUTO2_CONFIG)
+-    auto2.AUTO2_CONFIG.update({"process_mode": "two_image", "active_folders": None})
+-    yield
+-    auto2.AUTO2_CONFIG.clear()
+-    auto2.AUTO2_CONFIG.update(saved)
+-
+-
+-def test_natural_key_sorts_folders_numerically():
+-    names = ["Folder 10", "Folder 2", "Folder 1", "Folder 20"]
+-    names.sort(key=auto2._natural_key)
+-    assert names == ["Folder 1", "Folder 2", "Folder 10", "Folder 20"]
+-
+-
+-def test_discover_master_folders_natural_sorted(tmp_path):
+-    for n in ["Folder 10", "Folder 2", "Folder 1"]:
+-        (tmp_path / n).mkdir()
+-    (tmp_path / "not_a_dir.txt").write_text("x")
+-    result = auto2.discover_master_folders(str(tmp_path))
+-    assert result == ["Folder 1", "Folder 2", "Folder 10"]
+-
+-
+-def test_discover_master_folders_missing_dir_returns_empty():
+-    assert auto2.discover_master_folders(r"C:\does\not\exist") == []
+-
+-
+-def test_discover_master_folders_empty_arg_returns_empty():
+-    assert auto2.discover_master_folders("") == []
+-
+-
+-def _md5(path):
+-    with open(path, "rb") as f:
+-        return hashlib.md5(f.read()).hexdigest()
+-
+-
+-def test_copy_folder_to_temp_never_modifies_master(tmp_path, monkeypatch):
+-    master = tmp_path / "master"
+-    (master / "Folder 1").mkdir(parents=True)
+-    src_file = master / "Folder 1" / "IMG_0001.jpg"
+-    src_file.write_bytes(b"original jewellery photo bytes")
+-    original_hash = _md5(str(src_file))
+-
+-    monkeypatch.setattr(auto2, "TEMP_ROOT", str(tmp_path / "_auto2_temp"))
+-    temp_dir = auto2.copy_folder_to_temp(str(master), "Folder 1")
+-
+-    # Mutate/delete the TEMP copy only.
+-    copied_file = os.path.join(temp_dir, "IMG_0001.jpg")
+-    os.remove(copied_file)
+-
+-    # Master file must be completely untouched.
+-    assert src_file.exists()
+-    assert _md5(str(src_file)) == original_hash
+-
+-    auto2.cleanup_temp_folder("Folder 1")
+-    assert not os.path.isdir(temp_dir)
+-
+-
+-def test_mark_handled_and_folder_progress_round_trip(tmp_path, monkeypatch):
+-    monkeypatch.setattr(auto2, "PROGRESS_PATH", str(tmp_path / "auto2_progress.json"))
+-    auto2._mark_handled("Folder 1", 1, quarantined=False)
+-    auto2._mark_handled("Folder 1", 2, quarantined=True)
+-    prog = auto2._folder_progress("Folder 1")
+-    assert prog["handled_up_to"] == 2
+-    assert prog["quarantined"] == [2]
+-
+-
+-def test_mark_handled_does_not_regress_handled_up_to(tmp_path, monkeypatch):
+-    monkeypatch.setattr(auto2, "PROGRESS_PATH", str(tmp_path / "auto2_progress.json"))
+-    auto2._mark_handled("Folder 1", 5, quarantined=False)
+-    auto2._mark_handled("Folder 1", 3, quarantined=False)
+-    assert auto2._folder_progress("Folder 1")["handled_up_to"] == 5
+-
+-
+-def test_folder_progress_missing_folder_returns_default(tmp_path, monkeypatch):
+-    monkeypatch.setattr(auto2, "PROGRESS_PATH", str(tmp_path / "auto2_progress.json"))
+-    assert auto2._folder_progress("Never Touched") == {"handled_up_to": 0, "quarantined": []}
+-
+-
+-def _make_folder_with_n_images(master, folder_name, n):
+-    d = master / folder_name
+-    d.mkdir(parents=True)
+-    for i in range(n):
+-        (d / f"IMG_{i:04d}.jpg").write_bytes(b"x")
+-
+-
+-def test_get_resume_point_resumes_mid_folder(tmp_path, monkeypatch):
+-    master = tmp_path / "master"
+-    _make_folder_with_n_images(master, "Folder 1", 6)   # 3 pairs
+-    _make_folder_with_n_images(master, "Folder 2", 4)   # 2 pairs
+-    monkeypatch.setattr(auto2, "PROGRESS_PATH", str(tmp_path / "auto2_progress.json"))
+-
+-    auto2._mark_handled("Folder 1", 1, quarantined=False)  # 1 of 3 pairs done
+-
+-    assignments = [
+-        {"folder": "Folder 1", "background": "bg1.jpg", "model_image": "m1.jpg", "ornament_type": "earrings"},
+-        {"folder": "Folder 2", "background": "bg2.jpg", "model_image": "m2.jpg", "ornament_type": "rings"},
+-    ]
+-    resume = auto2.get_resume_point(str(master), assignments)
+-    assert resume["folder"] == "Folder 1"
+-    assert resume["next_pair"] == 2
+-    assert resume["total_pairs"] == 3
+-
+-
+-def test_get_resume_point_moves_to_next_folder_when_first_is_done(tmp_path, monkeypatch):
+-    master = tmp_path / "master"
+-    _make_folder_with_n_images(master, "Folder 1", 2)   # 1 pair
+-    _make_folder_with_n_images(master, "Folder 2", 4)   # 2 pairs
+-    monkeypatch.setattr(auto2, "PROGRESS_PATH", str(tmp_path / "auto2_progress.json"))
+-
+-    auto2._mark_handled("Folder 1", 1, quarantined=False)  # fully done
+-
+-    assignments = [
+-        {"folder": "Folder 1", "background": "bg1.jpg", "model_image": "m1.jpg", "ornament_type": "earrings"},
+-        {"folder": "Folder 2", "background": "bg2.jpg", "model_image": "m2.jpg", "ornament_type": "rings"},
+-    ]
+-    resume = auto2.get_resume_point(str(master), assignments)
+-    assert resume["folder"] == "Folder 2"
+-    assert resume["next_pair"] == 1
+-
+-
+-def test_get_resume_point_returns_none_when_all_folders_done(tmp_path, monkeypatch):
+-    master = tmp_path / "master"
+-    _make_folder_with_n_images(master, "Folder 1", 2)
+-    monkeypatch.setattr(auto2, "PROGRESS_PATH", str(tmp_path / "auto2_progress.json"))
+-    auto2._mark_handled("Folder 1", 1, quarantined=False)
+-
+-    assignments = [{"folder": "Folder 1", "background": "bg1.jpg",
+-                    "model_image": "m1.jpg", "ornament_type": "earrings"}]
+-    assert auto2.get_resume_point(str(master), assignments) is None
+-
+-
+-def test_quarantined_items_count_as_handled_for_resume(tmp_path, monkeypatch):
+-    """A quarantined pair must not be endlessly retried on every restart."""
+-    master = tmp_path / "master"
+-    _make_folder_with_n_images(master, "Folder 1", 4)  # 2 pairs
+-    monkeypatch.setattr(auto2, "PROGRESS_PATH", str(tmp_path / "auto2_progress.json"))
+-    auto2._mark_handled("Folder 1", 1, quarantined=True)
+-
+-    assignments = [{"folder": "Folder 1", "background": "bg1.jpg",
+-                    "model_image": "m1.jpg", "ornament_type": "earrings"}]
+-    resume = auto2.get_resume_point(str(master), assignments)
+-    assert resume["next_pair"] == 2
+-
+-
+-def test_derive_pairs_splits_files_into_jewel_tag_pairs(tmp_path):
+-    d = tmp_path / "Folder 1"
+-    d.mkdir()
+-    for name in ["IMG_0001.jpg", "IMG_0002.jpg", "IMG_0003.jpg"]:
+-        (d / name).write_bytes(b"x")
+-    pairs = auto2._derive_pairs(str(d))
+-    assert len(pairs) == 2
+-    assert pairs[0]["pair"] == 1 and pairs[0]["tag"] == "IMG_0002.jpg"
+-    assert pairs[1]["pair"] == 2 and pairs[1]["tag"] is None  # odd file out
+-
+-
+-def test_preflight_ok_fails_when_master_dir_missing(monkeypatch):
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "master_dir", r"C:\does\not\exist")
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "output_dir", "")
+-    ok, reason = auto2.preflight_ok()
+-    assert ok is False
+-    assert "Master folder not found" in reason
+-
+-
+-def test_preflight_ok_fails_when_output_dir_missing(tmp_path, monkeypatch):
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "master_dir", str(tmp_path))
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "output_dir", "")
+-    ok, reason = auto2.preflight_ok()
+-    assert ok is False
+-    assert "No output folder" in reason
+-
+-
+-def test_select_best_engine_skips_engines_with_no_accounts(monkeypatch):
+-    """An engine nobody has logged into is not a usable fallback.
+-
+-    ENGINE_HEALTH reports a never-configured engine as perfectly healthy
+-    (failures=0, no rate limit), which previously made it a valid pick.
+-    """
+-    import app
+-    monkeypatch.setattr(app, "_engine_has_capacity",
+-                        lambda eng: eng == "codex")
+-    assert app._select_best_engine() == "codex"
+-
+-    monkeypatch.setattr(app, "_engine_has_capacity", lambda eng: False)
+-    assert app._select_best_engine() is None
+-
+-
+-def test_preflight_pauses_when_cascade_engines_unconfigured(tmp_path, monkeypatch):
+-    """The real regression: Copilot exhausted + Gemini never set up used to
+-    pass preflight, so the loop quarantined six pairs in six seconds instead
+-    of pausing. Capacity of the cascade's OWN engines is what matters ΓÇö an
+-    available codex does not help a cascade that never calls codex."""
+-    import app
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "master_dir", str(tmp_path))
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "output_dir", str(tmp_path / "out"))
+-    monkeypatch.setattr(app, "_engine_has_capacity",
+-                        lambda eng: eng not in auto2._ENGINE_ORDER)
+-
+-    ok, reason = auto2.preflight_ok()
+-    assert ok is False
+-    assert "not set up" in reason
+-    for eng in auto2._ENGINE_ORDER:
+-        assert eng in reason
+-
+-
+-# ΓöÇΓöÇ varietyAuto: opt-in per-pair asset override ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+-
+-def test_variety_auto_defaults_off():
+-    """Must default False so an existing run that has never touched this
+-    setting keeps its exact current cycling behaviour."""
+-    assert auto2._DEFAULT_CONFIG["varietyAuto"] is False
+-
+-
+-def test_select_pair_assets_uses_cycling_when_variety_auto_is_off(monkeypatch):
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "varietyAuto", False)
+-    monkeypatch.setattr(auto2, "resolve_category_bg_path", lambda cat, style: f"/bg/{style}.jpg")
+-
+-    bg_path, model_ref, variety = auto2._select_pair_assets(
+-        {"pair": 1, "label": "LC22_13"}, "locket", ["Regular"], ["/model/a.jpg"]
+-    )
+-
+-    assert bg_path == "/bg/Regular.jpg"
+-    assert model_ref == "/model/a.jpg"
+-    assert variety == ""
+-
+-
+-def test_select_pair_assets_never_calls_variety_routing_when_off(monkeypatch):
+-    """If this module gets imported/called even while off, an unconfigured
+-    or slow stock lookup could quietly cost every pair extra latency for a
+-    feature nobody turned on."""
+-    import variety_routing
+-
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "varietyAuto", False)
+-    monkeypatch.setattr(auto2, "resolve_category_bg_path", lambda cat, style: "/bg/x.jpg")
+-
+-    def _boom(*a, **k):
+-        raise AssertionError("variety_routing.resolve must not be called when varietyAuto is off")
+-    monkeypatch.setattr(variety_routing, "resolve", _boom)
+-
+-    auto2._select_pair_assets({"pair": 1, "label": "LC22_13"}, "locket", ["Regular"], ["/model/a.jpg"])
+-
+-
+-def test_select_pair_assets_uses_variety_match_when_on(monkeypatch):
+-    import variety_routing
+-
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "varietyAuto", True)
+-    monkeypatch.setattr(auto2, "resolve_category_bg_path", lambda cat, style: "/bg/cycled.jpg")
+-    monkeypatch.setattr(
+-        variety_routing, "resolve",
+-        lambda tag, cat, **k: variety_routing.VarietyAssets(
+-            background_path="/bg/variety.jpg", model_path="/model/variety.jpg", variety="ANTIQUE",
+-        ),
+-    )
+-
+-    bg_path, model_ref, variety = auto2._select_pair_assets(
+-        {"pair": 1, "label": "LC22_13"}, "locket", ["Regular"], ["/model/cycled.jpg"]
+-    )
+-
+-    assert bg_path == "/bg/variety.jpg"
+-    assert model_ref == "/model/variety.jpg"
+-    assert variety == "ANTIQUE"
+-
+-
+-def test_select_pair_assets_falls_back_to_cycling_on_no_match(monkeypatch):
+-    """The core safety property: an unresolved tag must fall back to EXACTLY
+-    the cycling selection, not fail, not pause, not skip the pair."""
+-    import variety_routing
+-
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "varietyAuto", True)
+-    monkeypatch.setattr(auto2, "resolve_category_bg_path", lambda cat, style: "/bg/cycled.jpg")
+-    monkeypatch.setattr(variety_routing, "resolve", lambda tag, cat, **k: None)
+-
+-    bg_path, model_ref, variety = auto2._select_pair_assets(
+-        {"pair": 1, "label": "UNKNOWN_TAG"}, "locket", ["Regular"], ["/model/cycled.jpg"]
+-    )
+-
+-    assert bg_path == "/bg/cycled.jpg"
+-    assert model_ref == "/model/cycled.jpg"
+-    assert variety == ""
+diff --git a/tests/test_engine_wiring.py b/tests/test_engine_wiring.py
+index 0e2c914..2eaab80 100644
+--- a/tests/test_engine_wiring.py
++++ b/tests/test_engine_wiring.py
+@@ -29,12 +29,12 @@ def _src(name):
+ # ΓöÇΓöÇ 1. Engine keys must line up across modules ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+ 
+ def test_pipeline_engine_names_exist_in_engine_health():
+-    """autonomous_pipeline._ENGINE_ORDER used the key "gemini_web" while
++    """engine_cascade._ENGINE_ORDER used the key "gemini_web" while
+     app.ENGINE_HEALTH only had "gemini_webchat". Every fallback attempt then
+-    died on KeyError inside the loop's own error handler, so Auto Mode span
++    died on KeyError inside the loop's own error handler, so the run spun
+     forever on pair 1 without completing or failing it."""
+     import app
+-    import autonomous_pipeline as auto2
++    import engine_cascade as auto2
+     for eng in auto2._ENGINE_ORDER:
+         assert eng in app.ENGINE_HEALTH, (
+             f"_ENGINE_ORDER references '{eng}' which is not a key in "
+@@ -279,11 +279,6 @@ def test_no_entry_point_bypasses_the_mode_authority():
+     )
+ 
+ 
+-def test_pipeline_default_is_ai_only():
+-    import autonomous_pipeline as auto2
+-    assert auto2._DEFAULT_CONFIG["process_mode"] == "ai_only"
+-
+-
+ def test_ui_cannot_click_two_image():
+     html = _src(os.path.join("templates", "index.html"))
+     assert "selectProcessMode('two_image')" not in html
+@@ -697,13 +692,13 @@ def test_cookie_gemini_download_adapter_accepts_saved_path(tmp_path):
+ 
+ def test_production_generation_uses_bounded_headless_gemini_only():
+     app_src = _src("app.py")
+-    autonomous_src = _src("autonomous_pipeline.py")
++    cascade_src = _src("engine_cascade.py")
+     assert "import gemini_web_chat" not in app_src
+-    assert "import gemini_web_chat" not in autonomous_src
++    assert "import gemini_web_chat" not in cascade_src
+     assert app_src.count("import gemini_headless as _gwc") >= 3
+-    assert "import gemini_headless as _gwc" in autonomous_src
++    assert "import gemini_headless as _gwc" in cascade_src
+     assert "import gemini_img as _gwc" not in app_src
+-    assert "import gemini_img as _gwc" not in autonomous_src
++    assert "import gemini_img as _gwc" not in cascade_src
+     assert '"gemini_headless"' in app_src
+ 
+ 
+diff --git a/tests/test_item_routing.py b/tests/test_item_routing.py
+index ce216c5..1530cb2 100644
+--- a/tests/test_item_routing.py
++++ b/tests/test_item_routing.py
+@@ -45,8 +45,8 @@ def test_named_variety_only_changes_output_folder(tmp_path):
+ 
+     assert decision.variety == "ANTIQUE"
+     assert decision.output_bucket == "ANTIQUE"
+-    assert decision.studio_output == tmp_path / "output/ANTIQUE/LC22_13.jpg"
+-    assert decision.model_output == tmp_path / "output/ANTIQUE/LC22_13_2.jpg"
++    assert decision.studio_output == tmp_path / "output/locket/ANTIQUE/LC22_13.jpg"
++    assert decision.model_output == tmp_path / "output/locket/ANTIQUE/LC22_13_2.jpg"
+     assert decision.background_theme == "Regular"
+     assert decision.model_pose == "neck"
+     assert decision.model_candidates == (model.resolve(),)
+diff --git a/tests/test_manual_variety_routing.py b/tests/test_manual_variety_routing.py
+index 8b51e5f..59611e5 100644
+--- a/tests/test_manual_variety_routing.py
++++ b/tests/test_manual_variety_routing.py
+@@ -1,5 +1,5 @@
+-"""_resolve_pair_assets: the Manual Mode equivalent of
+-autonomous_pipeline._select_pair_assets. Baseline is the existing per-pair
++"""_resolve_pair_assets: Manual Mode's own per-pair asset resolution.
++Baseline is the existing per-pair
+ cycling ΓÇö default False means every job runner's exact current behaviour is
+ unchanged for an operator who hasn't opted in. When on, a resolved variety
+ match overrides bg_path/model_cfg for that pair only; anything unresolved
+diff --git a/tests/test_ornament_placement.py b/tests/test_ornament_placement.py
+index 42d3da0..1f85c07 100644
+--- a/tests/test_ornament_placement.py
++++ b/tests/test_ornament_placement.py
+@@ -3,7 +3,7 @@ import hashlib
+ 
+ import pytest
+ 
+-import autonomous_pipeline
++import engine_cascade
+ import app
+ import model_engine
+ from jewellery_image_policy import build_studio_edit_prompt
+@@ -104,10 +104,10 @@ def test_three_image_legacy_prompt_keeps_tag_out_of_destination_role():
+ 
+ def test_wati_uses_reviewed_mangalsutra_background_without_deleting_legacy_asset():
+     assert background_asset_category("wati") == "mangalsutra_short"
+-    resolved = autonomous_pipeline.resolve_category_bg_path("wati", "Regular")
++    resolved = engine_cascade.resolve_category_bg_path("wati", "Regular")
+     assert resolved is not None
+     assert Path(resolved).name == "bg_mangalsutra_short.jpg"
+-    legacy = Path(autonomous_pipeline.BASE) / "backgrounds" / "Regular" / "bg_wati.jpg"
++    legacy = Path(engine_cascade.BASE) / "backgrounds" / "Regular" / "bg_wati.jpg"
+     assert legacy.is_file()
+ 
+ 
+diff --git a/tests/test_processing_engine.py b/tests/test_processing_engine.py
+index fd26f73..3414be4 100644
+--- a/tests/test_processing_engine.py
++++ b/tests/test_processing_engine.py
+@@ -44,7 +44,7 @@ def _delivery(path):
+ @pytest.fixture
+ def fake_auto(monkeypatch, tmp_path):
+     import app
+-    import autonomous_pipeline as auto2
++    import engine_cascade as auto2
+ 
+     model = tmp_path / "models" / "female" / "ear_front.jpg"
+     _delivery(model)
+diff --git a/tests/test_routing_preview.py b/tests/test_routing_preview.py
+index 4a26198..a18c998 100644
+--- a/tests/test_routing_preview.py
++++ b/tests/test_routing_preview.py
+@@ -83,8 +83,8 @@ def test_shared_preview_refreshes_stock_and_returns_only_relative_paths(tmp_path
+     assert result["variety"] == "ANTIQUE"
+     assert result["output_bucket"] == "ANTIQUE"
+     assert result["output"] == {
+-        "studio": "ANTIQUE/LC22_13.jpg",
+-        "model": "ANTIQUE/LC22_13_2.jpg",
++        "studio": "locket/ANTIQUE/LC22_13.jpg",
++        "model": "locket/ANTIQUE/LC22_13_2.jpg",
+     }
+     assert result["background"] == {
+         "theme": "Regular",
+diff --git a/tests/test_stock_category_routes.py b/tests/test_stock_category_routes.py
+index 0b1f852..d328600 100644
+--- a/tests/test_stock_category_routes.py
++++ b/tests/test_stock_category_routes.py
+@@ -1,10 +1,9 @@
+ """
+ _resolve_stock_category and its wiring into every manual-mode entry point
+-(/api/copilot_run, /api/chatgpt_run, /api/codex_run) plus
+-/api/auto2/category_defaults. All four accept a category from the operator
+-and must translate a new stock_category_map key the same way ΓÇö this file
+-exists because that class of "wired into some call sites, not all" bug has
+-repeatedly shipped in this codebase before.
++(/api/copilot_run, /api/chatgpt_run, /api/codex_run). All three accept a
++category from the operator and must translate a new stock_category_map key
++the same way ΓÇö this file exists because that class of "wired into some call
++sites, not all" bug has repeatedly shipped in this codebase before.
+ """
+ import os
+ import sys
+@@ -53,47 +52,20 @@ def client(monkeypatch):
+     yield c
+ 
+ 
+-@pytest.mark.parametrize("route", ["/api/copilot_run", "/api/chatgpt_run"])
+-def test_ready_new_category_is_accepted(client, route):
+-    r = client.post(route, json={"category": "ladies_ring_22", "pairs": [1], "bg": "Regular"})
++def test_ready_new_category_is_accepted(client):
++    r = client.post("/api/copilot_run", json={"category": "ladies_ring_22", "pairs": [1], "bg": "Regular"})
+     assert r.status_code == 200
+ 
+ 
+-@pytest.mark.parametrize("route", ["/api/copilot_run", "/api/chatgpt_run"])
+-def test_needs_setup_new_category_is_rejected_with_400(client, route):
+-    r = client.post(route, json={"category": "jhumka_22", "pairs": [1], "bg": "Regular"})
++def test_needs_setup_new_category_is_rejected_with_400(client):
++    r = client.post("/api/copilot_run", json={"category": "jhumka_22", "pairs": [1], "bg": "Regular"})
+     assert r.status_code == 400
+     assert "JHUMKA 22" in r.get_json()["error"]
+ 
+ 
+-def test_codex_run_rejects_needs_setup_category(client, monkeypatch):
+-    monkeypatch.setattr(app, "_derive_single_items_from_disk", lambda: [])
+-    monkeypatch.setattr(app, "_derive_pairs_from_disk", lambda: [])
+-    r = client.post("/api/codex_run", json={"category": "tikka_18", "bg": "Regular"})
+-    assert r.status_code == 400
+-    assert "TIKKA 18" in r.get_json()["error"]
+-
+-
+-def test_category_defaults_rejects_needs_setup_category(client, monkeypatch):
+-    import autonomous_pipeline as auto2
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "category_bg_model_sets", {})
+-    r = client.post("/api/auto2/category_defaults", json={
+-        "category": "nath_22", "bg_styles": [], "model_images": [],
+-    })
+-    assert r.status_code == 400
+-    assert "NATH 22" in r.get_json()["error"]
+-
+-
+-def test_category_defaults_accepts_ready_new_category(client, monkeypatch):
+-    import autonomous_pipeline as auto2
+-    monkeypatch.setitem(auto2.AUTO2_CONFIG, "category_bg_model_sets", {})
+-    monkeypatch.setattr(auto2, "save_config", lambda: None)
+-    r = client.post("/api/auto2/category_defaults", json={
+-        "category": "locket_18", "bg_styles": ["Regular"], "model_images": ["female/legacy/hand_both.jpg"],
+-    })
+-    assert r.status_code == 200, r.get_json()
+-    # Stored under the translated LEGACY key ("locket"), not the new one ΓÇö
+-    # this is what keeps it sharing the same bucket as anything already
+-    # configured under "locket" via the old dropdown.
+-    assert "locket" in auto2.AUTO2_CONFIG["category_bg_model_sets"]
+-    assert "locket_18" not in auto2.AUTO2_CONFIG["category_bg_model_sets"]
++@pytest.mark.parametrize("route", ["/api/chatgpt_run", "/api/codex_run"])
++def test_cloud_lockdown_blocks_run_routes(client, route):
++    """Temporary lockdown (2026-08-05): cloud engines disabled tool-wide ΓÇö
++    these routes must 403 before even looking at the category."""
++    r = client.post(route, json={"category": "ladies_ring_22", "pairs": [1], "bg": "Regular"})
++    assert r.status_code == 403
+diff --git a/tests/test_variety_output_integration.py b/tests/test_variety_output_integration.py
+index 6d24d48..fcfdcf8 100644
+--- a/tests/test_variety_output_integration.py
++++ b/tests/test_variety_output_integration.py
+@@ -26,10 +26,10 @@ def test_generated_studio_moves_to_variety_folder(tmp_path, monkeypatch):
+         studio_output=target,
+         model_output=model,
+     )
+-    monkeypatch.setattr(app, "_resolve_variety_output", lambda label: resolved)
++    monkeypatch.setattr(app, "_resolve_variety_output", lambda label, category: resolved)
+ 
+     output_path, output_dir, paths = app._move_generated_to_variety_output(
+-        str(raw), "LC22_13", "LC22_13"
++        str(raw), "LC22_13", "LC22_13", "lockets"
+     )
+ 
+     assert not raw.exists()
+@@ -46,7 +46,7 @@ def test_generated_studio_moves_to_variety_folder(tmp_path, monkeypatch):
+ def test_real_safe_capture_label_resolves_stock_variety():
+     app._PIPELINE_COORDINATOR = None
+ 
+-    paths = app._resolve_variety_output("LC22_13")
++    paths = app._resolve_variety_output("LC22_13", "lockets")
+ 
+     assert paths.variety == "FANCY"
+     assert paths.output_bucket == "FANCY"
+@@ -58,7 +58,7 @@ def test_unknown_stock_label_is_not_silently_general():
+     app._PIPELINE_COORDINATOR = None
+ 
+     try:
+-        app._resolve_variety_output("NOT_A_REAL_TAG")
++        app._resolve_variety_output("NOT_A_REAL_TAG", "lockets")
+     except item_routing.RoutingError as exc:
+         assert "not present" in str(exc)
+     else:
