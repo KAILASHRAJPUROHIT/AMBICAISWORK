@@ -92,6 +92,14 @@ def _json_http_error(exc: HTTPException):
     response.status_code = exc.code or 500
     return response
 
+
+@app.errorhandler(Exception)
+def _json_unhandled_error(exc: Exception):
+    app.logger.exception("Unhandled exception in request")
+    response = jsonify(error="Internal server error")
+    response.status_code = 500
+    return response
+
 OTP_TTL_SECONDS = 10 * 60
 OTP_MAX_ATTEMPTS = 5
 PASSWORD_WINDOW_SECONDS = 15 * 60
