@@ -1,7 +1,7 @@
 {
-  "checked_at": "2026-08-15T10:38:57Z",
-  "capture_intake_files": 844,
-  "processed_files": 216,
+  "checked_at": "2026-08-15T12:22:55Z",
+  "capture_intake_files": 826,
+  "processed_files": 233,
   "label_conflicts": {
     "GR22_107_2": {
       "capture_intake": [
@@ -17,14 +17,6 @@
       ],
       "processed": [
         "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\processed\\GENTS RING 22\\GR22_208_2.jpg"
-      ]
-    },
-    "LR18_11": {
-      "capture_intake": [
-        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\LADIES RING 18\\LR18_11.jpg"
-      ],
-      "processed": [
-        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\processed\\LADIES RING 18\\LR18_11.jpg"
       ]
     }
   },

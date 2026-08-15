@@ -22966,6 +22966,1215 @@
       "reserved_usd": 0.1,
       "completed_at_utc": "2026-08-15T10:38:56.089192+00:00",
       "output_bytes": 618552
+    },
+    {
+      "id": "ca57153b94488690",
+      "reserved_at_utc": "2026-08-15T12:08:29.364985+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_10.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_10_f59ac92f042c_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0001_LR22_10.png",
+      "prompt_sha256": "bbaf6f65b35285d43ff5d38974c17232f435a6dcbaad0dabf36c88aa9af330bf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2710,
+            1692,
+            3343,
+            2841
+          ],
+          [
+            3323,
+            2580,
+            3612,
+            3013
+          ]
+        ],
+        "coloured_pixel_fraction": 0.0018,
+        "dominant_hue_degrees": 66.0,
+        "hue_label": "yellow-green",
+        "position": "top-centre",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:08:50.762335+00:00",
+      "output_bytes": 571759
+    },
+    {
+      "id": "1e1758337cf0f0e2",
+      "reserved_at_utc": "2026-08-15T12:09:00.270058+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_100.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_100_55491c20118b_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0002_LR22_100.png",
+      "prompt_sha256": "bbaf6f65b35285d43ff5d38974c17232f435a6dcbaad0dabf36c88aa9af330bf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            3164,
+            2112,
+            3364,
+            2352
+          ],
+          [
+            3233,
+            1300,
+            3646,
+            1802
+          ],
+          [
+            3446,
+            722,
+            4024,
+            1148
+          ],
+          [
+            4148,
+            1245,
+            4540,
+            1885
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00222,
+        "dominant_hue_degrees": 210.0,
+        "hue_label": "blue",
+        "position": "top-centre",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:09:19.323875+00:00",
+      "output_bytes": 723201
+    },
+    {
+      "id": "ebe5b9adc2b8a088",
+      "reserved_at_utc": "2026-08-15T12:09:30.311353+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_101.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_101_6f1ac91ba6ca_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0003_LR22_101.png",
+      "prompt_sha256": "694ae3922ae1ad84baceeb372d89b8e7cf4c41933fae71c40ac42931dcf9e7ef",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2951,
+            1603,
+            3364,
+            2222
+          ],
+          [
+            4128,
+            1747,
+            4644,
+            2896
+          ],
+          [
+            4272,
+            1520,
+            4437,
+            1699
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00082,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:09:50.564664+00:00",
+      "output_bytes": 812097
+    },
+    {
+      "id": "ea835ee7183b5087",
+      "reserved_at_utc": "2026-08-15T12:10:00.893056+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_102.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_102_5e43f2bdbbaf_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0004_LR22_102.png",
+      "prompt_sha256": "bbaf6f65b35285d43ff5d38974c17232f435a6dcbaad0dabf36c88aa9af330bf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2291,
+            1204,
+            3440,
+            2435
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00226,
+        "dominant_hue_degrees": 68.0,
+        "hue_label": "yellow-green",
+        "position": "middle-right",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:10:23.746585+00:00",
+      "output_bytes": 699086
+    },
+    {
+      "id": "071ce4853aa39e6f",
+      "reserved_at_utc": "2026-08-15T12:10:33.921222+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_103.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_103_de9170411355_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0005_LR22_103.png",
+      "prompt_sha256": "bbaf6f65b35285d43ff5d38974c17232f435a6dcbaad0dabf36c88aa9af330bf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2586,
+            949,
+            3522,
+            2167
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00758,
+        "dominant_hue_degrees": 70.0,
+        "hue_label": "yellow-green",
+        "position": "middle-right",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:10:53.602673+00:00",
+      "output_bytes": 658194
+    },
+    {
+      "id": "a2e01505738d7b90",
+      "reserved_at_utc": "2026-08-15T12:11:04.230342+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_104.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_104_68b153281027_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0006_LR22_104.png",
+      "prompt_sha256": "bbaf6f65b35285d43ff5d38974c17232f435a6dcbaad0dabf36c88aa9af330bf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            1857,
+            1554,
+            2504,
+            2064
+          ],
+          [
+            2518,
+            2635,
+            2724,
+            3034
+          ],
+          [
+            2745,
+            1018,
+            3192,
+            1431
+          ],
+          [
+            3419,
+            2868,
+            3687,
+            3199
+          ]
+        ],
+        "coloured_pixel_fraction": 0.03149,
+        "dominant_hue_degrees": 72.0,
+        "hue_label": "yellow-green",
+        "position": "bottom-right",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:11:23.442138+00:00",
+      "output_bytes": 789006
+    },
+    {
+      "id": "2c8a6bdeb471b48f",
+      "reserved_at_utc": "2026-08-15T12:11:33.703251+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_108.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_108_627e98d33c79_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0007_LR22_108.png",
+      "prompt_sha256": "694ae3922ae1ad84baceeb372d89b8e7cf4c41933fae71c40ac42931dcf9e7ef",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2084,
+            1850,
+            3949,
+            2635
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00104,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:11:54.088268+00:00",
+      "output_bytes": 763995
+    },
+    {
+      "id": "06c6d9af0df94d65",
+      "reserved_at_utc": "2026-08-15T12:12:05.347941+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_109.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_109_8dc07455bc26_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0008_LR22_109.png",
+      "prompt_sha256": "bbaf6f65b35285d43ff5d38974c17232f435a6dcbaad0dabf36c88aa9af330bf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2387,
+            1265,
+            3274,
+            2236
+          ],
+          [
+            3343,
+            1431,
+            3667,
+            1788
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00592,
+        "dominant_hue_degrees": 70.0,
+        "hue_label": "yellow-green",
+        "position": "top-right",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:12:24.805620+00:00",
+      "output_bytes": 806184
+    },
+    {
+      "id": "b42b5f9a3e8e4621",
+      "reserved_at_utc": "2026-08-15T12:12:34.293848+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_11.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_11_ea40acd33d96_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0009_LR22_11.png",
+      "prompt_sha256": "694ae3922ae1ad84baceeb372d89b8e7cf4c41933fae71c40ac42931dcf9e7ef",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2201,
+            1589,
+            3178,
+            2125
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00136,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:13:01.289873+00:00",
+      "output_bytes": 767870
+    },
+    {
+      "id": "3f27fdcb7a71325a",
+      "reserved_at_utc": "2026-08-15T12:13:12.905844+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_110.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_110_9b655f43af3e_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0010_LR22_110.png",
+      "prompt_sha256": "bbaf6f65b35285d43ff5d38974c17232f435a6dcbaad0dabf36c88aa9af330bf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            1850,
+            2573,
+            2449,
+            2862
+          ],
+          [
+            2332,
+            2834,
+            2992,
+            3199
+          ],
+          [
+            2820,
+            2593,
+            3281,
+            2820
+          ],
+          [
+            3598,
+            2359,
+            4430,
+            3013
+          ]
+        ],
+        "coloured_pixel_fraction": 0.02517,
+        "dominant_hue_degrees": 68.0,
+        "hue_label": "yellow-green",
+        "position": "top-right",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:13:33.937850+00:00",
+      "output_bytes": 576874
+    },
+    {
+      "id": "fcd2b59157ae0e10",
+      "reserved_at_utc": "2026-08-15T12:13:45.151260+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_112.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_112_5399efd82809_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0011_LR22_112.png",
+      "prompt_sha256": "694ae3922ae1ad84baceeb372d89b8e7cf4c41933fae71c40ac42931dcf9e7ef",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2366,
+            1417,
+            3316,
+            2201
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00094,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:14:05.296433+00:00",
+      "output_bytes": 644403
+    },
+    {
+      "id": "bccd581fc992ea77",
+      "reserved_at_utc": "2026-08-15T12:14:16.680715+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_113.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_113_1ef454fe9764_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0012_LR22_113.png",
+      "prompt_sha256": "694ae3922ae1ad84baceeb372d89b8e7cf4c41933fae71c40ac42931dcf9e7ef",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2717,
+            1307,
+            3268,
+            2125
+          ],
+          [
+            3584,
+            1527,
+            3818,
+            1898
+          ],
+          [
+            3701,
+            2435,
+            3914,
+            2745
+          ]
+        ],
+        "coloured_pixel_fraction": 9e-05,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:14:36.158859+00:00",
+      "output_bytes": 704981
+    },
+    {
+      "id": "5cb1eb0a00d0969d",
+      "reserved_at_utc": "2026-08-15T12:14:46.738940+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_117.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_117_fd0c5e7185a6_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0013_LR22_117.png",
+      "prompt_sha256": "694ae3922ae1ad84baceeb372d89b8e7cf4c41933fae71c40ac42931dcf9e7ef",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2518,
+            2043,
+            3618,
+            2717
+          ],
+          [
+            2985,
+            1486,
+            3316,
+            1768
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00097,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:15:09.943815+00:00",
+      "output_bytes": 592077
+    },
+    {
+      "id": "818834f3e6496a74",
+      "reserved_at_utc": "2026-08-15T12:15:19.979998+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_119.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_119_8ba8461662f0_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0014_LR22_119.png",
+      "prompt_sha256": "694ae3922ae1ad84baceeb372d89b8e7cf4c41933fae71c40ac42931dcf9e7ef",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2311,
+            1561,
+            3770,
+            2518
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00064,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:15:42.752155+00:00",
+      "output_bytes": 560653
+    },
+    {
+      "id": "2cf6a4c00a152af4",
+      "reserved_at_utc": "2026-08-15T12:15:53.784713+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_12.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_12_10df3dd4ab4f_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0015_LR22_12.png",
+      "prompt_sha256": "bbaf6f65b35285d43ff5d38974c17232f435a6dcbaad0dabf36c88aa9af330bf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2359,
+            1389,
+            3797,
+            2683
+          ]
+        ],
+        "coloured_pixel_fraction": 0.09332,
+        "dominant_hue_degrees": 338.0,
+        "hue_label": "red",
+        "position": "centre",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:16:12.918103+00:00",
+      "output_bytes": 724397
+    },
+    {
+      "id": "d36405c8cbae18c0",
+      "reserved_at_utc": "2026-08-15T12:16:15.811890+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_124.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_124_a0b22f29aaa0_wb.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0016_LR22_124.png",
+      "prompt_sha256": "694ae3922ae1ad84baceeb372d89b8e7cf4c41933fae71c40ac42931dcf9e7ef",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            710,
+            499,
+            1139,
+            834
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00063,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        1920,
+        1440
+      ],
+      "native_megapixels": 2.7648,
+      "reference_resize": "none",
+      "reference_dimensions": [
+        1920,
+        1440
+      ],
+      "reference_megapixels": 2.7648,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          1920,
+          1440
+        ]
+      ],
+      "input_billed_mp": 3,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.075,
+      "reserved_usd": 0.1,
+      "completed_at_utc": "2026-08-15T12:16:30.802807+00:00",
+      "output_bytes": 408928
+    },
+    {
+      "id": "87434a5f54ce7b43",
+      "reserved_at_utc": "2026-08-15T12:16:41.279544+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_128.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_128_ed5434329043_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0017_LR22_128.png",
+      "prompt_sha256": "bbaf6f65b35285d43ff5d38974c17232f435a6dcbaad0dabf36c88aa9af330bf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2683,
+            1348,
+            4533,
+            2524
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00177,
+        "dominant_hue_degrees": 68.0,
+        "hue_label": "yellow-green",
+        "position": "middle-right",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:17:02.695108+00:00",
+      "output_bytes": 566322
+    },
+    {
+      "id": "6f40a0379613ca4a",
+      "reserved_at_utc": "2026-08-15T12:17:12.195267+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\LR22_129.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\LR22_129_e20edd1d5193_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0018_LR22_129.png",
+      "prompt_sha256": "694ae3922ae1ad84baceeb372d89b8e7cf4c41933fae71c40ac42931dcf9e7ef",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            2999,
+            2256,
+            3687,
+            2924
+          ],
+          [
+            3612,
+            2091,
+            4066,
+            2552
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00011,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "ladies_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3872,
+        2581
+      ],
+      "reference_megapixels": 9.9936,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3872,
+          2581
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-15T12:17:31.283219+00:00",
+      "output_bytes": 480323
     }
   ]
 }

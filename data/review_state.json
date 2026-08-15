@@ -1798,5 +1798,113 @@
   "reason": null,
   "note": null,
   "reviewed_at": 1786790372.084238
+ },
+ "LR22_10": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796493.52453
+ },
+ "LR22_100": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796497.9710145
+ },
+ "LR22_101": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796505.6139736
+ },
+ "LR22_102": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796509.7471714
+ },
+ "LR22_103": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796515.113813
+ },
+ "LR22_104": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796516.994663
+ },
+ "LR22_108": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796518.464862
+ },
+ "LR22_109": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796519.9162698
+ },
+ "LR22_11": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796521.8487573
+ },
+ "LR22_110": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796523.4142098
+ },
+ "LR22_112": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796525.6374543
+ },
+ "LR22_113": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796528.289234
+ },
+ "LR22_117": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796532.4972842
+ },
+ "LR22_119": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796535.0717795
+ },
+ "LR22_12": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796536.9592354
+ },
+ "LR22_124": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796540.7090805
+ },
+ "LR22_128": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1786796547.8039122
+ },
+ "LR22_129": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1786796552.0234892
  }
 }

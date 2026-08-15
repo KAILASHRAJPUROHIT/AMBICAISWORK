@@ -11,7 +11,7 @@
   "default_prompt_file": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\config\\flux2_pro_catalogue_prompt.txt",
   "lifetime_hard_cap_usd": 100,
   "daily_hard_cap_usd": 100,
-  "maximum_calls_per_day": 300,
+  "maximum_calls_per_day": 1000,
   "cost_safety_factor": 1.25,
   "trial_credit_start_usd": 207.22,
   "historical_estimated_spend_usd": 1.22,
