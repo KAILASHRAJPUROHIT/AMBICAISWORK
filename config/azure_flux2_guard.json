@@ -9,7 +9,7 @@
   "final_height": 1536,
   "maximum_reference_megapixels": 10,
   "default_prompt_file": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\config\\flux2_pro_catalogue_prompt.txt",
-  "lifetime_hard_cap_usd": 100,
+  "lifetime_hard_cap_usd": 150,
   "daily_hard_cap_usd": 150,
   "maximum_calls_per_day": 1000,
   "cost_safety_factor": 1.25,
