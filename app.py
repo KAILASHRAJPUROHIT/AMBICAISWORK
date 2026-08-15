@@ -80,6 +80,17 @@ def _secret_key() -> str:
 app.secret_key = _secret_key()
 app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 12
 
+
+@app.errorhandler(HTTPException)
+def _json_http_error(exc: HTTPException):
+    # Werkzeug's default error pages are HTML. Every client-side fetch() in
+    # this app expects JSON, so an unhandled 413/404/405/etc left the raw
+    # HTML body for `r.json()` to choke on -- surfacing a bare browser
+    # "JSON.parse: unexpected character" toast with no actionable message.
+    response = jsonify(error=exc.description or exc.name)
+    response.status_code = exc.code or 500
+    return response
+
 OTP_TTL_SECONDS = 10 * 60
 OTP_MAX_ATTEMPTS = 5
 PASSWORD_WINDOW_SECONDS = 15 * 60
