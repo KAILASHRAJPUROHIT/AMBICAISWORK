@@ -726,6 +726,21 @@ const CAPTURE_FILL_TARGET = 0.90;
 // skips that whole wasted excursion.
 const CAPTURE_COVERAGE_MIN_TO_SETTLE_EARLY = 0.30;
 const CAPTURE_COVERAGE_STALL_DELTA = 0.03;
+// The LIVE optical-zoom climb stops here, separate from CAPTURE_FILL_TARGET
+// (which stays 0.90 and still governs the digital post-capture crop via
+// cropToFillOrnament -- the final saved photo's framing tightness is
+// unaffected by this). 0.90 as a live-zoom target measures frame AREA, so
+// it demands the gold blob's bounding box cover 90% of the frame's area --
+// an extremely tight crop that, across every real capture watched this
+// session, was never actually reached: the blob's measured box plateaued
+// around 30-50% (small ring, thin gold slivers around a bright diamond
+// face keep the connected-component box from ever reading much larger) and
+// every capture climbed all the way to the device ceiling chasing 0.90
+// before backing back down to roughly that same plateau anyway. Targeting
+// the realistic figure directly, instead of relying on the diminishing-
+// returns check below to catch the plateau via noisy per-tick deltas,
+// means the climb just stops there the first time it arrives.
+const CAPTURE_LIVE_ZOOM_TARGET = 0.42;
 let _cameraStream = null;
 let _cameraTrack = null;
 let _cameraImageCapture = null;
