@@ -538,6 +538,8 @@ class _BoundedTimeoutRequestHandler(WSGIRequestHandler):
 
 
 if __name__ == "__main__":
+    from single_instance import enforce_single_instance
+    enforce_single_instance("capture_server")
     port = PORT
     try:
         with open(os.path.join(BASE, "capture_port.txt"), "w") as f:
