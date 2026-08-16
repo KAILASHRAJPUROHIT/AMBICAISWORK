@@ -94,6 +94,20 @@ object MaterialDetector {
 
     private const val METAL_PROXIMITY_CELLS = 3
 
+    private fun hasNearbyMetal(mask: BooleanArray, cols: Int, rows: Int, col: Int, row: Int): Boolean {
+        val r = METAL_PROXIMITY_CELLS
+        for (dy in -r..r) {
+            val nr = row + dy
+            if (nr < 0 || nr >= rows) continue
+            for (dx in -r..r) {
+                val nc = col + dx
+                if (nc < 0 || nc >= cols) continue
+                if (mask[nr * cols + nc]) return true
+            }
+        }
+        return false
+    }
+
     /** Standard BT.601 YCbCr -> RGB, same conversion browsers already do
      * internally on camera frames before exposing RGBA pixel data -- close
      * enough to reuse the RGB-space thresholds above verbatim. */
