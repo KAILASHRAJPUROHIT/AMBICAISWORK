@@ -1152,8 +1152,12 @@ const CAPTURE_ZOOM_ADJUST_INTERVAL_MS = 300;
 // not catching up after the jump, or past the point where zoom stops being
 // optical and starts just magnifying existing softness) -- back off rather
 // than sitting blocked forever. See _maybeBackOffZoom.
-const CAPTURE_SHARP_STUCK_TIMEOUT_MS = 3000;
-const CAPTURE_ZOOM_BACKOFF_RATIO = 0.85;
+const CAPTURE_SHARP_STUCK_TIMEOUT_MS = 1200;
+const CAPTURE_ZOOM_BACKOFF_RATIO = 0.75;
+// Below this live (unrefined) sharpness reading, the zoom-in climb stops
+// immediately instead of continuing toward CAPTURE_FILL_TARGET regardless
+// of focus -- see the sharpness check in waitForPlacement's zoom step.
+const CAPTURE_ZOOM_SHARPNESS_FLOOR = 28;
 // Grace period after a single decisive focus-lock trigger before the
 // sharpness gate is judged -- gives the lens time to actually complete one
 // focus pass rather than being judged mid-search.
