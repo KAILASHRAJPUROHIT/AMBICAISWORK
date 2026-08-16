@@ -26,43 +26,43 @@
   "LR22_237": {
     "label": "LR22_237",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_237.jpg",
-    "queued_at": 1786870623.8597324,
+    "queued_at": 1786870683.8497825,
     "last_error": "ValueError: LR22_237: expected one current-stock label, found 0"
   },
   "LR22_268": {
     "label": "LR22_268",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_268.jpg",
-    "queued_at": 1786870623.9032738,
+    "queued_at": 1786870683.8947687,
     "last_error": "ValueError: LR22_268: expected one current-stock label, found 0"
   },
   "LR22_276": {
     "label": "LR22_276",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_276.jpg",
-    "queued_at": 1786870623.9467394,
+    "queued_at": 1786870683.938643,
     "last_error": "ValueError: LR22_276: expected one current-stock label, found 0"
   },
   "LR22_281": {
     "label": "LR22_281",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_281.jpg",
-    "queued_at": 1786870623.996633,
+    "queued_at": 1786870683.988518,
     "last_error": "ValueError: LR22_281: expected one current-stock label, found 0"
   },
   "LR22_340": {
     "label": "LR22_340",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_340.jpg",
-    "queued_at": 1786870624.0403585,
+    "queued_at": 1786870684.030074,
     "last_error": "ValueError: LR22_340: expected one current-stock label, found 0"
   },
   "LR22_400": {
     "label": "LR22_400",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_400.jpg",
-    "queued_at": 1786870624.0830941,
+    "queued_at": 1786870684.0703454,
     "last_error": "ValueError: LR22_400: expected one current-stock label, found 0"
   },
   "LR22_90": {
     "label": "LR22_90",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_90.jpg",
-    "queued_at": 1786870624.1256242,
+    "queued_at": 1786870684.1136045,
     "last_error": "ValueError: LR22_90: expected one current-stock label, found 0"
   }
 }
