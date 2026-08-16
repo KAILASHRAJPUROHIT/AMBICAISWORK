@@ -1330,7 +1330,7 @@ async function waitForPlacement(result) {
     return true;
   }
   _qualityLostFrames = 0;
-  if (coverage >= CAPTURE_FILL_TARGET || noZoomCapability || atDeviceMax) {
+  if (coverage >= CAPTURE_LIVE_ZOOM_TARGET || noZoomCapability || atDeviceMax) {
     _qualityZoomSettled = true;
     return true; // next tick handles the focus-lock step above
   }
