@@ -132,6 +132,15 @@ tools/ffmpeg/
 # tools/setup_sam2.ps1, not committed (same large-binary policy as above).
 models/sam2/
 
+# JDK + Android SDK for CaptureCam (native smart-camera companion app) --
+# fetched per-machine, not committed (same large-binary policy as above).
+android_tools/
+# Gradle build outputs for CaptureCam -- regenerated, never source.
+CaptureCam/.gradle/
+CaptureCam/build/
+CaptureCam/app/build/
+CaptureCam/local.properties
+
 # ── Machine-bound encrypted credentials (DPAPI, tied to this Windows user) ────
 config/azure_flux2_pro_key.dpapi
 config/azure_flux2_pro_key.clixml
