@@ -40,8 +40,8 @@ import cv2
 import numpy as np
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-CKPT = os.path.join(BASE, "models", "sam2", "sam2.1_hiera_small.pt")
-CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
+CKPT = os.path.join(BASE, "models", "sam2", "sam2.1_hiera_large.pt")
+CFG = "configs/sam2.1/sam2.1_hiera_l.yaml"
 
 _pred = None
 # Mask of the last located piece, kept so tight_crop can derive the tilt from
