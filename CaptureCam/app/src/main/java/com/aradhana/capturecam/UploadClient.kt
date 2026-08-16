@@ -81,12 +81,13 @@ object UploadClient {
         client.newCall(request).execute().use { response ->
             val text = response.body?.string() ?: "{}"
             val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
+            val errorField = if (json.has("error")) json.getString("error") else null
             SaveResult(
                 ok = json.optBoolean("ok", false),
-                error = json.optString("error", null),
-                duplicate = json.optString("error") == "duplicate",
-                blurry = json.optString("error") == "blurry",
-                notVisible = json.optString("error") == "not_clearly_visible",
+                error = errorField,
+                duplicate = errorField == "duplicate",
+                blurry = errorField == "blurry",
+                notVisible = errorField == "not_clearly_visible",
                 raw = json
             )
         }
