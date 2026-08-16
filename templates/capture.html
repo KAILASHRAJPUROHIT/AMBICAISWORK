@@ -1340,12 +1340,24 @@ async function waitForPlacement(result) {
     _qualityZoomSettled = true;
     return true;
   }
+  if (_qualityCoverageAtLastStep !== null &&
+      coverage >= CAPTURE_COVERAGE_MIN_TO_SETTLE_EARLY &&
+      coverage - _qualityCoverageAtLastStep < CAPTURE_COVERAGE_STALL_DELTA) {
+    // Diminishing returns: the last zoom-in step barely moved coverage even
+    // though we're already well past a token amount of frame-fill. Pushing
+    // further from here has, in practice, only meant a long, wasted climb
+    // to the device ceiling followed by backing all the way down to
+    // (approximately) this exact coverage anyway -- settle here instead.
+    _qualityZoomSettled = true;
+    return true;
+  }
   // Closed-loop step, not a one-shot prediction: coverage doesn't scale
   // cleanly with zoom on every lens, so nudging by a fixed ratio and
   // re-measuring next tick makes steady progress toward the target (or the
   // real device max) without ever getting stuck on a bad prediction.
   // Deliberately does NOT touch focus here -- only the single lock-once
   // step above does, once zoom is fully done moving.
+  _qualityCoverageAtLastStep = coverage;
   const nextZoom = Math.min(clampCameraZoom(currentZoom * 1.15), _qualityMaxUsableZoom);
   await applyCameraZoom(nextZoom);
   cameraQualityLabel.textContent = `Zooming in… ${nextZoom.toFixed(1)}×`;
