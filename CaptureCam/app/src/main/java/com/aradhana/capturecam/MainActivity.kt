@@ -31,7 +31,6 @@ import com.aradhana.capturecam.databinding.DialogSettingsBinding
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.launch
-import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 
 /**
