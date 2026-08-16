@@ -39,7 +39,7 @@ just double-click `LAUNCH_CATALOG_UI.bat`.
 
 - The model library (`models/`) and studio backgrounds (`backgrounds/`) —
   ready to use immediately.
-- The Aradhana logo (`assets/logo.png`) for watermarking.
+- The AMBIC logo (`assets/logo.png`) for watermarking.
 
 ## What can't be pre-packaged (and why)
 

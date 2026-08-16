@@ -292,7 +292,7 @@ _IMMUTABLE_ROOT_NAMES = frozenset(
 def _generated_roots() -> tuple[Path, ...]:
     import paths
 
-    candidates = (Path(paths.OUTPUT_DIR), BASE / "output_aradhana")
+    candidates = (Path(paths.OUTPUT_DIR), BASE / "output_AMBIC")
     roots = []
     seen = set()
     for candidate in candidates:

@@ -107,7 +107,7 @@ last full run)
 
 ## Hard rule from the user this session
 **Never delete/move any file under a production folder (`capture_intake/`,
-`output_aradhana/`, `output/`, `master backup/`, etc.) without informing the
+`output_AMBIC/`, `output/`, `master backup/`, etc.) without informing the
 user first and getting confirmation** — even a file that's clearly wrong
 (e.g. a tag-photo-as-main-file). Saved to Claude's memory as
 `catalogue-tool-no-silent-file-deletion`.

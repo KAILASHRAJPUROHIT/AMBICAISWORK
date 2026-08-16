@@ -1,6 +1,6 @@
 """
 stock_category_map.py: the 47 real stock categories (from
-Aradhana_Categorywise_Varieties.xlsx, verified 2026-07-31 by variety-set
+AMBIC_Categorywise_Varieties.xlsx, verified 2026-07-31 by variety-set
 overlap against Stock/31072026.xls) and which ones reuse an existing
 background/model asset today.
 

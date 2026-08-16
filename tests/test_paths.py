@@ -110,5 +110,5 @@ def test_ensure_dirs_rejects_a_root_inside_capture_intake(monkeypatch, tmp_path)
 
 def test_current_to_target_mapping_is_documentation_only():
     assert paths.CURRENT_TO_TARGET["capture_intake"] == "capture"
-    assert paths.CURRENT_TO_TARGET["output_aradhana"] == "output"
+    assert paths.CURRENT_TO_TARGET["output_AMBIC"] == "output"
     assert paths.CURRENT_TO_TARGET["Reject"] == "rejected"

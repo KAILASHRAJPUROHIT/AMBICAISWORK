@@ -60,7 +60,7 @@ generic "garden"/"studio" ideas.
     Western silhouette (sequined draped gown, not saree), teal channel-tufted
     boat seating, open sea horizon, designer handbag prop, relaxed reclining
     arm-along-seatback pose. Use only if a modern/non-traditional angle is
-    ever wanted — off-brand for Aradhana's current traditional positioning.
+    ever wanted — off-brand for AMBIC's current traditional positioning.
 13. **Maximalist floral greenhouse throne** (JOSCO) — a striped vintage armchair
     fully enveloped in an explosion of mixed real flowers (roses, hydrangea,
     larkspur — not a blurred garden bokeh, an immersive flower wall), backlit
@@ -143,6 +143,6 @@ When drafting a new `CONCEPTS` batch (see `aradhya_realism.py`'s
 `build_prompt()`), pick ONE genre above per concept rather than mixing
 several, and pull the specific color/prop/pose/lighting language verbatim
 where it fits the jewellery hero zone being shot. Genres 3 and 11 are closest
-to Aradhana's existing brand look and are the safest default; genres 8, 9, 12,
+to AMBIC's existing brand look and are the safest default; genres 8, 9, 12,
 13 introduce genuinely new poses/angles we haven't used and are good picks
 when the goal is deliberately expanding variety.

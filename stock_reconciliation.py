@@ -217,7 +217,7 @@ def _active_roots(base: Path = BASE) -> tuple[Path, ...]:
         Path(paths.PROCESSING_DIR),
         Path(paths.PROCESSED_DIR),
         Path(paths.OUTPUT_DIR),
-        base / "output_aradhana",
+        base / "output_AMBIC",
         Path(paths.NEEDS_REVIEW_DIR),
         Path(paths.REJECTED_DIR),
         base / "_needs_review",

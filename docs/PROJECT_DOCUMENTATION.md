@@ -1,20 +1,20 @@
-# Aradhana Jewellers — Auto Catalogue Tool
+# AMBIC Jewellers — Auto Catalogue Tool
 ## Complete Project Documentation
 
 ---
 
 ## What This Tool Does
 
-This tool automates the creation of professional jewellery catalogue images for Aradhana Jewellers. Given raw camera photos of jewellery items and their price tags, it:
+This tool automates the creation of professional jewellery catalogue images for AMBIC Jewellers. Given raw camera photos of jewellery items and their price tags, it:
 
-1. **Composites** each jewellery piece onto a branded Aradhana studio background
+1. **Composites** each jewellery piece onto a branded AMBIC studio background
 2. **Labels** each image with the item code read from the price tag
 3. **Generates a model lifestyle shot** — jewellery worn by a model in a professional pose
 4. **Deduplicates** against a 30-day database to catch re-submissions
 5. **Saves** final images organised by jewellery category
 
 Input: raw DSLR photos (jewel + tag pairs)
-Output: `output_aradhana/{category}/{ItemCode}.jpg` + `{ItemCode}_model.jpg`
+Output: `output_AMBIC/{category}/{ItemCode}.jpg` + `{ItemCode}_model.jpg`
 
 ---
 
@@ -31,7 +31,7 @@ C:\Users\kaila\Desktop\JewelleryCatalogTool\
 │
 ├── processing\               ← Staged files (renamed _jewel/_tag after staging)
 │
-├── output_aradhana\          ← FINAL OUTPUT — organised by category
+├── output_AMBIC\          ← FINAL OUTPUT — organised by category
 │   └── tops\                ← e.g. tops/TP22_30.jpg + tops/TP22_30_model.jpg
 │
 ├── output_copilot\           ← Temp staging for Copilot raw outputs
@@ -80,7 +80,7 @@ C:\Users\kaila\Desktop\JewelleryCatalogTool\
 **External dependency — Backgrounds folder:**
 ```
 C:\Users\kaila\Desktop\Backgrounds\Watermarked\
-    earrings.png, tops.png, necklace.png, etc.   ← Aradhana watermarked studio backgrounds
+    earrings.png, tops.png, necklace.png, etc.   ← AMBIC watermarked studio backgrounds
     1.png, 2.jpg … 14.jpg                         ← Numbered generic backgrounds
 ```
 
@@ -239,7 +239,7 @@ Every engine output passes through **10 mandatory checks** before being saved:
 | 4 | **Gemma jewellery check** — AI confirms jewellery present | Reject (no jewellery detected) |
 | 5 | **Per-run pixel hash** — not duplicate of another SKU this run | Reject (cross-SKU duplicate) |
 | 6 | **In-run tag dedup** — same label not already saved this run | Skip |
-| 7 | **Move to final path** — `output_aradhana/{category}/{Label}.jpg` | — |
+| 7 | **Move to final path** — `output_AMBIC/{category}/{Label}.jpg` | — |
 | 8 | **30-day DB check** — `catalogue_db.json` for cross-run duplicates | Warning (logged) |
 | 9 | **Save progress** — `progress_{category}.json` | — |
 | 10 | **Model shoot** — triggers model image generation | Warns if fails |
@@ -432,11 +432,11 @@ Both use the free Gemini API key from `keys.py`.
 ## File Naming Convention
 
 ```
-Studio shot:  output_aradhana/{category}/{ItemCode}.jpg
-              e.g.  output_aradhana/tops/TP22_30.jpg
+Studio shot:  output_AMBIC/{category}/{ItemCode}.jpg
+              e.g.  output_AMBIC/tops/TP22_30.jpg
 
-Model shot:   output_aradhana/{category}/{ItemCode}_model.jpg
-              e.g.  output_aradhana/tops/TP22_30_model.jpg
+Model shot:   output_AMBIC/{category}/{ItemCode}_model.jpg
+              e.g.  output_AMBIC/tops/TP22_30_model.jpg
 ```
 
 `/` in item codes is replaced with `_` in filenames.
@@ -525,7 +525,7 @@ Invoke-WebRequest "http://127.0.0.1:7654/api/copilot_run" -Method POST -Body $bo
 | 13 | TP22/106 | ✅ | ✅ |
 | 14 | TP22/333 | ✅ | ✅ |
 
-All 28 files in `output_aradhana\tops\`.
+All 28 files in `output_AMBIC\tops\`.
 
 ---
 

@@ -62,7 +62,7 @@ gemini_cooldown*.json
 
 # ── Image data (too large for git) ────────────────────────────────────────────
 input/
-output_aradhana/
+output_AMBIC/
 processing/
 _input_originals/
 dataset/

@@ -28,7 +28,7 @@ HEADERS = [
 
 def _rows(*data_rows):
     return [
-        ["Aradhana Jewellers"],
+        ["AMBIC Jewellers"],
         ["Label/Tags Closing Stock Report As On Date : 30/07/2026"],
         HEADERS,
         *data_rows,

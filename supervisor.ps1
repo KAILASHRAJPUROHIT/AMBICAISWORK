@@ -59,7 +59,7 @@ if (Test-Path -LiteralPath $RestartRequest) {
 # same topic string) to get push notifications on your phone. Topic names on
 # ntfy.sh are only as private as they are hard to guess - this one has a
 # random suffix baked in; change it if you want a different one.
-$NtfyTopic = "aradhana-catalogue-qyjkjpa0sj"
+$NtfyTopic = "AMBIC-catalogue-qyjkjpa0sj"
 
 function Write-Log([string]$msg) {
     $line = "[" + (Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "] " + $msg

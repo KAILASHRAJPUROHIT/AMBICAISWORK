@@ -20,7 +20,7 @@ Legacy-to-target migration map (documentation only; no migration is performed):
     capture_intake/  -> capture/
     input/           -> processing/
     processing/      -> processing/
-    output_aradhana/ -> output/
+    output_AMBIC/ -> output/
     _needs_review/   -> needs_review/
     Reject/          -> rejected/
     backgrounds/     -> backgrounds/
@@ -82,7 +82,7 @@ CURRENT_TO_TARGET = {
     "capture_intake": "capture",
     "input": "processing",
     "processing": "processing",
-    "output_aradhana": "output",
+    "output_AMBIC": "output",
     "_needs_review": "needs_review",
     "Reject": "rejected",
 }

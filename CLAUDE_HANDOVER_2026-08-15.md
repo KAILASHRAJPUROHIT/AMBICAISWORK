@@ -2,16 +2,16 @@
 
 Date: 2026-08-15 (Asia/Calcutta)
 
-This document is the authoritative handover for the Aradhana Jewellery Catalogue Tool after the Claude-to-Codex continuation. Read it completely before changing prompts, lifecycle routing, review behavior, cost guards, or Ornate NX publishing.
+This document is the authoritative handover for the AMBIC Jewellery Catalogue Tool after the Claude-to-Codex continuation. Read it completely before changing prompts, lifecycle routing, review behavior, cost guards, or Ornate NX publishing.
 
 ## 1. Current production state
 
 - Workspace: `C:\Users\kaila\Desktop\JewelleryCatalogTool`
 - Main UI: `http://127.0.0.1:7654`
 - Capture service: port `7660`
-- Main Windows service: `AradhanaCatalogueTool`
-- Capture Windows service: `AradhanaCaptureServer`
-- Approved-image uploader task: `AradhanaOrnItemUpload`
+- Main Windows service: `AMBICCatalogueTool`
+- Capture Windows service: `AMBICCaptureServer`
+- Approved-image uploader task: `AMBICOrnItemUpload`
 - Stock workbook used during this handover: `Stock\12082026.xls`
 - Stock labels: 2,749
 - Catalogue taxonomy: 57 categories
@@ -203,13 +203,13 @@ All 56 Stock-Excel-represented category folders were created. There are 57 appli
 
 ### 7.1 Why uploads use a scheduled task
 
-`AradhanaCatalogueTool` runs as `LocalSystem`. LocalSystem cannot authenticate to the Server2k22 share.
+`AMBICCatalogueTool` runs as `LocalSystem`. LocalSystem cannot authenticate to the Server2k22 share.
 
 Therefore:
 
 1. Approval first attempts direct publish.
 2. Network failure records a local queue entry.
-3. `AradhanaOrnItemUpload` is triggered.
+3. `AMBICOrnItemUpload` is triggered.
 4. That task runs as user `kaila`, logon type `Interactive`, run level `Limited`.
 5. It drains the queue using the user's valid network identity.
 6. It also repeats every minute and starts at user logon.
@@ -235,8 +235,8 @@ Local operational files:
 Useful checks:
 
 ```powershell
-Get-ScheduledTask -TaskName AradhanaOrnItemUpload
-Get-ScheduledTaskInfo -TaskName AradhanaOrnItemUpload
+Get-ScheduledTask -TaskName AMBICOrnItemUpload
+Get-ScheduledTaskInfo -TaskName AMBICOrnItemUpload
 Get-Content .\data\orn_item_upload_queue.json
 Get-Content .\data\orn_item_upload_status.json
 ```
@@ -319,8 +319,8 @@ Important rules:
 Preferred controlled restart:
 
 1. Create `data\restart_catalogue.request`.
-2. Run scheduled task `AradhanaCatalogueSupervisor`.
-3. Supervisor restarts only `AradhanaCatalogueTool` and removes the request.
+2. Run scheduled task `AMBICCatalogueSupervisor`.
+3. Supervisor restarts only `AMBICCatalogueTool` and removes the request.
 4. Verify port 7654 and `/api/health`.
 
 Do not kill unrelated capture or printer-relay processes.
@@ -371,7 +371,7 @@ Tests cover paid-call locking, Bali routing, item hints, colour localisation, Co
 
 1. Local `master` and remote `origin/master` have unrelated histories. At handover time local was 2,022 commits ahead and 1,834 behind with no merge base. Never force-push remote master.
 2. Use the dedicated remote handover branch recorded in the final Codex message.
-3. `AradhanaOrnItemUpload` depends on user `kaila` being logged in because it uses an Interactive task token.
+3. `AMBICOrnItemUpload` depends on user `kaila` being logged in because it uses an Interactive task token.
 4. If uploads stop, inspect queue/status and Scheduled Task result before touching review state.
 5. The tool currently publishes only Ornate NX Image 1. Do not invent `_2`/`_3` output without a product requirement and explicit source-selection design.
 6. Current Stock Excel does not contain `ER22_74` or `GR22_135`; their upload failures are expected safeguards.
@@ -383,8 +383,8 @@ Tests cover paid-call locking, Bali routing, item hints, colour localisation, Co
 ```powershell
 Set-Location C:\Users\kaila\Desktop\JewelleryCatalogTool
 
-Get-Service AradhanaCatalogueTool,AradhanaCaptureServer
-Get-ScheduledTaskInfo -TaskName AradhanaOrnItemUpload
+Get-Service AMBICCatalogueTool,AMBICCaptureServer
+Get-ScheduledTaskInfo -TaskName AMBICOrnItemUpload
 Get-Content .\data\orn_item_upload_queue.json
 
 python -m pytest tests/test_orn_item_image_sync.py tests/test_category_dashboard.py tests/test_review_queue_source_routing.py -q

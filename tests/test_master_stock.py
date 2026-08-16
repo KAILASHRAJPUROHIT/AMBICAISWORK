@@ -27,7 +27,7 @@ def _write_xls_like(monkeypatch, rows):
 
 def test_parses_reduced_schema(monkeypatch):
     rows = [
-        ["Aradhana Jewellers"],
+        ["AMBIC Jewellers"],
         ["Label/Tags Closing Stock Report (BAJU BANDH 22) As On Date : 01/08/2026"],
         ["ItemName", "Label No"],
         ["BAJU BANDH 22", "BB22/1"],
@@ -42,7 +42,7 @@ def test_parses_reduced_schema(monkeypatch):
 
 def test_parses_full_schema(monkeypatch):
     rows = [
-        ["Aradhana Jewellers"],
+        ["AMBIC Jewellers"],
         ["Label/Tags Closing Stock Report (BABY BRACLET 22) As On Date : 31/07/2026"],
         ["Label No", "Old BarcodeNo", "Prefix", "Carat", "Variety Name",
          "Gross Wt", "Net Wt", "Pcs", "HUID"],

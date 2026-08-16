@@ -25,7 +25,7 @@ def purge_env(tmp_path, monkeypatch):
     for root in roots.values():
         root.mkdir()
     output = tmp_path / "output"
-    legacy_output = tmp_path / "output_aradhana"
+    legacy_output = tmp_path / "output_AMBIC"
     output.mkdir()
     legacy_output.mkdir()
 

@@ -1,6 +1,6 @@
-# Aradhana Catalogue Tool — Handover
+# AMBIC Catalogue Tool — Handover
 
-Local AI tool that turns raw jewellery photos into unified, branded catalogue tiles for the Aradhana Jewellers app. ~2000 ornaments to process. This doc is the single source of truth for picking the work up.
+Local AI tool that turns raw jewellery photos into unified, branded catalogue tiles for the AMBIC Jewellers app. ~2000 ornaments to process. This doc is the single source of truth for picking the work up.
 
 ## TWO MASTER RULES (non-negotiable)
 1. **Preserve design always.** Output must be the customer's real photographed piece. No AI redraw/relight that alters geometry. (IC-Light at full denoise redraws → banned from catalogue path; OK only for optional marketing heroes.) Cutout/matting only changes alpha — fine.
@@ -18,20 +18,20 @@ Local AI tool that turns raw jewellery photos into unified, branded catalogue ti
 
 ## Brand spec
 - Gold `#CCA137` / `#F7CA5B`; brand blue `#23519D`; **EST. 1992**; tagline "Legacy of Purity. Promise of Trust."; 22K.
-- Transparent logo (hi-res): `C:\Users\kaila\Desktop\New folder (2)\aradhana_logo_hd.png` (referenced by engine as `LOGO`).
-- Brand kit PDF: `C:\Content\Logos\Aradhana Jewellers Logo 4.6.26\...pdf`.
+- Transparent logo (hi-res): `C:\Users\kaila\Desktop\New folder (2)\AMBIC_logo_hd.png` (referenced by engine as `LOGO`).
+- Brand kit PDF: `C:\Content\Logos\AMBIC Jewellers Logo 4.6.26\...pdf`.
 
 ## Files (in `C:\Users\kaila\Desktop\JewelleryCatalogTool`)
-- `aradhana_engine.py` — pipeline: cutout → enhance → straighten/symmetry → branded tile. Importable; also a CLI (`python aradhana_engine.py`).
+- `AMBIC_engine.py` — pipeline: cutout → enhance → straighten/symmetry → branded tile. Importable; also a CLI (`python AMBIC_engine.py`).
 - `vision.py` — VLM brain (Ollama/qwen2.5vl): `analyze()` (type/pieces/has_tag/upright/tier), `read_tag()` (full-image @2000px → SKU/G.W/N.W/pieces/confidence), `locate()` (grounding — UNRELIABLE, do not use), `qc()`, `unload()`.
 - `app.py` — Flask web UI. `templates/index.html` — frontend.
 - `backgrounds/` — photographic per-type backgrounds (user-added): bg1_white_leaves, bg2_dark_props, bg3_dark_crystals, bg4_golden_bokeh, bg5_white_satin.
 - `inventory.csv` — optional SKU→weight/category (tag is primary source; CSV is a cross-check/override).
 - `RUN_CATALOG.bat` — double-click CLI launcher. `CAPTURE_CHECKLIST.md` — staff capture guide.
-- `input/` (drop photos), `processing/` (staged), `output_aradhana/` (finished tiles), `needs_review.csv` (Rule-2 log).
+- `input/` (drop photos), `processing/` (staged), `output_AMBIC/` (finished tiles), `needs_review.csv` (Rule-2 log).
 
 ## Workflow / how to run
-- **UI (preferred):** `Python311\python.exe app.py` → http://127.0.0.1:5000  (or preview config `.claude/launch.json` name `aradhana-ui`).
+- **UI (preferred):** `Python311\python.exe app.py` → http://127.0.0.1:5000  (or preview config `.claude/launch.json` name `AMBIC-ui`).
   - Steps: **1 Load** (from `input\` or file/folder picker → uploads to input) → **2 Ornament type** (Auto, or pick; "Other" reveals a name field) → **3 Rename & Stage (OPTIONAL)** → **4 Run** (background job, **live progress: current file / X-of-N / % / ETA**) → review cards (inline SKU/weight fix → re-generate) → download.
 - **Capture model (DECIDED):** photos in **PAIRS — 1st = jewellery, 2nd = its tag**. Tool reads tag → SKU+net weight → names output by SKU. Do NOT ask user to pre-name or supply SKUs.
 - VRAM: PASS A = all VLM (tag read + type) → `vision.unload()` → PASS B = SAM/withoutbg cutout + compose.
@@ -70,7 +70,7 @@ Fixed the regression spiral:
 **KEY TRUTH (re-confirmed):** the staged test set (001–012) are NON-CONFORMING captures (tags in the jewellery frame, rings angled on mixed/bright backgrounds, in boxes) → they correctly flag or come out poor. The pipeline + branding are correct for CONFORMING captures (one piece, black velvet, fill frame, NO tag in the jewellery photo, tag as separate 2nd photo). Do not chase bad captures in code — fix capture.
 
 ## Current disk state at handover
-- `input/` empty; `processing/` has `001_jewel.jpeg` + `001_tag.jpeg` (one pair staged); `output_aradhana/` has test tiles (`JB0671.jpg`, `_wbgtest_*`, `_wbg_silver` attempts).
+- `input/` empty; `processing/` has `001_jewel.jpeg` + `001_tag.jpeg` (one pair staged); `output_AMBIC/` has test tiles (`JB0671.jpg`, `_wbgtest_*`, `_wbg_silver` attempts).
 - A Flask server may be running on :5000 (preview). Engine top now reconfigures stdout to UTF-8 (withoutbg ✓ fix) and sets PYTHONUTF8.
 
 ---
@@ -78,12 +78,12 @@ Fixed the regression spiral:
 ## V4 CATALOGUE BACKGROUND SET (Claude/Cowork session, 2026-07-25)
 
 Separate sub-task from the cutout/tagging engine above: generating a **4th catalogue background style** (`_category_bgs_v4`), a luxury-brand direction, on top of the existing 3 sets already produced and reviewed:
-- `output_aradhana/generated_backgrounds/_category_bgs/` (v1) — superlight ice-blue (#eaf1fa), clean minimal, made by `_gen_category_bgs.py`.
+- `output_AMBIC/generated_backgrounds/_category_bgs/` (v1) — superlight ice-blue (#eaf1fa), clean minimal, made by `_gen_category_bgs.py`.
 - `_category_bgs_v2/` — rich cobalt/sky blue (#2f74b5) + Indian-handicraft props (brass/wood stands, lotus/jasmine/marigold accents), made by `_gen_category_bgs_v2.py`.
 - `_category_bgs_v3/` — same rich blue but as a silk/satin drape + ONE softly-blurred traditional accent (diya/peacock feather/temple arch) per category, cinematic shallow DOF, made by `_gen_category_bgs_v3.py`.
-- `output_aradhana/finished_showcase/{v1_clean,v2_heritage,v3_traditional}/` — product-composited previews of all 3 sets already exist for all 20 categories, so those decisions were already reviewed once before this session.
+- `output_AMBIC/finished_showcase/{v1_clean,v2_heritage,v3_traditional}/` — product-composited previews of all 3 sets already exist for all 20 categories, so those decisions were already reviewed once before this session.
 
-User's ask this session: make v4 "for a luxury jewellery brand like Aradhana Jewellers Boisar," covering every category, but **share 3 different color/design inspirations first** before generating the full set — i.e. don't mass-generate blind again.
+User's ask this session: make v4 "for a luxury jewellery brand like AMBIC Jewellers Boisar," covering every category, but **share 3 different color/design inspirations first** before generating the full set — i.e. don't mass-generate blind again.
 
 ### What's done
 - Read all 3 existing generator scripts to confirm the established pattern (`OUT_DIR`, a `STYLE_SUFFIX` string, a `CATEGORIES` dict of `category -> prop/accent description`, loop that calls `codex_img.generate_background_only()` first then falls back to `copilot_img.generate_background_only()` per category, skips any category whose output file already exists).
@@ -91,7 +91,7 @@ User's ask this session: make v4 "for a luxury jewellery brand like Aradhana Jew
   - **A_ivory_gold** — champagne-ivory field (#F3E9D8), warm gold glow, carved ivory-marble stand + brass trim. Minimalist global-luxury-boutique look (Cartier/Tiffany-adjacent). Plays best against a light website UI; lets brand gold (#CCA137/#F7CA5B) lead.
   - **B_emerald** — deep emerald silk (#0B4D3A), carved rosewood + gold-leaf stand, one softly-blurred brass diya (reuses v3's cinematic-blur trick, new color family). Traditional Indian heritage/bridal, warm and festive.
   - **C_wine_regal** — deep burgundy velvet (#5C1A2B), mahogany + gold-filigree stand, single dramatic spotlight with hard shadow falloff. Most opulent/editorial of the three — flagship bridal hero-shot feel.
-- Wrote `_gen_category_bgs_v4_preview.py` (repo root) — generates ONE sample image per concept (necklace only, the flagship shape) to `output_aradhana/generated_backgrounds/_category_bgs_v4_preview/preview_{concept}.jpg`, so the user can pick a direction before the full ~21-category batch is built. Follows the exact same Codex→Copilot-fallback pattern as v1–v3.
+- Wrote `_gen_category_bgs_v4_preview.py` (repo root) — generates ONE sample image per concept (necklace only, the flagship shape) to `output_AMBIC/generated_backgrounds/_category_bgs_v4_preview/preview_{concept}.jpg`, so the user can pick a direction before the full ~21-category batch is built. Follows the exact same Codex→Copilot-fallback pattern as v1–v3.
 
 ### BLOCKED as of 2026-07-25 ~19:30 IST — read before touching this again
 Ran the preview script 3x. Neither generation engine is currently usable:
@@ -106,11 +106,11 @@ Ran the preview script 3x. Neither generation engine is currently usable:
    C:\Users\kaila\AppData\Local\Programs\Python\Python311\python.exe _gen_category_bgs_v4_preview.py
    ```
 2. Once the 3 `preview_*.jpg` files exist in `_category_bgs_v4_preview/`, view them with the user and get a pick (A/B/C, or a blend/tweak request).
-3. Once a concept is picked, build the FULL v4 script mirroring `_gen_category_bgs_v3.py`'s structure exactly: a 21-entry `CATEGORIES` dict (same 21 keys as v1–v3: earrings, ladies_rings, gents_rings, ladies_chains, gents_chains, ladies_bracelet, gents_bracelet, ladies_kada, gents_kada, locket, pendant, tops, wati, mangalsutra_short, mangalsutra_long, bangles, ladies_bali, mens_bali, necklace, silver, diamond), each with a category-matched prop description in the chosen concept's palette/material language, plus that concept's `STYLE_SUFFIX`. Save to `output_aradhana/generated_backgrounds/_category_bgs_v4/`. After that, probably also want a `finished_showcase/v4_*` composite pass like the other 3 sets got.
+3. Once a concept is picked, build the FULL v4 script mirroring `_gen_category_bgs_v3.py`'s structure exactly: a 21-entry `CATEGORIES` dict (same 21 keys as v1–v3: earrings, ladies_rings, gents_rings, ladies_chains, gents_chains, ladies_bracelet, gents_bracelet, ladies_kada, gents_kada, locket, pendant, tops, wati, mangalsutra_short, mangalsutra_long, bangles, ladies_bali, mens_bali, necklace, silver, diamond), each with a category-matched prop description in the chosen concept's palette/material language, plus that concept's `STYLE_SUFFIX`. Save to `output_AMBIC/generated_backgrounds/_category_bgs_v4/`. After that, probably also want a `finished_showcase/v4_*` composite pass like the other 3 sets got.
 4. Alternative unblocker if the user doesn't want to wait: top up Claude/Cowork image credits and generate the 3 previews (and/or the full set) directly in chat instead of depending on Codex/Copilot.
 
 ### Key files (this sub-task)
 - `_gen_category_bgs_v4_preview.py` — new this session, 3-concept preview generator (necklace only).
 - `_gen_category_bgs.py` / `_gen_category_bgs_v2.py` / `_gen_category_bgs_v3.py` — existing pattern the full v4 script should follow.
-- `output_aradhana/generated_backgrounds/_category_bgs{,_v2,_v3,_v4_preview}/` — output folders (v4_preview created but still empty at handover time — nothing has generated successfully yet).
+- `output_AMBIC/generated_backgrounds/_category_bgs{,_v2,_v3,_v4_preview}/` — output folders (v4_preview created but still empty at handover time — nothing has generated successfully yet).
 - `copilot_cooldown.json` / rate-limit state files — transient engine state, don't hand-edit.

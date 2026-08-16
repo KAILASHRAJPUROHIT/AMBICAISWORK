@@ -36,7 +36,7 @@ Exact driver/module attribution is unavailable because every minidump referenced
 - Prompt deadline reduced from 30 minutes to 8 minutes. Timeout actively interrupts and removes the owned prompt.
 - Dashboard Stop now interrupts the owned ComfyUI prompt instead of only cancelling the Python wrapper.
 - Launcher retains `--cache-none --disable-dynamic-vram --lowvram`; adds disabled previews and disabled auto-launch.
-- Five hidden Copilot account profiles were found running despite local-only lockdown. Root cause: `app.py` unconditionally warmed every account at startup. Warm-up is now restricted to actual cloud mode. The launcher also starts no cloud or Comfy editor Chrome by default. Cloud profiles require `ARADHANA_START_CLOUD_BROWSERS=1`; the Comfy editor requires `ARADHANA_OPEN_COMFY_MONITOR=1`.
+- Five hidden Copilot account profiles were found running despite local-only lockdown. Root cause: `app.py` unconditionally warmed every account at startup. Warm-up is now restricted to actual cloud mode. The launcher also starts no cloud or Comfy editor Chrome by default. Cloud profiles require `AMBIC_START_CLOUD_BROWSERS=1`; the Comfy editor requires `AMBIC_OPEN_COMFY_MONITOR=1`.
 - Chrome is assigned to the integrated GPU. Comfy Python is assigned to the high-performance GPU.
 - The broken nested-`cmd.exe` launcher was replaced by `launch_catalog_ui.ps1`; `LAUNCH_CATALOG_UI.bat` remains the stable double-click entry point.
 - A copy-only crash-dump archiver exists. Standard-user access to `C:\Windows\Minidump` is denied on this machine, so reliable automatic preservation requires the included administrator-only scheduled-task installer.

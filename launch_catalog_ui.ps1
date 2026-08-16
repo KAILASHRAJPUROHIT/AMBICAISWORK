@@ -45,7 +45,7 @@ if (-not $ready) {
 }
 
 $url = "http://127.0.0.1:$port"
-$lanUrl = "http://aradhana:$port"
+$lanUrl = "http://AMBIC:$port"
 try {
     Start-Process -FilePath "explorer.exe" -ArgumentList $url -ErrorAction Stop
 } catch {

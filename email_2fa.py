@@ -16,13 +16,13 @@ BASE = Path(__file__).resolve().parent
 SECRET_PATH = BASE / "config" / "email_2fa_smtp.dpapi"
 SMTP_HOST = os.environ.get("AMBIC_SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("AMBIC_SMTP_PORT", "587"))
-SMTP_USERNAME = os.environ.get("AMBIC_SMTP_USERNAME", "info@aradhanajewellers.com")
+SMTP_USERNAME = os.environ.get("AMBIC_SMTP_USERNAME", "")
 
 
 def _otp_recipient() -> str:
     """OTP destination: env var wins; else a persisted override under
     data/ (gitignored, same convention as _generated_password() in
-    app.py); else the hardcoded default."""
+    app.py); else empty, meaning 2FA is not configured yet."""
     env_value = os.environ.get("AMBIC_OTP_RECIPIENT")
     if env_value:
         return env_value
@@ -31,14 +31,15 @@ def _otp_recipient() -> str:
         value = override_path.read_text(encoding="utf-8").strip()
         if value:
             return value
-    return "info@aradhanajewellers.com"
+    return ""
 
 
 OTP_RECIPIENT = _otp_recipient()
 
 
 def configured() -> bool:
-    return bool(os.environ.get("AMBIC_SMTP_APP_PASSWORD")) or SECRET_PATH.is_file()
+    has_credential = bool(os.environ.get("AMBIC_SMTP_APP_PASSWORD")) or SECRET_PATH.is_file()
+    return has_credential and bool(SMTP_USERNAME) and bool(OTP_RECIPIENT)
 
 
 def store_app_password(app_password: str) -> None:
