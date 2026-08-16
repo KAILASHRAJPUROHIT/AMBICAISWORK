@@ -732,7 +732,7 @@ function analysePixels(imageData, kind, finalFrame) {
   const motionScore = finalFrame ? 100 : motion === null ? 0 : clamp((0.075 - motion) / 0.075 * 100, 0, 100);
   const exposureScore = clamp((0.20 - effectiveClippedRatio) / 0.20 * 100, 0, 100);
   const goldScore = clamp(
-    goldBlob.warmCoverage * 140 + goldRatio * 55 + (goldDominant ? 12 : 0),
+    goldBlob.warmCoverage * 140 + goldRatio * 55 + (goldDominant ? 12 : 0) + (goldBoxArea >= 0.05 ? 12 : 0),
     0, 100
   );
   const capturePlan = buildShotPlan(data, width, height, points, pointBounds, goldBlob, goldRatio, goldDominant, tagMode);
