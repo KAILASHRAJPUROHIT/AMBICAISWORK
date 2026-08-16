@@ -713,34 +713,21 @@ const CAPTURE_PHASE_PROMPTS = {
 // tick()). Only applies to the 'front' (jewel) phase, never 'tag' -- the
 // QR/label needs the whole tag in frame at native 1x to decode.
 const CAPTURE_FILL_TARGET = 0.90;
-// Diminishing-returns early stop for the climb (see waitForPlacement):
-// once coverage is already substantial and the last zoom-in step gained
-// less than CAPTURE_COVERAGE_STALL_DELTA, further zooming is measured to
-// not be filling the frame any more -- most likely the background/support
-// region the coverage estimate is measured against has already been
-// filled, not that the item itself would keep growing with more zoom.
-// Repeated real captures this session never actually settled anywhere near
-// CAPTURE_FILL_TARGET; they always plateaued around 40-60% coverage and
-// then spent 15-20+ wasted seconds climbing to the device ceiling and
-// backing back down to that same plateau. Stopping AT the plateau instead
-// skips that whole wasted excursion.
-const CAPTURE_COVERAGE_MIN_TO_SETTLE_EARLY = 0.30;
-const CAPTURE_COVERAGE_STALL_DELTA = 0.03;
-// The LIVE optical-zoom climb stops here, separate from CAPTURE_FILL_TARGET
-// (which stays 0.90 and still governs the digital post-capture crop via
-// cropToFillOrnament -- the final saved photo's framing tightness is
-// unaffected by this). 0.90 as a live-zoom target measures frame AREA, so
-// it demands the gold blob's bounding box cover 90% of the frame's area --
-// an extremely tight crop that, across every real capture watched this
-// session, was never actually reached: the blob's measured box plateaued
-// around 30-50% (small ring, thin gold slivers around a bright diamond
-// face keep the connected-component box from ever reading much larger) and
-// every capture climbed all the way to the device ceiling chasing 0.90
-// before backing back down to roughly that same plateau anyway. Targeting
-// the realistic figure directly, instead of relying on the diminishing-
-// returns check below to catch the plateau via noisy per-tick deltas,
-// means the climb just stops there the first time it arrives.
-const CAPTURE_LIVE_ZOOM_TARGET = 0.42;
+// Minimum live coverage (fraction of frame AREA the gold/silver blob's
+// bounding box occupies) before a frame is even considered "enough of the
+// piece is in view" -- deliberately low. This is no longer the thing that
+// decides when to stop zooming (see advanceCapturePipeline): sharpness and
+// stability are verified at EVERY zoom level before advancing to the next
+// one, so the moment all four conditions (material, sharp, stable, this
+// floor) are true together, that IS the stopping point -- there's no
+// reason to hold out for a bigger number once a clean, in-focus frame
+// exists. Final framing tightness in the saved photo is still handled
+// separately by the digital crop (cropToFillOrnament, CAPTURE_FILL_TARGET).
+const CAPTURE_MIN_LIVE_COVERAGE = 0.10;
+// How many genuine focus-lock retries a single zoom level gets before the
+// pipeline concedes that level isn't resolving and steps back, rather than
+// pushing forward into an even harder-to-focus level.
+const CAPTURE_MAX_FOCUS_RETRIES = 2;
 let _cameraStream = null;
 let _cameraTrack = null;
 let _cameraImageCapture = null;
