@@ -849,20 +849,27 @@ function isCaptureGateReady(result) {
     return !!_qualityStableTag;
   }
   if (!isGoldTargetCandidate(result)) return false;
+  const coverage = result.capturePlan && typeof result.capturePlan.coverage === 'number'
+    ? result.capturePlan.coverage : 0;
+  if (coverage < CAPTURE_MIN_LIVE_COVERAGE) return false;
   const sharpEnough = result.detailSharpnessConfirmed === true &&
-    result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
+    result.sharpnessScore >= (coverage >= 0.02 ? 34 : 38);
   if (!sharpEnough) return false;
   return result.motion !== null && result.motion <= 0.08;
 }
 
 // Names the single most likely reason isCaptureGateReady is blocking
-// capture -- material not detected, not sharp yet, or too much motion.
+// capture -- material not detected, not enough of the frame filled, not
+// sharp yet, or too much motion.
 function _captureGateBlockReason(result) {
   if (!result) return 'Waiting on camera…';
   if (isCaptureGateReady(result)) return 'Ready. Capturing…';
   if (!isGoldTargetCandidate(result)) return 'Gold/silver piece not detected — reposition';
+  const coverage = result.capturePlan && typeof result.capturePlan.coverage === 'number'
+    ? result.capturePlan.coverage : 0;
+  if (coverage < CAPTURE_MIN_LIVE_COVERAGE) return 'Move closer or zoom in';
   const sharpEnough = result.detailSharpnessConfirmed === true &&
-    result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
+    result.sharpnessScore >= (coverage >= 0.02 ? 34 : 38);
   if (!sharpEnough) return 'Not sharp enough yet — hold steady, focusing…';
   return 'Too much motion — hold the phone steady';
 }
