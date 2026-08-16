@@ -812,60 +812,44 @@ function captureZoomForPhase(profile, phase, plan) {
   return phaseZoom[profile]?.[phase] || settings.zoom || 1;
 }
 
-// Mirrors the worker's jewelRelaxedPass (capture_quality_worker.js) -- the
-// one that does NOT require boxFits -- using result's CURRENT fields. This
-// matters specifically because addTargetSharpnessConfirmation() re-measures
-// sharpness on a sharper, higher-resolution crop of just the ornament (the
-// full-frame 360px analysis under-measures fine detail like pavé stones)
-// and overwrites result.sharpnessScore/clippedRatio with that refined
-// reading -- but it does NOT touch result.pass, which stays the *original,
-// unrefined* verdict. Gating on raw result.pass alone (tried first) meant a
-// piece that the refined re-measurement confirmed was genuinely sharp could
-// still be blocked forever by the stale pre-refinement verdict. Recomputing
-// the relaxed check locally, against the refined values, fixes that while
-// staying aligned with what the burst's own re-validation will accept.
-function _relaxedJewelPass(result) {
-  if (!result) return false;
-  const strongGold = result.goldDominant || result.goldBlobCoverage >= 0.010 || result.goldRatio >= 0.030;
-  if (!strongGold) return false;
-  const sharpEnough = result.detailSharpnessConfirmed === true &&
-    result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
-  if (!sharpEnough) return false;
-  if (result.clippedRatio >= 0.28) return false;
-  const goldUsable = isGoldTargetCandidate(result);
-  if (result.skinRatio >= (goldUsable ? 0.30 : 0.10)) return false;
-  return result.motion !== null && result.motion <= 0.08;
-}
-
+// Gates purely on material detection: is there a well-localised gold/silver
+// blob (isGoldTargetCandidate/goldBoundsUsable -- looksLikeMetal() in the
+// worker already covers both gold AND silver), is IT sharp, is the frame
+// stable. Deliberately does NOT check framing/box-fit, skin ratio, or glare
+// -- each of those caused a real false-block this session (box-fit fights
+// live zoom's re-centering; skin ratio misfired on a saturated pink display
+// clip that was never a hand; glare misfires on legitimate diamond sparkle
+// once zoomed in). None of that is needed to know "the metal is in frame
+// and it's sharp." Mirrors the worker's own metalPass criterion
+// (capture_quality_worker.js) so the live gate and the burst's own
+// re-validation agree -- and uses the REFINED sharpness/detail values from
+// addTargetSharpnessConfirmation() (a sharper crop of just the item; the
+// full-frame downscaled analysis under-measures fine detail like pavé
+// stones), not result.pass directly, which stays the original unrefined
+// verdict and would otherwise block a piece the refined measurement already
+// confirmed is sharp.
 function isCaptureGateReady(result) {
   if (!result) return false;
   if (_cameraKind === 'tag') {
     return !!_qualityStableTag;
   }
-  return !!(result.pass || _relaxedJewelPass(result));
+  if (!isGoldTargetCandidate(result)) return false;
+  const sharpEnough = result.detailSharpnessConfirmed === true &&
+    result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
+  if (!sharpEnough) return false;
+  return result.motion !== null && result.motion <= 0.08;
 }
 
-// Names the single most likely reason isCaptureGateReady is blocking capture,
-// checked in priority order. Used to give the operator (and us) an actual
-// diagnosis instead of a generic "not ready" once zoom has already settled --
-// otherwise a real threshold problem (e.g. glare from a tight zoomed-in crop
-// on gold) just looks identical to "still working on it."
+// Names the single most likely reason isCaptureGateReady is blocking
+// capture -- material not detected, not sharp yet, or too much motion.
 function _captureGateBlockReason(result) {
   if (!result) return 'Waiting on camera…';
   if (isCaptureGateReady(result)) return 'Ready. Capturing…';
-  const strongGold = result.goldDominant || result.goldBlobCoverage >= 0.010 || result.goldRatio >= 0.030;
-  if (!strongGold) return 'Ornament not detected — reposition';
+  if (!isGoldTargetCandidate(result)) return 'Gold/silver piece not detected — reposition';
   const sharpEnough = result.detailSharpnessConfirmed === true &&
     result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
   if (!sharpEnough) return 'Not sharp enough yet — hold steady, focusing…';
-  if (result.clippedRatio >= 0.28) return 'Too much glare/highlight — tilt the piece or adjust lighting';
-  const goldUsable = isGoldTargetCandidate(result);
-  if (result.skinRatio >= (goldUsable ? 0.30 : 0.10)) return 'Too much hand/skin in frame — reposition';
-  if (!(result.motion !== null && result.motion <= 0.08)) return 'Too much motion — hold the phone steady';
-  // Sharp/clean/stable all check out but the gate is still false, meaning
-  // it's failing on framing/box-fit specifically -- surface the worker's
-  // own diagnosis (boxFits/centering/point-count) rather than guessing.
-  return result.reason || 'Adjusting…';
+  return 'Too much motion — hold the phone steady';
 }
 
 cameraApiState.textContent = window.isSecureContext && navigator.mediaDevices
