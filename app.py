@@ -1029,6 +1029,8 @@ def api_processed_reset():
 
 
 if __name__ == "__main__":
+    from single_instance import enforce_single_instance
+    enforce_single_instance("app")
     import review_queue
 
     route_report = review_queue.reconcile_source_routes()
