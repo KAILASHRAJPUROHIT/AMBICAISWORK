@@ -49,10 +49,6 @@ _SSL_CERT_PATH = os.path.join(BASE, "data", "capture_https_cert.pem")
 _SSL_KEY_PATH = os.path.join(BASE, "data", "capture_https_key.pem")
 _SSL_META_PATH = os.path.join(BASE, "data", "capture_https_meta.json")
 
-# Duplicated deliberately, not imported from app.py — see module docstring.
-# Keep in sync with app.py's ADMIN_PASSWORD if it's ever changed.
-ADMIN_PASSWORD = "Aradhana1992"
-
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
