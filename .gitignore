@@ -122,6 +122,11 @@ _reset_backup_*/
 anthropic_key.txt
 tools/cloudflared.exe
 
+# ffmpeg download for spin_processor.py -- fetched per-machine by
+# tools/setup_ffmpeg.ps1, not committed (large binary, see .gitattributes
+# policy set 2026-08-16: no large binaries without LFS, avoid re-adding LFS)
+tools/ffmpeg/
+
 # ── Machine-bound encrypted credentials (DPAPI, tied to this Windows user) ────
 config/azure_flux2_pro_key.dpapi
 config/azure_flux2_pro_key.clixml
