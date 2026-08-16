@@ -939,8 +939,15 @@ async function createVideoAnalysisBitmap(maximum, bounds) {
 }
 
 function isGoldTargetCandidate(result) {
+  // goldBoxArea catches a piece paved with diamonds/stones: its gold pixels
+  // are fragmented into thin slivers around a large non-gold-coloured face,
+  // so the density-based checks (goldBlobCoverage/goldRatio) stay low even
+  // when the piece is sharp and dead-centre -- but the sparse slivers still
+  // span the whole piece, so the blob's bounding box is large. See the
+  // matching comment in capture_quality_worker.js where this is computed.
   return !!(result && result.goldBounds && (
-    result.goldDominant || result.goldBlobCoverage >= 0.012 || result.goldRatio >= 0.035
+    result.goldDominant || result.goldBlobCoverage >= 0.012 || result.goldRatio >= 0.035 ||
+    result.goldBoxArea >= 0.05
   ));
 }
 
