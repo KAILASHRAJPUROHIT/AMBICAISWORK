@@ -702,7 +702,7 @@ function analysePixels(imageData, kind, finalFrame) {
     : {x0: 0.18, y0: 0.16, x1: 0.82, y1: 0.84};
   const boxMargin = tagMode ? 0.018 : 0.03;
   const goldBoundsUsable = !tagMode && !!goldBlob.bounds && (
-    goldBlob.warmCoverage >= 0.02 || goldRatio >= 0.08 || goldDominant
+    goldBlob.warmCoverage >= 0.02 || goldRatio >= 0.08 || goldDominant || goldBoxArea >= 0.05
   );
   const targetQuality = goldBoundsUsable
     ? qualityInsideBounds(gray, width, height, goldBlob.bounds)
