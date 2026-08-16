@@ -1163,6 +1163,9 @@ let _qualityLastZoomAdjustAt = 0;
 let _qualityMaxUsableZoom = Infinity; // lowered by _maybeBackOffZoom when a zoom level proves unfocusable
 let _qualitySharpBlockedAt = 0;
 let _qualityFocusLockedAt = 0;
+// Consecutive climb-phase ticks with no LIVE detection -- signals the item
+// has drifted out of frame from centre-anchored zoom, see waitForPlacement.
+let _qualityLostFrames = 0;
 // Whether the ONE bounded focus retry (see _maybeBackOffZoom) has already
 // been used for the current zoom level. Reset whenever zoom actually moves
 // (settle restart, or a backoff step) so each new zoom level gets its own
