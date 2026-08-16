@@ -129,6 +129,28 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * With launchMode="singleTask", re-launching this app (tapping the
+     * launcher icon again, or the capturecam://start deep link from
+     * capture.html) while its task is already alive in the background does
+     * NOT call onCreate again -- Android just brings the existing instance
+     * forward and delivers the new Intent here instead. Without this
+     * override that meant every "fresh" open actually resumed showing
+     * whatever phase (e.g. "Scanning tag…") the PREVIOUS session had been
+     * left on, with the pipeline's tick loop still running against stale
+     * state -- indistinguishable from a hang from the operator's side, and
+     * why "it's still looking for the tag" kept reproducing on a supposedly
+     * new launch. Every entry from outside now forces a clean restart.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        launchedFromBrowser = intent.data?.scheme == "capturecam"
+        if (::cameraProvider.isInitialized) {
+            resetForNewItem(Phase.JEWEL)
+        }
+    }
+
     // ---------------------------------------------------------------- Camera setup
 
     private fun startCamera() {
