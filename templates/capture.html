@@ -1749,13 +1749,13 @@ async function captureOptimizedPhoto(source, expectedTag) {
         kind === 'tag' ? (validatedTag || 'Tag locked') : 'Best frame selected',
         () => {
           if (kind === 'tag') handleTagBlob(blob, validatedTag);
-          else handleJewelBlob(blob);
+          else handleJewelBlob(blob, validation.result && validation.result.goldBounds);
         }
       );
     } else if (kind === 'tag') {
       handleTagBlob(blob, validatedTag);
     } else {
-      handleJewelBlob(blob);
+      handleJewelBlob(blob, validation.result && validation.result.goldBounds);
     }
   } catch (error) {
     cameraStatus.textContent = 'Capture failed: ' + (error.message || String(error));
