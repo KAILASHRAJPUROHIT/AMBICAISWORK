@@ -96,8 +96,15 @@ def _capture_page_version():
 @app.route("/capture")
 def capture_page():
     import capture_tool as ct
-    return render_template("capture.html", categories=ct.category_list(TYPES + [ct.TEST_CATEGORY]),
-                           capture_version=_capture_page_version())
+    response = render_template("capture.html", categories=ct.category_list(TYPES + [ct.TEST_CATEGORY]),
+                               capture_version=_capture_page_version())
+    # The page itself carries no versioned query string (unlike the worker
+    # script below), so without an explicit no-store a phone browser can
+    # keep serving a stale cached copy of the capture flow after an update
+    # even though the server is already running the new code.
+    resp = app.make_response(response)
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
 
 
 @app.route("/api/stock/reconciliation")
