@@ -6,8 +6,10 @@
 ' windowStyle=0 is the same trick launch_tool.vbs already uses to keep the
 ' actual app.py process invisible; this applies it to the outer supervisor
 ' check itself so nothing flashes on screen at all.
-Dim shell
+Dim shell, fso, tool
 Set shell = CreateObject("WScript.Shell")
+Set fso   = CreateObject("Scripting.FileSystemObject")
+tool = fso.GetParentFolderName(WScript.ScriptFullName)
 Dim cmdLine
-cmdLine = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""C:\Users\kaila\Desktop\JewelleryCatalogTool\supervisor.ps1"""
+cmdLine = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File """ & tool & "\supervisor.ps1"""
 shell.Run cmdLine, 0, True

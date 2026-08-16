@@ -7,9 +7,13 @@ import app
 
 
 def test_dashboard_html_is_never_cached(monkeypatch):
-    monkeypatch.setattr(app, "ADMIN_PASSWORD", "test-password")
+    app.app.config["TESTING"] = True
     client = app.app.test_client()
-    client.post("/login", data={"password": "test-password"})
+    # Real login requires email 2FA (deliberate, see login()/verify_otp()) —
+    # setting the session directly is how every other authenticated-route
+    # test in this suite gets past that without weakening the real flow.
+    with client.session_transaction() as session:
+        session["authed"] = True
 
     response = client.get("/")
 

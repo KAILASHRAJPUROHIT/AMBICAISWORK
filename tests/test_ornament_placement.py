@@ -6,13 +6,7 @@ import pytest
 import engine_cascade
 import app
 import model_engine
-from jewellery_image_policy import (
-    build_klein_edit_prompt,
-    build_klein_isolation_prompt,
-    build_klein_raw_edit_prompt,
-    build_klein_white_product_prompt,
-    build_studio_edit_prompt,
-)
+from jewellery_image_policy import build_studio_edit_prompt
 from ornament_placement import (
     background_asset_category,
     get_profile,
@@ -136,119 +130,6 @@ def test_literal_ring_never_substring_matches_earrings():
     cfg = model_engine.get_templates("ring")
     assert cfg["zone"] == "hand"
     assert cfg["zone"] != model_engine.get_templates("earrings")["zone"]
-
-
-@pytest.mark.parametrize(
-    ("folder_name", "expected"),
-    [
-        ("32 JHUMKA 22", "jhumka"),
-        ("56 TOPS 22", "tops"),
-        ("6 BALI 22", "bali"),
-        ("16 GENTS RING 22", "gents_rings"),
-    ],
-)
-def test_numbered_stock_folder_resolves_for_live_klein_prompt(folder_name, expected):
-    assert normalise_category(folder_name) == expected
-    assert "unclassified jewellery" not in build_klein_isolation_prompt(folder_name)
-
-
-def test_klein_ring_prompts_lock_band_topology_and_real_stand():
-    isolation = build_klein_isolation_prompt("LADIES RING 22")
-    composite = build_klein_edit_prompt("LADIES RING 22")
-    for prompt in (isolation, composite):
-        assert "continuous finger band/shank" in prompt
-        assert "Never flatten it into a brooch" in prompt
-        assert "Add no text, logo, watermark, label or AI badge" in prompt
-    assert "CATEGORY PLACEMENT (Ladies Ring)" in composite
-    assert "Do not erase, replace, resize or redesign the existing stand" in composite
-    assert "Preserve every visible band path and its crossing order" in composite
-    assert "open bypass or wraparound ring" in composite
-    assert "reflective two-tone metal endcaps" in composite
-    assert "never replace them with diamonds or gems" in composite
-
-
-def test_klein_direct_ring_prompt_is_short_positive_and_source_led():
-    prompt = build_klein_raw_edit_prompt("LADIES RING 22")
-    assert 30 <= len(prompt.split()) <= 80
-    assert prompt.startswith("Place the exact")
-    assert "left reference" in prompt
-    assert "right scene" in prompt
-    assert "Keep the jewellery design unchanged" in prompt
-    assert "Match only the destination lighting" in prompt
-    assert "do not" not in prompt.lower()
-    assert "never" not in prompt.lower()
-
-
-def test_klein_jhumka_composite_keeps_complete_top_to_bottom_assembly():
-    prompt = build_klein_edit_prompt("32 JHUMKA 22")
-    assert 30 <= len(prompt.split()) <= 80
-    assert "hanging from the two ends of the T-stand" in prompt
-    assert "complete top-to-bottom assembly" in prompt
-    assert "through every connector and bell" in prompt
-    assert "lowest bead fringe" in prompt
-    assert "equal size and identical design" in prompt
-    assert "do not" not in prompt.lower()
-    assert "never" not in prompt.lower()
-
-
-@pytest.mark.parametrize(
-    ("category", "placement", "structure"),
-    [
-        ("TOPS 18", "pinned flat", "front-facing studs"),
-        ("JHUMKA 22", "hanging", "lowest bead fringe"),
-        ("EARRING 22", "hanging", "lowest drop"),
-        ("LADIES BALI 22", "hanging", "circular openings"),
-    ],
-)
-def test_klein_earring_prompts_are_short_positive_and_type_specific(
-    category, placement, structure
-):
-    isolation = build_klein_isolation_prompt(category)
-    edit = build_klein_edit_prompt(category)
-    for prompt in (isolation, edit):
-        assert 30 <= len(prompt.split()) <= 80
-        assert "do not" not in prompt.lower()
-        assert "never" not in prompt.lower()
-    assert placement in edit
-    assert structure in edit
-
-
-@pytest.mark.parametrize(
-    "category",
-    ["LADIES RING 22", "TOPS 18", "JHUMKA 22", "EARRING 22", "LADIES BALI 22"],
-)
-def test_klein_white_product_prompts_follow_length_and_positive_rules(category):
-    prompt = build_klein_white_product_prompt(category)
-    assert 30 <= len(prompt.split()) <= 80
-    assert "white" in prompt.lower()
-    assert "do not" not in prompt.lower()
-    assert "never" not in prompt.lower()
-
-
-def test_klein_white_prompt_injects_only_surgical_design_facts():
-    design = {
-        "item_type": "gold infinity stud earrings",
-        "quantity": 2,
-        "pair": True,
-        "silhouette": "horizontal infinity with a crown",
-        "components": [
-            {"name": "stone crown", "shape": "five marquise stones"},
-            {"name": "infinity body", "shape": "crossing gold loop"},
-        ],
-        "stone_groups": [
-            {"where": "each crown", "count": 5, "cut": "marquise", "colour": "colourless"},
-        ],
-        "metal_colour": "two-tone yellow and white gold",
-        "colours_present": ["yellow gold", "colourless white stones"],
-    }
-    prompt = build_klein_white_product_prompt("TOPS 18", design)
-    assert 50 <= len(prompt.split()) <= 80
-    assert "exactly 2 separate matching" in prompt
-    assert "five marquise stones" in prompt
-    assert "exactly 5 colourless marquise stones" in prompt
-    assert "infinity body" in prompt
-    assert "do not" not in prompt.lower()
-    assert "never" not in prompt.lower()
 
 
 def test_every_current_category_resolves_a_real_regular_background():

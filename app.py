@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from pathlib import Path
 from urllib.parse import quote
 
@@ -28,6 +29,12 @@ import stock_category_map
 import stock_watcher
 import ornament_code_map
 import prompt_governance
+import routing_preview
+import paths
+import dashboard_stats
+import stock_excel
+import category_dashboard
+import capture_tool
 
 
 BASE = Path(__file__).resolve().parent
@@ -39,13 +46,35 @@ NEEDS_REVIEW = BASE / "needs_review"
 REJECTED = BASE / "rejected"
 CAPTURE = BASE / "capture_intake"
 BACKGROUNDS = BASE / "backgrounds"
+BACKGROUNDS_DIR = str(BACKGROUNDS)
+MODELS_DIR = str(BASE / "models")
 REPORTS = BASE / "reports"
 AZURE_REPORTS = REPORTS / "azure_flux2_guard"
 CONFIG = BASE / "config" / "azure_flux2_guard.json"
 DUPLICATE_GUARD_CONFIG = BASE / "config" / "duplicate_guard.json"
 PROCESS_ENGINE = "azure_flux2_pro"
-PROCESS_PASSWORD = os.environ.get("ARADHANA_PROCESS_PASSWORD", "Aradhana@2026")
-ADMIN_PASSWORD = os.environ.get("ARADHANA_ADMIN_PASSWORD", "Aradhana1992")
+
+
+def _generated_password(env_var: str, filename: str) -> str:
+    """Auth password: env var wins; otherwise a random value persisted under
+    data/ (gitignored, same convention as _secret_key()). No hardcoded
+    default — a forgotten env var must never fall back to a guessable
+    literal password baked into source control."""
+    value = os.environ.get(env_var)
+    if value:
+        return value
+    path = BASE / "data" / filename
+    if path.is_file() and path.read_text(encoding="utf-8").strip():
+        return path.read_text(encoding="utf-8").strip()
+    import secrets
+    generated = secrets.token_urlsafe(18)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(generated, encoding="utf-8")
+    return generated
+
+
+PROCESS_PASSWORD = _generated_password("ARADHANA_PROCESS_PASSWORD", "process_password.txt")
+ADMIN_PASSWORD = _generated_password("ARADHANA_ADMIN_PASSWORD", "admin_password.txt")
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 TYPES = sorted({
     "earrings", "ladies_rings", "gents_rings", "ladies_chains", "gents_chains",
@@ -137,6 +166,12 @@ def require_login():
 def no_stale_pages(response):
     if response.mimetype == "text/html":
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        # Pragma/Expires are the HTTP/1.0-era complements to Cache-Control —
+        # belt-and-suspenders against an intermediary proxy/cache that only
+        # understands the older headers and would otherwise still be able
+        # to serve a stale authenticated page.
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -218,7 +253,16 @@ def logout():
 
 @app.get("/")
 def index():
-    return render_template("index.html", types=TYPES)
+    import raw_intake_sync
+    captured = stock_category_map.captured_keys(
+        raw_intake_sync.CAPTURE_INTAKE_SOURCE, raw_intake_sync.RAW_FINAL_DIR
+    )
+    needs_setup_keys = {c.key for c in stock_category_map.NEEDS_SETUP}
+    categories = [
+        {"key": c.key, "label": c.label, "disabled": c.key in needs_setup_keys and c.key not in captured}
+        for c in stock_category_map.CATEGORIES
+    ]
+    return render_template("index.html", types=TYPES, categories=categories)
 
 
 @app.get("/dashboard")
@@ -431,6 +475,26 @@ def api_queue_clear():
 
 @app.get("/img/<where>/<path:name>")
 def serve_image(where: str, name: str):
+    if where == "bg":
+        # Short alias that applies the same category substitution generation
+        # uses (engine_cascade.resolve_category_bg_path) — a literally-named
+        # request like Regular/bg_wati.jpg must preview the actual reviewed
+        # asset a real batch would get (bg_mangalsutra_short.jpg), not the
+        # legacy file sitting at that literal name, otherwise the preview UI
+        # and generation can silently disagree about which background an
+        # operator is looking at.
+        import engine_cascade
+        relative = _safe_child(BACKGROUNDS, name)
+        if not relative:
+            return "Not found", 404
+        theme = Path(name).parent.as_posix()
+        stem = Path(name).stem
+        category = stem[3:] if stem.startswith("bg_") else stem
+        resolved = engine_cascade.resolve_category_bg_path(category, theme)
+        if not resolved:
+            return "Not found", 404
+        return send_from_directory(resolved.parent, resolved.name)
+
     roots = {"input": INPUT, "processing": PROCESSING, "processed": PROCESSED, "output": OUTPUT, "backgrounds": BACKGROUNDS}
     root = roots.get(where)
     candidate = _safe_child(root, name) if root else None
@@ -865,68 +929,181 @@ def _count(root: Path) -> int:
     return len(_images(root, recursive=True))
 
 
-def _latest_capture() -> dict | None:
-    photos = [path for path in _images(CAPTURE, recursive=True) if "_tag_archive" not in path.parts]
-    if not photos:
-        return None
-    path = max(photos, key=lambda item: item.stat().st_mtime_ns)
-    return {"tag": path.stem, "relative_path": path.relative_to(CAPTURE).as_posix(), "preview_url": "/api/pipeline/latest_capture_preview"}
+def _get_lifecycle_requeue_service():
+    import lifecycle_requeue
+    return lifecycle_requeue.LifecycleRequeueService(processing_root=PROCESSING, needs_review_root=NEEDS_REVIEW, rejected_root=REJECTED)
 
 
-@app.get("/api/pipeline/dashboard")
-def api_pipeline_dashboard():
+def _get_routing_preview_service():
+    return routing_preview.RoutingPreviewService()
+
+
+# ── Manual model-pose override ──────────────────────────────────────────────
+# A manually pinned model reference (model_cfg["modelPath"]) is normally
+# required to match the category's expected anatomical zone (earrings need a
+# face-zone pose, not a feet-zone one) — a silent mismatch there produces a
+# genuinely wrong composite (jewellery pasted onto the wrong body part) with
+# no visible error. allowPoseOverride is the explicit, opt-in escape hatch
+# for when an operator really does want a non-standard pose.
+
+def _resolve_model_ref(category: str, model_cfg: dict):
+    import item_routing
+    import ornament_placement
+
+    model_path = (model_cfg or {}).get("modelPath")
+    if not model_path:
+        return None, None
+
     try:
-        import stock_excel
+        resolved = item_routing._resolve_inside(Path(MODELS_DIR), Path(model_path))
+    except item_routing.RoutingError as exc:
+        raise ValueError(f"MODEL_REFERENCE_INVALID: {exc}")
+
+    if not resolved.is_file():
+        raise ValueError(f"MODEL_REFERENCE_NOT_FOUND: {model_path}")
+
+    if not (model_cfg or {}).get("allowPoseOverride"):
+        _, expected_zone, _ = ornament_placement.template_profile(category)
+        actual_zone = item_routing._model_zone(resolved.name)
+        if expected_zone and actual_zone and actual_zone != expected_zone:
+            raise ValueError(
+                f"MODEL_POSE_MISMATCH: {resolved.name} looks like a {actual_zone!r} pose, "
+                f"expected {expected_zone!r} for {category}. Set allowPoseOverride to use it anyway."
+            )
+
+    return str(resolved), None
+
+
+def _cycled_model_cfg(model_cfg: dict, index: int) -> dict:
+    """One config per pair from a multi-model batch — a shallow copy so the
+    batch's shared config (and every other pair reading it concurrently)
+    is never mutated by one pair's cycle position."""
+    cfg = dict(model_cfg or {})
+    model_paths = cfg.get("modelPaths") or []
+    if model_paths:
+        cfg["modelPath"] = model_paths[index % len(model_paths)]
+    return cfg
+
+
+@app.route("/api/model_images")
+def api_model_images():
+    import item_routing
+    import ornament_placement
+
+    category = request.args.get("category", "")
+    group = request.args.get("group", "")
+    style = request.args.get("style", "")
+    include_all_poses = request.args.get("include_all_poses") == "1"
+
+    _, expected_zone, _ = ornament_placement.template_profile(category)
+    root = Path(MODELS_DIR) / group / style
+    images = []
+    if root.is_dir():
+        for candidate in sorted(root.iterdir()):
+            if candidate.is_file() and candidate.suffix.casefold() in IMAGE_EXTENSIONS:
+                zone = item_routing._model_zone(candidate.name)
+                if include_all_poses or not expected_zone or zone is None or zone == expected_zone:
+                    images.append({
+                        "path": candidate.relative_to(Path(MODELS_DIR)).as_posix(),
+                    })
+    return jsonify({"images": images, "expected_zone": expected_zone})
+
+
+# ── Pipeline dashboard ──────────────────────────────────────────────────────
+
+class PipelineCoordinator:
+    """Owns the last-known-good stock snapshot so a failed refresh (bad
+    workbook, share offline) degrades to stale-but-present numbers instead of
+    zeroing the whole dashboard — the health segment still reports the
+    failure honestly, it just doesn't nuke stock_tags/stock_pieces."""
+
+    def __init__(self):
+        self._last_snapshot = None
+
+    def refresh_stock(self):
         workbook = stock_excel.latest_stock_workbook()
-        inventory = stock_excel.load_stock_label_inventory(workbook)
-        stock_tags = inventory.record_count
-        stock_health = {"ok": True, "detail": f"{stock_tags} validated tags"}
+        snapshot = stock_excel.load_stock_workbook(workbook)
+        self._last_snapshot = snapshot
+        return SimpleNamespace(inventory=snapshot, warning=None)
+
+    def dashboard(self, *, now, timezone, external_health):
+        return dashboard_stats.collect_dashboard_stats(
+            capture_root=paths.CAPTURE_DIR,
+            processing_root=paths.PROCESSING_DIR,
+            processed_root=paths.PROCESSED_DIR,
+            needs_review_root=paths.NEEDS_REVIEW_DIR,
+            rejected_root=paths.REJECTED_DIR,
+            stock_snapshot=self._last_snapshot,
+            now=now,
+            timezone=timezone,
+            external_health=external_health,
+        )
+
+
+_PIPELINE_COORDINATOR = None
+
+
+def _get_pipeline_coordinator():
+    global _PIPELINE_COORDINATOR
+    if _PIPELINE_COORDINATOR is None:
+        _PIPELINE_COORDINATOR = PipelineCoordinator()
+    return _PIPELINE_COORDINATOR
+
+
+def _cached_pipeline_system_health():
+    # Reuses /api/health's own checks (azure key decrypt, disk writable,
+    # capture service reachable) rather than re-deriving a second, possibly
+    # drifting notion of "healthy" for the dashboard specifically.
+    return api_health().get_json()["checks"]
+
+
+@app.route("/api/pipeline/dashboard")
+def api_pipeline_dashboard():
+    coordinator = _get_pipeline_coordinator()
+    stock_error = None
+    refresh_result = None
+    try:
+        refresh_result = coordinator.refresh_stock()
     except Exception as exc:
-        stock_tags = 0
-        stock_health = {"ok": False, "detail": str(exc)}
-    health = api_health().get_json().get("checks", {})
-    health["stock"] = stock_health
-    return jsonify({
-        "captured_total": _count(CAPTURE), "stock_tags": stock_tags, "processing_available": _count(INPUT) + _count(PROCESSING),
-        "processed_total": _count(PROCESSED), "needs_review_total": _count(NEEDS_REVIEW), "rejected_total": _count(REJECTED),
-        "health": health, "latest_capture": _latest_capture(),
-    })
+        stock_error = str(exc)
+
+    now = datetime.now(tz=timezone.utc)
+    stats = coordinator.dashboard(now=now, timezone=timezone.utc,
+                                   external_health=_cached_pipeline_system_health())
+    payload = stats.as_dict()
+    payload["stock_source"] = None
+    payload["stock_updated_at"] = None
+
+    if stock_error:
+        payload.setdefault("health", {})["stock"] = {"ok": False, "detail": stock_error}
+    elif refresh_result is not None:
+        inventory = getattr(refresh_result, "inventory", None)
+        source_path = getattr(inventory, "source_path", None) if inventory is not None else None
+        if source_path is not None:
+            payload["stock_source"] = Path(source_path).name
+            payload["stock_updated_at"] = now.isoformat()
+        warning = getattr(refresh_result, "warning", None)
+        if warning:
+            payload.setdefault("health", {})["stock"] = {"ok": True, "detail": warning}
+
+    payload["latest_capture"] = _latest_capture_record()
+    return jsonify(payload)
 
 
-@app.get("/api/pipeline/latest_capture_preview")
-def api_latest_capture_preview():
-    latest = _latest_capture()
-    return send_from_directory(CAPTURE, latest["relative_path"]) if latest else ("not found", 404)
-
-
-@app.get("/api/pipeline/category_breakdown")
-def api_category_breakdown():
-    import category_dashboard
+@app.route("/api/pipeline/category_breakdown")
+def api_pipeline_category_breakdown():
     import orn_item_image_sync
     import review_queue
-    import stock_excel
 
-    now = time.time()
-    cache = getattr(api_category_breakdown, "_stock_cache", None)
-    if not cache or cache["expires_at"] <= now:
-        try:
-            inventory = stock_excel.load_stock_label_inventory(stock_excel.latest_stock_workbook())
-            stock_labels = inventory.labels
-        except Exception:
-            stock_labels = cache["labels"] if cache else ()
-        api_category_breakdown._stock_cache = {
-            "labels": stock_labels,
-            "expires_at": now + 60,
-        }
-    else:
-        stock_labels = cache["labels"]
+    coordinator = _get_pipeline_coordinator()
+    stock_labels = coordinator._last_snapshot.records if coordinator._last_snapshot else ()
+    stock_labels = [record.label_no for record in stock_labels]
     rows = category_dashboard.category_breakdown(
-        str(CAPTURE),
-        str(PROCESSED),
-        stock_labels,
-        review_queue._load_state(),
-        None,
-        orn_item_image_sync.uploaded_labels(),
+        capture_root=str(paths.CAPTURE_DIR),
+        processed_root=str(paths.PROCESSED_DIR),
+        stock_labels=stock_labels,
+        review_state=review_queue._load_state(),
+        uploaded_labels=orn_item_image_sync.uploaded_labels(),
     )
     upload_status = orn_item_image_sync._load_json(orn_item_image_sync.STATUS)
     upload_queue = orn_item_image_sync._load_json(orn_item_image_sync.QUEUE)
@@ -938,22 +1115,139 @@ def api_category_breakdown():
     })
 
 
-def _requeue_service():
+def _latest_capture_record():
+    dedup = capture_tool._load_dedup()
+    if not dedup:
+        return None
+    tag, info = max(dedup.items(), key=lambda kv: kv[1].get("ts", 0))
+    relative_path = f"{info.get('folder', '')}/{info.get('filename', '')}"
+    return {
+        "tag": tag,
+        "relative_path": relative_path,
+        "preview_url": f"/api/pipeline/latest_capture_preview?v={info.get('ts', 0)}",
+    }
+
+
+@app.route("/api/pipeline/latest_capture_preview")
+def api_pipeline_latest_capture_preview():
+    latest = _latest_capture_record()
+    if not latest:
+        return jsonify({"error": "no captures yet"}), 404
+    full_path = os.path.join(capture_tool.CAPTURE_ROOT, *latest["relative_path"].split("/"))
+    if not os.path.isfile(full_path):
+        return jsonify({"error": "capture file missing"}), 404
+    return send_from_directory(os.path.dirname(full_path), os.path.basename(full_path))
+
+
+@app.route("/api/capture/live_status")
+def api_capture_live_status():
+    try:
+        with socket.create_connection(("127.0.0.1", 7660), timeout=0.3):
+            reachable = True
+    except OSError:
+        reachable = False
+    try:
+        sessions = capture_tool.all_sessions_summary()
+    except Exception:
+        sessions = []
+    active_trays = {
+        session.get("category", session.get("folder", str(i))): session.get("folder", "")
+        for i, session in enumerate(sessions)
+        if session.get("open") or session.get("active")
+    }
+    return jsonify({"reachable": reachable, "active_trays": active_trays})
+
+
+_PIPELINE_LIVE_CACHE = {"expires_at": 0.0, "payload": None, "signature": None, "generation": 0}
+_PIPELINE_LIVE_LOCK = threading.Lock()
+
+
+def _pipeline_live_signature():
+    """Cheap, fast-to-compute signature so an unchanged filesystem state can
+    skip redoing the real (directory-walking) work on every 1s poll."""
+    try:
+        capture_mtime = os.path.getmtime(paths.CAPTURE_DIR) if os.path.isdir(paths.CAPTURE_DIR) else 0
+        processed_mtime = os.path.getmtime(paths.PROCESSED_DIR) if os.path.isdir(paths.PROCESSED_DIR) else 0
+    except OSError:
+        capture_mtime = processed_mtime = 0
+    return (capture_mtime, processed_mtime)
+
+
+@app.route("/api/pipeline/live_snapshot")
+def api_pipeline_live_snapshot():
+    now = time.time()
+    with _PIPELINE_LIVE_LOCK:
+        cache = _PIPELINE_LIVE_CACHE
+        signature = _pipeline_live_signature()
+        if (cache["payload"] is not None and cache["signature"] == signature
+                and now < cache["expires_at"]):
+            return jsonify(cache["payload"])
+
+        dashboard = api_pipeline_dashboard().get_json()
+        categories = api_pipeline_category_breakdown().get_json()
+        capture = api_capture_live_status().get_json()
+        generation = cache["generation"] + 1
+        payload = {
+            "dashboard": dashboard,
+            "categories": categories.get("categories", []),
+            "capture": capture,
+            "generation": generation,
+        }
+        cache.update({
+            "expires_at": now + 1.0,
+            "payload": payload,
+            "signature": signature,
+            "generation": generation,
+        })
+        return jsonify(payload)
+
+
+@app.route("/api/pipeline/routing/preview", methods=["POST"])
+def api_routing_preview():
+    data = request.get_json(force=True) or {}
+    service = _get_routing_preview_service()
+    try:
+        result = service.preview(
+            tag_label=data.get("tag_label", ""),
+            ornament_type=data.get("ornament_type", ""),
+            manual_override=data.get("manual_override"),
+        )
+    except routing_preview.RoutingPreviewValidationError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except routing_preview.RoutingPreviewTagNotFound as exc:
+        return jsonify({"error": str(exc)}), 404
+    except routing_preview.RoutingPreviewConflict as exc:
+        return jsonify({"error": str(exc)}), 409
+    return jsonify(result), 200
+
+
+@app.route("/api/pipeline/requeue/preview", methods=["GET"])
+def api_pipeline_requeue_preview():
     import lifecycle_requeue
-    return lifecycle_requeue.LifecycleRequeueService(processing_root=PROCESSING, needs_review_root=NEEDS_REVIEW, rejected_root=REJECTED)
+    service = _get_lifecycle_requeue_service()
+    try:
+        return jsonify(service.preview(request.args.get("status", ""), request.args.get("path", "")))
+    except lifecycle_requeue.RequeueSourceNotFound as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+    except lifecycle_requeue.RequeueValidationError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
 
 @app.route("/api/pipeline/requeue", methods=["GET", "POST"])
 def api_pipeline_requeue():
     import lifecycle_requeue
-    service = _requeue_service()
+    service = _get_lifecycle_requeue_service()
     try:
         if request.method == "GET":
             status = request.args.get("status", "")
             return jsonify({"ok": True, "status": status, "items": [item.as_dict() for item in service.list_items(status)]})
         data = request.get_json(silent=True) or {}
         return jsonify(service.requeue(data.get("status"), data.get("path"), data.get("confirmation_token")))
-    except (lifecycle_requeue.RequeueValidationError, lifecycle_requeue.RequeueSourceNotFound, lifecycle_requeue.RequeueConflictError) as exc:
+    except lifecycle_requeue.RequeueConflictError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 409
+    except lifecycle_requeue.RequeueSourceNotFound as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+    except lifecycle_requeue.RequeueValidationError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
 
@@ -970,17 +1264,29 @@ def api_processed_reset_preview():
         return jsonify({"ok": False, "error": str(exc)}), 400
 
 
+def _processed_reset_blocked() -> bool:
+    return bool(JOB["running"])
+
+
 @app.post("/api/pipeline/processed_reset")
 def api_processed_reset():
     import processed_state
-    if JOB["running"]:
-        return jsonify({"ok": False, "error": "Stop processing before reset"}), 409
     data = request.get_json(silent=True) or {}
+    scope = str(data.get("scope") or "tags")
+    required_confirmation = "RESET ALL PROCESSED" if scope == "all" else "RESET SELECTED PROCESSED"
+    if str(data.get("confirmation") or "") != required_confirmation:
+        return jsonify({"ok": False, "error": f"Type exactly {required_confirmation!r} to confirm."}), 400
+    if _processed_reset_blocked():
+        return jsonify({"ok": False, "error": "Stop Manual/Auto processing before resetting"}), 409
     try:
-        tags = processed_state.parse_tag_series(str(data.get("tags") or ""))
-        if not tags:
-            raise ValueError("Enter at least one tag")
-        return jsonify({"ok": True, "scope": "tags", **processed_state.apply_reset(tags)})
+        if scope == "all":
+            result = processed_state.apply_reset(None)
+        else:
+            tags = processed_state.parse_tag_series(str(data.get("tags") or ""))
+            if not tags:
+                raise ValueError("Enter at least one tag")
+            result = processed_state.apply_reset(tags)
+        return jsonify({"ok": True, "scope": scope, **result})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 409
 

@@ -37,12 +37,17 @@ import threading
 
 from logutil import ts
 
+_BASE = os.path.dirname(os.path.abspath(__file__))
+
 # No longer an active sync source (see module docstring) — kept only so any
 # code that references this constant for historical/debugging purposes still
-# finds the real path, not a NameError.
+# finds the real path, not a NameError. This one was never repo-relative (it
+# lived on the old machine's Desktop, outside the tool's own folder) so it
+# can't be made self-locating the way the other two below were — it's dead
+# either way since _SOURCES below doesn't include it.
 DND_SOURCE           = r"C:\Users\kaila\Desktop\FINAL CATALOGUE DND (tag-named)"
-CAPTURE_INTAKE_SOURCE = r"C:\Users\kaila\Desktop\JewelleryCatalogTool\capture_intake"
-RAW_FINAL_DIR        = r"C:\Users\kaila\Desktop\JewelleryCatalogTool\master backup"
+CAPTURE_INTAKE_SOURCE = os.path.join(_BASE, "capture_intake")
+RAW_FINAL_DIR        = os.environ.get("AJ_RAW_MIRROR_DIR", os.path.join(_BASE, "master backup"))
 
 _SOURCES = (CAPTURE_INTAKE_SOURCE,)
 _STABLE_AGE_SECS = 10   # skip files modified more recently than this

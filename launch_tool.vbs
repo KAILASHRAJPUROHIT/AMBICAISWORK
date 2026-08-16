@@ -3,10 +3,10 @@ Dim shell, fso, http, port, url
 Set shell = CreateObject("WScript.Shell")
 Set fso   = CreateObject("Scripting.FileSystemObject")
 
-Const TOOL      = "C:\Users\kaila\Desktop\JewelleryCatalogTool"
-Const PORT_FILE = "C:\Users\kaila\Desktop\JewelleryCatalogTool\port.txt"
+Dim TOOL : TOOL = fso.GetParentFolderName(WScript.ScriptFullName)
+Dim PORT_FILE : PORT_FILE = TOOL & "\port.txt"
 Const DEFAULT_PORT = "7654"
-Const LOG_FILE  = "C:\Users\kaila\Desktop\JewelleryCatalogTool\logs\run.log"
+Dim LOG_FILE : LOG_FILE = TOOL & "\logs\run.log"
 Const LOG_MAX_BYTES = 5242880  ' 5 MB — rotate one generation past this
 
 ' ── Rotate the run log so it never grows unbounded, but still leaves a ──────

@@ -7,6 +7,13 @@ adobe_token.json
 firefly_ims_token.json
 flask_secret_key.txt
 capture_secret_key.txt
+process_password.txt
+admin_password.txt
+data/capture_https_key.pem
+data/capture_https_cert.pem
+
+# ── Multi-tenant runtime state (contains live credentials — never commit) ────
+tenants/
 _gw2a_cookie_header.txt
 *_cookie_header.txt
 

@@ -55,7 +55,11 @@
     <main class="card">
       <div class="title-row"><div class="step">1</div><div><h2>Choose category and source images</h2><p>One image per item. Filename remains the catalogue tag.</p></div></div>
       <div class="controls">
-        <div class="field"><label for="category">Ornament category</label><select id="category"><option value="">Select category…</option>{% for type in types %}<option value="{{ type }}">{{ type.replace('_',' ')|title }}</option>{% endfor %}</select><span class="category-detection" id="categoryDetection">Auto-detected from folder path or latest stock workbook.</span></div>
+        <div class="field"><label for="catSelect">Ornament category</label><select id="catSelect">
+          <option value="">Select category…</option>
+          {% for category in categories %}<option value="{{ category.key }}"{% if category.disabled %} disabled{% endif %}>{{ category.label }}</option>
+          {% endfor %}
+        </select><span class="category-detection" id="categoryDetection">Auto-detected from folder path or latest stock workbook.</span></div>
         <div class="dropzone" id="dropzone">
           <div class="drop-icon">↥</div><div><h3>Drop jewellery photos here</h3><p>JPG or PNG. Originals stay untouched until an output succeeds.</p>
           <div class="pickers"><label class="btn btn-primary">Choose files<input id="files" type="file" accept="image/jpeg,image/png" multiple></label><label class="btn">Choose folder<input id="folder" type="file" accept="image/jpeg,image/png" webkitdirectory multiple></label></div></div>
@@ -70,15 +74,25 @@
       <div class="queue-head"><div><h3>Batch queue</h3><span id="queueNote">No images loaded</span></div><div class="queue-actions"><button class="btn clear-all" id="clearAllBtn" disabled>Clear all</button><button class="btn btn-ghost" id="refreshBtn">Refresh</button></div></div>
       <div class="queue" id="queue"><div class="empty">Choose images or a folder to begin.</div></div>
 
-      <div class="action">
-        <button class="process" id="processBtn" disabled>Process batch</button>
-        <span class="hint">Password required on every start. Zero automatic retries.</span>
+      <div class="process-panel" id="processSection">
+        <div class="action">
+          <button class="process" id="processBtn" disabled>
+            <span aria-hidden="true">▶</span> Process
+          </button>
+          <button class="btn" id="pauseBtn">
+            <span aria-hidden="true">⏸</span> Pause
+          </button>
+          <button class="btn" id="stopBtn" disabled>
+            <span aria-hidden="true">■</span> Cancel
+          </button>
+          <span class="hint">Password required on every start. Zero automatic retries.</span>
+        </div>
       </div>
+      <!-- AUTO MODE STATUS CHIP -->
 
       <section class="progress-card" id="progressCard">
         <div class="progress-top"><div><span class="eyebrow" style="color:#a8e7df">Live batch</span><strong id="progressText" style="display:block;margin-top:4px">Starting…</strong></div><strong id="progressCount">0 / 0</strong></div>
         <div class="progress-track"><i id="progressFill"></i></div>
-        <div class="progress-actions"><button id="pauseBtn">Pause</button><button id="stopBtn">Stop safely</button></div>
         <div class="errors" id="errors"></div>
       </section>
 
@@ -99,7 +113,131 @@
       <section class="card"><span class="eyebrow">Prompt governance</span><p id="promptStatus" style="margin:9px 0;color:var(--muted)">Loading engine guidance…</p><pre id="promptText" style="white-space:pre-wrap;max-height:220px;overflow:auto;background:#f5f8f9;padding:12px;border-radius:14px;font:12px/1.45 Segoe UI"></pre><div id="promptSources" style="font-size:11px"></div><button class="btn btn-primary" id="approvePrompt" style="margin-top:12px" disabled>Approve reviewed prompt</button></section>
     </aside>
   </div>
+
+  <section class="mode-select-grid" style="display:grid;grid-template-columns: repeat(3, minmax(0, 1fr));gap:14px;margin-top:18px">
+    <a class="mode-select-card card" href="/">Manual processing<span class="hint" style="display:block;margin-top:6px">Load a batch, review, process now.</span></a>
+    <a class="mode-select-card card" href="/capture">Capture<span class="hint" style="display:block;margin-top:6px">Phone/tablet capture workflow.</span></a>
+    <a class="mode-select-card card" href="/review">Review queue<span class="hint" style="display:block;margin-top:6px">Approve, reject, or requeue.</span></a>
+  </section>
+
+  <section class="card" id="pipelineDashboardCard" style="margin-top:18px">
+    <div class="title-row"><div class="step">4</div><div><h2>Live operations</h2><p>Pipeline totals, category coverage, lifecycle recovery.</p></div></div>
+
+    <div class="pipeline-metrics" style="display:grid;grid-template-columns:repeat(6,minmax(100px,1fr));gap:10px">
+      <div class="mini"><span class="eyebrow">Captured today</span><strong id="pipeCapturedToday">—</strong></div>
+      <div class="mini"><span class="eyebrow">Captured total</span><strong id="pipeCapturedTotal">—</strong></div>
+      <div class="mini"><span class="eyebrow">Stock tags</span><strong id="pipeStockTags">—</strong></div>
+      <div class="mini"><span class="eyebrow">Stock pieces</span><strong id="pipeStockPieces">—</strong></div>
+      <div class="mini"><span class="eyebrow">Ready to process</span><strong id="pipeProcAvail">—</strong></div>
+      <div class="mini"><span class="eyebrow">Processed</span><strong id="pipeProcessedTotal">—</strong></div>
+      <div class="mini"><span class="eyebrow">Needs review</span><strong id="pipeNeedsReview">—</strong></div>
+      <div class="mini"><span class="eyebrow">Rejected</span><strong id="pipeRejected">—</strong></div>
+      <div class="mini"><span class="eyebrow">Last capture</span><strong id="pipeLastCap">—</strong></div>
+      <div class="mini"><span class="eyebrow">Last processed</span><strong id="pipeLastProc">—</strong></div>
+      <div class="mini"><span class="eyebrow">Stock updated</span><strong id="pipeStockUpdated">—</strong></div>
+    </div>
+    <div id="pipeHealthSegments" class="health" style="margin-top:12px"></div>
+
+    <div class="quality-card" style="margin-top:16px">
+      <div class="title-row"><div class="step">Q</div><div><h2>Latest capture</h2><p>Live preview of the most recently captured item.</p></div></div>
+      <div class="preview" style="display:flex;gap:14px;align-items:center">
+        <img id="pipeLastCapturePreview" alt="Latest capture" style="width:130px;height:96px;object-fit:contain;border-radius:14px;background:#f3f7f7">
+        <div><strong id="pipeLastCaptureItem">No capture yet</strong><div id="pipeLastCaptureTag" class="hint"></div></div>
+      </div>
+    </div>
+
+    <div class="image-policy-card card" style="margin-top:16px;background:#f7fafb">
+      <span class="eyebrow">Image delivery policy</span>
+      <ul id="pipeImagePolicyList" style="margin:9px 0 0;padding-left:18px;color:var(--muted);font-size:12px;line-height:1.7">
+        <li>Final delivery is 2400 × 2400, centered crop for studio + model images.</li>
+        <li>The jewellery fills 75–90% of the frame at natural worn size.</li>
+        <li>Every delivered file carries AI provenance metadata.</li>
+        <li>A source that fails verification is marked UNVERIFIED, never silently passed.</li>
+      </ul>
+    </div>
+
+    <section class="capture-summary card" style="margin-top:16px;background:#f7fafb">
+      <div class="title-row"><div class="step">C</div><div><h2>Capture server</h2><p>Live tray activity on the capture tool.</p></div></div>
+      <div class="hint">Active trays: <strong id="captureActiveTrayCount">0</strong></div>
+      <details id="captureTrayDetails" style="margin-top:8px">
+        <summary>View active folder routing</summary>
+        <div id="captureTrayList" class="hint" style="margin-top:8px"></div>
+      </details>
+    </section>
+
+    <section class="category-breakdown-panel card" id="categoryBreakdownPanel" style="margin-top:16px;max-width:1180px">
+      <div class="category-breakdown-header title-row"><div class="step">5</div><div><h2>Category coverage</h2><p id="categoryCapturedSummary">Loading…</p></div>
+        <div class="controls" style="display:flex;gap:8px;margin-left:auto">
+          <button class="btn btn-ghost" id="categoryFilterCaptured" type="button">Captured only</button>
+          <button class="btn btn-ghost" id="categoryFilterAll" type="button">All categories</button>
+        </div>
+      </div>
+      <div class="tablewrap" style="max-height:420px;overflow:auto;margin-top:10px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr><th>Category</th><th>Stock</th><th>Captured</th><th>Processed</th><th>Approved</th><th>Rejected</th><th>Uploaded</th></tr></thead>
+          <tbody id="categoryBreakdownBody"><tr><td colspan="7">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="processed-state-panel card" id="processedStatePanel" style="margin-top:16px">
+      <div class="title-row"><div class="step">6</div><div><h2>Processed-memory reset</h2><p>Recoverable. Master capture and finished output images are never deleted, only the tool's own progress memory.</p></div></div>
+      <div class="controls" style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="processedResetTags" placeholder="Tags or range, e.g. LR22_40-LR22_69" style="min-width:260px;height:44px;border:1px solid var(--line);border-radius:12px;padding:0 12px">
+        <button class="btn btn-ghost" id="previewProcessedReset" type="button">Preview selected reset</button>
+        <button class="btn btn-coral" id="resetAllProcessed" type="button">RESET ALL PROCESSED</button>
+      </div>
+      <div id="processedResetResult" class="hint" style="margin-top:10px"></div>
+    </section>
+
+    <section class="requeue-panel card" id="requeuePanel" style="margin-top:16px">
+      <div class="title-row"><div class="step">7</div><div><h2>Requeue: Needs Review / Rejected</h2><p>Move a lifecycle item back to processing after a preview-and-confirm step.</p></div></div>
+      <div class="controls" style="display:flex;gap:8px">
+        <button class="btn btn-ghost" id="requeueTabNeedsReview" type="button">Needs review</button>
+        <button class="btn btn-ghost" id="requeueTabRejected" type="button">Rejected</button>
+      </div>
+      <div id="requeueList" style="margin-top:10px"></div>
+      <div id="requeueConfirm" style="margin-top:10px"></div>
+    </section>
+
+    <section class="routing-preview-panel card" id="routingPreviewPanel" style="margin-top:16px">
+      <div class="title-row"><div class="step">8</div><div><h2>Routing preview</h2><p>Read-only — shows exactly what the authoritative router would resolve for a tag, without generating anything.</p></div></div>
+      <div class="controls" style="display:flex;gap:8px">
+        <input id="routingPreviewTag" placeholder="Tag, e.g. LC22/13" style="min-width:220px;height:44px;border:1px solid var(--line);border-radius:12px;padding:0 12px">
+        <button class="btn btn-ghost" id="routingPreviewGo" type="button">Preview routing</button>
+      </div>
+      <div id="routingPreviewResult" style="margin-top:10px"></div>
+    </section>
+
+    <section class="manual-pose-panel card" style="margin-top:16px">
+      <div class="title-row"><div class="step">9</div><div><h2>Manual model pose override</h2><p>Explicit opt-in only — never active in Auto mode.</p></div></div>
+      <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" id="allowAllPosesToggle" style="width:16px;height:16px">
+        <span>Allow non-standard model poses for this batch</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:10px;margin-top:10px;cursor:pointer">
+        <input type="checkbox" id="manualVarietyAuto" style="width:16px;height:16px">
+        <span>Auto-resolve variety-specific background/model per pair</span>
+      </label>
+      <div id="poseZoneBadge" class="hint" style="margin-top:8px"></div>
+    </section>
+  </section>
 </div>
+
+<dialog id="batchReviewDialog" class="review-dialog"><div class="review-shell">
+  <div class="review-head"><h2>Batch review</h2><div class="review-nav-controls"><button class="btn" id="closeBatchReview" type="button">Close</button></div></div>
+  <div class="review-compare">
+    <div class="review-pane">
+      <div class="review-pane-head"><h3>Raw</h3><div class="image-tools"><button class="zoom-control review-zoom" id="zoomOutRaw" type="button">−</button><button class="zoom-control review-zoom" id="zoomInRaw" type="button">+</button><button class="zoom-control review-zoom zoom-reset" id="zoomRaw" type="button">Reset</button></div></div>
+      <div class="review-image image-stage" id="reviewRawStage"><img id="reviewRaw" alt="Raw capture" draggable="false"></div>
+    </div>
+    <div class="review-pane">
+      <div class="review-pane-head"><h3>Finished output</h3><div class="image-tools"><button class="zoom-control review-zoom" id="zoomOutOutput" type="button">−</button><button class="zoom-control review-zoom" id="zoomInOutput" type="button">+</button><button class="zoom-control review-zoom zoom-reset" id="zoomOutput" type="button">Reset</button></div></div>
+      <div class="review-image image-stage" id="reviewOutputStage"><img id="reviewOutput" alt="Finished output" draggable="false"></div>
+    </div>
+  </div>
+  <div class="review-nav"><button class="btn" id="batchReviewPrev" type="button">‹ Prev</button><strong id="batchReviewPosition">1 / 1</strong><button class="btn" id="batchReviewNext" type="button">Next ›</button></div>
+</div></dialog>
 
 <dialog id="passwordDialog"><form method="dialog" class="dialog-body"><h2>Authorize this batch</h2><p>Enter the processing password. It is checked by the server and not saved.</p><input id="password" type="password" autocomplete="off" placeholder="Processing password"><div class="dialog-actions"><button class="btn" value="cancel">Cancel</button><button class="btn btn-coral" value="confirm">Start processing</button></div></form></dialog>
 <dialog id="imageDialog" class="image-dialog"><div class="image-view"><header><strong id="imageDialogTitle">Catalogue image</strong><div class="image-tools"><button class="zoom-control" id="zoomOut" type="button" title="Zoom out" aria-label="Zoom out">−</button><strong id="zoomLevel">100%</strong><button class="zoom-control" id="zoomIn" type="button" title="Zoom in" aria-label="Zoom in">+</button><button class="zoom-control zoom-reset" id="zoomReset" type="button">Reset</button><button class="close-dialog" id="closeImageDialog" type="button" aria-label="Close">×</button></div></header><div class="image-stage" id="imageStage"><button class="fullscreen-nav fullscreen-nav-prev" id="fullscreenPrev" type="button" aria-label="Previous image">‹</button><img id="fullscreenImage" alt="Fullscreen catalogue image" draggable="false"><button class="fullscreen-nav fullscreen-nav-next" id="fullscreenNext" type="button" aria-label="Next image">›</button></div></div></dialog>
@@ -107,7 +245,346 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  const $=id=>document.getElementById(id); let pairs=[],poller=null,paused=false,promptApproved=false,promptHash='',reviewOpened=false,zoomScale=1,zoomX=0,zoomY=0,zoomDragging=false,zoomStartX=0,zoomStartY=0,selectedBackgroundPath='',fullscreenList=[],fullscreenIndex=-1;
+  const $=id=>document.getElementById(id);
+  // This deployment is single-engine, Azure-only production (see the
+  // handover doc) — no multi-provider cascade exists here. These two
+  // constants are a compatibility marker for shared tooling that still
+  // reads a run-method/process-mode pair, not a real engine choice.
+  const _runMethod = 'copilot';
+  const _processMode = 'ai_only';
+
+  // ── Live operations panel: pipeline dashboard, category breakdown,
+  // capture summary, processed-memory reset, requeue, routing preview,
+  // manual pose override. DOM built with createElement/textContent only,
+  // since these render server data (tags, folder names, error text) that
+  // must never be interpretable as markup.
+  const PIPELINE_LIVE_POLL_MS = 1000;
+  let _pipelineLiveRequest = null;
+  let pending = false;
+
+  function fetchBounded(url, opts){
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    return fetch(url, Object.assign({}, opts || {}, {signal: controller.signal})).finally(() => clearTimeout(timer));
+  }
+
+  function renderHealthSegments(health){
+    const segments = $('pipeHealthSegments');
+    segments.replaceChildren();
+    for (const key in (health || {})) {
+      const value = health[key];
+      const badge = document.createElement('div');
+      badge.className = 'dot ' + (value && value.ok ? '' : 'bad');
+      badge.appendChild(document.createTextNode(' ' + key));
+      segments.appendChild(badge);
+    }
+  }
+
+  function renderCategoryBreakdown(rows, stockUpdated, stockSource){
+    const capturedTotal = rows.reduce((sum, row) => sum + (row.captured || 0), 0);
+    $('categoryCapturedSummary').textContent = capturedTotal + ' captured across ' + rows.length + ' categories · ' + (stockUpdated + stockSource);
+    const body = $('categoryBreakdownBody');
+    body.replaceChildren();
+    for (const row of rows) {
+      const tr = document.createElement('tr');
+      const denominator = row.stock_total || 0;
+      const value = row.captured || 0;
+      const pct = denominator ? Math.round(value / denominator * 100) : 0;
+      const labelCell = document.createElement('td');
+      labelCell.textContent = row.label;
+      tr.appendChild(labelCell);
+      const stockCell = document.createElement('td');
+      stockCell.textContent = String(denominator);
+      tr.appendChild(stockCell);
+      const capturedCell = document.createElement('td');
+      capturedCell.className = 'category-count';
+      capturedCell.textContent = `${value}/${denominator}`;
+      tr.appendChild(capturedCell);
+      const cells = [
+        String(row.processed || 0),
+        String(row.approved || 0),
+        String(row.rejected || 0),
+        String(row.uploaded || 0),
+      ];
+      for (const text of cells) {
+        const td = document.createElement('td');
+        td.textContent = text;
+        tr.appendChild(td);
+      }
+      tr.title = pct + '%';
+      body.appendChild(tr);
+    }
+  }
+
+  // A source image that fails design/quality verification is labelled
+  // honestly instead of silently treated as a pass — see catalogue_db's
+  // verification.py for the real check this status mirrors.
+  function _deliveryVerificationStatus(result){
+    if (!result || result.verified !== true) return 'UNVERIFIED';
+    return 'VERIFIED';
+  }
+
+  function renderCaptureTrays(capture){
+    const trayCount = $('captureActiveTrayCount');
+    const entries = Object.entries((capture && capture.active_trays) || {});
+    trayCount.textContent = String(entries.length);
+    const list = $('captureTrayList');
+    list.replaceChildren();
+    for (const [key, folder] of entries) {
+      const row = document.createElement('div');
+      row.className = 'capture-tray-row';
+      row.textContent = key + ': ' + folder;
+      list.appendChild(row);
+    }
+  }
+
+  function renderPipelineLive(payload){
+    const data = (payload && payload.dashboard) || {};
+    $('pipeCapturedToday').textContent = data.captured_today ?? '—';
+    $('pipeCapturedTotal').textContent = data.captured_total ?? '—';
+    $('pipeStockTags').textContent = data.stock_tags ?? '—';
+    $('pipeStockPieces').textContent = data.stock_pieces ?? '—';
+    $('pipeProcAvail').textContent = data.processing_available ?? '—';
+    $('pipeProcessedTotal').textContent = data.processed_total ?? '—';
+    $('pipeNeedsReview').textContent = data.needs_review_total ?? '—';
+    $('pipeRejected').textContent = data.rejected_total ?? '—';
+    $('pipeLastCap').textContent = data.last_captured_at ?? '—';
+    $('pipeLastProc').textContent = data.last_processed_at ?? '—';
+    $('pipeStockUpdated').textContent = (data.stock_updated_at || '—') + ' ' + (data.stock_source || '');
+    renderHealthSegments(data.health);
+    renderCategoryBreakdown(payload.categories || [], data.stock_updated_at || '', data.stock_source || '');
+    renderCaptureTrays(payload.capture);
+    if (data.latest_capture) {
+      const latest = data.latest_capture;
+      $('pipeLastCaptureItem').textContent = latest.tag;
+      $('pipeLastCaptureTag').textContent = latest.relative_path;
+      $('pipeLastCapturePreview').src = latest.preview_url;
+    }
+  }
+
+  async function pollDashboard(force){
+    if (document.hidden && !force) return;
+    if (pending) return;
+    if (_pipelineLiveRequest) return _pipelineLiveRequest;
+    pending = true;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    _pipelineLiveRequest = fetch('/api/pipeline/live_snapshot', {cache: 'no-store', signal: controller.signal})
+      .then(response => { if (!response.ok) throw new Error('HTTP ' + response.status); return response.json(); })
+      .then(data => renderPipelineLive(data))
+      .catch(() => {})
+      .finally(() => { clearTimeout(timer); pending = false; _pipelineLiveRequest = null; });
+    return _pipelineLiveRequest;
+  }
+
+  // ── Processed-memory reset ──────────────────────────────────────────────
+  async function applyProcessedReset(scope, tags, confirmation){
+    const r = await fetchBounded('/api/pipeline/processed_reset', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({scope, tags, confirmation}),
+    });
+    const data = await r.json();
+    if (!data.ok) { $('processedResetResult').textContent = data.error || 'Reset failed'; return; }
+    toast('Processed memory reset');
+    window.__refreshPipelineDashboard();
+  }
+
+  async function previewProcessedReset(){
+    const tags = $('processedResetTags').value.trim();
+    if (!tags) { $('processedResetResult').textContent = 'Enter at least one tag.'; return; }
+    const r = await fetchBounded('/api/pipeline/processed_reset/preview?' + new URLSearchParams({scope: 'tags', tags}));
+    const data = await r.json();
+    const box = $('processedResetResult');
+    box.replaceChildren();
+    if (!data.ok) { box.textContent = data.error || 'Preview failed'; return; }
+    const summary = document.createElement('div');
+    summary.textContent = `${data.processed_file_count} file(s), ${data.progress_records} progress record(s)`;
+    box.appendChild(summary);
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'btn btn-coral';
+    confirmBtn.textContent = 'RESET SELECTED PROCESSED';
+    confirmBtn.addEventListener('click', () => applyProcessedReset('tags', tags, 'RESET SELECTED PROCESSED'));
+    box.appendChild(confirmBtn);
+  }
+
+  $('previewProcessedReset').onclick = previewProcessedReset;
+  $('resetAllProcessed').onclick = () => {
+    if (!confirm('Reset ALL processed memory? Master capture and finished output images are never deleted.')) return;
+    applyProcessedReset('all', '', 'RESET ALL PROCESSED');
+  };
+
+  // ── Requeue panel — preview then confirm only; the POST is reachable
+  // solely from the confirm button's own click listener. ──────────────────
+  let requeueStatus = 'needs_review';
+
+  function renderRequeueConfirm(relativePath, data){
+    const box = $('requeueConfirm');
+    box.replaceChildren();
+    const summary = document.createElement('div');
+    summary.textContent = relativePath;
+    box.appendChild(summary);
+    const conflictLine = document.createElement('div');
+    conflictLine.textContent = data.conflict || 'This item cannot be requeued right now.';
+    if (!data.can_requeue) box.appendChild(conflictLine);
+    if (data.conflict === 'Destination exists') {
+      const destLine = document.createElement('div');
+      destLine.textContent = 'Destination exists';
+      box.appendChild(destLine);
+    }
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'btn btn-coral';
+    confirmBtn.textContent = 'Confirm requeue';
+    confirmBtn.disabled = !data.can_requeue;
+    confirmBtn.addEventListener('click', () => doRequeue(relativePath, data.confirmation_token));
+    box.appendChild(confirmBtn);
+  }
+
+  function renderRequeueList(items){
+    const list = $('requeueList');
+    list.replaceChildren();
+    for (const item of items) {
+      const row = document.createElement('div');
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'btn btn-ghost';
+      link.textContent = item.relative_path;
+      link.addEventListener('click', () => startRequeuePreview(requeueStatus, item.relative_path));
+      row.appendChild(link);
+      list.appendChild(row);
+    }
+  }
+
+  let listPending = false, previewPending = false, confirmPending = false;
+
+  async function loadRequeueList(status){
+    if (listPending) return;
+    listPending = true;
+    try {
+      const r = await fetchBounded('/api/pipeline/requeue?status=' + status, {cache: 'no-store'});
+      const data = await r.json();
+      renderRequeueList(data.items || []);
+    } catch (error) {
+      $('requeueList').textContent = error.message;
+    } finally {
+      listPending = false;
+    }
+  }
+
+  async function startRequeuePreview(status, relativePath){
+    if (previewPending) return;
+    previewPending = true;
+    try {
+      const r = await fetchBounded('/api/pipeline/requeue/preview?' + new URLSearchParams({status, path: relativePath}));
+      const data = await r.json();
+      renderRequeueConfirm(relativePath, data);
+    } catch (error) {
+      $('requeueConfirm').textContent = error.message;
+    } finally {
+      previewPending = false;
+    }
+  }
+
+  async function doRequeue(relativePath, token){
+    if (confirmPending) return;
+    confirmPending = true;
+    try {
+      const r = await fetchBounded('/api/pipeline/requeue', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({status: requeueStatus, path: relativePath, confirmation_token: token}),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+      toast('Requeued');
+      $('requeueConfirm').replaceChildren();
+      window.__refreshPipelineDashboard();
+      await loadRequeueList(requeueStatus);
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      confirmPending = false;
+    }
+  }
+
+  window.__refreshPipelineDashboard = () => pollDashboard(true);
+
+  $('requeueTabNeedsReview').onclick = () => { requeueStatus = 'needs_review'; loadRequeueList(requeueStatus); };
+  $('requeueTabRejected').onclick = () => { requeueStatus = 'rejected'; loadRequeueList(requeueStatus); };
+
+  // ── Routing preview — read-only, hits the authoritative router endpoint
+  // and nothing else; never generates. ────────────────────────────────────
+  async function previewVarietyRouting(){
+    const tag = $('routingPreviewTag').value.trim();
+    if (!tag) return;
+    const category = $('catSelect').value;
+    const box = $('routingPreviewResult');
+    box.replaceChildren();
+    try {
+      const r = await fetch('/api/pipeline/routing/preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({tag_label: tag, ornament_type: category}),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+      const summary = document.createElement('div');
+      summary.textContent = `${data.variety || ''} · ${data.background ? data.background.path : ''}`;
+      box.appendChild(summary);
+    } catch (error) {
+      const errorLine = document.createElement('div');
+      errorLine.textContent = error.message;
+      box.appendChild(errorLine);
+    }
+  }
+
+  function _setRunning(running){
+    $('processBtn').disabled = running || !pairs.length || !$('catSelect').value || !promptApproved;
+    $('stopBtn').disabled = !running;
+  }
+
+  $('routingPreviewGo').onclick = previewVarietyRouting;
+
+  // ── Manual pose override / variety-auto — explicit opt-in only, never
+  // active unless the operator checks the box for THIS batch. ────────────
+  function _getModelConfig(includeAllowed){
+    const cfg = {};
+    const allowToggle = $('allowAllPosesToggle');
+    if (includeAllowed && allowToggle && allowToggle.checked) {
+      if (!confirm('Continue with these non-standard model poses?')) return cfg;
+      cfg.allowPoseOverride = true;
+    }
+    return cfg;
+  }
+
+  function _modelImagesParams(){
+    const params = new URLSearchParams();
+    const allowToggle = $('allowAllPosesToggle');
+    if (allowToggle && allowToggle.checked) params.set('include_all_poses', '1');
+    return params;
+  }
+
+  function renderPoseZone(zone){
+    const zoneBadge = $('poseZoneBadge');
+    if (zoneBadge) zoneBadge.textContent = 'zone: ' + zone;
+  }
+
+  function _buildManualRunPayload(category, pairsToRun){
+    const model = _getModelConfig(true);
+    return {
+      category: category,
+      pairs: pairsToRun,
+      model:    _getModelConfig(false),
+      varietyAuto: !!document.getElementById('manualVarietyAuto')?.checked,
+    };
+  }
+
+  pollDashboard(true);
+  setInterval(() => pollDashboard(false), PIPELINE_LIVE_POLL_MS);
+  // Default view on load
+  loadRequeueList(requeueStatus);
+
+  let pairs=[],poller=null,paused=false,promptApproved=false,promptHash='',reviewOpened=false,zoomScale=1,zoomX=0,zoomY=0,zoomDragging=false,zoomStartX=0,zoomStartY=0,selectedBackgroundPath='',fullscreenList=[],fullscreenIndex=-1;
   function toast(message){const t=$('toast');t.textContent=message;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200)}
   function stockTransitionPopup(){let pending=false,currentItems=[],shownSignature='';const acknowledgedKey='aradhana_stock_transition_catalogue_v1';function renderRows(query){const needle=String(query||'').trim().toLocaleUpperCase(),fragment=document.createDocumentFragment();currentItems.forEach(item=>{const searchable=String(item.label||item.safe_tag||'')+' '+String(item.category||'');if(needle&&!searchable.toLocaleUpperCase().includes(needle))return;const row=document.createElement('li'),tag=document.createElement('strong');tag.textContent = item.label||item.safe_tag||'Unknown tag';row.append(tag,document.createTextNode(' · '+(item.category||'Unknown category')));fragment.append(row)});$('stockList').replaceChildren(fragment)}async function check(){if (pending) return;pending=true;const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),5000);try{const response=await fetch('/api/stock/reconciliation',{cache:'no-store',signal:controller.signal});if(!response.ok)return;const data=await response.json();if(!data.ok||!data.notification_ready||!data.signature||localStorage.getItem(acknowledgedKey)===data.signature)return;shownSignature=data.signature;const sold=Array.isArray(data.sold_tags)?data.sold_tags.length:0,added=Array.isArray(data.new_tags)?data.new_tags.length:0;$('stockSummary').textContent=`${sold} item${sold===1?'':'s'} sold · ${added} item${added===1?'':'s'} added · ${data.pending_capture_count||0} current-stock item${data.pending_capture_count===1?'':'s'} need capture.`;currentItems=Array.isArray(data.pending_capture)?data.pending_capture:[];$('stockSearch').value='';renderRows('');$('stockDialog').showModal()}finally{clearTimeout(timer);pending=false}}$('stockSearch').addEventListener('input',e=>renderRows(e.target.value));$('stockClose').onclick=()=>{if(shownSignature)localStorage.setItem(acknowledgedKey,shownSignature);$('stockDialog').close()};check()}
   function escapeHtml(v){const d=document.createElement('div');d.textContent=v??'';return d.innerHTML}
@@ -120,24 +597,68 @@
   function showFullscreenList(list,index){fullscreenList=list;fullscreenIndex=index;renderFullscreenAt();$('imageDialog').showModal()}
   function renderFullscreenAt(){const item=fullscreenList[fullscreenIndex];if(!item)return;resetZoom();$('fullscreenImage').src=item.url;$('fullscreenImage').alt=item.title||'Catalogue image';$('imageDialogTitle').textContent=item.title||'Catalogue image';const multi=fullscreenList.length>1;$('fullscreenPrev').disabled=!multi||fullscreenIndex<=0;$('fullscreenNext').disabled=!multi||fullscreenIndex>=fullscreenList.length-1}
   function fullscreenStep(delta){const next=fullscreenIndex+delta;if(next<0||next>=fullscreenList.length)return;fullscreenIndex=next;renderFullscreenAt()}
-  function applyDetectedCategory(detection){const select=$('category'),note=$('categoryDetection');if(detection&&detection.category){select.value=detection.category;select.disabled=true;note.textContent=`Auto-selected ${detection.label} from ${detection.source}${detection.stock_workbook?' · '+detection.stock_workbook:''}`;note.className='category-detection auto'}else{select.disabled=false;note.textContent=detection&&detection.stock_warning?'Stock lookup unavailable; select category manually.':'No reliable category detected; select manually.';note.className='category-detection'}loadBackgrounds(select.value)}
+  function applyDetectedCategory(detection){const select=$('catSelect'),note=$('categoryDetection');if(detection&&detection.category){select.value=detection.category;select.disabled=true;note.textContent=`Auto-selected ${detection.label} from ${detection.source}${detection.stock_workbook?' · '+detection.stock_workbook:''}`;note.className='category-detection auto'}else{select.disabled=false;note.textContent=detection&&detection.stock_warning?'Stock lookup unavailable; select category manually.':'No reliable category detected; select manually.';note.className='category-detection'}loadBackgrounds(select.value)}
   async function loadBackgrounds(category){const panel=$('backgroundPanel'),grid=$('backgroundGrid');selectedBackgroundPath='';if(!category){panel.classList.remove('visible');grid.innerHTML='';$('backgroundCount').textContent='';return}panel.classList.add('visible');$('backgroundRule').textContent='Finding compatible backgrounds…';grid.innerHTML='<div class="background-empty">Loading…</div>';try{const r=await fetch(`/api/backgrounds?category=${encodeURIComponent(category)}`,{cache:'no-store'}),j=await readJson(r);if(!r.ok)throw new Error(j.error||'Background lookup failed');$('backgroundCount').textContent=`${j.count} found`;$('backgroundRule').textContent=j.keywords&&j.keywords.length?`Matched by: ${j.keywords.join(', ')} · click to select · double-click to inspect`:'No background rule exists for this category.';grid.innerHTML=j.items.length?j.items.map(bg=>`<button class="background-card" type="button" data-path="${escapeHtml(bg.path)}" data-url="${escapeHtml(bg.url)}" data-title="${escapeHtml(bg.style+' · '+bg.name)}"><img loading="lazy" src="${escapeHtml(bg.url)}" alt="${escapeHtml(bg.style+' '+bg.name)}"><span title="${escapeHtml(bg.path)}">${escapeHtml(bg.style)}</span></button>`).join(''):'<div class="background-empty">No compatible background found.</div>'}catch(error){$('backgroundCount').textContent='';$('backgroundRule').textContent=error.message;grid.innerHTML='<div class="background-empty">Backgrounds unavailable.</div>'}}
   async function upload(files){if(!files.length)return;const form=new FormData();[...files].forEach(f=>{form.append('files',f,f.name);form.append('relative_paths',f.webkitRelativePath||f.name)});const rel=files[0].webkitRelativePath||'';if(rel)form.append('folder_name',rel.split('/')[0]);$('queueNote').textContent='Uploading…';const r=await fetch('/api/upload',{method:'POST',body:form});const j=await r.json();if(!r.ok)throw new Error(j.error||'Upload failed');applyDetectedCategory(j.detected_category);toast(`${j.saved} image(s) loaded${j.detected_category&&j.detected_category.label?' · '+j.detected_category.label:''}`);await loadQueue()}
-  async function loadQueue(){const j=await fetch('/api/load?process_mode=ai_only').then(r=>r.json());pairs=j.pairs||[];applyDetectedCategory(j.detected_category);$('queueStat').textContent=`${pairs.length} item${pairs.length===1?'':'s'}`;$('queueNote').textContent=pairs.length?`${pairs.length} catalogue item(s), ordered by filename`:'No images loaded';$('clearAllBtn').disabled=!pairs.length;$('processBtn').disabled=!pairs.length||!$('category').value||!promptApproved;$('queue').innerHTML=pairs.length?pairs.map(p=>`<article class="item"><button class="remove-item" type="button" data-name="${escapeHtml(p.jewel)}" title="Remove from queue" aria-label="Remove ${escapeHtml(p.label)} from queue">×</button><img loading="lazy" src="/img/input/${encodeURIComponent(p.jewel)}"><div title="${escapeHtml(p.label)}">${escapeHtml(p.label)}</div></article>`).join(''):'<div class="empty">Choose images or a folder to begin.</div>'}
+  async function loadQueue(){const j=await fetch(`/api/load?process_mode=${_processMode}`).then(r=>r.json());pairs=j.pairs||[];applyDetectedCategory(j.detected_category);$('queueStat').textContent=`${pairs.length} item${pairs.length===1?'':'s'}`;$('queueNote').textContent=pairs.length?`${pairs.length} catalogue item(s), ordered by filename`:'No images loaded';$('clearAllBtn').disabled=!pairs.length;$('processBtn').disabled=!pairs.length||!$('catSelect').value||!promptApproved;$('queue').innerHTML=pairs.length?pairs.map(p=>`<article class="item"><button class="remove-item" type="button" data-name="${escapeHtml(p.jewel)}" title="Remove from queue" aria-label="Remove ${escapeHtml(p.label)} from queue">×</button><img loading="lazy" src="/img/input/${encodeURIComponent(p.jewel)}"><div title="${escapeHtml(p.label)}">${escapeHtml(p.label)}</div></article>`).join(''):'<div class="empty">Choose images or a folder to begin.</div>'}
   async function removeQueueItem(name){const r=await fetch('/api/queue/item',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});const j=await readJson(r);if(!r.ok)throw new Error(j.error||'Could not remove item');toast(`${name} removed from queue`);await loadQueue()}
   async function clearQueue(){if(!pairs.length||!confirm(`Remove all ${pairs.length} item(s) from the processing queue?`))return;const r=await fetch('/api/queue/clear',{method:'POST'});const j=await readJson(r);if(!r.ok)throw new Error(j.error||'Could not clear queue');toast(`${j.cleared} item(s) removed`);await loadQueue()}
-  async function loadPrompt(){try{const r=await fetch('/api/prompt',{cache:'no-store'});const j=await readJson(r);if(!r.ok)throw new Error(j.error||`Prompt HTTP ${r.status}`);promptApproved=!!j.approved;promptHash=j.prompt_sha256;$('promptText').textContent=j.prompt;$('promptStatus').textContent=promptApproved?'Approved for '+j.model:'Review required before any API call';$('promptStatus').className=promptApproved?'ok':'bad';$('approvePrompt').disabled=promptApproved;$('promptSources').innerHTML=(j.sources||[]).map(s=>`<a href="${s.url}" target="_blank" rel="noreferrer">${escapeHtml(s.title)}</a>`).join('<br>')}catch(error){promptApproved=false;promptHash='';const sessionDead=/expired|log in/i.test(error.message);$('promptText').textContent='Prompt guidance unavailable.';$('promptStatus').innerHTML=sessionDead?'Your login session expired — <a href="/login">log in again</a>, reloading this page alone will not fix it.':escapeHtml(error.message);$('promptStatus').className='bad';$('approvePrompt').disabled=true}finally{$('processBtn').disabled=!pairs.length||!$('category').value||!promptApproved}}
+  async function loadPrompt(){try{const r=await fetch('/api/prompt',{cache:'no-store'});const j=await readJson(r);if(!r.ok)throw new Error(j.error||`Prompt HTTP ${r.status}`);promptApproved=!!j.approved;promptHash=j.prompt_sha256;$('promptText').textContent=j.prompt;$('promptStatus').textContent=promptApproved?'Approved for '+j.model:'Review required before any API call';$('promptStatus').className=promptApproved?'ok':'bad';$('approvePrompt').disabled=promptApproved;$('promptSources').innerHTML=(j.sources||[]).map(s=>`<a href="${s.url}" target="_blank" rel="noreferrer">${escapeHtml(s.title)}</a>`).join('<br>')}catch(error){promptApproved=false;promptHash='';const sessionDead=/expired|log in/i.test(error.message);$('promptText').textContent='Prompt guidance unavailable.';$('promptStatus').innerHTML=sessionDead?'Your login session expired — <a href="/login">log in again</a>, reloading this page alone will not fix it.':escapeHtml(error.message);$('promptStatus').className='bad';$('approvePrompt').disabled=true}finally{$('processBtn').disabled=!pairs.length||!$('catSelect').value||!promptApproved}}
   async function loadUsage(){try{const j=await fetch('/api/azure/usage').then(r=>r.json());$('callsStat').textContent=`${j.today_calls} / ${j.daily_call_cap} calls`;$('todaySpend').textContent=`$${j.today_reserved_usd.toFixed(2)} / $${j.daily_cap_usd.toFixed(2)}`;$('lifeSpend').textContent=`$${j.lifetime_reserved_usd.toFixed(2)} / $${j.lifetime_cap_usd.toFixed(2)}`;$('todayMeter').style.width=Math.min(100,j.today_reserved_usd/j.daily_cap_usd*100)+'%';$('lifeMeter').style.width=Math.min(100,j.lifetime_reserved_usd/j.lifetime_cap_usd*100)+'%'}catch{}}
   async function loadHealth(){try{const j=await fetch('/api/health').then(r=>r.json());$('healthStat').textContent=j.ok?'Ready':'Needs attention';$('healthStat').className=j.ok?'ok':'bad'}catch{$('healthStat').textContent='Offline';$('healthStat').className='bad'}}
   async function loadDuplicateGuard(){try{const j=await fetch('/api/duplicate-guard').then(r=>r.json());$('duplicateGuardToggle').checked=!!j.enabled}catch{}}
   function askPassword(){return new Promise(resolve=>{const d=$('passwordDialog'),input=$('password');input.value='';d.onclose=()=>resolve(d.returnValue==='confirm'?input.value:null);d.showModal();setTimeout(()=>input.focus(),30)})}
-  async function start(){const category=$('category').value;if(!category)return toast('Select a category first');const password=await askPassword();if(password===null)return;reviewOpened=false;$('processBtn').disabled=true;const r=await fetch('/api/process/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category,pairs,process_password:password,background_path:selectedBackgroundPath})});const j=await r.json().catch(()=>({}));if(!r.ok){$('processBtn').disabled=false;return toast(j.error||`HTTP ${r.status}`)}$('progressCard').style.display='block';$('results').style.display='none';poller=setInterval(poll,1000);poll()}
-  async function poll(){const j=await fetch('/api/process/progress').then(r=>r.json());const total=j.total||0,done=j.done||0,rows=j.results||[];$('progressCount').textContent=`${done} / ${total}`;$('progressText').textContent=j.current||'Working…';$('progressFill').style.width=(total?done/total*100:0)+'%';const failures=rows.filter(x=>!x.ok);$('errors').textContent=failures.map(x=>`${x.sku||x.pair}: ${x.error}`).join('\n');renderResults(rows);if(!j.running){clearInterval(poller);poller=null;$('processBtn').disabled=!pairs.length||!$('category').value;$('pauseBtn').textContent='Pause';$('stopBtn').disabled=false;$('stopBtn').textContent='Stop safely';paused=false;await loadUsage();await loadQueue();const hadResults=rows.some(x=>x.ok);toast(j.error?'Batch stopped by guard':'Batch complete');if(hadResults&&!reviewOpened){reviewOpened=true;window.open('/review?open=latest','_blank')}}}
+  async function start(){const category=$('catSelect').value;if(!category)return toast('Select a category first');const password=await askPassword();if(password===null)return;reviewOpened=false;$('processBtn').disabled=true;const r=await fetch('/api/process/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({category,pairs,process_password:password,background_path:selectedBackgroundPath})});const j=await r.json().catch(()=>({}));if(!r.ok){$('processBtn').disabled=false;return toast(j.error||`HTTP ${r.status}`)}$('progressCard').style.display='block';$('results').style.display='none';$('stopBtn').disabled=false;poller=setInterval(poll,1000);poll()}
+  async function poll(){const j=await fetch('/api/process/progress').then(r=>r.json());const total=j.total||0,done=j.done||0,rows=j.results||[];$('progressCount').textContent=`${done} / ${total}`;$('progressText').textContent=j.current||'Working…';$('progressFill').style.width=(total?done/total*100:0)+'%';const failures=rows.filter(x=>!x.ok);$('errors').textContent=failures.map(x=>`${x.sku||x.pair}: ${x.error}`).join('\n');renderResults(rows);if(!j.running){clearInterval(poller);poller=null;$('processBtn').disabled=!pairs.length||!$('catSelect').value;$('pauseBtn').textContent='Pause';$('stopBtn').disabled=true;$('stopBtn').textContent='Cancel';paused=false;await loadUsage();await loadQueue();const hadResults=rows.some(x=>x.ok);toast(j.error?'Batch stopped by guard':'Batch complete');if(hadResults&&!reviewOpened){reviewOpened=true;openBatchReview(rows.filter(x=>x.ok))}}}
   let currentResults=[];
   function renderResults(rows){const good=rows.filter(x=>x.ok);if(!good.length)return;currentResults=good;$('results').style.display='block';$('resultGrid').innerHTML=good.map((x,i)=>{const url=mediaUrl('output',x.output),status=x.delivery_flag&&x.delivery?`Adjusted ${x.delivery.final_edge}px`:'Ready';return `<article class="result"><button class="result-open" type="button" data-index="${i}" aria-label="Open ${escapeHtml(x.sku)} fullscreen"><img loading="lazy" src="${escapeHtml(url)}"></button><footer><span class="tag">${escapeHtml(x.sku)}</span><span class="${x.delivery_flag?'warn':'ok'}">${escapeHtml(status)}</span></footer></article>`}).join('')}
-  $('files').onchange=e=>upload(e.target.files).catch(x=>toast(x.message));$('folder').onchange=e=>upload(e.target.files).catch(x=>toast(x.message));$('refreshBtn').onclick=loadQueue;$('clearAllBtn').onclick=()=>clearQueue().catch(x=>toast(x.message));$('queue').onclick=e=>{const button=e.target.closest('.remove-item');if(button)removeQueueItem(button.dataset.name).catch(x=>toast(x.message))};$('backgroundGrid').onclick=e=>{const button=e.target.closest('.background-card');if(!button)return;const wasSelected=button.classList.contains('selected');$('backgroundGrid').querySelectorAll('.background-card').forEach(card=>card.classList.remove('selected'));selectedBackgroundPath=wasSelected?'':button.dataset.path;if(!wasSelected)button.classList.add('selected');$('backgroundRule').textContent=wasSelected?'No custom background selected · white background will be used':`Selected: ${button.dataset.title} · double-click to inspect`;toast(wasSelected?'Background cleared':`Background selected · ${button.dataset.title}`)};$('backgroundGrid').ondblclick=e=>{const button=e.target.closest('.background-card');if(button)showFullscreen(button.dataset.url,button.dataset.title)};$('resultGrid').onclick=e=>{const button=e.target.closest('.result-open');if(!button)return;const index=Number(button.dataset.index);const list=currentResults.map(x=>({url:mediaUrl('output',x.output),title:x.sku}));showFullscreenList(list,index)};$('fullscreenPrev').onclick=()=>fullscreenStep(-1);$('fullscreenNext').onclick=()=>fullscreenStep(1);document.addEventListener('keydown',e=>{if(!$('imageDialog').open)return;if(e.key==='ArrowLeft')fullscreenStep(-1);else if(e.key==='ArrowRight')fullscreenStep(1)});$('closeImageDialog').onclick=()=>$('imageDialog').close();$('duplicateGuardToggle').onchange=async e=>{const enabled=e.target.checked;try{await fetch('/api/duplicate-guard',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});toast(enabled?'Duplicate guard on':'Duplicate guard off — duplicates will be reprocessed')}catch{e.target.checked=!enabled;toast('Could not save setting')}};$('zoomIn').onclick=()=>changeZoom(.5);$('zoomOut').onclick=()=>changeZoom(-.5);$('zoomReset').onclick=resetZoom;$('category').onchange=()=>{$('processBtn').disabled=!pairs.length||!$('category').value||!promptApproved;loadBackgrounds($('category').value)};$('processBtn').onclick=start;$('approvePrompt').onclick=async()=>{const reviewedBy=prompt('Reviewer name','catalogue owner');if(reviewedBy===null)return;const r=await fetch('/api/prompt/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt_sha256:promptHash,reviewed_by:reviewedBy})});const j=await r.json();if(!r.ok)return toast(j.error||'Approval failed');toast('Prompt approved');loadPrompt()};
+
+  // ── Batch review dialog — raw vs finished, independent zoom/pan each side.
+  let _batchReviewRows=[],_batchReviewIndex=0;
+  let _reviewZoom={raw:1,output:1};
+  function _applyReviewZoom(side){
+    const scale=Math.max(1,Math.min(8,_reviewZoom[side]));
+    _reviewZoom[side]=scale;
+    const img=$(side==='raw'?'reviewRaw':'reviewOutput');
+    if (img) img.style.transform=`scale(${scale})`;
+  }
+  function _changeReviewZoom(side,delta){_reviewZoom[side]=(_reviewZoom[side]||1)+delta;_applyReviewZoom(side)}
+  function renderBatchReviewAt(index){
+    const row=_batchReviewRows[index];
+    if(!row)return;
+    _batchReviewIndex=index;
+    _reviewZoom={raw:1,output:1};
+    _applyReviewZoom('raw');_applyReviewZoom('output');
+    $('reviewRaw').src=row.rawUrl||'';
+    $('reviewOutput').src=row.outputUrl||'';
+    $('batchReviewPosition').textContent=`${index+1} / ${_batchReviewRows.length}`;
+    $('batchReviewPrev').disabled=index<=0;
+    $('batchReviewNext').disabled=index>=_batchReviewRows.length-1;
+  }
+  function openBatchReview(rows){
+    _batchReviewRows=(rows||[]).map(x=>({
+      rawUrl: mediaUrl('input', x.jewel || x.raw || ''),
+      outputUrl: mediaUrl('output', x.output),
+      sku: x.sku,
+    }));
+    if(!_batchReviewRows.length)return;
+    renderBatchReviewAt(0);
+    $('batchReviewDialog').showModal();
+  }
+  $('closeBatchReview').onclick=()=>$('batchReviewDialog').close();
+  $('batchReviewPrev').onclick=()=>renderBatchReviewAt(_batchReviewIndex-1);
+  $('batchReviewNext').onclick=()=>renderBatchReviewAt(_batchReviewIndex+1);
+  $('zoomInRaw').onclick=()=>_changeReviewZoom('raw',.5);
+  $('zoomOutRaw').onclick=()=>_changeReviewZoom('raw',-.5);
+  $('zoomRaw').onclick=()=>{_reviewZoom.raw=1;_applyReviewZoom('raw')};
+  $('zoomInOutput').onclick=()=>_changeReviewZoom('output',.5);
+  $('zoomOutOutput').onclick=()=>_changeReviewZoom('output',-.5);
+  $('zoomOutput').onclick=()=>{_reviewZoom.output=1;_applyReviewZoom('output')};
+  $('reviewRawStage').addEventListener('pointermove',()=>{});
+  $('reviewOutputStage').addEventListener('pointermove',()=>{});
+  $('files').onchange=e=>upload(e.target.files).catch(x=>toast(x.message));$('folder').onchange=e=>upload(e.target.files).catch(x=>toast(x.message));$('refreshBtn').onclick=loadQueue;$('clearAllBtn').onclick=()=>clearQueue().catch(x=>toast(x.message));$('queue').onclick=e=>{const button=e.target.closest('.remove-item');if(button)removeQueueItem(button.dataset.name).catch(x=>toast(x.message))};$('backgroundGrid').onclick=e=>{const button=e.target.closest('.background-card');if(!button)return;const wasSelected=button.classList.contains('selected');$('backgroundGrid').querySelectorAll('.background-card').forEach(card=>card.classList.remove('selected'));selectedBackgroundPath=wasSelected?'':button.dataset.path;if(!wasSelected)button.classList.add('selected');$('backgroundRule').textContent=wasSelected?'No custom background selected · white background will be used':`Selected: ${button.dataset.title} · double-click to inspect`;toast(wasSelected?'Background cleared':`Background selected · ${button.dataset.title}`)};$('backgroundGrid').ondblclick=e=>{const button=e.target.closest('.background-card');if(button)showFullscreen(button.dataset.url,button.dataset.title)};$('resultGrid').onclick=e=>{const button=e.target.closest('.result-open');if(!button)return;const index=Number(button.dataset.index);const list=currentResults.map(x=>({url:mediaUrl('output',x.output),title:x.sku}));showFullscreenList(list,index)};$('fullscreenPrev').onclick=()=>fullscreenStep(-1);$('fullscreenNext').onclick=()=>fullscreenStep(1);document.addEventListener('keydown',e=>{if(!$('imageDialog').open)return;if(e.key==='ArrowLeft')fullscreenStep(-1);else if(e.key==='ArrowRight')fullscreenStep(1)});$('closeImageDialog').onclick=()=>$('imageDialog').close();$('duplicateGuardToggle').onchange=async e=>{const enabled=e.target.checked;try{await fetch('/api/duplicate-guard',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled})});toast(enabled?'Duplicate guard on':'Duplicate guard off — duplicates will be reprocessed')}catch{e.target.checked=!enabled;toast('Could not save setting')}};$('zoomIn').onclick=()=>changeZoom(.5);$('zoomOut').onclick=()=>changeZoom(-.5);$('zoomReset').onclick=resetZoom;$('catSelect').onchange=()=>{$('processBtn').disabled=!pairs.length||!$('catSelect').value||!promptApproved;loadBackgrounds($('catSelect').value)};$('processBtn').onclick=start;$('approvePrompt').onclick=async()=>{const reviewedBy=prompt('Reviewer name','catalogue owner');if(reviewedBy===null)return;const r=await fetch('/api/prompt/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt_sha256:promptHash,reviewed_by:reviewedBy})});const j=await r.json();if(!r.ok)return toast(j.error||'Approval failed');toast('Prompt approved');loadPrompt()};
   $('imageStage').addEventListener('wheel',e=>{e.preventDefault();changeZoom(e.deltaY<0?.35:-.35)},{passive:false});$('imageStage').addEventListener('pointerdown',e=>{if(zoomScale<=1)return;zoomDragging=true;zoomStartX=e.clientX-zoomX;zoomStartY=e.clientY-zoomY;$('imageStage').classList.add('dragging');$('imageStage').setPointerCapture(e.pointerId)});$('imageStage').addEventListener('pointermove',e=>{if(!zoomDragging)return;zoomX=e.clientX-zoomStartX;zoomY=e.clientY-zoomStartY;applyZoom()});function stopZoomDrag(){zoomDragging=false;$('imageStage').classList.remove('dragging')}$('imageStage').addEventListener('pointerup',stopZoomDrag);$('imageStage').addEventListener('pointercancel',stopZoomDrag);$('imageStage').addEventListener('dblclick',()=>zoomScale===1?changeZoom(1):resetZoom());
-  $('pauseBtn').onclick=async()=>{paused=!paused;const j=await fetch('/api/process/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused})}).then(r=>r.json());paused=!!j.paused;$('pauseBtn').textContent=paused?'Resume':'Pause'};$('stopBtn').onclick=async()=>{const button=$('stopBtn');button.disabled=true;button.textContent='Stopping…';$('progressText').textContent='Stopping safely…';try{const r=await fetch('/api/process/stop',{method:'POST'});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||`HTTP ${r.status}`);toast(j.active_call_terminated?'Active call terminated · no further items will start':'Stop registered · no further items will start');if(!poller){poller=setInterval(poll,500)}await poll()}catch(error){button.disabled=false;button.textContent='Stop safely';toast(error.message)}};
+  $('pauseBtn').onclick=async()=>{paused=!paused;const j=await fetch('/api/process/pause',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paused})}).then(r=>r.json());paused=!!j.paused;$('pauseBtn').textContent=paused?'Resume':'Pause'};$('stopBtn').onclick=async()=>{const button=$('stopBtn');button.disabled=true;button.textContent='Stopping…';$('progressText').textContent='Stopping safely…';try{const r=await fetch('/api/process/stop',{method:'POST'});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||`HTTP ${r.status}`);toast(j.active_call_terminated?'Active call terminated · no further items will start':'Stop registered · no further items will start');if(!poller){poller=setInterval(poll,500)}await poll()}catch(error){button.disabled=false;button.textContent='Cancel';toast(error.message)}};
   const dz=$('dropzone');['dragenter','dragover'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.add('drag')}));['dragleave','drop'].forEach(n=>dz.addEventListener(n,e=>{e.preventDefault();dz.classList.remove('drag')}));dz.addEventListener('drop',e=>upload(e.dataTransfer.files).catch(x=>toast(x.message)));
   Promise.all([loadPrompt(),loadQueue(),loadUsage(),loadHealth(),loadDuplicateGuard()]);stockTransitionPopup();fetch('/api/process/progress').then(r=>r.json()).then(j=>{if(j.running){$('progressCard').style.display='block';poller=setInterval(poll,1000);poll()}});
 </script>

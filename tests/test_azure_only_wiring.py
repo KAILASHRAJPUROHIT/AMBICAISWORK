@@ -35,7 +35,7 @@ def test_azure_run_accepts_authorized_start(monkeypatch):
     app.CGPT_JOB["running"] = False
     response = _client().post(
         "/api/process/start",
-        json={"category": "earrings", "process_password": "Aradhana@2026"},
+        json={"category": "earrings", "process_password": app.PROCESS_PASSWORD},
     )
     app.CGPT_JOB["running"] = False
     assert response.status_code == 200

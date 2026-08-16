@@ -8,10 +8,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Security
-$root = "C:\Users\kaila\Desktop\JewelleryCatalogTool"
+$root = Split-Path -Parent $PSScriptRoot
 $configPath = Join-Path $root "config\azure_flux2_guard.json"
 $script = Join-Path $root "tools\azure_flux2_guarded.py"
-$python = "C:\Users\kaila\AppData\Local\Programs\Python\Python311\python.exe"
+$python = "C:\Users\KAILASH\AppData\Local\Programs\Python\Python311\python.exe"
 if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
     throw "Run tools\setup_azure_flux2_secure.ps1 once first."
 }

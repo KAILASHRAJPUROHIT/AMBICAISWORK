@@ -67,7 +67,8 @@ def test_selective_reset_requeues_source_and_forgets_only_selected_tag(tmp_path)
     other.parent.mkdir(parents=True)
     selected.write_bytes(b"ring")
     other.write_bytes(b"tops")
-    _write_json(base / "progress_ladies_rings.json", {
+    (base / "data").mkdir(parents=True, exist_ok=True)
+    _write_json(base / "data" / "progress_ladies_rings.json", {
         "1": {"label": "LR22_7", "output": "CASTING/LR22_7.jpg"},
         "2": {"label": "LR22_8", "output": "CASTING/LR22_8.jpg"},
     })
@@ -84,7 +85,7 @@ def test_selective_reset_requeues_source_and_forgets_only_selected_tag(tmp_path)
     assert (processing / "LADIES RING 22" / "LR22_7.jpg").read_bytes() == b"ring"
     assert not selected.exists()
     assert other.read_bytes() == b"tops"
-    progress = json.loads((base / "progress_ladies_rings.json").read_text())
+    progress = json.loads((base / "data" / "progress_ladies_rings.json").read_text())
     database = json.loads((base / "catalogue_db.json").read_text())
     assert [record["label"] for record in progress.values()] == ["LR22_8"]
     assert [entry["label"] for entry in database["entries"]] == ["LR22_8"]
@@ -102,7 +103,8 @@ def test_full_reset_clears_all_memory_without_touching_output_or_capture(tmp_pat
     capture = base / "capture" / "LR22_7.jpg"
     output.parent.mkdir(parents=True); output.write_bytes(b"finished")
     capture.parent.mkdir(parents=True); capture.write_bytes(b"master")
-    _write_json(base / "progress_ladies_rings.json", {
+    (base / "data").mkdir(parents=True, exist_ok=True)
+    _write_json(base / "data" / "progress_ladies_rings.json", {
         "1": {"label": "LR22_7", "output": "CASTING/LR22_7.jpg"},
     })
     _write_json(base / "catalogue_db.json", {"entries": [{"label": "LR22_7"}]})
@@ -113,7 +115,7 @@ def test_full_reset_clears_all_memory_without_touching_output_or_capture(tmp_pat
     )
 
     assert (processing / "LADIES RING 22" / "LR22_7.jpg").exists()
-    assert json.loads((base / "progress_ladies_rings.json").read_text()) == {}
+    assert json.loads((base / "data" / "progress_ladies_rings.json").read_text()) == {}
     assert json.loads((base / "catalogue_db.json").read_text())["entries"] == []
     assert output.read_bytes() == b"finished"
     assert capture.read_bytes() == b"master"

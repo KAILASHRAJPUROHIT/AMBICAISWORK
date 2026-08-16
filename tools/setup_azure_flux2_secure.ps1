@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Security
 
-$root = "C:\Users\kaila\Desktop\JewelleryCatalogTool"
+$root = Split-Path -Parent $PSScriptRoot
 $configDir = Join-Path $root "config"
 $configPath = Join-Path $configDir "azure_flux2_guard.json"
 $keyPath = Join-Path $configDir "azure_flux2_pro_key.dpapi"

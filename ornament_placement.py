@@ -317,8 +317,8 @@ def normalise_category(value: str | None) -> str:
     text = re.sub(r"[^a-z0-9]+", "_", (value or "").strip().casefold()).strip("_")
     # Stock folders begin with a catalogue sequence number (for example
     # ``32 JHUMKA 22``). It is metadata, not part of the jewellery category.
-    # Without removing it, live Klein prompts silently resolve to ``generic``
-    # and lose category-specific piece-count and placement rules.
+    # Without removing it, prompts silently resolve to ``generic`` and lose
+    # category-specific piece-count and placement rules.
     text = re.sub(r"^\d+_", "", text)
     # Purity/weight suffixes are stock metadata, not a change of body zone.
     text = re.sub(r"_(?:18|20|22|24)(?:_?k|_?kt)?$", "", text)

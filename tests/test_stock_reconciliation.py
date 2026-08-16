@@ -41,21 +41,23 @@ def test_reconcile_moves_sold_files_and_memory_but_preserves_current_prefix(
     (raw / "LR22_11.jpg").write_bytes(b"current")
     (output / "JB22_3.jpg").write_bytes(b"sold-output")
 
-    (tmp_path / "capture_dedup.json").write_text(json.dumps({
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "capture_dedup.json").write_text(json.dumps({
         "LR22/1": {"folder": raw.name, "filename": "LR22_1.jpg"},
         "LR22/11": {"folder": raw.name, "filename": "LR22_11.jpg"},
     }), encoding="utf-8")
-    (tmp_path / "catalogue_db.json").write_text(json.dumps({"entries": [
+    (data_dir / "catalogue_db.json").write_text(json.dumps({"entries": [
         {"label": "JB22/3"}, {"label": "LR22/11"},
     ]}), encoding="utf-8")
-    (tmp_path / "review_state.json").write_text(
+    (data_dir / "review_state.json").write_text(
         json.dumps({"LR22_1": {"status": "review"}, "LR22_11": {"status": "ok"}}),
         encoding="utf-8",
     )
-    (tmp_path / "progress_run.json").write_text(json.dumps({
+    (data_dir / "progress_run.json").write_text(json.dumps({
         "a": {"label": "JB22/3"}, "b": {"label": "LR22/11"},
     }), encoding="utf-8")
-    (tmp_path / "feedback.jsonl").write_text(
+    (data_dir / "feedback.jsonl").write_text(
         json.dumps({"label": "LR22/1"}) + "\n" + json.dumps({"label": "LR22/11"}) + "\n",
         encoding="utf-8",
     )
@@ -79,13 +81,13 @@ def test_reconcile_moves_sold_files_and_memory_but_preserves_current_prefix(
     assert not (output / "JB22_3.jpg").exists()
     sold_files = sorted(path.name for path in (tmp_path / "sold" / "02082026").rglob("*.jpg"))
     assert sold_files == ["JB22_3.jpg", "LR22_1.jpg", "LR22_1_2.jpg"]
-    assert set(json.loads((tmp_path / "capture_dedup.json").read_text())) == {"LR22/11"}
-    assert [e["label"] for e in json.loads((tmp_path / "catalogue_db.json").read_text())["entries"]] == ["LR22/11"]
-    assert list(json.loads((tmp_path / "review_state.json").read_text())) == ["LR22_11"]
-    assert list(json.loads((tmp_path / "progress_run.json").read_text())) == ["b"]
+    assert set(json.loads((data_dir / "capture_dedup.json").read_text())) == {"LR22/11"}
+    assert [e["label"] for e in json.loads((data_dir / "catalogue_db.json").read_text())["entries"]] == ["LR22/11"]
+    assert list(json.loads((data_dir / "review_state.json").read_text())) == ["LR22_11"]
+    assert list(json.loads((data_dir / "progress_run.json").read_text())) == ["b"]
     feedback = [
         json.loads(line)
-        for line in (tmp_path / "feedback.jsonl").read_text().splitlines()
+        for line in (data_dir / "feedback.jsonl").read_text().splitlines()
     ]
     assert feedback == [{"label": "LR22/11"}]
     backups = list((tmp_path / "backups").iterdir())

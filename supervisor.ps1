@@ -35,7 +35,7 @@
 
 $ErrorActionPreference = 'SilentlyContinue'
 
-$ToolDir     = "C:\Users\kaila\Desktop\JewelleryCatalogTool"
+$ToolDir     = $PSScriptRoot
 $LogFile     = Join-Path $ToolDir "logs\supervisor.log"
 $StateFile   = Join-Path $ToolDir "data\supervisor_state.json"
 $RestartRequest = Join-Path $ToolDir "data\restart_catalogue.request"

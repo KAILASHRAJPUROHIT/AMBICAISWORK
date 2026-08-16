@@ -709,6 +709,13 @@ def find_item(tag_code: str) -> dict | None:
     stem = os.path.splitext(filename)[0]
     studs_path = os.path.join(CAPTURE_ROOT, folder, f"{stem}_studs.jpg")
     detail_path = os.path.join(CAPTURE_ROOT, folder, f"{stem}_detail.jpg")
+    # The archived price-tag photo lives in its own subfolder (see
+    # TAG_ARCHIVE_DIRNAME — also excluded from lifecycle counts elsewhere,
+    # e.g. dashboard_stats._iter_primary_images), not beside the jewel photo
+    # like the studs/detail sidecars. tag_exists used to be hardcoded False,
+    # so a real tag archive photo was invisible to the search UI and never
+    # got cleaned up on delete.
+    tag_path = os.path.join(CAPTURE_ROOT, folder, TAG_ARCHIVE_DIRNAME, f"{stem}_tag.jpg")
     return {
         "tag_code": tag_code,
         "folder": folder,
@@ -719,7 +726,7 @@ def find_item(tag_code: str) -> dict | None:
         "jewel_exists": os.path.isfile(jewel_path),
         "studs_exists": os.path.isfile(studs_path),
         "detail_exists": os.path.isfile(detail_path),
-        "tag_exists": False,
+        "tag_exists": os.path.isfile(tag_path),
         "tag_embedded": True,
     }
 
@@ -742,6 +749,7 @@ def delete_item(tag_code: str) -> dict:
         sidecar_paths = (
             os.path.join(CAPTURE_ROOT, item["folder"], f"{stem}_studs.jpg"),
             os.path.join(CAPTURE_ROOT, item["folder"], f"{stem}_detail.jpg"),
+            os.path.join(CAPTURE_ROOT, item["folder"], TAG_ARCHIVE_DIRNAME, f"{stem}_tag.jpg"),
         )
         for path in (jewel_path, *sidecar_paths):
             try:

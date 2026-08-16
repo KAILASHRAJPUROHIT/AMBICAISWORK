@@ -23,8 +23,34 @@ class StockCategory:
     existing_key: str | None  # reused internal processing key, or None
 
 
+# existing_key must be the semantic processing category the old asset
+# folders/backgrounds are actually keyed by, not this taxonomy's own raw key
+# — a plain identity mapping (existing_key = key) left every category
+# effectively "unprocessable" against real assets, since nothing on disk is
+# literally named e.g. "bali_18" or "ladies_ring_22". Karat/purity suffixes
+# ("_18", "_22", "_20"...) are stock metadata, not a different processing
+# category, so they're stripped. gold_coin_* keys are untouched by this —
+# their trailing components are weight/purity units ("_kt", "_gm", "_m"),
+# never a bare trailing digit group, so the regex doesn't match them.
+_KARAT_SUFFIX = re.compile(r"_\d+$")
+
+# Irregular pluralization the legacy asset folders actually use. Only the
+# cases with real test coverage are listed here rather than guessed at for
+# all 57 categories — an untested category simply falls through to the
+# plain karat-stripped key, which is no worse than the previous identity
+# mapping and won't silently claim a wrong legacy name.
+_IRREGULAR_EXISTING_KEY = {
+    "ladies_ring": "ladies_rings",
+}
+
+
+def _existing_key_for(raw_key: str) -> str:
+    stripped = _KARAT_SUFFIX.sub("", raw_key)
+    return _IRREGULAR_EXISTING_KEY.get(stripped, stripped)
+
+
 CATEGORIES: tuple[StockCategory, ...] = tuple(
-    StockCategory(c.key, c.label, c.key)
+    StockCategory(c.key, c.label, _existing_key_for(c.key))
     for c in CURRENT_STOCK_CATEGORIES
 )
 

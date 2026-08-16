@@ -21,7 +21,7 @@ BASE = Path(__file__).resolve().parent
 RAW_MIRROR_DIR = Path(
     os.environ.get(
         "AJ_RAW_MIRROR_DIR",
-        r"C:\Users\kaila\Desktop\JewelleryCatalogTool\master backup",
+        str(BASE / "master backup"),
     )
 )
 _IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp"})
