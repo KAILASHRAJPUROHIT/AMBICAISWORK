@@ -444,7 +444,7 @@ class MainActivity : AppCompatActivity() {
             when {
                 result.ok -> {
                     Toast.makeText(this@MainActivity, "Saved: $tagCode", Toast.LENGTH_SHORT).show()
-                    resetForNewItem(Phase.JEWEL)
+                    finishOrResetForNewItem()
                 }
                 result.duplicate -> confirmOverrideAndRetry("Duplicate tag $tagCode — save anyway?") { overrideDup ->
                     retryUpload(tagCode, staffName, jewel, tag, overrideDuplicate = overrideDup)
