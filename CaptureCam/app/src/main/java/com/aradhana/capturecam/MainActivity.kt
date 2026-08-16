@@ -542,9 +542,22 @@ class MainActivity : AppCompatActivity() {
         onCancel: () -> Unit
     ) {
         val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
+        if (bitmap == null) {
+            // Decode failed -- don't show a blank/stale ImageView with the
+            // live camera visible behind it looking like "the preview
+            // didn't update". Skip straight to onProceed instead.
+            Log.e(TAG, "Failed to decode captured JPEG for preview (${jpeg.size} bytes)")
+            onProceed()
+            return
+        }
+        previewShowing = true
+        // Actually hide the live camera surface, not just draw over it --
+        // a translucent overlay alone left the feed visibly bleeding
+        // through underneath what was supposed to be a frozen photo.
+        binding.previewView.visibility = View.INVISIBLE
+        binding.boundsOverlay.update(emptyList(), 0, 0, 0)
         binding.previewImage.setImageBitmap(bitmap)
         binding.previewOverlay.visibility = View.VISIBLE
-        previewShowing = true
 
         binding.previewRetakeButton.setOnClickListener {
             hideCapturePreview()
