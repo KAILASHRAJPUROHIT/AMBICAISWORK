@@ -2097,9 +2097,9 @@ async function cropToFillOrnament(blob, targetFill, bounds) {
 
 // The one jewel/ornament photo (auto-captured, then cropped to fill the
 // frame) routes through this same capture input.
-async function handleJewelBlob(blob) {
+async function handleJewelBlob(blob, goldBounds) {
   if (!blob) return;
-  blob = await cropToFillOrnament(blob, CAPTURE_FILL_TARGET);
+  blob = await cropToFillOrnament(blob, CAPTURE_FILL_TARGET, goldBounds);
   if (blurRetakeContext) {
     // Re-shot just the front photo after a blur warning — the tag was
     // already captured/confirmed earlier, so skip straight back to saving
