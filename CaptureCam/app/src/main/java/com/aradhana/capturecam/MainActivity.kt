@@ -100,10 +100,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // True when launched via the capturecam://start deep link from
+    // capture.html, rather than tapped from the launcher directly. Drives
+    // whether a successful upload hands control back to the browser
+    // (finish()) or loops internally for the next item -- see uploadPair.
+    private var launchedFromBrowser = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        launchedFromBrowser = intent?.data?.scheme == "capturecam"
 
         binding.settingsButton.setOnClickListener { showSettingsDialog() }
         binding.manualShutterButton.setOnClickListener { forceCaptureCurrentPhase() }
