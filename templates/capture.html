@@ -780,28 +780,37 @@ function captureZoomForPhase(profile, phase, plan) {
   return phaseZoom[profile]?.[phase] || settings.zoom || 1;
 }
 
-// Was previously a separate, looser reimplementation of "is this good
-// enough" (sharpness >= 34-38) than the worker's own authoritative `pass`
-// verdict that the burst capture re-validates against (sharpness >= 46-58,
-// plus boxFits) -- see jewelStrictPass/jewelRelaxedPass in
-// capture_quality_worker.js. That gap meant the shutter would show "ready"
-// and auto-fire a burst that the worker's own stricter re-check then
-// rejected, looping forever between "Auto burst" and "trying again" without
-// ever actually saving a photo. Deferring to result.pass directly guarantees
-// the fire decision and the burst's own pass/fail check use identical
-// criteria.
+// Mirrors the worker's jewelRelaxedPass (capture_quality_worker.js) -- the
+// one that does NOT require boxFits -- using result's CURRENT fields. This
+// matters specifically because addTargetSharpnessConfirmation() re-measures
+// sharpness on a sharper, higher-resolution crop of just the ornament (the
+// full-frame 360px analysis under-measures fine detail like pavé stones)
+// and overwrites result.sharpnessScore/clippedRatio with that refined
+// reading -- but it does NOT touch result.pass, which stays the *original,
+// unrefined* verdict. Gating on raw result.pass alone (tried first) meant a
+// piece that the refined re-measurement confirmed was genuinely sharp could
+// still be blocked forever by the stale pre-refinement verdict. Recomputing
+// the relaxed check locally, against the refined values, fixes that while
+// staying aligned with what the burst's own re-validation will accept.
+function _relaxedJewelPass(result) {
+  if (!result) return false;
+  const strongGold = result.goldDominant || result.goldBlobCoverage >= 0.010 || result.goldRatio >= 0.030;
+  if (!strongGold) return false;
+  const sharpEnough = result.detailSharpnessConfirmed === true &&
+    result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
+  if (!sharpEnough) return false;
+  if (result.clippedRatio >= 0.28) return false;
+  const goldUsable = isGoldTargetCandidate(result);
+  if (result.skinRatio >= (goldUsable ? 0.30 : 0.10)) return false;
+  return result.motion !== null && result.motion <= 0.08;
+}
+
 function isCaptureGateReady(result) {
   if (!result) return false;
   if (_cameraKind === 'tag') {
     return !!_qualityStableTag;
   }
-  if (!result.pass) return false;
-  const strongGold = result.goldDominant || result.goldBlobCoverage >= 0.012 || result.goldRatio >= 0.035;
-  const sharpEnough = result.detailSharpnessConfirmed === true &&
-    result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
-  const cleanEnough = result.clippedRatio < 0.30 && (strongGold || result.skinRatio < 0.12);
-  const stableEnough = result.motion !== null && result.motion <= 0.08;
-  return sharpEnough && cleanEnough && stableEnough;
+  return !!(result.pass || _relaxedJewelPass(result));
 }
 
 // Names the single most likely reason isCaptureGateReady is blocking capture,
