@@ -73,6 +73,12 @@ class MainActivity : AppCompatActivity() {
     private var stableTagCode: String? = null
     private var autoFired = false
     private var lastAnalysisAt = 0L
+    // True while the post-capture preview (image + Retake/Cancel) is on
+    // screen -- tickJewel/tickTag must not act on new frames underneath it,
+    // or the pipeline could re-fire another auto-capture while the operator
+    // is still looking at the last one.
+    private var previewShowing = false
+    private var previewCountdownRunnable: Runnable? = null
 
     @Volatile private var latestMaterial: MaterialDetector.Result? = null
     @Volatile private var latestSharpness: Float = 0f
