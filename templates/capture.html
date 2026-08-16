@@ -763,6 +763,9 @@ let _qualityCooldownUntil = 0;
 // a real placement window without a fixed timer. Tag phase is armed
 // immediately (see openCaptureCamera).
 let _qualityArmed = true;
+// Timestamp _qualityArmed last became true -- drives CAPTURE_MAX_STALL_MS,
+// the absolute safety valve in advanceCapturePipeline.
+let _qualityArmedAt = 0;
 const _qualityTagCanvas = document.createElement('canvas');
 
 try {
