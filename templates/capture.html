@@ -2276,6 +2276,14 @@ function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
     .finally(() => clearTimeout(id));
 }
 
+// CaptureCam (the native companion app, see btnStartItemApp below) uploads
+// straight to the server and hands control back to this tab -- refresh the
+// tray/recommended-item state the moment we're visible again so it isn't
+// showing stale "22 of 24" counts from before that upload landed.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refreshSessionCount();
+});
+
 let _sessionSummaryPending = false;
 function refreshSessionCount() {
   if (_sessionSummaryPending) return;
