@@ -1152,64 +1152,29 @@ function recordLiveTag(read) {
   _qualityTagCorners = read.corners || [];
 }
 
-// Continuously chasing CAPTURE_FILL_TARGET live was tried once before and
-// dropped -- back then the capture gate ALSO required boxFits (the
-// ornament's detected box had to sit inside a fixed on-screen guide
-// rectangle), and live zoom re-centers around the frame middle, so zooming
-// on an off-center item pushed it out of that guide box and the two fought
-// each other forever. That's no longer a problem: isCaptureGateReady
-// (below) dropped the boxFits/framing requirement entirely when the gate
-// was simplified to material-detection-only, so there's nothing left for
-// zoom to fight with. What broke the FIRST attempt was two things, both
-// fixed here: (1) oscillation -- a coverage reading flickering right at the
-// threshold kept re-triggering nudges forever; fixed with a one-shot
-// "settled" flag that permanently stops touching zoom once the target (or
-// the device's real zoom ceiling) is reached, even if a later noisy reading
-// dips back under target. (2) motion invalidation -- every zoom change
-// resets focus/motion, so the stability gate never saw a settled frame;
-// fixed by only evaluating the capture gate once zoom has stopped moving.
-const CAPTURE_ZOOM_ADJUST_INTERVAL_MS = 300;
-// If sharpness still hasn't been confirmed this long after zoom settled,
-// the lens likely can't resolve detail at this zoom level at all (autofocus
-// not catching up after the jump, or past the point where zoom stops being
-// optical and starts just magnifying existing softness) -- back off rather
-// than sitting blocked forever. See _maybeBackOffZoom. Tuned down from an
-// original 2000ms: at 90% coverage (near/at device max on a small item) this
-// stuck-then-retry-then-backoff cascade fires on essentially every capture,
-// not as a rare fallback, so its cost is paid every time and is worth
-// trimming aggressively.
-const CAPTURE_SHARP_STUCK_TIMEOUT_MS = 1100;
-// The ONE retry (see _maybeBackOffZoom) gets a shorter follow-up window than
-// the initial wait -- it's judging "did that specific extra pass land",
-// not giving the lens the full benefit of the doubt a first attempt gets.
-// Must clear CAPTURE_FOCUS_SETTLE_MS with room to spare: the retry's own
-// fresh focus-lock consumes the first 500ms of this window before the
-// sharpness gate is even evaluated again, so anything much tighter leaves
-// too few analysis ticks to actually judge the retry fairly.
-const CAPTURE_SHARP_RETRY_TIMEOUT_MS = 900;
+// Capture pipeline: at the CURRENT zoom, lock focus decisively, wait for
+// the lock to settle, then judge material/sharpness/motion/coverage on
+// that SAME settled frame together (advanceCapturePipeline). Zoom only
+// ever advances by exactly one step, and only after the current level has
+// already been confirmed clean -- never while blurry. This replaces an
+// earlier design that climbed zoom on coverage alone and only judged
+// sharpness after the whole climb finished, which could (and did) end up
+// firing the shutter on a frame that had never actually been confirmed
+// sharp at the zoom level it was captured at.
 const CAPTURE_ZOOM_BACKOFF_RATIO = 0.8;
 // Grace period after a single decisive focus-lock trigger before the
 // sharpness gate is judged -- gives the lens time to actually complete one
 // focus pass rather than being judged mid-search.
 const CAPTURE_FOCUS_SETTLE_MS = 500;
-let _qualityZoomSettled = false;
-let _qualityLastZoomAdjustAt = 0;
-// Coverage reading from the last time a zoom-in step was actually taken --
-// used to detect diminishing returns (see waitForPlacement) so climbing
-// stops once further zoom stops meaningfully filling more of the frame,
-// instead of always grinding toward the full 90% target / device ceiling.
-let _qualityCoverageAtLastStep = null;
-let _qualityMaxUsableZoom = Infinity; // lowered by _maybeBackOffZoom when a zoom level proves unfocusable
-let _qualitySharpBlockedAt = 0;
+let _qualityMaxUsableZoom = Infinity; // soft ceiling after a level proves unfocusable
 let _qualityFocusLockedAt = 0;
-// Consecutive climb-phase ticks with no LIVE detection -- signals the item
-// has drifted out of frame from centre-anchored zoom, see waitForPlacement.
+// Consecutive ticks with no LIVE material detection while already zoomed
+// in -- signals the item has drifted out of frame from centre-anchored
+// zoom (see advanceCapturePipeline).
 let _qualityLostFrames = 0;
-// Whether the ONE bounded focus retry (see _maybeBackOffZoom) has already
-// been used for the current zoom level. Reset whenever zoom actually moves
-// (settle restart, or a backoff step) so each new zoom level gets its own
-// fresh retry budget.
-let _qualityFocusRetried = false;
+// How many focus retries have been used at the CURRENT zoom level. Reset
+// whenever zoom actually changes so each new level gets its own budget.
+let _stepFocusAttempts = 0;
 
 // Fires exactly ONE decisive focus action per call, not continuous
 // re-evaluation. Continuous AF on a shiny, reflective, low-texture subject
@@ -1221,7 +1186,7 @@ let _qualityFocusRetried = false;
 // focus pass and then holds, which is both faster and far less prone to
 // hunting.
 //
-// forceRetrigger is used by the ONE bounded retry in _maybeBackOffZoom: on
+// forceRetrigger is used by advanceCapturePipeline's focus retries: on
 // several Android/Chrome camera stacks, re-applying the SAME focusMode
 // value the track already reports is a silent no-op -- the platform camera
 // HAL only re-runs an AF sweep on an actual state transition, not a
