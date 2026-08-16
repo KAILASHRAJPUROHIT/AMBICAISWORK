@@ -1102,29 +1102,15 @@ function recordLiveTag(read) {
   _qualityTagCorners = read.corners || [];
 }
 
-let _qualityLastZoomAdjustAt = 0;
-// True once zoom-to-fill has made its final decision for this camera
-// session (target reached, or the device's real zoom ceiling hit) -- from
-// then on it never touches zoom again, even if a later frame's coverage
-// reading dips due to measurement noise. Without this, a reading that
-// flickers right around CAPTURE_FILL_TARGET could keep re-triggering small
-// zoom nudges indefinitely; every zoom change makes the frame register as
-// "moving" to the motion-stability check the capture gate depends on
-// (isCaptureGateReady's stableEnough), so a zoom loop that never truly
-// stops means the gate never gets a clean, settled frame to fire on --
-// capture looks like it's "zooming and focusing perfectly" forever without
-// ever actually taking the shot.
-let _qualityZoomSettled = false;
-const CAPTURE_FILL_ADJUST_INTERVAL_MS = 300;
-
-// Drives zoom toward CAPTURE_FILL_TARGET before the capture gate runs. This
-// tick() is only ever reached for the 'front' (jewel) phase -- the 'tag'
-// phase has its own early-return branch above and never calls this. Returns
-// true while still converging (caller should skip the capture gate this
-// frame); false once done -- either the target was reached, or we hit the
-// device's zoom ceiling or has no zoom capability at all (best-effort
-// fallback: capture at whatever coverage was actually reached rather than
-// blocking forever on an unreachable target).
+// Live hardware zoom before capture was tried and dropped: on-device zoom
+// re-centers around the middle of the frame, which pushes an off-center
+// ornament out of the alignment box the instant it zooms in (fighting the
+// "keep it inside the box" check), and every zoom change resets
+// focus/motion, which blocks the sharpness/stability gate from ever
+// settling. Framing to CAPTURE_FILL_TARGET now happens as a digital crop
+// on the already-captured photo instead (see cropToFillOrnament) -- capture
+// fires at native framing using the original, proven gate, and the "zoom
+// in" the owner wants happens losslessly-enough after the fact.
 function _ornamentPresent(result) {
   return !!(result && (
     result.pass ||
@@ -1135,43 +1121,18 @@ function _ornamentPresent(result) {
   ));
 }
 
-async function maybeZoomToFill(result, now) {
-  if (!_qualityArmed) {
-    // Not armed yet: give the operator a real placement window by waiting
-    // for the ornament to actually show up in frame, rather than a fixed
-    // timer. The live HUD keeps updating in the meantime so they can see
-    // it's tracking.
-    if (_ornamentPresent(result)) {
-      _qualityArmed = true;
-      cameraStatus.textContent = 'Item detected. Filling frame…';
-    } else {
-      cameraStatus.textContent = 'Place the item in frame…';
-      return true; // skip the capture gate this frame
-    }
-  }
-  if (_qualityZoomSettled) return false;
-  const plan = result && (result.capturePlan || _qualityLastPlan);
-  const coverage = plan && typeof plan.coverage === 'number' ? plan.coverage : null;
-  const range = _cameraCapabilities.zoom;
-  const currentZoom = Number((_cameraTrack && _cameraTrack.getSettings().zoom) || cameraZoom.value || 1);
-  const noZoomCapability = !range || typeof range.max !== 'number';
-  const atDeviceMax = !noZoomCapability && currentZoom >= range.max - 0.01;
-  if (coverage === null || coverage >= CAPTURE_FILL_TARGET || noZoomCapability || atDeviceMax) {
-    _qualityZoomSettled = true;
+// Holds the capture gate off until the ornament has actually been placed in
+// frame -- not a fixed timer -- so the operator gets a real placement
+// window without the automation racing ahead or stalling. Returns true
+// while still waiting (caller should skip the capture gate this frame).
+function waitForPlacement(result) {
+  if (_qualityArmed) return false;
+  if (_ornamentPresent(result)) {
+    _qualityArmed = true;
+    cameraStatus.textContent = 'Item detected.';
     return false;
   }
-  if (now - _qualityLastZoomAdjustAt < CAPTURE_FILL_ADJUST_INTERVAL_MS) return true;
-  _qualityLastZoomAdjustAt = now;
-  // Closed-loop step, not a one-shot prediction: coverage doesn't scale
-  // cleanly with zoom on every lens (crop factor, digital-zoom rounding,
-  // autofocus refocus), so solving for a single "right" zoom can converge
-  // short of both the target and the device's real ceiling and then stall.
-  // Nudging by a fixed ratio and re-measuring next tick always keeps making
-  // progress until either the target or the true device max is reached.
-  const nextZoom = clampCameraZoom(currentZoom * 1.15);
-  await applyCameraZoom(nextZoom);
-  cameraQualityLabel.textContent = `Zooming in… ${nextZoom.toFixed(1)}×`;
-  cameraStatus.textContent = 'Filling frame before capture…';
+  cameraStatus.textContent = 'Place the item in frame…';
   return true;
 }
 
