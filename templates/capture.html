@@ -1913,7 +1913,7 @@ btnUndo.addEventListener('click', () => {
 });
 
 btnStartItem.addEventListener('click', () => {
-  jewelBlob = null; studsBlob = null; detailBlob = null; tagBlob = null;
+  jewelBlob = null; tagBlob = null;
   _capturePhase = 'front';
   saveResumeState(currentCaptureSnapshot());
   openCaptureCamera('front');
@@ -2260,7 +2260,7 @@ function showConfirmPopup(decodedCode, dupInfo, unrecognisedCategory) {
       closePopup();
       showToast('Discarded — capture the next item');
       clearResumeState();
-      jewelBlob = null; studsBlob = null; detailBlob = null; tagBlob = null;
+      jewelBlob = null; tagBlob = null;
       _capturePhase = 'front';
       saveResumeState(currentCaptureSnapshot());
       openCaptureCamera('front');
@@ -2355,7 +2355,7 @@ function attemptSave(tagCode, overrideDuplicate, overrideBlur, overrideVisibilit
 
 function onSaved(tagCode, d) {
   clearResumeState();
-  jewelBlob = null; studsBlob = null; detailBlob = null; tagBlob = null;
+  jewelBlob = null; tagBlob = null;
   _capturePhase = 'front';
   sessionCountEl.textContent = d.session_captured;
   refreshSessionCount();   // pulls the real ordered list (with correct display numbers) from the server
@@ -2373,7 +2373,7 @@ function onSaved(tagCode, d) {
   `);
   document.getElementById('popup-next-item').addEventListener('click', () => {
     closePopup();
-    jewelBlob = null; studsBlob = null; detailBlob = null; tagBlob = null;
+    jewelBlob = null; tagBlob = null;
     _capturePhase = 'front';
     saveResumeState(currentCaptureSnapshot());
     openCaptureCamera('front');
