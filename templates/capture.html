@@ -1252,7 +1252,7 @@ function startQualityAnalysis() {
         result = await addTargetSharpnessConfirmation(result);
         if (session === _qualitySession && _cameraTrack) {
           updateQualityDisplay(result);
-          if (!waitForPlacement(result)) {
+          if (!(await waitForPlacement(result))) {
             maybeAutoCapture(result);
             if (!_qualityAutoFired) cameraStatus.textContent = _captureGateBlockReason(result);
           }
