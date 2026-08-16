@@ -74,6 +74,20 @@ object MaterialDetector {
     private fun looksLikeMetal(r: Int, g: Int, b: Int): Boolean =
         looksLikeGold(r, g, b) || looksLikeSilver(r, g, b)
 
+    /** Diamonds/cut stones/studs read as bright, near-white specular
+     * highlights -- the opposite signature deliberately excluded from
+     * looksLikeSilver (which caps at yLuma<240 specifically to avoid
+     * clipped-highlight false positives on real silver). Wanted here
+     * anyway purely for the visual overlay -- this never feeds coverage/
+     * material-detected, only the dot cloud. */
+    private fun looksLikeSparkle(r: Int, g: Int, b: Int): Boolean {
+        val maxV = max(r, max(g, b))
+        val minV = min(r, min(g, b))
+        val delta = maxV - minV
+        val yLuma = 0.299f * r + 0.587f * g + 0.114f * b
+        return yLuma >= 232 && delta < 45
+    }
+
     /** Standard BT.601 YCbCr -> RGB, same conversion browsers already do
      * internally on camera frames before exposing RGBA pixel data -- close
      * enough to reuse the RGB-space thresholds above verbatim. */
