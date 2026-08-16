@@ -478,9 +478,24 @@ class MainActivity : AppCompatActivity() {
             }
             if (result?.ok == true) {
                 Toast.makeText(this@MainActivity, "Saved: $tagCode", Toast.LENGTH_SHORT).show()
+                finishOrResetForNewItem()
             } else {
                 Toast.makeText(this@MainActivity, "Save failed: ${result?.error}", Toast.LENGTH_LONG).show()
+                resetForNewItem(Phase.JEWEL)
             }
+        }
+    }
+
+    /** After a successful save: if this session was handed off from the
+     * browser (capturecam://start), return control to it immediately --
+     * the browser stays the anchor for tray/recommended-item context, this
+     * app's only job was the one capture. Otherwise (launched directly
+     * from the home screen) keep looping for the next item in-app, since
+     * that's faster for a standalone multi-item batch session. */
+    private fun finishOrResetForNewItem() {
+        if (launchedFromBrowser) {
+            handler.postDelayed({ finish() }, 600)
+        } else {
             resetForNewItem(Phase.JEWEL)
         }
     }
