@@ -2550,7 +2550,7 @@ function onSaved(tagCode, d) {
     <div class="badge success" style="margin-bottom:14px">✓ Saved: ${escapeHtml(tagCode)}</div>
     <div class="sub-hint" id="popup-next-recommendation">Updating next recommendation…</div>
     <button class="big-next-btn" id="popup-next-item">📷 Next item</button>
-    <button class="btn secondary" id="popup-spin">🔄 Record 360° spin</button>
+    ${SPIN_CAPTURE_ENABLED ? '<button class="btn secondary" id="popup-spin">🔄 Record 360° spin</button>' : ''}
     <button class="btn secondary" id="popup-done-tray">Done with this tray</button>
   `);
   document.getElementById('popup-next-item').addEventListener('click', () => {
@@ -2560,10 +2560,12 @@ function onSaved(tagCode, d) {
     saveResumeState(currentCaptureSnapshot());
     openCaptureCamera('front');
   });
-  document.getElementById('popup-spin').addEventListener('click', () => {
-    closePopup();
-    startSpinRecording(tagCode, currentCategory);
-  });
+  if (SPIN_CAPTURE_ENABLED) {
+    document.getElementById('popup-spin').addEventListener('click', () => {
+      closePopup();
+      startSpinRecording(tagCode, currentCategory);
+    });
+  }
   document.getElementById('popup-done-tray').addEventListener('click', closePopup);
   if (window.refreshStockCapturePlan) {
     window.refreshStockCapturePlan().then(data => {
