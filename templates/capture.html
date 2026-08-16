@@ -1179,6 +1179,11 @@ const CAPTURE_ZOOM_BACKOFF_RATIO = 0.8;
 const CAPTURE_FOCUS_SETTLE_MS = 500;
 let _qualityZoomSettled = false;
 let _qualityLastZoomAdjustAt = 0;
+// Coverage reading from the last time a zoom-in step was actually taken --
+// used to detect diminishing returns (see waitForPlacement) so climbing
+// stops once further zoom stops meaningfully filling more of the frame,
+// instead of always grinding toward the full 90% target / device ceiling.
+let _qualityCoverageAtLastStep = null;
 let _qualityMaxUsableZoom = Infinity; // lowered by _maybeBackOffZoom when a zoom level proves unfocusable
 let _qualitySharpBlockedAt = 0;
 let _qualityFocusLockedAt = 0;
