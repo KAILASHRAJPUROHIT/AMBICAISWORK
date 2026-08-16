@@ -1083,6 +1083,38 @@ function recordLiveTag(read) {
   _qualityTagCorners = read.corners || [];
 }
 
+let _qualityLastZoomAdjustAt = 0;
+const CAPTURE_FILL_MIN_ZOOM_DELTA = 0.15;
+const CAPTURE_FILL_ADJUST_INTERVAL_MS = 300;
+
+// Drives zoom toward CAPTURE_FILL_TARGET before the capture gate runs. This
+// tick() is only ever reached for the 'front' (jewel) phase -- the 'tag'
+// phase has its own early-return branch above and never calls this. Returns
+// true while still converging (caller should skip the capture gate this
+// frame); false once done -- either the target was reached, or we hit the
+// device's zoom ceiling / the device has no zoom capability at all
+// (best-effort fallback: capture at whatever coverage was actually reached
+// rather than blocking forever on an unreachable target).
+async function maybeZoomToFill(result, now) {
+  const plan = result && (result.capturePlan || _qualityLastPlan);
+  const coverage = plan && typeof plan.coverage === 'number' ? plan.coverage : null;
+  if (coverage === null || coverage >= CAPTURE_FILL_TARGET) return false;
+  const range = _cameraCapabilities.zoom;
+  if (!range || typeof range.max !== 'number') return false;
+  const currentZoom = Number((_cameraTrack && _cameraTrack.getSettings().zoom) || cameraZoom.value || 1);
+  if (currentZoom >= range.max - 0.01) return false;
+  if (now - _qualityLastZoomAdjustAt < CAPTURE_FILL_ADJUST_INTERVAL_MS) return true;
+  const safeCoverage = Math.max(coverage, 0.01);
+  const desiredZoom = clampCameraZoom(currentZoom * Math.sqrt(CAPTURE_FILL_TARGET / safeCoverage));
+  if (Math.abs(desiredZoom - currentZoom) >= CAPTURE_FILL_MIN_ZOOM_DELTA) {
+    _qualityLastZoomAdjustAt = now;
+    await applyCameraZoom(desiredZoom);
+    cameraQualityLabel.textContent = `Zooming in… ${desiredZoom.toFixed(1)}×`;
+    cameraStatus.textContent = 'Filling frame before capture…';
+  }
+  return true;
+}
+
 function maybeAutoCapture(result) {
   if (!result || _qualityAutoFired || !cameraShutter || cameraShutter.disabled) return;
   if (!cameraAutoEnabled.checked) return;
