@@ -1209,7 +1209,18 @@ async function waitForPlacement(result) {
     _qualityArmed = true;
     cameraStatus.textContent = 'Item detected. Filling frame…';
   }
-  if (_qualityZoomSettled) return false;
+  if (_qualityZoomSettled) {
+    // Zoom is done, but the gate still isn't opened until one decisive
+    // focus pass has actually had time to complete -- no repeated AF
+    // triggers here, that's what caused hunting.
+    if (!_qualityFocusLockedAt) {
+      await _lockFocusOnce();
+      cameraStatus.textContent = 'Focusing…';
+      return true;
+    }
+    if (Date.now() - _qualityFocusLockedAt < CAPTURE_FOCUS_SETTLE_MS) return true;
+    return false;
+  }
   const plan = result.capturePlan || _qualityLastPlan;
   const coverage = plan && typeof plan.coverage === 'number' ? plan.coverage : null;
   const range = _cameraCapabilities.zoom;
@@ -1218,7 +1229,7 @@ async function waitForPlacement(result) {
   const atDeviceMax = !noZoomCapability && currentZoom >= range.max - 0.01;
   if (coverage === null || coverage >= CAPTURE_FILL_TARGET || noZoomCapability || atDeviceMax) {
     _qualityZoomSettled = true;
-    return false;
+    return true; // next tick handles the focus-lock step above
   }
   const now = Date.now();
   if (now - _qualityLastZoomAdjustAt < CAPTURE_ZOOM_ADJUST_INTERVAL_MS) return true;
@@ -1227,19 +1238,16 @@ async function waitForPlacement(result) {
     // Already at the ceiling a previous stuck-focus backoff set -- treat
     // this as settled rather than trying to push past it again.
     _qualityZoomSettled = true;
-    return false;
+    return true;
   }
   // Closed-loop step, not a one-shot prediction: coverage doesn't scale
   // cleanly with zoom on every lens, so nudging by a fixed ratio and
   // re-measuring next tick makes steady progress toward the target (or the
   // real device max) without ever getting stuck on a bad prediction.
+  // Deliberately does NOT touch focus here -- only the single lock-once
+  // step above does, once zoom is fully done moving.
   const nextZoom = Math.min(clampCameraZoom(currentZoom * 1.15), _qualityMaxUsableZoom);
   await applyCameraZoom(nextZoom);
-  // Re-trigger continuous AF after the zoom change -- on some devices the
-  // lens doesn't restart its focus search just because the zoom constraint
-  // changed, so without this it can keep evaluating a stale, still-blurry
-  // frame indefinitely.
-  await applyContinuousCameraControls();
   cameraQualityLabel.textContent = `Zooming in… ${nextZoom.toFixed(1)}×`;
   cameraStatus.textContent = 'Filling frame before capture…';
   return true;
