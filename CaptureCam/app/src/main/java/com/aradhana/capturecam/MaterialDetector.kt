@@ -222,7 +222,8 @@ object MaterialDetector {
             coverage = goldBoxArea,
             warmCoverage = warmCoverage,
             goldRatio = goldRatio,
-            goldBoxArea = goldBoxArea
+            goldBoxArea = goldBoxArea,
+            points = points
         )
     }
 }
