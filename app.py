@@ -144,7 +144,7 @@ def _otp_digest(salt: str, code: str) -> str:
 
 @app.before_request
 def require_login():
-    if request.path in {"/login", "/verify-otp", "/api/health"} or request.path.startswith("/static/"):
+    if request.path in {"/login", "/verify-otp", "/api/health", "/capture"} or request.path.startswith("/static/"):
         return None
     if session.get("authed"):
         return None
