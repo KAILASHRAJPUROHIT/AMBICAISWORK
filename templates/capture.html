@@ -711,6 +711,11 @@ let _qualityStableTag = null;
 let _qualityTagCorners = [];
 let _qualityBarcodeDetectorPromise = null;
 let _qualityCooldownUntil = 0;
+// True once the ornament has actually been seen in frame for the jewel
+// ('front') phase -- gates zoom-to-fill/auto-capture so the operator gets
+// a real placement window without a fixed timer. Tag phase is armed
+// immediately (see openCaptureCamera).
+let _qualityArmed = true;
 const _qualityTagCanvas = document.createElement('canvas');
 
 try {
