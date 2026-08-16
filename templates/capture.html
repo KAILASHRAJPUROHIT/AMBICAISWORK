@@ -1165,13 +1165,9 @@ function maybeAutoCapture(result) {
   if (!cameraAutoEnabled.checked) return;
   if (_qualityCooldownUntil && Date.now() < _qualityCooldownUntil) return;
   const isTag = _cameraKind === 'tag';
-  const canFireNow = isTag ? !!_qualityStableTag : !!(
-    result.pass ||
-    result.goldDominant ||
-    result.goldBlobCoverage >= 0.012 ||
-    result.goldRatio >= 0.035 ||
-    (result.capturePlan && result.capturePlan.coverage >= 0.01)
-  );
+  // Same criteria as isCaptureGateReady (see its comment) -- a separate,
+  // looser check here would reintroduce the fire-then-fail-then-retry loop.
+  const canFireNow = isTag ? !!_qualityStableTag : isCaptureGateReady(result);
   if (!canFireNow) {
     _qualityStableFrames = 0;
     return;
