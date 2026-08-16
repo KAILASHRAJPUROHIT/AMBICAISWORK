@@ -590,6 +590,7 @@ class MainActivity : AppCompatActivity() {
         previewCountdownRunnable?.let { handler.removeCallbacks(it) }
         previewCountdownRunnable = null
         binding.previewOverlay.visibility = View.GONE
+        binding.previewView.visibility = View.VISIBLE
         previewShowing = false
     }
 
