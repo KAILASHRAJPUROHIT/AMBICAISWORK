@@ -431,7 +431,14 @@ class MainActivity : AppCompatActivity() {
                 setStatus("Filling frame before capture…", ready = false)
                 return
             }
-            val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO))
+            // Must also respect maxUsableZoom -- a level a previous backoff
+            // already proved unfocusable. Without this the climb ignored
+            // that ceiling entirely and marched straight back up to the
+            // exact same problem zoom every time, failed focus again,
+            // backed off again, forever: the "zooms in, zooms back out,
+            // keeps cycling" loop.
+            val climbCeiling = min(min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO), maxUsableZoom)
+            val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(climbCeiling)
             focusZoom.setZoomRatio(next)
             lastZoomChangeAt = now
             stepFocusAttempts = 0
