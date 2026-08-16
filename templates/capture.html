@@ -665,23 +665,22 @@ const CAMERA_PROFILES = {
 const CAPTURE_PHASE_RULES = {
   nothing: {
     front: {score: 70, sharpness: 36, points: 12, cells: 3},
-    studs: {score: 66, sharpness: 34, points: 10, cells: 3},
-    detail: {score: 72, sharpness: 40, points: 12, cells: 3},
     tag: {score: 72, sharpness: 32, points: 10, cells: 3},
   },
   redmi: {
     front: {score: 68, sharpness: 34, points: 10, cells: 3},
-    studs: {score: 64, sharpness: 32, points: 8, cells: 3},
-    detail: {score: 70, sharpness: 38, points: 10, cells: 3},
     tag: {score: 70, sharpness: 30, points: 8, cells: 3},
   },
 };
 const CAPTURE_PHASE_PROMPTS = {
-  front: 'Move closer. Keep the full ornament tight in frame.',
-  studs: 'Show studs now. If none, skip to close-up.',
-  detail: 'Move in. Keep the small design elements sharp.',
+  front: 'Hold steady. Zooming in to fill the frame, then capturing automatically.',
   tag: 'Show tag now. Keep the code square and sharp.',
 };
+// Target fraction of the frame the ornament should occupy before the
+// capture gate runs (see the zoom-to-fill step in startQualityAnalysis's
+// tick()). Only applies to the 'front' (jewel) phase, never 'tag' -- the
+// QR/label needs the whole tag in frame at native 1x to decode.
+const CAPTURE_FILL_TARGET = 0.75;
 let _cameraStream = null;
 let _cameraTrack = null;
 let _cameraImageCapture = null;
