@@ -820,21 +820,20 @@ function isCaptureGateReady(result) {
 // on gold) just looks identical to "still working on it."
 function _captureGateBlockReason(result) {
   if (!result) return 'Waiting on camera…';
-  const plan = result.capturePlan || _qualityLastPlan || null;
-  const ornamentSeen = !!(
-    result.pass || result.goldDominant ||
-    result.goldBlobCoverage >= 0.012 || result.goldRatio >= 0.035 ||
-    (plan && plan.coverage >= 0.01)
-  );
-  if (!ornamentSeen) return 'Ornament not detected — reposition';
-  const strongGold = result.goldDominant || result.goldBlobCoverage >= 0.012 || result.goldRatio >= 0.035;
-  if (result.clippedRatio >= 0.30) return 'Too much glare/highlight — tilt the piece or adjust lighting';
-  if (!strongGold && result.skinRatio >= 0.12) return 'Too much hand/skin in frame — reposition';
+  if (isCaptureGateReady(result)) return 'Ready. Capturing…';
+  const strongGold = result.goldDominant || result.goldBlobCoverage >= 0.010 || result.goldRatio >= 0.030;
+  if (!strongGold) return 'Ornament not detected — reposition';
   const sharpEnough = result.detailSharpnessConfirmed === true &&
-    result.sharpnessScore >= (plan && plan.coverage >= 0.02 ? 34 : 38);
+    result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
   if (!sharpEnough) return 'Not sharp enough yet — hold steady, focusing…';
+  if (result.clippedRatio >= 0.28) return 'Too much glare/highlight — tilt the piece or adjust lighting';
+  const goldUsable = isGoldTargetCandidate(result);
+  if (result.skinRatio >= (goldUsable ? 0.30 : 0.10)) return 'Too much hand/skin in frame — reposition';
   if (!(result.motion !== null && result.motion <= 0.08)) return 'Too much motion — hold the phone steady';
-  return 'Ready. Capturing…';
+  // Sharp/clean/stable all check out but the gate is still false, meaning
+  // it's failing on framing/box-fit specifically -- surface the worker's
+  // own diagnosis (boxFits/centering/point-count) rather than guessing.
+  return result.reason || 'Adjusting…';
 }
 
 cameraApiState.textContent = window.isSecureContext && navigator.mediaDevices
