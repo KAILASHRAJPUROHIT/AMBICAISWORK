@@ -742,6 +742,8 @@ class MainActivity : AppCompatActivity() {
         maxUsableZoom = Float.MAX_VALUE
         autoFired = false
         latestMaterial = null
+        lastZoomChangeAt = 0L
+        focusTriggeredThisLevel = false
         if (next == Phase.TAG) {
             barcodeAttempts = 0
             lastBarcodeCount = -1
