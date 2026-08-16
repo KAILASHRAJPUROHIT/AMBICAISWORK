@@ -242,9 +242,21 @@ class MainActivity : AppCompatActivity() {
                 latestSharpness = if (result.bounds != null) {
                     SharpnessAnalyzer.score(imageProxy, result.bounds)
                 } else 0f
+                // Focus-peaking style overlay -- screen only, see
+                // BoundsOverlayView's own doc comment for why this can
+                // never leak into the actual captured photo.
+                if (previewShowing) {
+                    boundsOverlay.update(null, 0, 0, 0)
+                } else {
+                    boundsOverlay.update(
+                        result.bounds, imageProxy.width, imageProxy.height,
+                        imageProxy.imageInfo.rotationDegrees
+                    )
+                }
                 imageProxy.close()
             }
             Phase.TAG -> {
+                boundsOverlay.update(null, 0, 0, 0)
                 if (barcodeBusy) {
                     imageProxy.close()
                     return
