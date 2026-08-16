@@ -1292,12 +1292,26 @@ async function waitForPlacement(result) {
 // rather than staying blocked on an unreachable sharpness target forever.
 async function _maybeBackOffZoom(result, now) {
   if (!_qualityZoomSettled) return;
-  if (!isGoldTargetCandidate(result)) { _qualitySharpBlockedAt = 0; return; }
+  if (!isGoldTargetCandidate(result)) { _qualitySharpBlockedAt = 0; _qualityFocusRetried = false; return; }
   const sharpEnough = result.detailSharpnessConfirmed === true &&
     result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
-  if (sharpEnough) { _qualitySharpBlockedAt = 0; return; }
+  if (sharpEnough) { _qualitySharpBlockedAt = 0; _qualityFocusRetried = false; return; }
   if (!_qualitySharpBlockedAt) { _qualitySharpBlockedAt = now; return; }
   if (now - _qualitySharpBlockedAt < CAPTURE_SHARP_STUCK_TIMEOUT_MS) return;
+  if (!_qualityFocusRetried) {
+    // The first decisive focus pass didn't converge. A single AF pass on a
+    // reflective, faceted subject can simply fail to land -- and the same
+    // small focus miss looks far blurrier the tighter the crop, so this is
+    // most likely to bite right where zoom is highest, not necessarily
+    // because the zoom level itself is unresolvable. One genuine retry at
+    // the SAME zoom is cheap and rules that out before conceding the level
+    // and paying for it with lost detail on every future zoom-in attempt.
+    _qualityFocusRetried = true;
+    _qualitySharpBlockedAt = now; // fresh full stuck-window for the retry
+    await _lockFocusOnce(true);   // forced re-trigger, not a same-value no-op
+    cameraStatus.textContent = 'Refocusing…';
+    return;
+  }
   const range = _cameraCapabilities.zoom;
   if (!range || typeof range.min !== 'number') return;
   const currentZoom = Number((_cameraTrack && _cameraTrack.getSettings().zoom) || cameraZoom.value || 1);
@@ -1306,6 +1320,7 @@ async function _maybeBackOffZoom(result, now) {
   _qualityMaxUsableZoom = backedOff;
   await applyCameraZoom(backedOff);
   _qualityFocusLockedAt = 0; // forces one fresh focus-lock pass at the new, lower zoom level
+  _qualityFocusRetried = false; // the new zoom level gets its own fresh retry budget
   cameraQualityLabel.textContent = `Easing zoom for sharper focus… ${backedOff.toFixed(1)}×`;
   cameraStatus.textContent = 'Backing off zoom for a sharper shot…';
   _qualitySharpBlockedAt = now; // restart the stuck-timer at the new, lower zoom level
