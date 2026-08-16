@@ -661,6 +661,13 @@ const cameraApiState = document.getElementById('camera-api-state');
 const captureChipFront = document.getElementById('capture-chip-front');
 const captureChipTag = document.getElementById('capture-chip-tag');
 const captureStepHint = document.getElementById('capture-step-hint');
+const spinOverlay = document.getElementById('spin-overlay');
+const spinVideo = document.getElementById('spin-video');
+const spinStatus = document.getElementById('spin-status');
+const spinRecordBtn = document.getElementById('spin-record-btn');
+const spinStopBtn = document.getElementById('spin-stop-btn');
+const spinCancelBtn = document.getElementById('spin-cancel');
+let _spinStream = null, _spinRecorder = null, _spinChunks = [];
 
 let currentCategory = null;
 let jewelBlob = null, tagBlob = null;
