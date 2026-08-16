@@ -228,6 +228,12 @@ class MainActivity : AppCompatActivity() {
 
     @OptIn(ExperimentalGetImage::class)
     private fun onFrame(imageProxy: ImageProxy) {
+        if (previewShowing) {
+            // The captured-photo preview is up -- don't touch pipeline
+            // state or the overlay underneath it at all while it's shown.
+            imageProxy.close()
+            return
+        }
         val now = System.currentTimeMillis()
         if (now - lastAnalysisAt < 150) {
             imageProxy.close()
@@ -245,14 +251,10 @@ class MainActivity : AppCompatActivity() {
                 // Focus-peaking style overlay -- screen only, see
                 // BoundsOverlayView's own doc comment for why this can
                 // never leak into the actual captured photo.
-                if (previewShowing) {
-                    binding.boundsOverlay.update(null, 0, 0, 0)
-                } else {
-                    binding.boundsOverlay.update(
-                        result.bounds, imageProxy.width, imageProxy.height,
-                        imageProxy.imageInfo.rotationDegrees
-                    )
-                }
+                binding.boundsOverlay.update(
+                    result.points, imageProxy.width, imageProxy.height,
+                    imageProxy.imageInfo.rotationDegrees
+                )
                 imageProxy.close()
             }
             Phase.TAG -> {
