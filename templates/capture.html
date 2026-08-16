@@ -1231,8 +1231,7 @@ function startQualityAnalysis() {
         result = await addTargetSharpnessConfirmation(result);
         if (session === _qualitySession && _cameraTrack) {
           updateQualityDisplay(result);
-          const stillZooming = await maybeZoomToFill(result, now);
-          if (!stillZooming) {
+          if (!waitForPlacement(result)) {
             maybeAutoCapture(result);
             if (!_qualityAutoFired) cameraStatus.textContent = _captureGateBlockReason(result);
           }
