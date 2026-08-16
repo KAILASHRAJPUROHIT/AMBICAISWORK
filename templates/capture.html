@@ -1867,6 +1867,7 @@ async function openCaptureCamera(kind) {
     // frame -- not a fixed timer, so it never rushes a slow placement or
     // stalls a fast one. Tag mode has no placement step and arms immediately.
     _qualityArmed = kind !== 'front';
+    _qualityArmedAt = Date.now();
     _qualityMaxUsableZoom = Infinity;
     _qualityFocusLockedAt = 0;
     _stepFocusAttempts = 0;
