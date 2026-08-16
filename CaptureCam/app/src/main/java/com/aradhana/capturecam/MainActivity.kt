@@ -75,6 +75,9 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var latestMaterial: MaterialDetector.Result? = null
     @Volatile private var latestSharpness: Float = 0f
     @Volatile private var barcodeBusy = false
+    @Volatile private var barcodeAttempts = 0
+    @Volatile private var lastBarcodeCount = -1
+    @Volatile private var lastBarcodeError: String? = null
 
     companion object {
         private const val TAG = "CaptureCam"
