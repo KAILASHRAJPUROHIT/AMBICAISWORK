@@ -1357,10 +1357,23 @@ async function _maybeBackOffZoom(result, now) {
     return;
   }
   const range = _cameraCapabilities.zoom;
-  if (!range || typeof range.min !== 'number') return;
   const currentZoom = Number((_cameraTrack && _cameraTrack.getSettings().zoom) || cameraZoom.value || 1);
-  const backedOff = Math.max(range.min, currentZoom * CAPTURE_ZOOM_BACKOFF_RATIO);
-  if (backedOff >= currentZoom - 0.05) return; // already at the device's own minimum, nothing left to try
+  const backedOff = (range && typeof range.min === 'number')
+    ? Math.max(range.min, currentZoom * CAPTURE_ZOOM_BACKOFF_RATIO) : currentZoom;
+  if (!range || typeof range.min !== 'number' || backedOff >= currentZoom - 0.05) {
+    // Nowhere left to back off to (no zoom range info, or already at the
+    // device's own minimum / a floor repeated backoffs have converged to).
+    // A bare return here used to leave _qualitySharpBlockedAt/
+    // _qualityFocusRetried stale forever -- every future tick re-entered
+    // this same branch and no-op'd, permanently freezing the item with the
+    // capture gate never opening. Re-arm a fresh focus attempt instead of
+    // going silent, so it keeps trying rather than hanging indefinitely.
+    _qualityFocusRetried = false;
+    _qualityFocusLockedAt = 0;
+    _qualitySharpBlockedAt = now;
+    cameraStatus.textContent = 'Refocusing at closest usable zoom…';
+    return;
+  }
   _qualityMaxUsableZoom = backedOff;
   await applyCameraZoom(backedOff);
   _qualityFocusLockedAt = 0; // forces one fresh focus-lock pass at the new, lower zoom level
