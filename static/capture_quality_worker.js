@@ -792,6 +792,7 @@ function analysePixels(imageData, kind, finalFrame) {
     goldRatio: Number(goldRatio.toFixed(4)),
     goldBlobCoverage: Number(goldBlob.warmCoverage.toFixed(4)),
     goldBlobRatio: Number(goldBlob.blobRatio.toFixed(4)),
+    goldBoxArea: Number(goldBoxArea.toFixed(4)),
     goldDominant,
     goldBounds: goldBlob.bounds,
     capturePlan,
