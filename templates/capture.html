@@ -1271,7 +1271,10 @@ function startQualityAnalysis() {
         if (session === _qualitySession && _cameraTrack) {
           updateQualityDisplay(result);
           const stillZooming = await maybeZoomToFill(result, now);
-          if (!stillZooming) maybeAutoCapture(result);
+          if (!stillZooming) {
+            maybeAutoCapture(result);
+            if (!_qualityAutoFired) cameraStatus.textContent = _captureGateBlockReason(result);
+          }
         }
       } catch (_) {
         if (session === _qualitySession) cameraQualityLabel.textContent = 'Analysis retrying · manual shutter works';
