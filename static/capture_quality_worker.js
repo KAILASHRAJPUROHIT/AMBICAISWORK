@@ -275,12 +275,21 @@ function skinOcclusionRatio(data, width, height, roi, tagMode) {
       const max = Math.max(r, g, b);
       const min = Math.min(r, g, b);
       const delta = max - min;
+      const saturation = max ? delta / max : 0;
       const yLuma = 0.299 * r + 0.587 * g + 0.114 * b;
       const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
       const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
       const looksSkin =
         yLuma > 70 && yLuma < 245 &&
         delta > 18 &&
+        // Real skin, even reddish/warm-toned, rarely exceeds ~0.5 HSV
+        // saturation under normal lighting. Dyed plastic props (a bright
+        // pink/magenta ring-display clip, for example) commonly land
+        // inside the same YCbCr chroma range skin does but are far more
+        // saturated -- without this, such a prop reads as "hand in frame"
+        // and permanently blocks auto-capture even though nothing skin-
+        // coloured is actually in the shot.
+        saturation < 0.50 &&
         r > g && g > b * 0.55 &&
         cb >= 77 && cb <= 135 &&
         cr >= 133 && cr <= 190;
