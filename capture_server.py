@@ -336,8 +336,6 @@ def api_capture_save():
     override_blur = request.form.get("override_blur") == "1"
     override_visibility = request.form.get("override_visibility") == "1"
     jewel_file = request.files.get("jewel")
-    studs_file = request.files.get("studs")
-    detail_file = request.files.get("detail")
     tag_file = request.files.get("tag")
     if not category and tag_code:
         # The tag's code is already known the moment its barcode/QR is
