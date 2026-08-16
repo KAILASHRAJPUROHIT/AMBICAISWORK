@@ -483,6 +483,27 @@ select:focus, input[type="text"]:focus { outline: none; border-color: var(--gold
   </div>
 </div>
 
+<!-- Deliberately its own small, self-contained overlay rather than reusing
+     camera-overlay's markup -- that overlay's controls (shutter, zoom,
+     assist-mode toggle) are wired to the still-photo quality-analysis flow,
+     and reusing its DOM here would mean carefully avoiding every one of
+     those existing event listeners. A separate overlay keeps 360-spin
+     recording fully independent of that flow. -->
+<div id="spin-overlay" class="camera-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="spin-title">
+  <div class="camera-topbar">
+    <strong id="spin-title">Record 360° spin</strong>
+    <button type="button" class="btn secondary" id="spin-cancel">Cancel</button>
+  </div>
+  <div class="camera-viewport">
+    <video id="spin-video" autoplay muted playsinline></video>
+  </div>
+  <div class="camera-controls">
+    <div id="spin-status" class="camera-status">Start the turntable, then tap Record.</div>
+    <button type="button" id="spin-record-btn" class="btn btn-coral">⏺ Record</button>
+    <button type="button" id="spin-stop-btn" class="btn btn-coral" style="display:none">⏹ Stop &amp; upload</button>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <input type="file" accept="image/*" capture="environment" class="capture-input" id="jewel-input">
