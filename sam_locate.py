@@ -253,8 +253,8 @@ def locate(bgr: np.ndarray, expect: int = 1, margin: float = 0.10):
     pred.set_image(rgb)
 
     H, W = bgr.shape[:2]
-    gboxes = _gold_boxes(bgr, expect)
-    seeds = _centre_seed(bgr, expect)
+    gboxes = _dino_boxes(bgr, expect)
+    seeds = _centre_seed_from_boxes(gboxes, bgr)
     boxes = []
     for idx, (cx, cy) in enumerate(seeds):
         gb = gboxes[idx] if idx < len(gboxes) else None
@@ -264,21 +264,18 @@ def locate(bgr: np.ndarray, expect: int = 1, margin: float = 0.10):
             box=(np.array(gb) if gb is not None else None),
             multimask_output=True,
         )
-        # Pick by GOLD CONTENT, not by SAM2's confidence.
+        # Pick by SAM2's OWN CONFIDENCE, not by colour.
         #
-        # SAM2's top-scoring mask on a hand-held plate is the hand: it is a
-        # large, coherent, well-defined object and the model is right about
-        # that — it just is not the object we want. Confidence answers "is
-        # this a clean segment", not "is this the jewellery".
-        #
-        # Colour is safe HERE in a way it was not for masking: we are only
-        # choosing between a handful of SAM2-proposed boundaries, so skin's
-        # warm hue cannot bleed the boundary outward. It only has to beat the
-        # hand on average saturation, which it does comfortably.
-        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-        sat, val = hsv[..., 1], hsv[..., 2]
-        goldish = (sat >= 90) & (val >= 70)
-        best_frac, chosen = -1.0, None
+        # The old tiebreak picked by gold-pixel-fraction specifically because
+        # SAM2's top-scoring mask on a hand-held plate was often the hand, and
+        # colour was the only cheap way to prefer the jewellery over it. That
+        # ambiguity is already resolved now: the seed box itself came from
+        # Grounding DINO being asked for "jewellery"/"ring"/etc, so a mask
+        # that stays inside that box IS the jewellery by construction, not by
+        # colour. Confidence among masks that already passed containment is a
+        # clean tiebreak now, and unlike gold-fraction it works identically
+        # for silver.
+        best_score, chosen = -1.0, None
         for i in range(len(masks)):
             m = masks[i].astype(bool)
             area = float(m.sum())
@@ -296,11 +293,10 @@ def locate(bgr: np.ndarray, expect: int = 1, margin: float = 0.10):
                     continue
                 if area > 3.0 * bw * bh:
                     continue
-            gf = float((m & goldish).sum()) / area
-            if gf > best_frac:
-                best_frac, chosen = gf, m
-        if chosen is None or best_frac < 0.30:
-            # SAM2 gave nothing trustworthy. The gold box alone is a worse
+            if float(scores[i]) > best_score:
+                best_score, chosen = float(scores[i]), m
+        if chosen is None:
+            # SAM2 gave nothing trustworthy. The DINO box alone is a worse
             # boundary but a far better answer than the display stand.
             if gb is not None:
                 boxes.append((int(gb[0]), int(gb[1]), int(gb[2]), int(gb[3])))
