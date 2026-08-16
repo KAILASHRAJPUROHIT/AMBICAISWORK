@@ -333,6 +333,51 @@ def api_capture_save():
     return jsonify(result)
 
 
+def _run_spin_processing(video_path: str, output_dir: str, tag_stem: str) -> None:
+    import spin_processor
+    try:
+        spin_processor.process_spin(video_path, output_dir, tag_stem)
+    except Exception:
+        import logging
+        logging.getLogger("spin_processor").exception("Spin processing failed for %s", tag_stem)
+
+
+@app.route("/api/capture/spin", methods=["POST"])
+def api_capture_spin():
+    """Saves a recorded turntable-rotation clip and kicks off local
+    frame-extraction/cropping/360-viewer processing in the background --
+    no AI credit spend involved, so the phone doesn't wait for it (see
+    spin_processor.py's module docstring)."""
+    import capture_tool as ct
+    import ornament_code_map as ocm
+    category = request.form.get("category", "")
+    tag_code = request.form.get("tag_code", "")
+    video_file = request.files.get("video")
+    if not category and tag_code:
+        auto = ocm.category_from_tag_code(tag_code)
+        if auto:
+            category = auto.key
+    if not category or category not in ct.CATEGORY_LABELS:
+        return jsonify({"ok": False, "error": f"missing or unknown category: {category!r}"}), 400
+    if not tag_code or not video_file:
+        return jsonify({"ok": False, "error": "missing tag_code or video"}), 400
+
+    tray = ct.get_current_tray(category)
+    tray_dir = os.path.join(ct.CAPTURE_ROOT, tray["folder"])
+    os.makedirs(tray_dir, exist_ok=True)
+    tag_stem = ct._safe_filename_from_tag(tag_code)
+    ext = os.path.splitext(video_file.filename or "")[1] or ".webm"
+    video_path = os.path.join(tray_dir, f"{tag_stem}_360{ext}")
+    video_file.save(video_path)
+
+    output_dir = os.path.join(OUTPUT, category)
+    os.makedirs(output_dir, exist_ok=True)
+    threading.Thread(
+        target=_run_spin_processing, args=(video_path, output_dir, tag_stem), daemon=True,
+    ).start()
+    return jsonify({"ok": True, "processing": True})
+
+
 @app.route("/api/heartbeat", methods=["POST"])
 def api_heartbeat():
     return jsonify({"ok": True, "capture_version": _capture_page_version()})
