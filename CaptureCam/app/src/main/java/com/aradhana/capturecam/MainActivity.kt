@@ -362,6 +362,8 @@ class MainActivity : AppCompatActivity() {
             if (zoom > 1.05f) {
                 focusZoom.setZoomRatio((zoom * ZOOM_BACKOFF_RATIO).coerceAtLeast(1f))
                 stepFocusAttempts = 0
+                focusTriggeredThisLevel = false
+                lastZoomChangeAt = now
             }
             setStatus("Re-centre the item…", ready = false)
             return
@@ -375,12 +377,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         val coverageOk = result.coverage >= MIN_LIVE_COVERAGE
+        val zoomSettled = now - lastZoomChangeAt >= ZOOM_SETTLE_MS
         val afState = focusZoom.afState.value
         val focusLocked = focusZoom.isFocusLocked(afState)
         val focusFailed = focusZoom.isFocusFailed(afState)
         val sharpEnough = latestSharpness >= SHARPNESS_THRESHOLD
 
-        if (coverageOk && focusLocked && sharpEnough) {
+        if (coverageOk && zoomSettled && focusLocked && sharpEnough) {
             setStatus("Ready. Capturing…", ready = true)
             captureJewel()
             return
@@ -395,24 +398,52 @@ class MainActivity : AppCompatActivity() {
             // Too small to trust a focus verdict either way yet -- climb on
             // coverage alone, same reasoning as the web version's identical
             // branch (a crop this small would be judged on an upscaled,
-            // artificially-softened analysis region).
+            // artificially-softened analysis region). Deliberately does NOT
+            // touch focus here at all -- that used to fire on every single
+            // climb step (a new AF trigger roughly every tick, each one
+            // interrupting whatever partial scan the last step started),
+            // which is what "focus hunting too rapid" actually was. Focus
+            // is only ever triggered once coverage is trustworthy AND the
+            // zoom has been sitting still for ZOOM_SETTLE_MS, see below.
             if (atZoomCeiling) {
                 captureJewel() // nowhere left to climb -- accept what's on offer
                 return
             }
-            setStatus("Filling frame before capture…", ready = false)
+            if (now - lastZoomChangeAt < ZOOM_STEP_INTERVAL_MS) {
+                setStatus("Filling frame before capture…", ready = false)
+                return
+            }
             val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO))
             focusZoom.setZoomRatio(next)
-            focusZoom.triggerAutoFocus()
+            lastZoomChangeAt = now
             stepFocusAttempts = 0
+            focusTriggeredThisLevel = false
+            setStatus("Filling frame before capture…", ready = false)
             return
         }
 
-        // Coverage is trustworthy now -- this is where "never advance while
-        // blurry" actually applies.
-        if (afState == null) {
-            // AF sweep not yet triggered/settled at this zoom.
+        // Coverage is trustworthy now. Still give the lens/sensor a moment
+        // to settle from the last zoom change before touching focus at all
+        // -- triggering AF against a target that's still moving is judged
+        // on a moving target and reads as more hunting.
+        if (!zoomSettled) {
+            setStatus("Settling…", ready = false)
+            return
+        }
+
+        if (!focusTriggeredThisLevel) {
+            // One decisive trigger per zoom level -- not re-fired every
+            // tick while waiting for its result, that restart-storm was
+            // the other half of the hunting complaint.
+            focusTriggeredThisLevel = true
             focusZoom.triggerAutoFocus()
+            setStatus("Focusing…", ready = false)
+            return
+        }
+
+        if (afState == null) {
+            // Trigger already sent -- waiting for Camera2's own result,
+            // not re-triggering.
             setStatus("Focusing…", ready = false)
             return
         }
@@ -420,7 +451,10 @@ class MainActivity : AppCompatActivity() {
             if (focusFailed || !sharpEnough) {
                 stepFocusAttempts += 1
                 if (stepFocusAttempts <= MAX_FOCUS_RETRIES) {
-                    focusZoom.triggerAutoFocus()
+                    // One more genuine, decisive attempt at this SAME zoom
+                    // level (falls through to the focusTriggeredThisLevel
+                    // branch above on the next tick).
+                    focusTriggeredThisLevel = false
                     setStatus("Refocusing…", ready = false)
                     return
                 }
@@ -431,8 +465,9 @@ class MainActivity : AppCompatActivity() {
                 if (backedOff < zoom - 0.05f) {
                     maxUsableZoom = backedOff
                     focusZoom.setZoomRatio(backedOff)
+                    lastZoomChangeAt = now
                 }
-                focusZoom.triggerAutoFocus()
+                focusTriggeredThisLevel = false
                 setStatus("Refocusing…", ready = false)
                 return
             }
