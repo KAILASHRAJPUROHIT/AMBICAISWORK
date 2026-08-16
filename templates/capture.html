@@ -1103,15 +1103,18 @@ function recordLiveTag(read) {
   _qualityTagCorners = read.corners || [];
 }
 
-// Live hardware zoom before capture was tried and dropped: on-device zoom
-// re-centers around the middle of the frame, which pushes an off-center
-// ornament out of the alignment box the instant it zooms in (fighting the
-// "keep it inside the box" check), and every zoom change resets
-// focus/motion, which blocks the sharpness/stability gate from ever
-// settling. Framing to CAPTURE_FILL_TARGET now happens as a digital crop
-// on the already-captured photo instead (see cropToFillOrnament) -- capture
-// fires at native framing using the original, proven gate, and the "zoom
-// in" the owner wants happens losslessly-enough after the fact.
+// Continuously chasing CAPTURE_FILL_TARGET live was tried and dropped: a
+// coverage reading that flickers near the threshold kept re-triggering zoom
+// nudges indefinitely, and repeated zoom changes reset focus/motion, so the
+// stability gate never got a settled frame to fire on. What's below instead
+// applies ONE bounded zoom step the moment the ornament is detected, then
+// never touches zoom again for that item -- gives the operator the visible
+// "zooming in" feedback, without the endless-adjustment failure mode. Final,
+// precise framing to CAPTURE_FILL_TARGET still happens as a digital crop on
+// the captured photo afterward (see cropToFillOrnament) -- the live zoom
+// only needs to get reasonably close, not exact.
+const CAPTURE_ARM_ZOOM_TARGET = 0.45; // moderate, not the full 75% -- avoids a jarring jump and reduces the chance of pushing an off-center piece out of frame
+const CAPTURE_ARM_SETTLE_MS = 700; // pause after the single zoom step so focus/motion can resettle before the capture gate is evaluated
 function _ornamentPresent(result) {
   return !!(result && (
     result.pass ||
@@ -1122,18 +1125,35 @@ function _ornamentPresent(result) {
   ));
 }
 
+let _qualityArmedAt = 0;
+
 // Holds the capture gate off until the ornament has actually been placed in
 // frame -- not a fixed timer -- so the operator gets a real placement
-// window without the automation racing ahead or stalling. Returns true
-// while still waiting (caller should skip the capture gate this frame).
-function waitForPlacement(result) {
-  if (_qualityArmed) return false;
-  if (_ornamentPresent(result)) {
-    _qualityArmed = true;
-    cameraStatus.textContent = 'Item detected.';
-    return false;
+// window without the automation racing ahead or stalling. The moment it
+// arms, it fires one bounded zoom step and then a short settle pause.
+// Returns true while still waiting (caller should skip the capture gate
+// this frame).
+async function waitForPlacement(result) {
+  if (_qualityArmed) {
+    return Date.now() - _qualityArmedAt < CAPTURE_ARM_SETTLE_MS;
   }
-  cameraStatus.textContent = 'Place the item in frame…';
+  if (!_ornamentPresent(result)) {
+    cameraStatus.textContent = 'Place the item in frame…';
+    return true;
+  }
+  _qualityArmed = true;
+  _qualityArmedAt = Date.now();
+  cameraStatus.textContent = 'Item detected. Zooming in…';
+  const range = _cameraCapabilities.zoom;
+  const plan = result.capturePlan || _qualityLastPlan;
+  const coverage = plan && typeof plan.coverage === 'number' ? plan.coverage : null;
+  if (range && typeof range.max === 'number' && coverage) {
+    const currentZoom = Number((_cameraTrack && _cameraTrack.getSettings().zoom) || cameraZoom.value || 1);
+    const safeCoverage = Math.max(coverage, 0.01);
+    const desired = currentZoom * Math.sqrt(CAPTURE_ARM_ZOOM_TARGET / safeCoverage);
+    const capped = Math.min(desired, currentZoom * 2.5); // never jump more than 2.5x in one step
+    await applyCameraZoom(clampCameraZoom(capped));
+  }
   return true;
 }
 
