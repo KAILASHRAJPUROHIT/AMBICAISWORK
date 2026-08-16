@@ -50,7 +50,11 @@ _last_mask = None
 
 
 def available() -> bool:
-    return os.path.isfile(CKPT)
+    """Fail-open: only claim availability when BOTH SAM2's checkpoint is on
+    disk and Grounding DINO's library is importable. If DINO can't load, the
+    seeding step has nothing to seed with, so a capture should proceed with
+    its original uncropped photo rather than block on this."""
+    return os.path.isfile(CKPT) and _dino_available()
 
 
 def release() -> None:
