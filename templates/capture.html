@@ -2024,62 +2024,10 @@ function showReadOverlay(code, ok, onDone, categoryLabel) {
   setTimeout(onDone, 900);
 }
 
-function promptStudsCapture(plan) {
-  updateCaptureGuide('studs');
-  showPopup(`
-    <div class="step-tag">Step 2 of 4</div>
-    <h2>Show studs</h2>
-    <div class="sub-hint">${plan && plan.studsLikely
-      ? 'AI saw a top cluster. Capture the studs now.'
-      : 'AI did not see a strong stud cluster. You can skip to close-up.'}</div>
-    <div class="btn-row">
-      <button class="btn secondary" id="popup-skip-studs">Skip studs</button>
-      <button class="btn" id="popup-studs-btn">📷 Open camera</button>
-    </div>
-    <button class="btn secondary" id="popup-cancel">Cancel this item</button>
-  `);
-  document.getElementById('popup-studs-btn').addEventListener('click', () => {
-    _capturePhase = 'studs';
-    saveResumeState(currentCaptureSnapshot());
-    closePopup();
-    openCaptureCamera('studs');
-  });
-  document.getElementById('popup-skip-studs').addEventListener('click', () => {
-    studsBlob = null;
-    _capturePhase = 'detail';
-    saveResumeState(currentCaptureSnapshot());
-    closePopup();
-    updateCameraPlanDetail(describeCurrentPlan(plan || _qualityLastPlan, 'detail'));
-    openCaptureCamera('detail');
-  });
-  document.getElementById('popup-cancel').addEventListener('click', () => { clearResumeState(); closePopup(); });
-}
-
-function promptDetailCapture(plan) {
-  updateCaptureGuide('detail');
-  showPopup(`
-    <div class="step-tag">Step 3 of 4</div>
-    <h2>Show close-up details</h2>
-    <div class="sub-hint">${plan && plan.detailLabel
-      ? `AI picked ${escapeHtml(plan.detailLabel)}. Move close and keep it sharp.`
-      : 'Move close and keep the small design elements sharp.'}</div>
-    <button class="btn" id="popup-detail-btn">📷 Open camera</button>
-    <button class="btn secondary" id="popup-cancel">Cancel this item</button>
-  `);
-  document.getElementById('popup-detail-btn').addEventListener('click', () => {
-    _capturePhase = 'detail';
-    saveResumeState(currentCaptureSnapshot());
-    closePopup();
-    updateCameraPlanDetail(describeCurrentPlan(plan || _qualityLastPlan, 'detail'));
-    openCaptureCamera('detail');
-  });
-  document.getElementById('popup-cancel').addEventListener('click', () => { clearResumeState(); closePopup(); });
-}
-
 function promptTagCapture() {
   updateCaptureGuide('tag');
   showPopup(`
-    <div class="step-tag">Step 4 of 4</div>
+    <div class="step-tag">Step 2 of 2</div>
     <h2>Show tag</h2>
     <div class="sub-hint">Get the barcode/QR sharp and well-lit.</div>
     <button class="btn" id="popup-tag-btn">🏷️ Open camera</button>
@@ -2094,7 +2042,8 @@ function promptTagCapture() {
   document.getElementById('popup-cancel').addEventListener('click', () => { clearResumeState(); closePopup(); });
 }
 
-// Front / studs / detail photos all route through the same capture input.
+// The one jewel/ornament photo (auto-captured, zoomed to fill the frame)
+// routes through this same capture input.
 function handleJewelBlob(blob) {
   if (!blob) return;
   if (blurRetakeContext) {
@@ -2119,33 +2068,10 @@ function handleJewelBlob(blob) {
     return;
   }
 
-  if (_capturePhase === 'studs') {
-    studsBlob = blob;
-    _capturePhase = 'detail';
-    saveResumeState(currentCaptureSnapshot());
-    promptDetailCapture(_qualityLastPlan);
-    return;
-  }
-
-  if (_capturePhase === 'detail') {
-    detailBlob = blob;
-    _capturePhase = 'tag';
-    saveResumeState(currentCaptureSnapshot());
-    promptTagCapture();
-    return;
-  }
-
   jewelBlob = blob;
-  const plan = _qualityLastPlan || null;
-  const nextPhase = plan && plan.nextPhase === 'detail' ? 'detail' : 'studs';
-  _capturePhase = nextPhase;
+  _capturePhase = 'tag';
   saveResumeState(currentCaptureSnapshot());
-  if (nextPhase === 'detail') {
-    updateCameraPlanDetail(describeCurrentPlan(plan, 'detail'));
-    openCaptureCamera('detail');
-    return;
-  }
-  promptStudsCapture(plan);
+  promptTagCapture();
 }
 
 jewelInput.addEventListener('change', () => {
