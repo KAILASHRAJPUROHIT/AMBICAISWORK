@@ -351,8 +351,6 @@ def api_capture_save():
         return jsonify({"ok": False, "error": "missing category, front photo, or tag photo"}), 400
 
     result = ct.save_pair(category, jewel_file.read(), tag_file.read(), tag_code,
-                          studs_bytes=studs_file.read() if studs_file else None,
-                          detail_bytes=detail_file.read() if detail_file else None,
                           staff_name=staff_name, override_duplicate=override_duplicate,
                           override_blur=override_blur, override_visibility=override_visibility)
     return jsonify(result)
