@@ -1160,7 +1160,11 @@ const CAPTURE_SHARP_STUCK_TIMEOUT_MS = 1100;
 // The ONE retry (see _maybeBackOffZoom) gets a shorter follow-up window than
 // the initial wait -- it's judging "did that specific extra pass land",
 // not giving the lens the full benefit of the doubt a first attempt gets.
-const CAPTURE_SHARP_RETRY_TIMEOUT_MS = 650;
+// Must clear CAPTURE_FOCUS_SETTLE_MS with room to spare: the retry's own
+// fresh focus-lock consumes the first 500ms of this window before the
+// sharpness gate is even evaluated again, so anything much tighter leaves
+// too few analysis ticks to actually judge the retry fairly.
+const CAPTURE_SHARP_RETRY_TIMEOUT_MS = 900;
 const CAPTURE_ZOOM_BACKOFF_RATIO = 0.8;
 // Grace period after a single decisive focus-lock trigger before the
 // sharpness gate is judged -- gives the lens time to actually complete one
