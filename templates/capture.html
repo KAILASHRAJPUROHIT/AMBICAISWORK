@@ -1163,22 +1163,42 @@ let _qualityLastZoomAdjustAt = 0;
 let _qualityMaxUsableZoom = Infinity; // lowered by _maybeBackOffZoom when a zoom level proves unfocusable
 let _qualitySharpBlockedAt = 0;
 let _qualityFocusLockedAt = 0;
+// Whether the ONE bounded focus retry (see _maybeBackOffZoom) has already
+// been used for the current zoom level. Reset whenever zoom actually moves
+// (settle restart, or a backoff step) so each new zoom level gets its own
+// fresh retry budget.
+let _qualityFocusRetried = false;
 
-// Fires exactly ONE decisive focus action, not continuous re-evaluation.
-// Continuous AF on a shiny, reflective, low-texture subject (polished gold,
-// faceted diamonds) is prone to "hunting" -- racking back and forth without
-// locking, because it keeps re-searching for a confident contrast peak.
-// Repeatedly re-triggering continuous mode (tried first, on every zoom
-// step) made this WORSE by restarting that search mid-hunt every time.
-// single-shot mode -- when the device supports it -- performs one focus
-// pass and then holds, which is both faster and far less prone to hunting.
-async function _lockFocusOnce() {
+// Fires exactly ONE decisive focus action per call, not continuous
+// re-evaluation. Continuous AF on a shiny, reflective, low-texture subject
+// (polished gold, faceted diamonds) is prone to "hunting" -- racking back
+// and forth without locking, because it keeps re-searching for a confident
+// contrast peak. Repeatedly re-triggering continuous mode (tried first, on
+// every zoom step) made this WORSE by restarting that search mid-hunt every
+// time. single-shot mode -- when the device supports it -- performs one
+// focus pass and then holds, which is both faster and far less prone to
+// hunting.
+//
+// forceRetrigger is used by the ONE bounded retry in _maybeBackOffZoom: on
+// several Android/Chrome camera stacks, re-applying the SAME focusMode
+// value the track already reports is a silent no-op -- the platform camera
+// HAL only re-runs an AF sweep on an actual state transition, not a
+// repeated identical constraint. That is a plausible reason a single
+// "decisive" pass at high zoom can leave the frame stuck blurred: the
+// retry looked like it fired, but the hardware never actually re-focused.
+// Toggling through 'none' first (a no-parameter, universally cheap value
+// when supported) forces a real transition so the retry is a genuine fresh
+// AF sweep, not another no-op of the mode already in effect.
+async function _lockFocusOnce(forceRetrigger) {
   if (!_cameraTrack) return;
   const supported = _cameraCapabilities.focusMode;
   const mode = Array.isArray(supported) && supported.includes('single-shot')
     ? 'single-shot'
     : (Array.isArray(supported) && supported.includes('continuous') ? 'continuous' : null);
   if (mode) {
+    if (forceRetrigger && Array.isArray(supported) && supported.includes('none') && mode !== 'none') {
+      try { await _cameraTrack.applyConstraints({advanced: [{focusMode: 'none'}]}); } catch (_) {}
+    }
     try { await _cameraTrack.applyConstraints({advanced: [{focusMode: mode}]}); } catch (_) {}
   }
   _qualityFocusLockedAt = Date.now();
