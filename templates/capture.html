@@ -1147,8 +1147,17 @@ function recordLiveTag(read) {
 // resets focus/motion, so the stability gate never saw a settled frame;
 // fixed by only evaluating the capture gate once zoom has stopped moving.
 const CAPTURE_ZOOM_ADJUST_INTERVAL_MS = 300;
+// If sharpness still hasn't been confirmed this long after zoom settled,
+// the lens likely can't resolve detail at this zoom level at all (autofocus
+// not catching up after the jump, or past the point where zoom stops being
+// optical and starts just magnifying existing softness) -- back off rather
+// than sitting blocked forever. See _maybeBackOffZoom.
+const CAPTURE_SHARP_STUCK_TIMEOUT_MS = 3000;
+const CAPTURE_ZOOM_BACKOFF_RATIO = 0.85;
 let _qualityZoomSettled = false;
 let _qualityLastZoomAdjustAt = 0;
+let _qualityMaxUsableZoom = Infinity; // lowered by _maybeBackOffZoom when a zoom level proves unfocusable
+let _qualitySharpBlockedAt = 0;
 
 function _ornamentPresent(result) {
   return !!(result && (
