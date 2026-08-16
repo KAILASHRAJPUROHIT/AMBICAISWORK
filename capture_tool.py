@@ -41,6 +41,7 @@ import cv2
 import numpy as np
 
 import capture_voids
+import sam_locate
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 CAPTURE_ROOT = os.path.join(BASE, "capture_intake")
