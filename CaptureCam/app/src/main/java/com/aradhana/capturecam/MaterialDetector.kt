@@ -139,9 +139,11 @@ object MaterialDetector {
         val cols = max(1, (endX - startX) / step)
         val rows = max(1, (endY - startY) / step)
         val mask = BooleanArray(cols * rows)
+        val sparkleCandidate = BooleanArray(cols * rows)
         var warm = 0
-        val points = mutableListOf<Point>()
 
+        // Pass 1: classify every sampled cell. Sparkle candidates are
+        // recorded but not yet trusted -- see the proximity gate below.
         for (row in 0 until rows) {
             for (col in 0 until cols) {
                 val x = min(width - 1, startX + col * step)
@@ -158,13 +160,30 @@ object MaterialDetector {
                 val vVal = vBuffer.get(vIndex).toInt() and 0xFF
                 val rgb = yuvToRgb(yVal, uVal, vVal)
                 val isMetal = looksLikeMetal(rgb[0], rgb[1], rgb[2])
+                val cell = row * cols + col
                 if (isMetal) {
-                    mask[row * cols + col] = true
+                    mask[cell] = true
                     warm += 1
+                } else if (looksLikeSparkle(rgb[0], rgb[1], rgb[2])) {
+                    sparkleCandidate[cell] = true
                 }
-                if (isMetal || looksLikeSparkle(rgb[0], rgb[1], rgb[2])) {
-                    points.add(Point(x.toFloat() / width, yPix.toFloat() / height))
-                }
+            }
+        }
+
+        // Pass 2: build the dot cloud -- every metal cell, plus every
+        // sparkle candidate that has an actual metal cell nearby (a stone
+        // set into or beside gold/silver), dropping the ones that don't
+        // (background highlights, skin, studio lighting -- exactly what
+        // "dots on all focused areas, not just the jewellery" was).
+        val points = mutableListOf<Point>()
+        for (row in 0 until rows) {
+            for (col in 0 until cols) {
+                val cell = row * cols + col
+                val keep = mask[cell] || (sparkleCandidate[cell] && hasNearbyMetal(mask, cols, rows, col, row))
+                if (!keep) continue
+                val x = min(width - 1, startX + col * step)
+                val yPix = min(height - 1, startY + row * step)
+                points.add(Point(x.toFloat() / width, yPix.toFloat() / height))
             }
         }
 
