@@ -753,17 +753,7 @@ function updateCameraPlanDetail(text) {
 function describeCurrentPlan(plan, phase) {
   if (!plan) return '';
   if (phase === 'tag') return 'Tag next · main lens · native 1×';
-  if (phase === 'front') {
-    return plan.studsLikely
-      ? 'Studs likely · upper crown · main lens · native 1×'
-      : (plan.detailLabel || 'Detail region') + ' · main lens · native 1×';
-  }
-  if (phase === 'studs') {
-    return plan.studsLikely
-      ? 'Studs likely · upper crown · main lens · native 1×'
-      : 'No stud cluster seen · move closer for detail · native 1×';
-  }
-  return (plan.detailLabel || 'Detail region') + ' · move closer · native 1×';
+  return 'Whole ornament · zooming to fill frame · main lens';
 }
 
 function updateCaptureGuide(phase, customText) {
