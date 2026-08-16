@@ -424,7 +424,12 @@ class MainActivity : AppCompatActivity() {
                 return@captureFullRes
             }
             jewelJpeg = bytes
-            resetForNewItem(Phase.TAG)
+            showCapturePreview(
+                bytes,
+                onProceed = { resetForNewItem(Phase.TAG) },
+                onRetake = { retakeJewel() },
+                onCancel = { cancelItem() }
+            )
         }
     }
 
@@ -432,9 +437,107 @@ class MainActivity : AppCompatActivity() {
         when (phase) {
             Phase.JEWEL -> captureJewel()
             Phase.TAG -> captureFullRes { bytes ->
-                if (bytes != null) { tagJpeg = bytes; uploadPair() }
+                if (bytes != null) {
+                    tagJpeg = bytes
+                    showCapturePreview(
+                        bytes,
+                        onProceed = { uploadPair() },
+                        onRetake = { retakeTag() },
+                        onCancel = { cancelItem() }
+                    )
+                }
             }
             Phase.UPLOADING -> {}
+        }
+    }
+
+    // ---------------------------------------------------------------- Capture preview
+
+    /** Shows the just-captured photo full-screen with Retake/Cancel item
+     * buttons and a 5s auto-continue countdown -- gives the operator a
+     * real chance to catch a bad frame before it's used, matching
+     * capture.html's own "Best frame selected · auto-proceeding in 3 sec"
+     * preview step. */
+    private fun showCapturePreview(
+        jpeg: ByteArray,
+        onProceed: () -> Unit,
+        onRetake: () -> Unit,
+        onCancel: () -> Unit
+    ) {
+        val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
+        binding.previewImage.setImageBitmap(bitmap)
+        binding.previewOverlay.visibility = View.VISIBLE
+        previewShowing = true
+
+        binding.previewRetakeButton.setOnClickListener {
+            hideCapturePreview()
+            onRetake()
+        }
+        binding.previewCancelButton.setOnClickListener {
+            hideCapturePreview()
+            onCancel()
+        }
+
+        previewCountdownRunnable?.let { handler.removeCallbacks(it) }
+        var secondsLeft = 5
+        val tick = object : Runnable {
+            override fun run() {
+                if (secondsLeft <= 0) {
+                    hideCapturePreview()
+                    onProceed()
+                    return
+                }
+                binding.previewCountdown.text = "Continuing in ${secondsLeft}s…"
+                secondsLeft -= 1
+                handler.postDelayed(this, 1000)
+            }
+        }
+        previewCountdownRunnable = tick
+        handler.post(tick)
+    }
+
+    private fun hideCapturePreview() {
+        previewCountdownRunnable?.let { handler.removeCallbacks(it) }
+        previewCountdownRunnable = null
+        binding.previewOverlay.visibility = View.GONE
+        previewShowing = false
+    }
+
+    /** Discards the jewel shot and re-arms the JEWEL pipeline from
+     * scratch, staying in this session (not returning to the browser). */
+    private fun retakeJewel() {
+        jewelJpeg = null
+        armed = false
+        stepFocusAttempts = 0
+        maxUsableZoom = Float.MAX_VALUE
+        latestMaterial = null
+        autoFired = false
+        armedAt = System.currentTimeMillis()
+        setStatus("Place the item in frame…", ready = false)
+    }
+
+    /** Discards the tag shot only -- the jewel shot already captured
+     * stays, no need to redo it. */
+    private fun retakeTag() {
+        tagJpeg = null
+        tagCodeHistory = mutableListOf()
+        stableTagCode = null
+        autoFired = false
+        barcodeAttempts = 0
+        lastBarcodeCount = -1
+        lastBarcodeError = null
+        setStatus("Show the tag QR/barcode…", ready = false)
+    }
+
+    /** Abandons the item entirely (no upload). If this session was handed
+     * off from the browser, return to it immediately -- same reasoning as
+     * finishOrResetForNewItem: the browser is the anchor, this app's job
+     * for this item is simply over. Otherwise loop for a fresh item. */
+    private fun cancelItem() {
+        if (launchedFromBrowser) {
+            finish()
+        } else {
+            resetForNewItem(Phase.JEWEL)
         }
     }
 
