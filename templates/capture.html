@@ -1336,7 +1336,8 @@ async function _maybeBackOffZoom(result, now) {
     result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
   if (sharpEnough) { _qualitySharpBlockedAt = 0; _qualityFocusRetried = false; return; }
   if (!_qualitySharpBlockedAt) { _qualitySharpBlockedAt = now; return; }
-  if (now - _qualitySharpBlockedAt < CAPTURE_SHARP_STUCK_TIMEOUT_MS) return;
+  const stuckWindow = _qualityFocusRetried ? CAPTURE_SHARP_RETRY_TIMEOUT_MS : CAPTURE_SHARP_STUCK_TIMEOUT_MS;
+  if (now - _qualitySharpBlockedAt < stuckWindow) return;
   if (!_qualityFocusRetried) {
     // The first decisive focus pass didn't converge. A single AF pass on a
     // reflective, faceted subject can simply fail to land -- and the same
@@ -1346,7 +1347,7 @@ async function _maybeBackOffZoom(result, now) {
     // the SAME zoom is cheap and rules that out before conceding the level
     // and paying for it with lost detail on every future zoom-in attempt.
     _qualityFocusRetried = true;
-    _qualitySharpBlockedAt = now; // fresh full stuck-window for the retry
+    _qualitySharpBlockedAt = now; // fresh (shorter) window for the retry
     await _lockFocusOnce(true);   // forced re-trigger, not a same-value no-op
     cameraStatus.textContent = 'Refocusing…';
     return;
