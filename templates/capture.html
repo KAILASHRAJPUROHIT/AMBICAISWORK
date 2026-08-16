@@ -2323,8 +2323,6 @@ function attemptSave(tagCode, overrideDuplicate, overrideBlur, overrideVisibilit
   fd.append('category', currentCategory);
   fd.append('tag_code', tagCode);
   fd.append('jewel', jewelBlob, 'jewel.jpg');
-  if (studsBlob) fd.append('studs', studsBlob, 'studs.jpg');
-  if (detailBlob) fd.append('detail', detailBlob, 'detail.jpg');
   fd.append('tag', tagBlob, 'tag.jpg');
   if (overrideDuplicate) fd.append('override_duplicate', '1');
   if (overrideBlur) fd.append('override_blur', '1');
