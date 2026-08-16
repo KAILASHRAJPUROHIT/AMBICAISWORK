@@ -764,20 +764,22 @@ function describeCurrentPlan(plan, phase) {
 function updateCaptureGuide(phase, customText) {
   const activePhase = phase && CAPTURE_PHASE_PROMPTS[phase] ? phase : 'front';
   captureChipFront.classList.toggle('active', activePhase === 'front');
-  captureChipStuds.classList.toggle('active', activePhase === 'studs');
-  captureChipDetail.classList.toggle('active', activePhase === 'detail');
   captureChipTag.classList.toggle('active', activePhase === 'tag');
   const profileLabel = (CAMERA_PROFILES[currentCameraProfileKey()] || CAMERA_PROFILES.nothing).label;
   captureStepHint.textContent = customText || `${profileLabel} · ${CAPTURE_PHASE_PROMPTS[activePhase]}`;
 }
 
-updateCaptureGuide('front', 'Move closer. Start with the front shot.');
+updateCaptureGuide('front', 'Move closer. Start with the jewellery photo.');
 
+// Starting zoom when a phase's camera opens. 'front' starts at native 1x and
+// is then driven upward live by the zoom-to-fill step in startQualityAnalysis's
+// tick() (see CAPTURE_FILL_TARGET); 'tag' always stays at native 1x so the
+// whole label/QR is visible.
 function captureZoomForPhase(profile, phase, plan) {
   const settings = CAMERA_PROFILES[profile] || CAMERA_PROFILES.nothing;
   const phaseZoom = {
-    nothing: {front: 1, studs: 1, detail: 1, tag: 1},
-    redmi: {front: 1, studs: 1, detail: 1, tag: 1},
+    nothing: {front: 1, tag: 1},
+    redmi: {front: 1, tag: 1},
   };
   return phaseZoom[profile]?.[phase] || settings.zoom || 1;
 }
