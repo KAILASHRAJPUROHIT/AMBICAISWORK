@@ -279,6 +279,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun tickTag() {
+        if (previewShowing) return
         binding.tagCodeText.text = stableTagCode?.let { "Tag: $it · ready" } ?: "Show the tag QR/barcode…"
         setStatus(stableTagCode?.let { "Tag locked. Capturing…" } ?: "Scanning tag…", ready = stableTagCode != null)
         binding.debugText.text = "attempts=$barcodeAttempts  lastSeen=$lastBarcodeCount" +
@@ -292,7 +293,12 @@ class MainActivity : AppCompatActivity() {
                     return@captureFullRes
                 }
                 tagJpeg = bytes
-                uploadPair()
+                showCapturePreview(
+                    bytes,
+                    onProceed = { uploadPair() },
+                    onRetake = { retakeTag() },
+                    onCancel = { cancelItem() }
+                )
             }
         }
     }
