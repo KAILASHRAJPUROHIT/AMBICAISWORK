@@ -2083,6 +2083,20 @@ async function captureOptimizedPhoto(source, expectedTag) {
       handleJewelBlob(blob, validation.result && validation.result.goldBounds);
     }
   } catch (error) {
+    // maybeAutoCapture sets _qualityAutoFired = true BEFORE calling this
+    // function, as a synchronous guard against double-firing while the
+    // burst/analysis is in flight. If that burst then throws (transient
+    // ImageCapture/camera error -- more likely right after the heavy
+    // zoom/refocus churn this page just went through), the shutter used to
+    // come back but _qualityAutoFired stayed stuck true forever: analysis
+    // kept running and could show a perfectly sharp, steady frame, but
+    // maybeAutoCapture's very first line (`if (... || _qualityAutoFired ||
+    // ...) return`) silently refused to ever fire again for this item. That
+    // reads to the operator as the whole thing just sitting there frozen,
+    // with no error visible once the status text scrolls past. Must reset
+    // here, matching the other two places autoFired is cleared on retry
+    // (the validation-failed branch above, and a fresh item start).
+    _qualityAutoFired = false;
     cameraStatus.textContent = 'Capture failed: ' + (error.message || String(error));
     cameraShutter.disabled = false;
     if (_cameraTrack) startQualityAnalysis();
