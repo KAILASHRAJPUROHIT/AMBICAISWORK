@@ -1735,6 +1735,8 @@ async function openCaptureCamera(kind) {
     // no placement step and arms immediately.
     _qualityArmed = kind !== 'front';
     _qualityZoomSettled = false;
+    _qualityMaxUsableZoom = Infinity;
+    _qualitySharpBlockedAt = 0;
     if (kind === 'front') cameraStatus.textContent = 'Place the item in frame…';
     startQualityAnalysis();
     const settleMs = _cameraProfile && CAMERA_PROFILES[_cameraProfile]
