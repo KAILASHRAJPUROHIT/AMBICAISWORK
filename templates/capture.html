@@ -1239,26 +1239,18 @@ async function waitForPlacement(result) {
   }
   const now = Date.now();
   if (now - _qualityLastZoomAdjustAt < CAPTURE_ZOOM_ADJUST_INTERVAL_MS) return true;
-  // Stop climbing once focus visibly and CONSISTENTLY breaks down, rather
-  // than chasing coverage all the way to the device's zoom ceiling
-  // regardless of whether the lens can still resolve anything there. Two
-  // things guard against false triggers: waiting a full
-  // CAPTURE_ZOOM_ADJUST_INTERVAL_MS after each zoom step before judging
-  // (the lens needs that time to refocus), and requiring 2 CONSECUTIVE
-  // low readings, not one -- a single reading is noisy enough (this is the
-  // coarse, downscaled live analysis, not the refined crop) that one dip
-  // was previously enough to halt climbing after essentially a single step.
-  // currentZoom > 1 guards the very first reading, which can be noisily
-  // low before the object is centred at all.
-  if (currentZoom > 1 && typeof result.sharpnessScore === 'number' && result.sharpnessScore < CAPTURE_ZOOM_SHARPNESS_FLOOR) {
-    _qualityLowSharpStreak += 1;
-    if (_qualityLowSharpStreak >= 2) {
-      _qualityZoomSettled = true;
-      return true;
-    }
-  } else {
-    _qualityLowSharpStreak = 0;
-  }
+  // Deliberately does NOT judge sharpness while still climbing (tried three
+  // times, all wrong): the coarse full-frame reading is diluted by
+  // background at low zoom and unreliable; the "refined" crop-based reading
+  // (addTargetSharpnessConfirmation) is often UPSCALING a still-small
+  // native-pixel region up to its target size at low-mid zoom, which
+  // softens it artificially regardless of true focus -- so a low reading
+  // there doesn't mean "this level can't be resolved," it means "the item
+  // isn't big enough in the source frame yet for this measurement to be
+  // meaningful." Climbing is judged on coverage alone; sharpness is only
+  // judged once settled (see the focus-lock branch above and
+  // _maybeBackOffZoom below), where the crop is at its largest and least
+  // upscaled, and the reading is trustworthy.
   _qualityLastZoomAdjustAt = now;
   if (currentZoom >= _qualityMaxUsableZoom - 0.01) {
     // Already at the ceiling a previous stuck-focus backoff set -- treat
