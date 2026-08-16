@@ -89,10 +89,29 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "CaptureCam"
-        private const val MIN_LIVE_COVERAGE = 0.10f
+        // Guide-box area caps coverage at roughly 0.435 (the blob's box can
+        // never exceed the 64%x68% guide region it's measured within) --
+        // 0.10 was reachable almost immediately at 1x for any reasonably
+        // close item, so the climb rarely ran at all ("doesn't zoom, clicks
+        // from far away"). 0.24 asks for the piece to fill about half the
+        // guide box before settling, which actually uses the climb.
+        private const val MIN_LIVE_COVERAGE = 0.24f
         private const val MAX_FOCUS_RETRIES = 2
         private const val ZOOM_BACKOFF_RATIO = 0.8f
-        private const val ZOOM_STEP_RATIO = 1.15f
+        // Gentler per-step ratio (was 1.15x) and a real pause between steps
+        // (ZOOM_STEP_INTERVAL_MS) so the climb reads as a smooth, deliberate
+        // approach rather than a jumpy series of jerks.
+        private const val ZOOM_STEP_RATIO = 1.10f
+        private const val ZOOM_STEP_INTERVAL_MS = 350L
+        // Quiet time required after ANY zoom change (a climb step or a
+        // backoff step) before focus is triggered or judged at all. Camera2
+        // AF triggered while the lens/sensor is still settling from a zoom
+        // change is judged on a moving target -- this is the actual fix for
+        // "focus hunting too rapid": the previous code re-triggered AF on
+        // literally every zoom step during the climb (a new trigger every
+        // ~150ms interrupted whatever partial scan the last one started),
+        // which reads as the lens racking rapidly and never converging.
+        private const val ZOOM_SETTLE_MS = 450L
         private const val MAX_STALL_MS = 12_000L
         private const val TICK_INTERVAL_MS = 150L
         private const val SHARPNESS_THRESHOLD = 40f
