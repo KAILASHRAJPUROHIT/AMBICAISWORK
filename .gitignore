@@ -27,6 +27,7 @@ engine_advisor_state.json
 pipeline_runtime_state.json
 capture_port.txt
 replicate_progress.json
+_instance_locks/
 # Per-account pool state. The un-suffixed forms were already ignored, but the
 # _2.._5 variants were committed before those rules existed, so gitignore alone
 # never untracked them — gitignore is only consulted for files git isn't already
