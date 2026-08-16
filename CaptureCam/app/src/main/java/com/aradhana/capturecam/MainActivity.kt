@@ -194,11 +194,23 @@ class MainActivity : AppCompatActivity() {
                     return
                 }
                 barcodeBusy = true
+                barcodeAttempts += 1
                 val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
                 barcodeScanner.process(inputImage)
                     .addOnSuccessListener { barcodes ->
+                        lastBarcodeCount = barcodes.size
                         val code = barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue
                         recordTagCode(code)
+                    }
+                    .addOnFailureListener { e ->
+                        // Silently swallowed before this: an ML Kit failure
+                        // (e.g. its scanner module not yet downloaded/ready
+                        // on this device) meant onSuccessListener simply
+                        // never fired, tagCodeHistory never advanced, and
+                        // the status text sat on "Scanning tag..." forever
+                        // with nothing in logcat pointing at why.
+                        Log.e(TAG, "Barcode scan failed", e)
+                        lastBarcodeError = e.message ?: e.javaClass.simpleName
                     }
                     .addOnCompleteListener {
                         barcodeBusy = false
