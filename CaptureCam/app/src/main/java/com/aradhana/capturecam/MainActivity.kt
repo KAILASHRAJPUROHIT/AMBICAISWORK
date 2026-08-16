@@ -251,6 +251,8 @@ class MainActivity : AppCompatActivity() {
     private fun tickTag() {
         binding.tagCodeText.text = stableTagCode?.let { "Tag: $it · ready" } ?: "Show the tag QR/barcode…"
         setStatus(stableTagCode?.let { "Tag locked. Capturing…" } ?: "Scanning tag…", ready = stableTagCode != null)
+        binding.debugText.text = "attempts=$barcodeAttempts  lastSeen=$lastBarcodeCount" +
+            (lastBarcodeError?.let { "  error=$it" } ?: "")
         if (stableTagCode != null && !autoFired) {
             autoFired = true
             captureFullRes { bytes ->
