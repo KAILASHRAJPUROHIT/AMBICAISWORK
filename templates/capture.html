@@ -1848,17 +1848,11 @@ async function clearResumeState() {
   const state = pending && (pending.state || pending);
   if (!state || (!state.jewelBlob && !state.tagBlob)) return;
   jewelBlob = state.jewelBlob || null;
-  studsBlob = state.studsBlob || null;
-  detailBlob = state.detailBlob || null;
   tagBlob = state.tagBlob || null;
   _capturePhase = state.phase || 'front';
   const resumeLabel = _capturePhase === 'tag'
     ? 'Continue — photo the tag'
-    : _capturePhase === 'detail'
-      ? 'Continue — close-up details'
-      : _capturePhase === 'studs'
-        ? 'Continue — studs if present'
-        : 'Continue — photo the front';
+    : 'Continue — photo the jewellery';
   showPopup(`
     <div class="step-tag">Recovered item</div>
     <h2>Unfinished capture found</h2>
