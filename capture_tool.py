@@ -574,6 +574,32 @@ def check_duplicate(tag_code: str) -> dict | None:
     return prior
 
 
+def _segment_jewel_async(jewel_path: str) -> None:
+    """Replace the saved jewel photo in-place with a SAM2/DINO segmentation
+    crop, off the request thread.
+
+    This runs after save_pair() has already written the file and is about to
+    return its response to the phone -- segmentation is real GPU inference
+    (SAM2-large + Grounding DINO) and the save confirmation shouldn't wait on
+    it. tight_crop() is already fail-open (returns the original path
+    untouched on any error), so a slow/missing model never blocks a capture,
+    it just leaves the digital fill-crop from capture.html as the final
+    result for that piece.
+    """
+    if not sam_locate.available():
+        return
+
+    def _run():
+        try:
+            sam_locate.tight_crop(jewel_path, jewel_path, expect=1, straighten=True)
+        except Exception:
+            pass
+        finally:
+            sam_locate.release()
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 @_stock_write_guard
 def save_pair(category: str, jewel_bytes: bytes, tag_bytes: bytes, tag_code: str,
              staff_name: str = "", override_duplicate: bool = False,
