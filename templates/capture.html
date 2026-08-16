@@ -1338,6 +1338,7 @@ function startQualityAnalysis() {
         if (session === _qualitySession && _cameraTrack) {
           updateQualityDisplay(result);
           if (!(await waitForPlacement(result))) {
+            await _maybeBackOffZoom(result, now);
             maybeAutoCapture(result);
             if (!_qualityAutoFired) cameraStatus.textContent = _captureGateBlockReason(result);
           }
