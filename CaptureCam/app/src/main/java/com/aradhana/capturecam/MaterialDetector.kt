@@ -21,13 +21,21 @@ object MaterialDetector {
         fun area(): Float = max(0f, x1 - x0) * max(0f, y1 - y0)
     }
 
+    /** Normalized (0..1, against the raw analysis frame) point. */
+    data class Point(val x: Float, val y: Float)
+
     data class Result(
         val material: Boolean,
         val bounds: Bounds?,
         val coverage: Float,
         val warmCoverage: Float,
         val goldRatio: Float,
-        val goldBoxArea: Float
+        val goldBoxArea: Float,
+        // Every sampled point classified as gold/silver/sparkle -- the
+        // focus-peaking overlay draws a dot at each one instead of a single
+        // box, so studs/diamonds/facets across the piece all light up
+        // individually rather than just the metal's own bounding box.
+        val points: List<Point> = emptyList()
     )
 
     private fun looksLikeGold(r: Int, g: Int, b: Int): Boolean {
