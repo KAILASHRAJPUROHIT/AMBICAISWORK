@@ -1100,7 +1100,30 @@ const CAPTURE_FILL_ADJUST_INTERVAL_MS = 300;
 // device's zoom ceiling / the device has no zoom capability at all
 // (best-effort fallback: capture at whatever coverage was actually reached
 // rather than blocking forever on an unreachable target).
+function _ornamentPresent(result) {
+  return !!(result && (
+    result.pass ||
+    result.goldDominant ||
+    result.goldBlobCoverage >= 0.012 ||
+    result.goldRatio >= 0.035 ||
+    (result.capturePlan && result.capturePlan.coverage >= 0.01)
+  ));
+}
+
 async function maybeZoomToFill(result, now) {
+  if (!_qualityArmed) {
+    // Not armed yet: give the operator a real placement window by waiting
+    // for the ornament to actually show up in frame, rather than a fixed
+    // timer. The live HUD keeps updating in the meantime so they can see
+    // it's tracking.
+    if (_ornamentPresent(result)) {
+      _qualityArmed = true;
+      cameraStatus.textContent = 'Item detected. Filling frame…';
+    } else {
+      cameraStatus.textContent = 'Place the item in frame…';
+      return true; // skip the capture gate this frame
+    }
+  }
   const plan = result && (result.capturePlan || _qualityLastPlan);
   const coverage = plan && typeof plan.coverage === 'number' ? plan.coverage : null;
   if (coverage === null || coverage >= CAPTURE_FILL_TARGET) return false;
