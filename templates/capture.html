@@ -2269,6 +2269,19 @@ btnStartItem.addEventListener('click', () => {
   openCaptureCamera('front');
 });
 
+// Hands off to CaptureCam (Android companion app, see MainActivity.kt) via
+// a capturecam://start deep link. That app does its own auto-zoom/focus/
+// capture for BOTH the jewel and tag shots using real Camera2 AF state
+// (not achievable from a browser at all -- see advanceCapturePipeline's
+// comments for what the web flow above has to work around instead), then
+// uploads directly to this same server's /api/capture/save and returns
+// here. This tab doesn't send or receive anything for that capture -- it
+// only refreshes its own tray view afterward (see the visibilitychange
+// listener near refreshSessionCount).
+btnStartItemApp.addEventListener('click', () => {
+  window.location.href = 'capturecam://start';
+});
+
 function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
