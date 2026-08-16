@@ -1711,7 +1711,18 @@ async function captureOptimizedPhoto(source, expectedTag) {
       else best = await captureAutoJewelBurst(kind);
     } else {
       const blob = await captureStillBlob();
-      best = {blob, validation: {ok: true, decodedTag: null}};
+      // Manual shutter tap: no burst validation runs, but we still want the
+      // ornament's position for the post-capture crop, so run one analysis
+      // pass on the actual still (best-effort -- a failure here just means
+      // this photo doesn't get cropped, not that the capture fails).
+      let manualResult = null;
+      if (kind !== 'tag') {
+        try {
+          const manualBitmap = await createImageBitmap(blob);
+          manualResult = await requestQualityAnalysis(manualBitmap, kind, true);
+        } catch (_) {}
+      }
+      best = {blob, validation: {ok: true, decodedTag: null, result: manualResult}};
     }
     const blob = best.blob;
     const validation = best.validation || {ok: true};
