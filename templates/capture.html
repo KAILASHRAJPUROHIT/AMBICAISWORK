@@ -1521,39 +1521,19 @@ async function openCaptureCamera(kind) {
     if (window.ImageCapture) {
       try { _cameraImageCapture = new ImageCapture(_cameraTrack); } catch (_) {}
     }
-    // Placement preview: the live feed is already visible above, but for the
-    // jewel shot ('front') hold off on starting the zoom/auto-capture loop
-    // for a moment so the operator has time to actually place the item and
-    // see it framed before automation starts moving the lens or firing the
-    // shutter. Tag mode skips this -- the operator only opens that camera
-    // once the tag is already in hand and ready to show.
-    const previewMs = kind === 'front'
-      ? ((_cameraProfile && CAMERA_PROFILES[_cameraProfile] && CAMERA_PROFILES[_cameraProfile].previewMs) || 2500)
-      : 0;
-    const openSession = _cameraStream;
-    if (previewMs > 0) {
-      cameraShutter.disabled = true;
-      let remainingMs = previewMs;
-      const tickCountdown = () => {
-        if (_cameraStream !== openSession) return; // camera was cancelled/reopened during the wait
-        if (remainingMs <= 0) {
-          cameraStatus.textContent = 'Hold steady.';
-          startQualityAnalysis();
-          return;
-        }
-        cameraStatus.textContent = 'Place the item in frame…';
-        cameraQualityLabel.textContent = `Auto-capture starts in ${Math.ceil(remainingMs / 1000)}s`;
-        remainingMs -= 500;
-        setTimeout(tickCountdown, 500);
-      };
-      tickCountdown();
-    } else {
-      startQualityAnalysis();
-    }
+    // Placement preview: the live feed + quality HUD run immediately so the
+    // operator can see framing feedback while placing the item, but the
+    // zoom-to-fill/auto-capture gate stays disarmed (see _qualityArmed in
+    // maybeZoomToFill) until the ornament is actually detected in frame --
+    // not a fixed timer, so it never rushes a slow placement or stalls a
+    // fast one. Tag mode has no placement step and arms immediately.
+    _qualityArmed = kind !== 'front';
+    if (kind === 'front') cameraStatus.textContent = 'Place the item in frame…';
+    startQualityAnalysis();
     const settleMs = _cameraProfile && CAMERA_PROFILES[_cameraProfile]
       ? CAMERA_PROFILES[_cameraProfile].settleMs : 650;
     setTimeout(() => {
-      if (_cameraTrack && cameraShutter.disabled && previewMs === 0) {
+      if (_cameraTrack && cameraShutter.disabled && _qualityArmed) {
         cameraStatus.textContent = cameraStatus.textContent || 'Hold steady.';
       }
     }, settleMs);
