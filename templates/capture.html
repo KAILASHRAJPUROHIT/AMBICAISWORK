@@ -1564,6 +1564,7 @@ async function openCaptureCamera(kind) {
     // not a fixed timer, so it never rushes a slow placement or stalls a
     // fast one. Tag mode has no placement step and arms immediately.
     _qualityArmed = kind !== 'front';
+    _qualityZoomSettled = false;
     if (kind === 'front') cameraStatus.textContent = 'Place the item in frame…';
     startQualityAnalysis();
     const settleMs = _cameraProfile && CAMERA_PROFILES[_cameraProfile]
