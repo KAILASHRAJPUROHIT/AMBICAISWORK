@@ -1235,20 +1235,21 @@ async function waitForPlacement(result) {
     _qualityZoomSettled = true;
     return true; // next tick handles the focus-lock step above
   }
+  const now = Date.now();
+  if (now - _qualityLastZoomAdjustAt < CAPTURE_ZOOM_ADJUST_INTERVAL_MS) return true;
   // Stop climbing the instant focus visibly breaks down, rather than
   // chasing coverage all the way to the device's zoom ceiling regardless of
-  // whether the lens can still resolve anything there. Without this, a
-  // lens that stops being able to focus well before max zoom still gets
-  // pushed all the way to max (badly blurred) before the separate stuck-
-  // focus backoff kicks in -- slow, and needlessly overshoots past a zoom
-  // level that was already sharp. currentZoom > 1 guards the very first
-  // reading, which can be noisily low before the object is centred at all.
+  // whether the lens can still resolve anything there. Checked here, not
+  // immediately after a zoom step -- the lens needs the full
+  // CAPTURE_ZOOM_ADJUST_INTERVAL_MS to refocus after a zoom change, so
+  // judging sharpness any earlier just reads transient post-zoom blur as
+  // "this level is unfocusable" and halts after a single step.
+  // currentZoom > 1 guards the very first reading, which can be noisily
+  // low before the object is centred at all.
   if (currentZoom > 1 && typeof result.sharpnessScore === 'number' && result.sharpnessScore < CAPTURE_ZOOM_SHARPNESS_FLOOR) {
     _qualityZoomSettled = true;
     return true;
   }
-  const now = Date.now();
-  if (now - _qualityLastZoomAdjustAt < CAPTURE_ZOOM_ADJUST_INTERVAL_MS) return true;
   _qualityLastZoomAdjustAt = now;
   if (currentZoom >= _qualityMaxUsableZoom - 0.01) {
     // Already at the ceiling a previous stuck-focus backoff set -- treat
