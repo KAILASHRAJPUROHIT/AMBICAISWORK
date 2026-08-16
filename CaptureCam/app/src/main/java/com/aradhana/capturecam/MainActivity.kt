@@ -576,6 +576,9 @@ class MainActivity : AppCompatActivity() {
         latestMaterial = null
         autoFired = false
         armedAt = System.currentTimeMillis()
+        lastZoomChangeAt = 0L
+        focusTriggeredThisLevel = false
+        focusZoom.setZoomRatio(1f)
         setStatus("Place the item in frame…", ready = false)
     }
 
