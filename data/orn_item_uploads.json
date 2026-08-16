@@ -1613,5 +1613,876 @@
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_128.jpg",
     "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_128.Jpg",
     "uploaded_at": 1786796548.2657523
+  },
+  "LR22_132": {
+    "ok": true,
+    "label": "LR22_132",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_132.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_132.Jpg",
+    "uploaded_at": 1786803111.75856
+  },
+  "LR22_142": {
+    "ok": false,
+    "label": "LR22_142",
+    "error": "ValueError: LR22_142: expected one current-stock label, found 0",
+    "attempted_at": 1786858323.991166
+  },
+  "LR22_143": {
+    "ok": true,
+    "label": "LR22_143",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_143.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_143.Jpg",
+    "uploaded_at": 1786803143.9007852
+  },
+  "LR22_147": {
+    "ok": true,
+    "label": "LR22_147",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_147.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_147.Jpg",
+    "uploaded_at": 1786803145.754311
+  },
+  "LR22_149": {
+    "ok": true,
+    "label": "LR22_149",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_149.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_149.Jpg",
+    "uploaded_at": 1786803148.88422
+  },
+  "LR22_150": {
+    "ok": false,
+    "label": "LR22_150",
+    "error": "ValueError: LR22_150: expected one current-stock label, found 0",
+    "attempted_at": 1786858324.0331879
+  },
+  "LR22_151": {
+    "ok": true,
+    "label": "LR22_151",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_151.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_151.Jpg",
+    "uploaded_at": 1786803160.1111636
+  },
+  "LR22_154": {
+    "ok": true,
+    "label": "LR22_154",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_154.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_154.Jpg",
+    "uploaded_at": 1786803163.2605922
+  },
+  "LR22_158": {
+    "ok": true,
+    "label": "LR22_158",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_158.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_158.Jpg",
+    "uploaded_at": 1786803165.1811264
+  },
+  "LR22_159": {
+    "ok": true,
+    "label": "LR22_159",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_159.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_159.Jpg",
+    "uploaded_at": 1786803167.3438764
+  },
+  "LR22_164": {
+    "ok": true,
+    "label": "LR22_164",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_164.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_164.Jpg",
+    "uploaded_at": 1786803188.9123251
+  },
+  "LR22_170": {
+    "ok": true,
+    "label": "LR22_170",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_170.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_170.Jpg",
+    "uploaded_at": 1786803226.9887452
+  },
+  "LR22_171": {
+    "ok": true,
+    "label": "LR22_171",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_171.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_171.Jpg",
+    "uploaded_at": 1786803233.6011093
+  },
+  "LR22_173": {
+    "ok": true,
+    "label": "LR22_173",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_173.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_173.Jpg",
+    "uploaded_at": 1786803244.751168
+  },
+  "LR22_174": {
+    "ok": true,
+    "label": "LR22_174",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_174.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_174.Jpg",
+    "uploaded_at": 1786803251.8645544
+  },
+  "LR22_175": {
+    "ok": true,
+    "label": "LR22_175",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_175.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_175.Jpg",
+    "uploaded_at": 1786803257.494294
+  },
+  "LR22_177": {
+    "ok": true,
+    "label": "LR22_177",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_177.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_177.Jpg",
+    "uploaded_at": 1786803260.698138
+  },
+  "LR22_179": {
+    "ok": false,
+    "label": "LR22_179",
+    "error": "ValueError: LR22_179: expected one current-stock label, found 0",
+    "attempted_at": 1786858324.076428
+  },
+  "LR22_18": {
+    "ok": true,
+    "label": "LR22_18",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_18.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_18.Jpg",
+    "uploaded_at": 1786803269.8266878
+  },
+  "LR22_186": {
+    "ok": true,
+    "label": "LR22_186",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_186.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_186.Jpg",
+    "uploaded_at": 1786803277.432878
+  },
+  "LR22_188": {
+    "ok": false,
+    "label": "LR22_188",
+    "error": "ValueError: LR22_188: expected one current-stock label, found 0",
+    "attempted_at": 1786858324.1191645
+  },
+  "LR22_190": {
+    "ok": true,
+    "label": "LR22_190",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_190.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_190.Jpg",
+    "uploaded_at": 1786803286.1209934
+  },
+  "LR22_191": {
+    "ok": true,
+    "label": "LR22_191",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_191.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_191.Jpg",
+    "uploaded_at": 1786803288.111885
+  },
+  "LR22_193": {
+    "ok": true,
+    "label": "LR22_193",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_193.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_193.Jpg",
+    "uploaded_at": 1786803290.673322
+  },
+  "LR22_195": {
+    "ok": true,
+    "label": "LR22_195",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_195.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_195.Jpg",
+    "uploaded_at": 1786803302.0201519
+  },
+  "LR22_196": {
+    "ok": true,
+    "label": "LR22_196",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_196.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_196.Jpg",
+    "uploaded_at": 1786803303.796551
+  },
+  "LR22_197": {
+    "ok": true,
+    "label": "LR22_197",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_197.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_197.Jpg",
+    "uploaded_at": 1786803305.4550986
+  },
+  "LR22_199": {
+    "ok": true,
+    "label": "LR22_199",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_199.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_199.Jpg",
+    "uploaded_at": 1786803308.0205028
+  },
+  "LR22_208": {
+    "ok": true,
+    "label": "LR22_208",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_208.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_208.Jpg",
+    "uploaded_at": 1786803334.9284682
+  },
+  "LR22_216": {
+    "ok": true,
+    "label": "LR22_216",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_216.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_216.Jpg",
+    "uploaded_at": 1786803350.7042756
+  },
+  "LR22_219": {
+    "ok": true,
+    "label": "LR22_219",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_219.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_219.Jpg",
+    "uploaded_at": 1786803353.4529507
+  },
+  "LR22_221": {
+    "ok": true,
+    "label": "LR22_221",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_221.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_221.Jpg",
+    "uploaded_at": 1786803356.230242
+  },
+  "LR22_222": {
+    "ok": true,
+    "label": "LR22_222",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_222.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_222.Jpg",
+    "uploaded_at": 1786803359.0952137
+  },
+  "LR22_225": {
+    "ok": true,
+    "label": "LR22_225",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_225.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_225.Jpg",
+    "uploaded_at": 1786803363.5226514
+  },
+  "LR22_226": {
+    "ok": true,
+    "label": "LR22_226",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_226.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_226.Jpg",
+    "uploaded_at": 1786803365.246359
+  },
+  "LR22_227": {
+    "ok": true,
+    "label": "LR22_227",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_227.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_227.Jpg",
+    "uploaded_at": 1786803368.087147
+  },
+  "LR22_228": {
+    "ok": true,
+    "label": "LR22_228",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_228.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_228.Jpg",
+    "uploaded_at": 1786803371.0330117
+  },
+  "LR22_235": {
+    "ok": true,
+    "label": "LR22_235",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_235.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_235.Jpg",
+    "uploaded_at": 1786803381.8025162
+  },
+  "LR22_236": {
+    "ok": true,
+    "label": "LR22_236",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_236.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_236.Jpg",
+    "uploaded_at": 1786803383.9718134
+  },
+  "LR22_237": {
+    "ok": false,
+    "label": "LR22_237",
+    "error": "ValueError: LR22_237: expected one current-stock label, found 0",
+    "attempted_at": 1786858324.1632109
+  },
+  "LR22_238": {
+    "ok": true,
+    "label": "LR22_238",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_238.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_238.Jpg",
+    "uploaded_at": 1786803391.5842807
+  },
+  "LR22_25": {
+    "ok": true,
+    "label": "LR22_25",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_25.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_25.Jpg",
+    "uploaded_at": 1786803422.2988532
+  },
+  "LR22_250": {
+    "ok": true,
+    "label": "LR22_250",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_250.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_250.Jpg",
+    "uploaded_at": 1786803426.4269235
+  },
+  "LR22_252": {
+    "ok": true,
+    "label": "LR22_252",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_252.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_252.Jpg",
+    "uploaded_at": 1786803429.0433836
+  },
+  "LR22_257": {
+    "ok": true,
+    "label": "LR22_257",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_257.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_257.Jpg",
+    "uploaded_at": 1786803438.1536765
+  },
+  "LR22_258": {
+    "ok": true,
+    "label": "LR22_258",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_258.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_258.Jpg",
+    "uploaded_at": 1786803441.3486683
+  },
+  "LR22_259": {
+    "ok": true,
+    "label": "LR22_259",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_259.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_259.Jpg",
+    "uploaded_at": 1786803444.483648
+  },
+  "LR22_262": {
+    "ok": true,
+    "label": "LR22_262",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_262.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_262.Jpg",
+    "uploaded_at": 1786803454.138426
+  },
+  "LR22_267": {
+    "ok": true,
+    "label": "LR22_267",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_267.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_267.Jpg",
+    "uploaded_at": 1786803469.1170237
+  },
+  "LR22_268": {
+    "ok": false,
+    "label": "LR22_268",
+    "error": "ValueError: LR22_268: expected one current-stock label, found 0",
+    "attempted_at": 1786858324.2059305
+  },
+  "LR22_271": {
+    "ok": true,
+    "label": "LR22_271",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_271.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_271.Jpg",
+    "uploaded_at": 1786803483.7600272
+  },
+  "LR22_274": {
+    "ok": true,
+    "label": "LR22_274",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_274.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_274.Jpg",
+    "uploaded_at": 1786803493.4301898
+  },
+  "LR22_276": {
+    "ok": false,
+    "label": "LR22_276",
+    "error": "ValueError: LR22_276: expected one current-stock label, found 0",
+    "attempted_at": 1786858324.2482786
+  },
+  "LR22_281": {
+    "ok": false,
+    "label": "LR22_281",
+    "error": "ValueError: LR22_281: expected one current-stock label, found 0",
+    "attempted_at": 1786858324.2970226
+  },
+  "LR22_282": {
+    "ok": true,
+    "label": "LR22_282",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_282.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_282.Jpg",
+    "uploaded_at": 1786803514.0627627
+  },
+  "LR22_286": {
+    "ok": true,
+    "label": "LR22_286",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_286.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_286.Jpg",
+    "uploaded_at": 1786803515.496125
+  },
+  "LR22_29": {
+    "ok": true,
+    "label": "LR22_29",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_29.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_29.Jpg",
+    "uploaded_at": 1786803519.2033393
+  },
+  "LR22_30": {
+    "ok": true,
+    "label": "LR22_30",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_30.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_30.Jpg",
+    "uploaded_at": 1786803521.0608625
+  },
+  "LR22_32": {
+    "ok": true,
+    "label": "LR22_32",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_32.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_32.Jpg",
+    "uploaded_at": 1786803523.5211916
+  },
+  "LR22_322": {
+    "ok": true,
+    "label": "LR22_322",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_322.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_322.Jpg",
+    "uploaded_at": 1786803533.829195
+  },
+  "LR22_328": {
+    "ok": true,
+    "label": "LR22_328",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_328.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_328.Jpg",
+    "uploaded_at": 1786803550.8069618
+  },
+  "LR22_329": {
+    "ok": true,
+    "label": "LR22_329",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_329.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_329.Jpg",
+    "uploaded_at": 1786803552.5124557
+  },
+  "LR22_33": {
+    "ok": true,
+    "label": "LR22_33",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_33.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_33.Jpg",
+    "uploaded_at": 1786803557.1682234
+  },
+  "LR22_330": {
+    "ok": true,
+    "label": "LR22_330",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_330.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_330.Jpg",
+    "uploaded_at": 1786803560.542579
+  },
+  "LR22_336": {
+    "ok": true,
+    "label": "LR22_336",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_336.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_336.Jpg",
+    "uploaded_at": 1786803579.679974
+  },
+  "LR22_339": {
+    "ok": true,
+    "label": "LR22_339",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_339.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_339.Jpg",
+    "uploaded_at": 1786803590.3009293
+  },
+  "LR22_340": {
+    "ok": false,
+    "label": "LR22_340",
+    "error": "ValueError: LR22_340: expected one current-stock label, found 0",
+    "attempted_at": 1786858324.3388407
+  },
+  "LR22_342": {
+    "ok": true,
+    "label": "LR22_342",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_342.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_342.Jpg",
+    "uploaded_at": 1786803608.4263985
+  },
+  "LR22_385": {
+    "ok": true,
+    "label": "LR22_385",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_385.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_385.Jpg",
+    "uploaded_at": 1786803657.4299364
+  },
+  "LR22_386": {
+    "ok": true,
+    "label": "LR22_386",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_386.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_386.Jpg",
+    "uploaded_at": 1786803660.574646
+  },
+  "LR22_39": {
+    "ok": true,
+    "label": "LR22_39",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_39.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_39.Jpg",
+    "uploaded_at": 1786803667.0355225
+  },
+  "LR22_390": {
+    "ok": true,
+    "label": "LR22_390",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_390.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_390.Jpg",
+    "uploaded_at": 1786803671.608314
+  },
+  "LR22_392": {
+    "ok": true,
+    "label": "LR22_392",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_392.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_392.Jpg",
+    "uploaded_at": 1786803675.576667
+  },
+  "LR22_397": {
+    "ok": true,
+    "label": "LR22_397",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_397.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_397.Jpg",
+    "uploaded_at": 1786803681.6469107
+  },
+  "LR22_399": {
+    "ok": true,
+    "label": "LR22_399",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_399.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_399.Jpg",
+    "uploaded_at": 1786803690.73701
+  },
+  "LR22_4": {
+    "ok": true,
+    "label": "LR22_4",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_4.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_4.Jpg",
+    "uploaded_at": 1786803693.9401634
+  },
+  "LR22_40": {
+    "ok": true,
+    "label": "LR22_40",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_40.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_40.Jpg",
+    "uploaded_at": 1786803698.0028703
+  },
+  "LR22_400": {
+    "ok": false,
+    "label": "LR22_400",
+    "error": "ValueError: LR22_400: expected one current-stock label, found 0",
+    "attempted_at": 1786858324.3818834
+  },
+  "LR22_401": {
+    "ok": true,
+    "label": "LR22_401",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_401.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_401.Jpg",
+    "uploaded_at": 1786803707.7180035
+  },
+  "LR22_403": {
+    "ok": true,
+    "label": "LR22_403",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_403.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_403.Jpg",
+    "uploaded_at": 1786803717.8702834
+  },
+  "LR22_409": {
+    "ok": true,
+    "label": "LR22_409",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_409.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_409.Jpg",
+    "uploaded_at": 1786803740.8568933
+  },
+  "LR22_411": {
+    "ok": true,
+    "label": "LR22_411",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_411.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_411.Jpg",
+    "uploaded_at": 1786803750.9873128
+  },
+  "LR22_413": {
+    "ok": true,
+    "label": "LR22_413",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_413.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_413.Jpg",
+    "uploaded_at": 1786803754.186174
+  },
+  "LR22_415": {
+    "ok": true,
+    "label": "LR22_415",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_415.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_415.Jpg",
+    "uploaded_at": 1786803823.9974208
+  },
+  "LR22_417": {
+    "ok": true,
+    "label": "LR22_417",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_417.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_417.Jpg",
+    "uploaded_at": 1786803833.3596506
+  },
+  "LR22_42": {
+    "ok": true,
+    "label": "LR22_42",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_42.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_42.Jpg",
+    "uploaded_at": 1786803846.20269
+  },
+  "LR22_425": {
+    "ok": true,
+    "label": "LR22_425",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_425.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_425.Jpg",
+    "uploaded_at": 1786803870.5867028
+  },
+  "LR22_426": {
+    "ok": true,
+    "label": "LR22_426",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_426.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_426.Jpg",
+    "uploaded_at": 1786803878.0991976
+  },
+  "LR22_432": {
+    "ok": true,
+    "label": "LR22_432",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_432.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_432.Jpg",
+    "uploaded_at": 1786803941.7748575
+  },
+  "LR22_438": {
+    "ok": true,
+    "label": "LR22_438",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_438.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_438.Jpg",
+    "uploaded_at": 1786803967.6398995
+  },
+  "LR22_439": {
+    "ok": true,
+    "label": "LR22_439",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_439.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_439.Jpg",
+    "uploaded_at": 1786803970.3776867
+  },
+  "LR22_44": {
+    "ok": true,
+    "label": "LR22_44",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_44.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_44.Jpg",
+    "uploaded_at": 1786803973.0119164
+  },
+  "LR22_450": {
+    "ok": true,
+    "label": "LR22_450",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_450.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_450.Jpg",
+    "uploaded_at": 1786804020.4459512
+  },
+  "LR22_451": {
+    "ok": true,
+    "label": "LR22_451",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_451.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_451.Jpg",
+    "uploaded_at": 1786804023.1971433
+  },
+  "LR22_46": {
+    "ok": true,
+    "label": "LR22_46",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_46.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_46.Jpg",
+    "uploaded_at": 1786804027.7612746
+  },
+  "LR22_48": {
+    "ok": true,
+    "label": "LR22_48",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_48.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_48.Jpg",
+    "uploaded_at": 1786804034.4569802
+  },
+  "LR22_5": {
+    "ok": true,
+    "label": "LR22_5",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_5.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_5.Jpg",
+    "uploaded_at": 1786804040.866446
+  },
+  "LR22_50": {
+    "ok": true,
+    "label": "LR22_50",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_50.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_50.Jpg",
+    "uploaded_at": 1786804045.71709
+  },
+  "LR22_57": {
+    "ok": true,
+    "label": "LR22_57",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_57.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_57.Jpg",
+    "uploaded_at": 1786804057.691713
+  },
+  "LR22_59": {
+    "ok": true,
+    "label": "LR22_59",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_59.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_59.Jpg",
+    "uploaded_at": 1786804068.600782
+  },
+  "LR22_6": {
+    "ok": true,
+    "label": "LR22_6",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_6.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_6.Jpg",
+    "uploaded_at": 1786804071.910474
+  },
+  "LR22_64": {
+    "ok": true,
+    "label": "LR22_64",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_64.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_64.Jpg",
+    "uploaded_at": 1786804073.92357
+  },
+  "LR22_66": {
+    "ok": true,
+    "label": "LR22_66",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_66.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_66.Jpg",
+    "uploaded_at": 1786804075.584148
+  },
+  "LR22_67": {
+    "ok": true,
+    "label": "LR22_67",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_67.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_67.Jpg",
+    "uploaded_at": 1786804092.1236196
+  },
+  "LR22_68": {
+    "ok": true,
+    "label": "LR22_68",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_68.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_68.Jpg",
+    "uploaded_at": 1786804096.026932
+  },
+  "LR22_69": {
+    "ok": true,
+    "label": "LR22_69",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_69.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_69.Jpg",
+    "uploaded_at": 1786804100.1962597
+  },
+  "LR22_7": {
+    "ok": true,
+    "label": "LR22_7",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_7.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_7.Jpg",
+    "uploaded_at": 1786804102.2328916
+  },
+  "LR22_72": {
+    "ok": true,
+    "label": "LR22_72",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_72.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_72.Jpg",
+    "uploaded_at": 1786804104.006994
+  },
+  "LR22_75": {
+    "ok": true,
+    "label": "LR22_75",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_75.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_75.Jpg",
+    "uploaded_at": 1786804109.9587712
+  },
+  "LR22_76": {
+    "ok": true,
+    "label": "LR22_76",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_76.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_76.Jpg",
+    "uploaded_at": 1786804113.454684
+  },
+  "LR22_78": {
+    "ok": true,
+    "label": "LR22_78",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_78.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_78.Jpg",
+    "uploaded_at": 1786804115.8305602
+  },
+  "LR22_8": {
+    "ok": true,
+    "label": "LR22_8",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_8.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_8.Jpg",
+    "uploaded_at": 1786804119.2364745
+  },
+  "LR22_81": {
+    "ok": true,
+    "label": "LR22_81",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_81.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_81.Jpg",
+    "uploaded_at": 1786804135.0775003
+  },
+  "LR22_82": {
+    "ok": true,
+    "label": "LR22_82",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_82.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_82.Jpg",
+    "uploaded_at": 1786804138.072715
+  },
+  "LR22_83": {
+    "ok": true,
+    "label": "LR22_83",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_83.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_83.Jpg",
+    "uploaded_at": 1786804140.8772335
+  },
+  "LR22_88": {
+    "ok": true,
+    "label": "LR22_88",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_88.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_88.Jpg",
+    "uploaded_at": 1786804167.5010145
+  },
+  "LR22_9": {
+    "ok": true,
+    "label": "LR22_9",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_9.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_9.Jpg",
+    "uploaded_at": 1786804169.9154372
+  },
+  "LR22_90": {
+    "ok": false,
+    "label": "LR22_90",
+    "error": "ValueError: LR22_90: expected one current-stock label, found 0",
+    "attempted_at": 1786858324.423876
+  },
+  "LR22_91": {
+    "ok": true,
+    "label": "LR22_91",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_91.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_91.Jpg",
+    "uploaded_at": 1786804175.2613683
+  },
+  "LR22_92": {
+    "ok": true,
+    "label": "LR22_92",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_92.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_92.Jpg",
+    "uploaded_at": 1786804180.1846154
+  },
+  "LR22_93": {
+    "ok": true,
+    "label": "LR22_93",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_93.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_93.Jpg",
+    "uploaded_at": 1786804182.006517
+  },
+  "LR22_95": {
+    "ok": true,
+    "label": "LR22_95",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_95.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_95.Jpg",
+    "uploaded_at": 1786804189.8373635
+  },
+  "LR22_96": {
+    "ok": true,
+    "label": "LR22_96",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_96.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_96.Jpg",
+    "uploaded_at": 1786804192.7538872
+  },
+  "LR22_97": {
+    "ok": true,
+    "label": "LR22_97",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_97.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_97.Jpg",
+    "uploaded_at": 1786804195.5015526
+  },
+  "LR22_98": {
+    "ok": true,
+    "label": "LR22_98",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_98.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_98.Jpg",
+    "uploaded_at": 1786804198.6247983
+  },
+  "LR22_99": {
+    "ok": true,
+    "label": "LR22_99",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_99.jpg",
+    "destination": "\\\\Server2k22\\D\\Ornnx\\Orn Images\\Orn Item Image\\LADIES RING 22\\LR22_99.Jpg",
+    "uploaded_at": 1786804200.6336775
   }
 }
