@@ -257,6 +257,29 @@ def capture_page():
     return redirect(f"https://{host}:7660/capture")
 
 
+@app.get("/360/<category>/<tag>")
+def view_360(category: str, tag: str):
+    """Interactive drag-to-spin viewer for a turntable-recorded item -- see
+    spin_processor.py for how the frame set under output/<category>/<tag>_360/
+    gets produced."""
+    if category not in TYPES:
+        return "Unknown category", 404
+    frames_dir = _safe_child(OUTPUT / category, f"{tag}_360")
+    if not frames_dir or not frames_dir.is_dir():
+        return "No 360 spin found for this item", 404
+    frame_names = sorted(
+        p.name for p in frames_dir.iterdir()
+        if p.is_file() and p.suffix.lower() == ".jpg" and p.stem.startswith("frame_")
+    )
+    if not frame_names:
+        return "No 360 spin found for this item", 404
+    video_path = OUTPUT / category / f"{tag}_360.mp4"
+    return render_template(
+        "view_360.html", category=category, tag=tag, frame_names=frame_names,
+        has_video=video_path.is_file(),
+    )
+
+
 def _images(root: Path, recursive: bool = False) -> list[Path]:
     iterator = root.rglob("*") if recursive else root.iterdir()
     return sorted(
