@@ -202,7 +202,7 @@ object MaterialDetector {
                 bestSize = size; bestMinCol = minCol; bestMinRow = minRow; bestMaxCol = maxCol; bestMaxRow = maxRow
             }
         }
-        if (bestSize == 0) return Result(false, null, 0f, 0f, 0f, 0f)
+        if (bestSize == 0) return Result(false, null, 0f, 0f, 0f, 0f, points)
 
         val bounds = Bounds(
             x0 = (startX + bestMinCol * step).toFloat() / width,
