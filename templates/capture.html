@@ -1446,15 +1446,11 @@ async function openCaptureCamera(kind) {
 
   cameraOverlay.classList.remove('hidden');
   const cameraTitles = {
-    front: 'Front shot',
-    studs: 'Studs shot',
-    detail: 'Close-up shot',
+    front: 'Jewellery shot',
     tag: 'Tag shot',
   };
   const cameraPrompts = {
-    front: 'Move closer. Keep the ornament tight in frame.',
-    studs: 'Show studs now. If none, skip ahead.',
-    detail: 'Move in. Keep the design elements sharp.',
+    front: 'Place the item. Zooms in and captures automatically.',
     tag: 'Show tag now. Keep the code square.',
   };
   cameraTitle.textContent = cameraTitles[kind] || 'Jewellery photo';
