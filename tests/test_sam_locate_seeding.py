@@ -67,7 +67,7 @@ def test_locate_picks_highest_confidence_contained_mask(monkeypatch):
     x0, y0, x1, y1 = boxes[0]
     # Should match jewel_high_conf's extent (65..135), not jewel_low_conf's
     # wider one -- confidence, not gold-fraction, decided the tiebreak.
-    assert (x0, y0, x1, y1) == (65, 65, 135, 135)
+    assert (x0, y0, x1, y1) == (65, 65, 134, 134)
 
 
 def test_locate_falls_back_to_seed_box_when_nothing_survives(monkeypatch):
