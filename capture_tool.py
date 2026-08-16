@@ -633,12 +633,6 @@ def save_pair(category: str, jewel_bytes: bytes, tag_bytes: bytes, tag_code: str
 
         with open(jewel_path, "wb") as f:
             f.write(jewel_bytes)
-        if studs_bytes:
-            with open(os.path.join(tray_dir, f"{safe_name}_studs.jpg"), "wb") as f:
-                f.write(studs_bytes)
-        if detail_bytes:
-            with open(os.path.join(tray_dir, f"{safe_name}_detail.jpg"), "wb") as f:
-                f.write(detail_bytes)
         _embed_tag_metadata(jewel_path, tag_code=tag_code, category=category, staff_name=staff_name)
 
         # Test captures never touch the global dedup file — recording them
