@@ -161,63 +161,82 @@ def focus_boxes(bgr: np.ndarray, expect: int, pct: float = 99.0) -> list:
     return boxes
 
 
-def _gold_boxes(bgr: np.ndarray, expect: int) -> list:
-    """Bounding boxes of the gold blobs — used as SAM2 BOX prompts.
+_DINO_PROMPT = "jewellery. ring. bracelet. necklace. pendant. earring. bangle."
+_DINO_MODEL_ID = "IDEA-Research/grounding-dino-base"
+_dino_model = None
+_dino_processor = None
 
-    A bare point prompt puts no limit on how far the mask may grow. On a Bali
-    hoop pinned to a black velvet cone that is fatal: SAM2 returns the stand,
-    which is a perfectly good object and completely the wrong one. Five of
-    five Bali came back as invented diamond jewellery because the reference
-    was mostly stand.
 
-    A box says "the thing is in HERE", which is exactly the constraint that
-    was missing. Velvet is the easy case for finding that box by colour —
-    black backdrop, gold piece — so colour is a good enough prompt even
-    though it is a hopeless boundary.
+def _dino_available() -> bool:
+    try:
+        import transformers  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def _dino_predictor():
+    """Lazy-loaded, cached (same singleton style as _predictor() below).
+    Weights download automatically from the HuggingFace Hub on first call
+    and are cached locally afterward -- no manual checkpoint file needed,
+    unlike SAM2's."""
+    global _dino_model, _dino_processor
+    if _dino_model is not None:
+        return _dino_processor, _dino_model
+    import torch
+    from transformers import AutoProcessor, GroundingDinoForObjectDetection
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    _dino_processor = AutoProcessor.from_pretrained(_DINO_MODEL_ID)
+    _dino_model = GroundingDinoForObjectDetection.from_pretrained(_DINO_MODEL_ID).to(dev)
+    return _dino_processor, _dino_model
+
+
+def _dino_boxes(bgr: np.ndarray, expect: int, box_threshold: float = 0.25) -> list:
+    """Bounding boxes of the jewellery, found by TEXT-PROMPTED detection --
+    used as SAM2 BOX prompts, and as the source for the seed points below.
+
+    Replaces the earlier gold-hue colour threshold that produced this same
+    shape of result. That approach worked for warm-toned gold on a dark
+    backdrop but is blind to silver/white-metal pieces (no gold-hue blob
+    ever forms for them) and can be fooled by any other warm-toned object in
+    frame (a beige display card, a wooden prop). Asking Grounding DINO for
+    "jewellery"/"ring"/etc. directly identifies the object by what it IS,
+    not by its colour, so it works the same for gold and silver alike and
+    isn't confused by a colourful prop (e.g. a bright pink display clip)
+    the way colour-threshold detection was.
     """
-    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-    m = cv2.inRange(hsv, np.array([5, 70, 60], np.uint8),
-                    np.array([45, 255, 255], np.uint8))
-    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
-    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((45, 45), np.uint8))
-    n, lab, stats, _ = cv2.connectedComponentsWithStats(m, 8)
-    if n <= 1:
-        return []
-    ranked = sorted(((stats[i, cv2.CC_STAT_AREA], i) for i in range(1, n)),
-                    reverse=True)
-    biggest = ranked[0][0]
-    keep = [i for a, i in ranked[:expect] if a >= 0.12 * biggest]
+    import torch
+    from PIL import Image
+    processor, model = _dino_predictor()
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    image = Image.fromarray(rgb)
+    inputs = processor(images=image, text=_DINO_PROMPT, return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    results = processor.post_process_grounded_object_detection(
+        outputs, inputs["input_ids"], box_threshold=box_threshold,
+        text_threshold=box_threshold, target_sizes=[rgb.shape[:2]],
+    )[0]
+    scored = sorted(zip(results["scores"].tolist(), results["boxes"].tolist()), reverse=True)
+    H, W = bgr.shape[:2]
     boxes = []
-    for i in keep:
-        x, y = stats[i, cv2.CC_STAT_LEFT], stats[i, cv2.CC_STAT_TOP]
-        w, h = stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT]
-        pad = int(0.08 * max(w, h))
-        boxes.append([max(0, x - pad), max(0, y - pad),
-                      min(bgr.shape[1], x + w + pad),
-                      min(bgr.shape[0], y + h + pad)])
+    for _, (x0, y0, x1, y1) in scored[:expect]:
+        w, h = x1 - x0, y1 - y0
+        pad = 0.08 * max(w, h)
+        boxes.append([max(0, int(x0 - pad)), max(0, int(y0 - pad)),
+                      min(W, int(x1 + pad)), min(H, int(y1 + pad))])
     boxes.sort(key=lambda b: b[0])
     return boxes
 
 
-def _centre_seed(bgr: np.ndarray, expect: int) -> list:
-    """Rough starting points for the prompt.
-
-    Gold-ness is still used HERE and only here — as a hint for where to click,
-    never as the boundary. A hint that is 80% right is fine; a boundary that is
-    80% right is a hand in the catalogue.
-    """
-    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-    m = cv2.inRange(hsv, np.array([5, 60, 50], np.uint8),
-                    np.array([45, 255, 255], np.uint8))
-    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((9, 9), np.uint8))
-    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((35, 35), np.uint8))
-    n, lab, stats, cent = cv2.connectedComponentsWithStats(m, 8)
-    if n <= 1:
+def _centre_seed_from_boxes(boxes: list, bgr: np.ndarray) -> list:
+    """Seed points derived from the DINO boxes' own centres. Falls back to
+    the image centre if nothing was detected, matching the old function's
+    fail-open behaviour."""
+    if not boxes:
         h, w = bgr.shape[:2]
         return [(w // 2, h // 2)]
-    ranked = sorted(((stats[i, cv2.CC_STAT_AREA], i) for i in range(1, n)),
-                    reverse=True)[:expect]
-    pts = [(int(cent[i][0]), int(cent[i][1])) for _, i in ranked]
+    pts = [((b[0] + b[2]) // 2, (b[1] + b[3]) // 2) for b in boxes]
     pts.sort(key=lambda p: p[0])
     return pts
 
