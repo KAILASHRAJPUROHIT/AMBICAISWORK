@@ -1122,14 +1122,17 @@ async function maybeZoomToFill(result, now) {
   const currentZoom = Number((_cameraTrack && _cameraTrack.getSettings().zoom) || cameraZoom.value || 1);
   if (currentZoom >= range.max - 0.01) return false;
   if (now - _qualityLastZoomAdjustAt < CAPTURE_FILL_ADJUST_INTERVAL_MS) return true;
-  const safeCoverage = Math.max(coverage, 0.01);
-  const desiredZoom = clampCameraZoom(currentZoom * Math.sqrt(CAPTURE_FILL_TARGET / safeCoverage));
-  if (Math.abs(desiredZoom - currentZoom) >= CAPTURE_FILL_MIN_ZOOM_DELTA) {
-    _qualityLastZoomAdjustAt = now;
-    await applyCameraZoom(desiredZoom);
-    cameraQualityLabel.textContent = `Zooming in… ${desiredZoom.toFixed(1)}×`;
-    cameraStatus.textContent = 'Filling frame before capture…';
-  }
+  _qualityLastZoomAdjustAt = now;
+  // Closed-loop step, not a one-shot prediction: coverage doesn't scale
+  // cleanly with zoom on every lens (crop factor, digital-zoom rounding,
+  // autofocus refocus), so solving for a single "right" zoom can converge
+  // short of both the target and the device's real ceiling and then stall.
+  // Nudging by a fixed ratio and re-measuring next tick always keeps making
+  // progress until either the target or the true device max is reached.
+  const nextZoom = clampCameraZoom(currentZoom * 1.15);
+  await applyCameraZoom(nextZoom);
+  cameraQualityLabel.textContent = `Zooming in… ${nextZoom.toFixed(1)}×`;
+  cameraStatus.textContent = 'Filling frame before capture…';
   return true;
 }
 
