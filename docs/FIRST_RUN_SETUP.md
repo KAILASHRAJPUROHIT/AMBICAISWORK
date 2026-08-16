@@ -13,6 +13,9 @@ just double-click `LAUNCH_CATALOG_UI.bat`.
    (`C:\Program Files\Google\Chrome\...` or the per-user AppData location).
 3. **Node.js** — https://nodejs.org/ (only needed for the Codex engine login
    below, via `npx`).
+4. **ffmpeg** — only needed for the 360° turntable spin feature
+   (`spin_processor.py`). Run `tools/setup_ffmpeg.ps1` once; it downloads a
+   static build into a local `tools/ffmpeg/` folder (not committed to git).
 
 ## One-time setup steps
 
