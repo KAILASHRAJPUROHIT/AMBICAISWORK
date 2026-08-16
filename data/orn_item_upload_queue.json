@@ -2,67 +2,67 @@
   "LR22_142": {
     "label": "LR22_142",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_142.jpg",
-    "queued_at": 1786883943.4418986,
+    "queued_at": 1786884003.4467223,
     "last_error": "ValueError: LR22_142: expected one current-stock label, found 0"
   },
   "LR22_150": {
     "label": "LR22_150",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_150.jpg",
-    "queued_at": 1786883943.4853609,
+    "queued_at": 1786884003.48855,
     "last_error": "ValueError: LR22_150: expected one current-stock label, found 0"
   },
   "LR22_179": {
     "label": "LR22_179",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_179.jpg",
-    "queued_at": 1786883943.5261421,
+    "queued_at": 1786884003.5317636,
     "last_error": "ValueError: LR22_179: expected one current-stock label, found 0"
   },
   "LR22_188": {
     "label": "LR22_188",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_188.jpg",
-    "queued_at": 1786883943.5672474,
+    "queued_at": 1786884003.5752635,
     "last_error": "ValueError: LR22_188: expected one current-stock label, found 0"
   },
   "LR22_237": {
     "label": "LR22_237",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_237.jpg",
-    "queued_at": 1786883943.6108325,
+    "queued_at": 1786884003.6189575,
     "last_error": "ValueError: LR22_237: expected one current-stock label, found 0"
   },
   "LR22_268": {
     "label": "LR22_268",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_268.jpg",
-    "queued_at": 1786883943.6529043,
+    "queued_at": 1786884003.6608005,
     "last_error": "ValueError: LR22_268: expected one current-stock label, found 0"
   },
   "LR22_276": {
     "label": "LR22_276",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_276.jpg",
-    "queued_at": 1786883943.6949058,
+    "queued_at": 1786884003.7035153,
     "last_error": "ValueError: LR22_276: expected one current-stock label, found 0"
   },
   "LR22_281": {
     "label": "LR22_281",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_281.jpg",
-    "queued_at": 1786883943.742672,
+    "queued_at": 1786884003.7522159,
     "last_error": "ValueError: LR22_281: expected one current-stock label, found 0"
   },
   "LR22_340": {
     "label": "LR22_340",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_340.jpg",
-    "queued_at": 1786883943.785966,
+    "queued_at": 1786884003.795105,
     "last_error": "ValueError: LR22_340: expected one current-stock label, found 0"
   },
   "LR22_400": {
     "label": "LR22_400",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_400.jpg",
-    "queued_at": 1786883943.8261833,
+    "queued_at": 1786884003.8362286,
     "last_error": "ValueError: LR22_400: expected one current-stock label, found 0"
   },
   "LR22_90": {
     "label": "LR22_90",
     "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_90.jpg",
-    "queued_at": 1786883943.8676708,
+    "queued_at": 1786884003.8799536,
     "last_error": "ValueError: LR22_90: expected one current-stock label, found 0"
   }
 }

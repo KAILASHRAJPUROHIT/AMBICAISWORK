@@ -728,6 +728,12 @@ const CAPTURE_MIN_LIVE_COVERAGE = 0.10;
 // pipeline concedes that level isn't resolving and steps back, rather than
 // pushing forward into an even harder-to-focus level.
 const CAPTURE_MAX_FOCUS_RETRIES = 2;
+// Absolute backstop: if a piece with material detected still hasn't gone
+// green this long after arming (retry/backoff cycling, or a subject this
+// lens genuinely can't resolve at any reachable zoom), stop cycling and
+// accept the best frame rather than holding the operator on "Focusing…"
+// indefinitely. See the safety-valve check in advanceCapturePipeline.
+const CAPTURE_MAX_STALL_MS = 12000;
 let _cameraStream = null;
 let _cameraTrack = null;
 let _cameraImageCapture = null;
