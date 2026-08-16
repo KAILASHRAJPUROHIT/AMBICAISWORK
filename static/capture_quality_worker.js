@@ -734,42 +734,37 @@ function analysePixels(imageData, kind, finalFrame) {
   );
   const minimumPoints = tagMode ? 14 : 20;
   const minimumCells = tagMode ? 4 : 5;
-  const traySupportSeen = !tagMode && !!support && support.areaRatio >= 0.0025;
-  const jewelRelaxedPass = !tagMode && (
-    (goldDominant || goldBlob.warmCoverage >= 0.010 || goldRatio >= 0.030) &&
-    sharpnessScore >= (finalFrame ? 40 : 34) &&
-    effectiveClippedRatio < (traySupportSeen ? 0.36 : 0.28) &&
-    skinRatio < (goldBoundsUsable ? 0.30 : 0.10) &&
-    (finalFrame || motion === null || motion <= 0.08)
-  );
-  const jewelStrictPass = !tagMode && boxFits &&
-    boxFitScore >= (goldBoundsUsable ? 55 : 80) &&
-    jewelScore >= (goldBoundsUsable ? (finalFrame ? 58 : 60) : (finalFrame ? 74 : 78)) &&
-    points.length >= (goldBoundsUsable ? 4 : minimumPoints) &&
-    occupiedCells.size >= (goldBoundsUsable ? 2 : minimumCells) &&
-    centerScore >= (goldBoundsUsable ? 18 : 55) &&
-    sharpnessScore >= (goldBoundsUsable ? (finalFrame ? 48 : 46) : (finalFrame ? 58 : 56)) &&
-    effectiveClippedRatio < 0.22 &&
-    skinRatio < (goldBoundsUsable ? 0.30 : 0.06) &&
-    (finalFrame || (motion !== null && motion <= 0.06));
+  // Jewel capture gates on material detection alone -- is there a
+  // well-localised gold/silver blob, is IT sharp, is the frame stable --
+  // not framing/alignment/skin/glare heuristics layered on top. Those
+  // extra checks (box-fit, point/cell counts, skin ratio, glare ratio)
+  // each independently caused a real false-block this session: box-fit
+  // fights live zoom's re-centering, skin ratio misfires on saturated
+  // props (e.g. a pink display clip) that were never a hand, glare
+  // misfires on legitimate diamond sparkle once zoomed in tight. None of
+  // that is needed to know "the metal is in frame and it's sharp" --
+  // looksLikeMetal() (gold OR silver) already does the material
+  // identification; goldBoundsUsable means it found a real, sized blob.
+  const metalPass = !tagMode && goldBoundsUsable &&
+    sharpnessScore >= (finalFrame ? 48 : 46) &&
+    (finalFrame || (motion !== null && motion <= 0.08));
   const pass = tagMode
     ? score >= (finalFrame ? 70 : 72) &&
       points.length >= minimumPoints && occupiedCells.size >= minimumCells &&
       centerScore >= 45 &&
       sharpnessScore >= 36 && effectiveClippedRatio < 0.20 &&
       (finalFrame || (motion !== null && motion <= 0.055))
-    : (jewelRelaxedPass || jewelStrictPass);
+    : metalPass;
 
   let reason = 'Hold steady';
   if (pass) reason = tagMode ? 'Tag clear' : 'Design clear';
-  else if (!tagMode && (!boxFits || boxFitScore < (goldBoundsUsable ? 70 : 80))) reason = 'Keep the ornament fully inside the box';
-  else if (points.length < minimumPoints || occupiedCells.size < minimumCells) reason = tagMode ? 'Bring the tag into the guide' : 'Centre the ornament';
-  else if (centerScore < (tagMode ? 45 : 55)) reason = tagMode ? 'Align the tag in the middle' : 'Keep the ornament centred';
-  else if (sharpnessScore < (tagMode ? 36 : 58)) reason = 'Waiting for sharp focus';
-  else if (!tagMode && skinRatio >= 0.06) reason = 'Remove hand from the frame';
-  else if (effectiveClippedRatio >= 0.18) reason = 'Reduce glare or deep shadow';
+  else if (tagMode && (points.length < minimumPoints || occupiedCells.size < minimumCells)) reason = 'Bring the tag into the guide';
+  else if (tagMode && centerScore < 45) reason = 'Align the tag in the middle';
+  else if (!tagMode && !goldBoundsUsable) reason = 'Show the gold/silver piece clearly';
+  else if (sharpnessScore < (tagMode ? 36 : 46)) reason = 'Waiting for sharp focus';
+  else if (tagMode && effectiveClippedRatio >= 0.20) reason = 'Reduce glare or deep shadow';
   else if (!finalFrame && motion === null) reason = 'Measuring stability';
-  else if (!finalFrame && motion > (tagMode ? 0.055 : 0.045)) reason = 'Hold the device still';
+  else if (!finalFrame && motion > (tagMode ? 0.055 : 0.08)) reason = 'Hold the device still';
 
   return {
     score,
