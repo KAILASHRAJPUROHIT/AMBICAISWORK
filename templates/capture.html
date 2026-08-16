@@ -800,6 +800,30 @@ function isCaptureGateReady(result) {
   return ornamentSeen && sharpEnough && cleanEnough && stableEnough;
 }
 
+// Names the single most likely reason isCaptureGateReady is blocking capture,
+// checked in priority order. Used to give the operator (and us) an actual
+// diagnosis instead of a generic "not ready" once zoom has already settled --
+// otherwise a real threshold problem (e.g. glare from a tight zoomed-in crop
+// on gold) just looks identical to "still working on it."
+function _captureGateBlockReason(result) {
+  if (!result) return 'Waiting on camera…';
+  const plan = result.capturePlan || _qualityLastPlan || null;
+  const ornamentSeen = !!(
+    result.pass || result.goldDominant ||
+    result.goldBlobCoverage >= 0.012 || result.goldRatio >= 0.035 ||
+    (plan && plan.coverage >= 0.01)
+  );
+  if (!ornamentSeen) return 'Ornament not detected — reposition';
+  const strongGold = result.goldDominant || result.goldBlobCoverage >= 0.012 || result.goldRatio >= 0.035;
+  if (result.clippedRatio >= 0.30) return 'Too much glare/highlight — tilt the piece or adjust lighting';
+  if (!strongGold && result.skinRatio >= 0.12) return 'Too much hand/skin in frame — reposition';
+  const sharpEnough = result.detailSharpnessConfirmed === true &&
+    result.sharpnessScore >= (plan && plan.coverage >= 0.02 ? 34 : 38);
+  if (!sharpEnough) return 'Not sharp enough yet — hold steady, focusing…';
+  if (!(result.motion !== null && result.motion <= 0.08)) return 'Too much motion — hold the phone steady';
+  return 'Ready. Capturing…';
+}
+
 cameraApiState.textContent = window.isSecureContext && navigator.mediaDevices
   ? 'Optimized browser camera ready.'
   : 'Native 1× fallback active: this exact capture URL is not a secure origin.';
