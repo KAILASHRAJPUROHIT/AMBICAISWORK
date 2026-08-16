@@ -1154,10 +1154,35 @@ const CAPTURE_ZOOM_ADJUST_INTERVAL_MS = 300;
 // than sitting blocked forever. See _maybeBackOffZoom.
 const CAPTURE_SHARP_STUCK_TIMEOUT_MS = 3000;
 const CAPTURE_ZOOM_BACKOFF_RATIO = 0.85;
+// Grace period after a single decisive focus-lock trigger before the
+// sharpness gate is judged -- gives the lens time to actually complete one
+// focus pass rather than being judged mid-search.
+const CAPTURE_FOCUS_SETTLE_MS = 500;
 let _qualityZoomSettled = false;
 let _qualityLastZoomAdjustAt = 0;
 let _qualityMaxUsableZoom = Infinity; // lowered by _maybeBackOffZoom when a zoom level proves unfocusable
 let _qualitySharpBlockedAt = 0;
+let _qualityFocusLockedAt = 0;
+
+// Fires exactly ONE decisive focus action, not continuous re-evaluation.
+// Continuous AF on a shiny, reflective, low-texture subject (polished gold,
+// faceted diamonds) is prone to "hunting" -- racking back and forth without
+// locking, because it keeps re-searching for a confident contrast peak.
+// Repeatedly re-triggering continuous mode (tried first, on every zoom
+// step) made this WORSE by restarting that search mid-hunt every time.
+// single-shot mode -- when the device supports it -- performs one focus
+// pass and then holds, which is both faster and far less prone to hunting.
+async function _lockFocusOnce() {
+  if (!_cameraTrack) return;
+  const supported = _cameraCapabilities.focusMode;
+  const mode = Array.isArray(supported) && supported.includes('single-shot')
+    ? 'single-shot'
+    : (Array.isArray(supported) && supported.includes('continuous') ? 'continuous' : null);
+  if (mode) {
+    try { await _cameraTrack.applyConstraints({advanced: [{focusMode: mode}]}); } catch (_) {}
+  }
+  _qualityFocusLockedAt = Date.now();
+}
 
 function _ornamentPresent(result) {
   return !!(result && (
