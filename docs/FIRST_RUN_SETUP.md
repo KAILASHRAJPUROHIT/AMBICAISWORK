@@ -16,6 +16,13 @@ just double-click `LAUNCH_CATALOG_UI.bat`.
 4. **ffmpeg** — only needed for the 360° turntable spin feature
    (`spin_processor.py`). Run `tools/setup_ffmpeg.ps1` once; it downloads a
    static build into a local `tools/ffmpeg/` folder (not committed to git).
+5. **SAM2 checkpoint** — needed for the capture tool's object-segmentation
+   crop (`sam_locate.py`). Run `tools/setup_sam2.ps1` once; it downloads the
+   SAM2.1 Hiera Large checkpoint (~900MB) into a local `models/sam2/` folder
+   (not committed to git). Grounding DINO needs no separate setup step — its
+   weights download automatically via the HuggingFace Hub the first time a
+   capture is segmented, so the very first capture after a fresh install will
+   be slower than usual.
 
 ## One-time setup steps
 
