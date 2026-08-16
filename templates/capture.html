@@ -1546,12 +1546,11 @@ async function openCaptureCamera(kind) {
     }
     // Placement preview: the live feed + quality HUD run immediately so the
     // operator can see framing feedback while placing the item, but the
-    // zoom-to-fill/auto-capture gate stays disarmed (see _qualityArmed in
-    // maybeZoomToFill) until the ornament is actually detected in frame --
-    // not a fixed timer, so it never rushes a slow placement or stalls a
-    // fast one. Tag mode has no placement step and arms immediately.
+    // auto-capture gate stays disarmed (see _qualityArmed / waitForPlacement)
+    // until the ornament is actually detected in frame -- not a fixed timer,
+    // so it never rushes a slow placement or stalls a fast one. Tag mode has
+    // no placement step and arms immediately.
     _qualityArmed = kind !== 'front';
-    _qualityZoomSettled = false;
     if (kind === 'front') cameraStatus.textContent = 'Place the item in frame…';
     startQualityAnalysis();
     const settleMs = _cameraProfile && CAMERA_PROFILES[_cameraProfile]
