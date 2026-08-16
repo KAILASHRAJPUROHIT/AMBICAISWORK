@@ -536,6 +536,11 @@ class MainActivity : AppCompatActivity() {
         maxUsableZoom = Float.MAX_VALUE
         autoFired = false
         latestMaterial = null
+        if (next == Phase.TAG) {
+            barcodeAttempts = 0
+            lastBarcodeCount = -1
+            lastBarcodeError = null
+        }
         if (next == Phase.JEWEL) {
             jewelJpeg = null
             tagJpeg = null
