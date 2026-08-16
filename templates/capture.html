@@ -1221,170 +1221,121 @@ function _ornamentPresent(result) {
   ));
 }
 
-// Drives zoom toward CAPTURE_LIVE_ZOOM_TARGET once the ornament
-// has been detected. Returns true while still converging (caller should
-// skip the capture gate this frame); false once settled -- either the
-// target was reached, or the device's real zoom ceiling was hit / it has no
-// zoom capability at all (best-effort: capture at whatever coverage was
-// actually reached rather than blocking forever on an unreachable target).
-async function waitForPlacement(result) {
+// Single state machine covering placement, zoom, and focus for the jewel
+// phase. At the CURRENT zoom: lock focus decisively, wait for the lock to
+// settle, then judge material + sharpness + motion + coverage TOGETHER on
+// that one settled frame. Returns true while still working (caller should
+// skip the capture gate this tick); false the instant everything is green
+// at once -- that frame IS the one to capture, nothing zooms past it.
+async function advanceCapturePipeline(result, now) {
   if (!_qualityArmed) {
     if (!_ornamentPresent(result)) {
       cameraStatus.textContent = 'Place the item in frame…';
       return true;
     }
     _qualityArmed = true;
-    cameraStatus.textContent = 'Item detected. Filling frame…';
+    cameraStatus.textContent = 'Item detected. Focusing…';
   }
-  if (_qualityZoomSettled) {
-    // Zoom is done, but the gate still isn't opened until one decisive
-    // focus pass has actually had time to complete -- no repeated AF
-    // triggers here, that's what caused hunting.
-    if (!_qualityFocusLockedAt) {
-      await _lockFocusOnce();
-      cameraStatus.textContent = 'Focusing…';
-      return true;
-    }
-    if (Date.now() - _qualityFocusLockedAt < CAPTURE_FOCUS_SETTLE_MS) return true;
+
+  // Step 1: one decisive focus pass at the CURRENT zoom -- no repeated AF
+  // triggers here, that's what caused hunting.
+  if (!_qualityFocusLockedAt) {
+    await _lockFocusOnce();
+    cameraStatus.textContent = 'Focusing…';
+    return true;
+  }
+  // Step 2: grace period for that pass to actually complete before judging
+  // anything -- judged mid-search is a guaranteed false "not sharp".
+  if (now - _qualityFocusLockedAt < CAPTURE_FOCUS_SETTLE_MS) return true;
+
+  // Step 3: judge material/sharpness/motion/coverage on the SAME settled
+  // frame, all together -- not sharpness-after-the-climp-finished like the
+  // old design, which is what let a never-actually-confirmed-sharp frame
+  // through to the shutter.
+  const material = isGoldTargetCandidate(result);
+  const plan = result.capturePlan;
+  const coverage = plan && typeof plan.coverage === 'number' ? plan.coverage : 0;
+  const sharpEnough = result.detailSharpnessConfirmed === true &&
+    result.sharpnessScore >= (coverage >= 0.02 ? 34 : 38);
+  const stable = result.motion !== null && result.motion <= 0.08;
+
+  if (material && sharpEnough && stable && coverage >= CAPTURE_MIN_LIVE_COVERAGE) {
+    // First green signal on a confirmed-clean frame -- stop here. Do NOT
+    // keep zooming past a piece that is already sharp, stable, and
+    // identified: that's exactly the wasted-time overshoot this replaces.
     return false;
   }
-  // LIVE reading only -- deliberately NOT the _qualityLastPlan fallback used
-  // elsewhere for the cosmetic label. Falling back to a stale plan here (the
-  // previous behaviour) meant that once the item drifted out of the live
-  // frame, the climb kept using the last-known-good coverage number and
-  // pushed zoom all the way to the device ceiling on an empty background,
-  // completely oblivious the item was gone. Browser zoom is anchored to the
-  // frame CENTRE, not to the item's box (no API for the latter -- see
-  // applyCameraZoom), so any item that isn't dead-centre gets walked toward
-  // the edge and eventually out of frame on every 1.15x zoom-in step; a
-  // held-by-hand shot is essentially never perfectly centred.
-  const plan = result.capturePlan;
-  const coverage = plan && typeof plan.coverage === 'number' ? plan.coverage : null;
+
   const range = _cameraCapabilities.zoom;
   const currentZoom = Number((_cameraTrack && _cameraTrack.getSettings().zoom) || cameraZoom.value || 1);
-  const noZoomCapability = !range || typeof range.max !== 'number';
-  const atDeviceMax = !noZoomCapability && currentZoom >= range.max - 0.01;
-  if (coverage === null) {
-    // No live detection this tick. At 1x that's normal placement noise --
-    // ignore it, _ornamentPresent already gated arming. Once already zoomed
-    // in, though, this is the drift signature above: give it a couple of
-    // ticks in case it's just one missed analysis frame, then ease back
-    // down to re-acquire the item instead of continuing to climb toward a
-    // ceiling that only makes the drift worse.
-    if (currentZoom <= 1.05 || noZoomCapability) return true;
+
+  if (!material) {
+    // No blob to reason about. At 1x that's normal placement noise --
+    // _ornamentPresent already gated arming. Once already zoomed in,
+    // though, this is browser zoom's centre-anchoring walking an
+    // off-centre item toward the edge and out of frame (there is no API to
+    // zoom around the item's own box, only the frame's centre -- see
+    // applyCameraZoom) -- give it a couple of ticks in case it's one missed
+    // analysis frame, then ease back to re-acquire instead of sitting here
+    // or drifting further on an empty background.
+    if (currentZoom <= 1.05) { _qualityLostFrames = 0; return true; }
     _qualityLostFrames += 1;
     if (_qualityLostFrames < 3) return true;
     _qualityLostFrames = 0;
     const recovered = Math.max((range && range.min) || 1, currentZoom * CAPTURE_ZOOM_BACKOFF_RATIO);
     if (recovered < currentZoom - 0.05) await applyCameraZoom(recovered);
+    _qualityFocusLockedAt = 0;
+    _stepFocusAttempts = 0;
     cameraQualityLabel.textContent = `Lost the piece · easing back to ${recovered.toFixed(1)}×`;
     cameraStatus.textContent = 'Re-centre the item…';
     return true;
   }
   _qualityLostFrames = 0;
-  if (coverage >= CAPTURE_LIVE_ZOOM_TARGET || noZoomCapability || atDeviceMax) {
-    _qualityZoomSettled = true;
-    return true; // next tick handles the focus-lock step above
-  }
-  const now = Date.now();
-  if (now - _qualityLastZoomAdjustAt < CAPTURE_ZOOM_ADJUST_INTERVAL_MS) return true;
-  // Deliberately does NOT judge sharpness while still climbing (tried three
-  // times, all wrong): the coarse full-frame reading is diluted by
-  // background at low zoom and unreliable; the "refined" crop-based reading
-  // (addTargetSharpnessConfirmation) is often UPSCALING a still-small
-  // native-pixel region up to its target size at low-mid zoom, which
-  // softens it artificially regardless of true focus -- so a low reading
-  // there doesn't mean "this level can't be resolved," it means "the item
-  // isn't big enough in the source frame yet for this measurement to be
-  // meaningful." Climbing is judged on coverage alone; sharpness is only
-  // judged once settled (see the focus-lock branch above and
-  // _maybeBackOffZoom below), where the crop is at its largest and least
-  // upscaled, and the reading is trustworthy.
-  _qualityLastZoomAdjustAt = now;
-  if (currentZoom >= _qualityMaxUsableZoom - 0.01) {
-    // Already at the ceiling a previous stuck-focus backoff set -- treat
-    // this as settled rather than trying to push past it again.
-    _qualityZoomSettled = true;
+
+  if (!sharpEnough || !stable) {
+    // Current zoom isn't resolving cleanly. A single AF pass on a
+    // reflective, faceted subject can simply fail to land, so give it a
+    // couple of genuine retries at this SAME zoom before conceding --
+    // never advance zoom while still blurry, that only makes focus harder.
+    _stepFocusAttempts += 1;
+    if (_stepFocusAttempts <= CAPTURE_MAX_FOCUS_RETRIES) {
+      await _lockFocusOnce(true); // forced re-trigger, not a same-value no-op
+      cameraStatus.textContent = 'Refocusing…';
+      return true;
+    }
+    // Retries exhausted at this level -- step BACK (never forward into a
+    // level even less likely to resolve) and cap future climbs at it.
+    _stepFocusAttempts = 0;
+    const backedOff = (range && typeof range.min === 'number')
+      ? Math.max(range.min, currentZoom * CAPTURE_ZOOM_BACKOFF_RATIO) : currentZoom;
+    if (backedOff < currentZoom - 0.05) {
+      _qualityMaxUsableZoom = backedOff;
+      await applyCameraZoom(backedOff);
+      cameraQualityLabel.textContent = `Easing zoom for sharper focus… ${backedOff.toFixed(1)}×`;
+    }
+    _qualityFocusLockedAt = 0; // forces a fresh lock + full re-judgement
+    cameraStatus.textContent = 'Refocusing…';
     return true;
   }
-  if (_qualityCoverageAtLastStep !== null &&
-      coverage >= CAPTURE_COVERAGE_MIN_TO_SETTLE_EARLY &&
-      coverage - _qualityCoverageAtLastStep < CAPTURE_COVERAGE_STALL_DELTA) {
-    // Diminishing returns: the last zoom-in step barely moved coverage even
-    // though we're already well past a token amount of frame-fill. Pushing
-    // further from here has, in practice, only meant a long, wasted climb
-    // to the device ceiling followed by backing all the way down to
-    // (approximately) this exact coverage anyway -- settle here instead.
-    _qualityZoomSettled = true;
-    return true;
+
+  // Sharp, stable, material confirmed -- just not enough of the frame
+  // filled yet. Take exactly ONE zoom-in step, then re-verify everything
+  // from scratch at the new level before ever considering another step.
+  const noZoomCapability = !range || typeof range.max !== 'number';
+  const atDeviceMax = !noZoomCapability && currentZoom >= range.max - 0.01;
+  if (noZoomCapability || atDeviceMax || currentZoom >= _qualityMaxUsableZoom - 0.01) {
+    // Nowhere left to climb -- this sharp, stable frame is the best on
+    // offer, accept it rather than blocking forever on an unreachable
+    // coverage floor.
+    return false;
   }
-  // Closed-loop step, not a one-shot prediction: coverage doesn't scale
-  // cleanly with zoom on every lens, so nudging by a fixed ratio and
-  // re-measuring next tick makes steady progress toward the target (or the
-  // real device max) without ever getting stuck on a bad prediction.
-  // Deliberately does NOT touch focus here -- only the single lock-once
-  // step above does, once zoom is fully done moving.
-  _qualityCoverageAtLastStep = coverage;
   const nextZoom = Math.min(clampCameraZoom(currentZoom * 1.15), _qualityMaxUsableZoom);
   await applyCameraZoom(nextZoom);
+  _qualityFocusLockedAt = 0; // the new zoom level needs its own fresh lock + judgement
+  _stepFocusAttempts = 0;
   cameraQualityLabel.textContent = `Zooming in… ${nextZoom.toFixed(1)}×`;
   cameraStatus.textContent = 'Filling frame before capture…';
   return true;
-}
-
-// Once zoom has settled, if sharpness still isn't confirmed after
-// CAPTURE_SHARP_STUCK_TIMEOUT_MS, the current zoom level likely can't be
-// resolved sharply on this lens -- back off by CAPTURE_ZOOM_BACKOFF_RATIO
-// and cap future zoom-in attempts at that level for the rest of this item,
-// rather than staying blocked on an unreachable sharpness target forever.
-async function _maybeBackOffZoom(result, now) {
-  if (!_qualityZoomSettled) return;
-  if (!isGoldTargetCandidate(result)) { _qualitySharpBlockedAt = 0; _qualityFocusRetried = false; return; }
-  const sharpEnough = result.detailSharpnessConfirmed === true &&
-    result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
-  if (sharpEnough) { _qualitySharpBlockedAt = 0; _qualityFocusRetried = false; return; }
-  if (!_qualitySharpBlockedAt) { _qualitySharpBlockedAt = now; return; }
-  const stuckWindow = _qualityFocusRetried ? CAPTURE_SHARP_RETRY_TIMEOUT_MS : CAPTURE_SHARP_STUCK_TIMEOUT_MS;
-  if (now - _qualitySharpBlockedAt < stuckWindow) return;
-  if (!_qualityFocusRetried) {
-    // The first decisive focus pass didn't converge. A single AF pass on a
-    // reflective, faceted subject can simply fail to land -- and the same
-    // small focus miss looks far blurrier the tighter the crop, so this is
-    // most likely to bite right where zoom is highest, not necessarily
-    // because the zoom level itself is unresolvable. One genuine retry at
-    // the SAME zoom is cheap and rules that out before conceding the level
-    // and paying for it with lost detail on every future zoom-in attempt.
-    _qualityFocusRetried = true;
-    _qualitySharpBlockedAt = now; // fresh (shorter) window for the retry
-    await _lockFocusOnce(true);   // forced re-trigger, not a same-value no-op
-    cameraStatus.textContent = 'Refocusing…';
-    return;
-  }
-  const range = _cameraCapabilities.zoom;
-  const currentZoom = Number((_cameraTrack && _cameraTrack.getSettings().zoom) || cameraZoom.value || 1);
-  const backedOff = (range && typeof range.min === 'number')
-    ? Math.max(range.min, currentZoom * CAPTURE_ZOOM_BACKOFF_RATIO) : currentZoom;
-  if (!range || typeof range.min !== 'number' || backedOff >= currentZoom - 0.05) {
-    // Nowhere left to back off to (no zoom range info, or already at the
-    // device's own minimum / a floor repeated backoffs have converged to).
-    // A bare return here used to leave _qualitySharpBlockedAt/
-    // _qualityFocusRetried stale forever -- every future tick re-entered
-    // this same branch and no-op'd, permanently freezing the item with the
-    // capture gate never opening. Re-arm a fresh focus attempt instead of
-    // going silent, so it keeps trying rather than hanging indefinitely.
-    _qualityFocusRetried = false;
-    _qualityFocusLockedAt = 0;
-    _qualitySharpBlockedAt = now;
-    cameraStatus.textContent = 'Refocusing at closest usable zoom…';
-    return;
-  }
-  _qualityMaxUsableZoom = backedOff;
-  await applyCameraZoom(backedOff);
-  _qualityFocusLockedAt = 0; // forces one fresh focus-lock pass at the new, lower zoom level
-  _qualityFocusRetried = false; // the new zoom level gets its own fresh retry budget
-  cameraQualityLabel.textContent = `Easing zoom for sharper focus… ${backedOff.toFixed(1)}×`;
-  cameraStatus.textContent = 'Backing off zoom for a sharper shot…';
-  _qualitySharpBlockedAt = now; // restart the stuck-timer at the new, lower zoom level
 }
 
 function maybeAutoCapture(result) {
