@@ -2052,15 +2052,18 @@ function promptTagCapture() {
 }
 
 // Crops the just-captured photo so the ornament fills roughly targetFill of
-// the frame, using the gold blob position from the last live analysis
-// (normalized 0-1, same aspect ratio as the full video frame the still was
-// taken from). This is the "zoom in" step -- done as a digital crop after a
-// reliably-captured native-framing photo, not as live hardware zoom (which
-// fights the box-alignment and focus-stability checks -- see the comment
-// above captureZoomForPhase). Falls back to the uncropped blob if there's no
-// recent detection to crop around, or if anything about the crop fails.
-async function cropToFillOrnament(blob, targetFill) {
-  const bounds = _qualityLastResult && _qualityLastResult.goldBounds;
+// the frame, using the gold blob position (normalized 0-1, from analyzing
+// this exact captured blob -- see the callers, which pass
+// validation.result.goldBounds from validateAutomaticCapture/the manual
+// capture's own analysis pass, NOT a stale live-tick global: captureOptimizedPhoto
+// calls stopQualityAnalysis() before the burst even starts, which clears
+// _qualityLastResult, so reading that global here always missed). This is
+// the "zoom in" step -- done as a digital crop after a reliably-captured
+// native-framing photo, not as live hardware zoom (which fights the
+// box-alignment and focus-stability checks -- see the comment above
+// captureZoomForPhase). Falls back to the uncropped blob if there's no
+// detection to crop around, or if anything about the crop fails.
+async function cropToFillOrnament(blob, targetFill, bounds) {
   if (!bounds) return blob;
   try {
     const bitmap = await createImageBitmap(blob);
