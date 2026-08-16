@@ -258,7 +258,7 @@ class MainActivity : AppCompatActivity() {
                 imageProxy.close()
             }
             Phase.TAG -> {
-                binding.boundsOverlay.update(null, 0, 0, 0)
+                binding.boundsOverlay.update(emptyList(), 0, 0, 0)
                 if (barcodeBusy) {
                     imageProxy.close()
                     return
