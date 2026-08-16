@@ -1198,15 +1198,52 @@ async function waitForPlacement(result) {
   const now = Date.now();
   if (now - _qualityLastZoomAdjustAt < CAPTURE_ZOOM_ADJUST_INTERVAL_MS) return true;
   _qualityLastZoomAdjustAt = now;
+  if (currentZoom >= _qualityMaxUsableZoom - 0.01) {
+    // Already at the ceiling a previous stuck-focus backoff set -- treat
+    // this as settled rather than trying to push past it again.
+    _qualityZoomSettled = true;
+    return false;
+  }
   // Closed-loop step, not a one-shot prediction: coverage doesn't scale
   // cleanly with zoom on every lens, so nudging by a fixed ratio and
   // re-measuring next tick makes steady progress toward the target (or the
   // real device max) without ever getting stuck on a bad prediction.
-  const nextZoom = clampCameraZoom(currentZoom * 1.15);
+  const nextZoom = Math.min(clampCameraZoom(currentZoom * 1.15), _qualityMaxUsableZoom);
   await applyCameraZoom(nextZoom);
+  // Re-trigger continuous AF after the zoom change -- on some devices the
+  // lens doesn't restart its focus search just because the zoom constraint
+  // changed, so without this it can keep evaluating a stale, still-blurry
+  // frame indefinitely.
+  await applyContinuousCameraControls();
   cameraQualityLabel.textContent = `Zooming in… ${nextZoom.toFixed(1)}×`;
   cameraStatus.textContent = 'Filling frame before capture…';
   return true;
+}
+
+// Once zoom has settled, if sharpness still isn't confirmed after
+// CAPTURE_SHARP_STUCK_TIMEOUT_MS, the current zoom level likely can't be
+// resolved sharply on this lens -- back off by CAPTURE_ZOOM_BACKOFF_RATIO
+// and cap future zoom-in attempts at that level for the rest of this item,
+// rather than staying blocked on an unreachable sharpness target forever.
+async function _maybeBackOffZoom(result, now) {
+  if (!_qualityZoomSettled) return;
+  if (!isGoldTargetCandidate(result)) { _qualitySharpBlockedAt = 0; return; }
+  const sharpEnough = result.detailSharpnessConfirmed === true &&
+    result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
+  if (sharpEnough) { _qualitySharpBlockedAt = 0; return; }
+  if (!_qualitySharpBlockedAt) { _qualitySharpBlockedAt = now; return; }
+  if (now - _qualitySharpBlockedAt < CAPTURE_SHARP_STUCK_TIMEOUT_MS) return;
+  const range = _cameraCapabilities.zoom;
+  if (!range || typeof range.min !== 'number') return;
+  const currentZoom = Number((_cameraTrack && _cameraTrack.getSettings().zoom) || cameraZoom.value || 1);
+  const backedOff = Math.max(range.min, currentZoom * CAPTURE_ZOOM_BACKOFF_RATIO);
+  if (backedOff >= currentZoom - 0.05) return; // already at the device's own minimum, nothing left to try
+  _qualityMaxUsableZoom = backedOff;
+  await applyCameraZoom(backedOff);
+  await applyContinuousCameraControls();
+  cameraQualityLabel.textContent = `Easing zoom for sharper focus… ${backedOff.toFixed(1)}×`;
+  cameraStatus.textContent = 'Backing off zoom for a sharper shot…';
+  _qualitySharpBlockedAt = now; // restart the stuck-timer at the new, lower zoom level
 }
 
 function maybeAutoCapture(result) {
