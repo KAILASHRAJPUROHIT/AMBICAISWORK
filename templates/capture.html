@@ -638,13 +638,11 @@ const cameraProfileRedmi = document.getElementById('camera-profile-redmi');
 const cameraRecheckLens = document.getElementById('camera-recheck-lens');
 const cameraApiState = document.getElementById('camera-api-state');
 const captureChipFront = document.getElementById('capture-chip-front');
-const captureChipStuds = document.getElementById('capture-chip-studs');
-const captureChipDetail = document.getElementById('capture-chip-detail');
 const captureChipTag = document.getElementById('capture-chip-tag');
 const captureStepHint = document.getElementById('capture-step-hint');
 
 let currentCategory = null;
-let jewelBlob = null, studsBlob = null, detailBlob = null, tagBlob = null;
+let jewelBlob = null, tagBlob = null;
 let _capturePhase = 'front';
 let capturedItems = [];   // [{code, pair}] this tray, newest first
 let _pollTimer = null;
