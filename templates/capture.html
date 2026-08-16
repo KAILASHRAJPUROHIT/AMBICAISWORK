@@ -667,6 +667,10 @@ const spinStatus = document.getElementById('spin-status');
 const spinRecordBtn = document.getElementById('spin-record-btn');
 const spinStopBtn = document.getElementById('spin-stop-btn');
 const spinCancelBtn = document.getElementById('spin-cancel');
+// Disabled for now (2026-08-16) while the still-photo auto-zoom/focus/
+// capture flow gets fine-tuned -- code kept intact, just hidden from the
+// post-save popup. Flip back to true to re-enable.
+const SPIN_CAPTURE_ENABLED = false;
 let _spinStream = null, _spinRecorder = null, _spinChunks = [];
 
 let currentCategory = null;
