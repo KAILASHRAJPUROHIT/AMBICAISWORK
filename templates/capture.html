@@ -1154,11 +1154,6 @@ const CAPTURE_ZOOM_ADJUST_INTERVAL_MS = 300;
 // than sitting blocked forever. See _maybeBackOffZoom.
 const CAPTURE_SHARP_STUCK_TIMEOUT_MS = 2000;
 const CAPTURE_ZOOM_BACKOFF_RATIO = 0.8;
-// Below this live (unrefined) sharpness reading, for 2 CONSECUTIVE checks,
-// the zoom-in climb stops instead of continuing toward CAPTURE_FILL_TARGET
-// regardless of focus -- see the sharpness check in waitForPlacement's
-// zoom step.
-const CAPTURE_ZOOM_SHARPNESS_FLOOR = 28;
 // Grace period after a single decisive focus-lock trigger before the
 // sharpness gate is judged -- gives the lens time to actually complete one
 // focus pass rather than being judged mid-search.
@@ -1167,7 +1162,6 @@ let _qualityZoomSettled = false;
 let _qualityLastZoomAdjustAt = 0;
 let _qualityMaxUsableZoom = Infinity; // lowered by _maybeBackOffZoom when a zoom level proves unfocusable
 let _qualitySharpBlockedAt = 0;
-let _qualityLowSharpStreak = 0;
 let _qualityFocusLockedAt = 0;
 
 // Fires exactly ONE decisive focus action, not continuous re-evaluation.
