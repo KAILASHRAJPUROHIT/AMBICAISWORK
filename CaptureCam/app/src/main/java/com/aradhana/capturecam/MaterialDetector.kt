@@ -134,6 +134,7 @@ object MaterialDetector {
         val rows = max(1, (endY - startY) / step)
         val mask = BooleanArray(cols * rows)
         var warm = 0
+        val points = mutableListOf<Point>()
 
         for (row in 0 until rows) {
             for (col in 0 until cols) {
@@ -150,14 +151,18 @@ object MaterialDetector {
                 val uVal = uBuffer.get(uIndex).toInt() and 0xFF
                 val vVal = vBuffer.get(vIndex).toInt() and 0xFF
                 val rgb = yuvToRgb(yVal, uVal, vVal)
-                if (looksLikeMetal(rgb[0], rgb[1], rgb[2])) {
+                val isMetal = looksLikeMetal(rgb[0], rgb[1], rgb[2])
+                if (isMetal) {
                     mask[row * cols + col] = true
                     warm += 1
+                }
+                if (isMetal || looksLikeSparkle(rgb[0], rgb[1], rgb[2])) {
+                    points.add(Point(x.toFloat() / width, yPix.toFloat() / height))
                 }
             }
         }
 
-        if (warm == 0) return Result(false, null, 0f, 0f, 0f, 0f)
+        if (warm == 0) return Result(false, null, 0f, 0f, 0f, 0f, points)
 
         // Connected-component largest blob (8-connectivity), same as
         // goldBlobDominance in the web worker.
