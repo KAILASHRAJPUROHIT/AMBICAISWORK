@@ -1,4 +1,4 @@
-"""Aradhana Jewellery Catalogue V2: Azure-only catalogue production UI."""
+"""AMBIC Jewellery Catalogue V2: Azure-only catalogue production UI."""
 
 from __future__ import annotations
 
@@ -73,8 +73,8 @@ def _generated_password(env_var: str, filename: str) -> str:
     return generated
 
 
-PROCESS_PASSWORD = _generated_password("ARADHANA_PROCESS_PASSWORD", "process_password.txt")
-ADMIN_PASSWORD = _generated_password("ARADHANA_ADMIN_PASSWORD", "admin_password.txt")
+PROCESS_PASSWORD = _generated_password("AMBIC_PROCESS_PASSWORD", "process_password.txt")
+ADMIN_PASSWORD = _generated_password("AMBIC_ADMIN_PASSWORD", "admin_password.txt")
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 TYPES = sorted({
     "earrings", "ladies_rings", "gents_rings", "ladies_chains", "gents_chains",
@@ -151,6 +151,17 @@ def _otp_digest(salt: str, code: str) -> str:
     return hmac.new(key, f"{salt}:{code}".encode("utf-8"), hashlib.sha256).hexdigest()
 
 
+def _two_factor_enabled() -> bool:
+    """Email-OTP second factor: on by default. A persisted opt-out under
+    data/ (gitignored, same convention as the password-override files)
+    lets one install disable it without a code change, without touching
+    the default for every other install of this tool."""
+    env_value = os.environ.get("AMBIC_DISABLE_2FA")
+    if env_value:
+        return env_value.strip().lower() not in {"1", "true", "yes"}
+    return not (BASE / "data" / "2fa_disabled.txt").is_file()
+
+
 @app.before_request
 def require_login():
     if request.path in {"/login", "/verify-otp", "/api/health"} or request.path.startswith("/static/"):
@@ -189,6 +200,14 @@ def login():
             return render_template("login.html", error="Too many attempts. Try again in 15 minutes."), 429
         if hmac.compare_digest(request.form.get("password", ""), ADMIN_PASSWORD):
             _clear_password_failures(key)
+            if not _two_factor_enabled():
+                destination = _safe_next(request.args.get("next"))
+                session.clear()
+                session.permanent = True
+                session["authed"] = True
+                session["auth_email"] = None
+                session["authenticated_at"] = int(time.time())
+                return redirect(destination)
             if not email_2fa.configured():
                 return render_template("login.html", error="Email 2FA is not configured on this computer."), 503
             code = f"{secrets.randbelow(1_000_000):06d}"
@@ -1291,7 +1310,42 @@ def api_processed_reset():
         return jsonify({"ok": False, "error": str(exc)}), 409
 
 
+def _acquire_single_instance_lock() -> None:
+    """Kernel-level singleton guard: exactly one server process may run on
+    this machine at a time.
+
+    Port binding alone doesn't reliably enforce this on Windows -- without
+    SO_EXCLUSIVEADDRUSE, multiple processes can each successfully LISTEN on
+    the same port, and the OS hands each new connection to an
+    implementation-defined one of them. That's exactly how this got found:
+    three stale `python app.py` processes ended up simultaneously bound to
+    :7654, and a login could land on whichever one still had the old
+    password in memory. A named Win32 mutex has no such ambiguity --
+    CreateMutex is atomic at the kernel level, so a second process asking
+    for the same name always gets told, unambiguously, that it already
+    exists. The OS releases it automatically the instant this process
+    exits, so a crashed/killed instance never leaves a stale lock behind.
+    """
+    import win32event
+    import win32api
+    import winerror
+
+    global _SINGLE_INSTANCE_MUTEX
+    _SINGLE_INSTANCE_MUTEX = win32event.CreateMutex(
+        None, False, "Global\\AmbicCatalogueStudio_SingleInstance"
+    )
+    if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+        print(
+            "Another Ambic Catalogue Studio server is already running on this "
+            "PC. Refusing to start a second instance -- close the existing one "
+            "first if you actually need to restart it."
+        )
+        raise SystemExit(0)
+
+
 if __name__ == "__main__":
+    _acquire_single_instance_lock()
+
     import review_queue
 
     route_report = review_queue.reconcile_source_routes()

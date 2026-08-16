@@ -5,12 +5,12 @@ $toolRoot = $PSScriptRoot
 $cataloguePort = 7654
 $capturePort = 7660
 
-Set-Service -Name "AradhanaCatalogueTool" -StartupType Automatic
-Set-Service -Name "AradhanaCaptureServer" -StartupType Automatic
+Set-Service -Name "AMBICCatalogueTool" -StartupType Automatic
+Set-Service -Name "AMBICCaptureServer" -StartupType Automatic
 
 foreach ($rule in @(
-    @{ Name = "Aradhana Catalogue Tool 7654"; Port = $cataloguePort },
-    @{ Name = "Aradhana Capture Server 7660"; Port = $capturePort }
+    @{ Name = "AMBIC Catalogue Tool 7654"; Port = $cataloguePort },
+    @{ Name = "AMBIC Capture Server 7660"; Port = $capturePort }
 )) {
     if (-not (Get-NetFirewallRule -DisplayName $rule.Name -ErrorAction SilentlyContinue)) {
         New-NetFirewallRule `
@@ -23,8 +23,8 @@ foreach ($rule in @(
     }
 }
 
-Restart-Service -Name "AradhanaCatalogueTool" -Force
-Restart-Service -Name "AradhanaCaptureServer" -Force
+Restart-Service -Name "AMBICCatalogueTool" -Force
+Restart-Service -Name "AMBICCaptureServer" -Force
 
 $deadline = (Get-Date).AddSeconds(30)
 $catalogueReady = $false

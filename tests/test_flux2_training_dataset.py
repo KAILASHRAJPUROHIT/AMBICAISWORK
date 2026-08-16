@@ -39,7 +39,7 @@ def test_builder_accepts_approved_owned_pair_and_canonicalises_category(tmp_path
         "target": str(target),
         "approved": "yes",
         "license": "company-owned",
-        "license_source": "Aradhana",
+        "license_source": "AMBIC",
     }])
 
     samples, errors = load_manifest(manifest)
@@ -91,7 +91,7 @@ def test_unapproved_rows_are_ignored_without_reading_images(tmp_path):
         "target": str(tmp_path / "missing-target.png"),
         "approved": "no",
         "license": "company-owned",
-        "license_source": "Aradhana",
+        "license_source": "AMBIC",
     }])
 
     samples, errors = load_manifest(manifest)

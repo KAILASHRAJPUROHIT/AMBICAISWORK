@@ -9,6 +9,8 @@ flask_secret_key.txt
 capture_secret_key.txt
 process_password.txt
 admin_password.txt
+otp_recipient.txt
+2fa_disabled.txt
 data/capture_https_key.pem
 data/capture_https_cert.pem
 

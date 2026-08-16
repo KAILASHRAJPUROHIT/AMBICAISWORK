@@ -12,7 +12,7 @@ import time
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "data", "catalogue_db.json")
 BACKUP_DIR = os.path.join(os.path.dirname(__file__), "backups")
-OFFSITE_BACKUP_DIR = os.path.join(os.path.expanduser("~"), "OneDrive", "AradhanaCatalogueBackups")
+OFFSITE_BACKUP_DIR = os.path.join(os.path.expanduser("~"), "OneDrive", "AMBICCatalogueBackups")
 KEEP_DAYS = 30
 HASH_DIST_THRESHOLD = 12
 

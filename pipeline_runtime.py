@@ -220,7 +220,7 @@ def _preview_dict(
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run the additive Aradhana catalogue pipeline coordinator."
+        description="Run the additive AMBIC catalogue pipeline coordinator."
     )
     parser.add_argument(
         "--state",

@@ -136,7 +136,7 @@ def trigger_user_upload_worker() -> None:
     """Run the user-context supervisor without blocking the approval request."""
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     subprocess.Popen(
-        ["schtasks.exe", "/Run", "/TN", "AradhanaOrnItemUpload"],
+        ["schtasks.exe", "/Run", "/TN", "AMBICOrnItemUpload"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         creationflags=creationflags,

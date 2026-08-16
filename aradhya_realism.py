@@ -138,7 +138,7 @@ def build_prompt(label, location, outfit, pose, camera, extra_negative="", palet
         negative = f"{NEGATIVE} {extra_negative}"
     palette_block = f"{palette}\n\n" if palette else ""
     return (
-        f"ARADHANA JEWELLERS — Creative Model Photoshoot Reference (Concept: {label})\n\n"
+        f"AMBIC JEWELLERS — Creative Model Photoshoot Reference (Concept: {label})\n\n"
         f"{NO_JEWELLERY_RULE}\n\n"
         f"{FACE_LOCK}\n\n"
         f"{palette_block}"

@@ -1,4 +1,4 @@
-' Aradhana Capture Server - launcher (isolated from the main catalogue tool)
+' AMBIC Capture Server - launcher (isolated from the main catalogue tool)
 ' Mirrors launch_tool.vbs exactly, but targets capture_server.py on its own
 ' port — kept as a fully separate script/log/port-file so relaunching this
 ' never depends on, or interferes with, the main tool's own launcher.

@@ -1,4 +1,4 @@
-' Aradhana Catalogue Tool – launcher
+' AMBIC Catalogue Tool – launcher
 Dim shell, fso, http, port, url
 Set shell = CreateObject("WScript.Shell")
 Set fso   = CreateObject("Scripting.FileSystemObject")

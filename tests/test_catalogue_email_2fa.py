@@ -5,6 +5,7 @@ import app as catalogue_app
 
 def test_password_then_email_otp_required(monkeypatch):
     sent = {}
+    monkeypatch.setattr(catalogue_app, "_two_factor_enabled", lambda: True)
     monkeypatch.setattr(catalogue_app.email_2fa, "configured", lambda: True)
     monkeypatch.setattr(catalogue_app.email_2fa, "send_otp", lambda code: sent.setdefault("code", code))
     client = catalogue_app.app.test_client()
@@ -29,6 +30,7 @@ def test_password_then_email_otp_required(monkeypatch):
 
 
 def test_email_2fa_must_be_configured(monkeypatch):
+    monkeypatch.setattr(catalogue_app, "_two_factor_enabled", lambda: True)
     monkeypatch.setattr(catalogue_app.email_2fa, "configured", lambda: False)
     client = catalogue_app.app.test_client()
     response = client.post(
@@ -41,6 +43,7 @@ def test_email_2fa_must_be_configured(monkeypatch):
 
 
 def test_wrong_otp_does_not_authenticate(monkeypatch):
+    monkeypatch.setattr(catalogue_app, "_two_factor_enabled", lambda: True)
     monkeypatch.setattr(catalogue_app.email_2fa, "configured", lambda: True)
     monkeypatch.setattr(catalogue_app.email_2fa, "send_otp", lambda code: None)
     client = catalogue_app.app.test_client()
@@ -53,3 +56,16 @@ def test_wrong_otp_does_not_authenticate(monkeypatch):
     assert response.status_code == 200
     assert b"Incorrect verification code" in response.data
     assert client.get("/").status_code == 302
+
+
+def test_password_alone_authenticates_when_2fa_disabled(monkeypatch):
+    monkeypatch.setattr(catalogue_app, "_two_factor_enabled", lambda: False)
+    client = catalogue_app.app.test_client()
+    response = client.post(
+        "/login?next=/dashboard",
+        data={"password": catalogue_app.ADMIN_PASSWORD},
+        environ_base={"REMOTE_ADDR": "198.51.100.23"},
+    )
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/dashboard")
+    assert client.get("/").status_code == 200

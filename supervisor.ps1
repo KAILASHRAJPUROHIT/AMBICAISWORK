@@ -1,4 +1,4 @@
-# Aradhana Catalogue Tool - supervisor
+# AMBIC Catalogue Tool - supervisor
 # Runs on a schedule (Windows Task Scheduler) and does several jobs at once:
 #   1. Boot/logon autostart - the scheduled task's "At log on" trigger means
 #      this runs shortly after Windows starts, so the tool comes back after
@@ -47,7 +47,7 @@ $FailThreshold = 3   # consecutive down-checks (~3 min at the 1-min poll interva
 # restarted; capture and print services are never touched here.
 if (Test-Path -LiteralPath $RestartRequest) {
     try {
-        Restart-Service -Name "AradhanaCatalogueTool" -Force -ErrorAction Stop
+        Restart-Service -Name "AMBICCatalogueTool" -Force -ErrorAction Stop
         Remove-Item -LiteralPath $RestartRequest -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 3
     } catch {
@@ -134,22 +134,22 @@ try {
 
 if (-not $mainHealthy) {
     $state.consecutiveDown += 1
-    Write-Log ("Main tool not responding (down-check #" + $state.consecutiveDown + ") - restarting AradhanaCatalogueTool service")
+    Write-Log ("Main tool not responding (down-check #" + $state.consecutiveDown + ") - restarting AMBICCatalogueTool service")
     try {
-        Restart-Service -Name "AradhanaCatalogueTool" -Force -ErrorAction Stop
+        Restart-Service -Name "AMBICCatalogueTool" -Force -ErrorAction Stop
         Write-Log "Main tool service restart triggered."
     } catch {
         Write-Log ("Main tool service restart FAILED: " + $_.Exception.Message)
     }
     if ($state.consecutiveDown -ge $FailThreshold -and -not $state.downAlertSent) {
-        Send-Notification "Aradhana Catalogue Tool DOWN" `
+        Send-Notification "AMBIC Catalogue Tool DOWN" `
             ("Main tool has failed to come back for " + $state.consecutiveDown + "+ checks. Relaunch is not fixing it on its own - needs a look. (Capture tool is unaffected - it runs as a separate process.)") `
             "urgent"
         $state.downAlertSent = $true
     }
 } else {
     if ($state.downAlertSent) {
-        Send-Notification "Aradhana Catalogue Tool recovered" `
+        Send-Notification "AMBIC Catalogue Tool recovered" `
             ("Back up after " + $state.consecutiveDown + " failed check(s).") `
             "default"
     }
@@ -175,9 +175,9 @@ if (-not $mainHealthy) {
             $wasOk = $prevStates.ContainsKey($engine) -and $prevStates[$engine]
             $hadPrev = $prevStates.ContainsKey($engine)
             if (-not $ok -and ($wasOk -or -not $hadPrev)) {
-                Send-Notification ("Aradhana: " + $engine + " needs attention") $detail "default"
+                Send-Notification ("AMBIC: " + $engine + " needs attention") $detail "default"
             } elseif ($ok -and $hadPrev -and -not $wasOk) {
-                Send-Notification ("Aradhana: " + $engine + " recovered") $detail "low"
+                Send-Notification ("AMBIC: " + $engine + " recovered") $detail "low"
             }
         }
         $state.engineStates = $newStates
@@ -208,9 +208,9 @@ try {
 
 if (-not $captureHealthy) {
     $state.captureConsecutiveDown += 1
-    Write-Log ("Capture server not responding (down-check #" + $state.captureConsecutiveDown + ") - restarting AradhanaCaptureServer service")
+    Write-Log ("Capture server not responding (down-check #" + $state.captureConsecutiveDown + ") - restarting AMBICCaptureServer service")
     try {
-        Restart-Service -Name "AradhanaCaptureServer" -Force -ErrorAction Stop
+        Restart-Service -Name "AMBICCaptureServer" -Force -ErrorAction Stop
         Write-Log "Capture server service restart triggered."
     } catch {
         Write-Log ("Capture server service restart FAILED: " + $_.Exception.Message)
@@ -220,14 +220,14 @@ if (-not $captureHealthy) {
         Write-Log "Capture server standalone launcher fallback triggered."
     }
     if ($state.captureConsecutiveDown -ge $FailThreshold -and -not $state.captureDownAlertSent) {
-        Send-Notification "Aradhana CAPTURE SERVER DOWN" `
+        Send-Notification "AMBIC CAPTURE SERVER DOWN" `
             ("Capture server has failed to come back for " + $state.captureConsecutiveDown + "+ checks - phones on the shop floor cannot capture right now. Needs a look.") `
             "urgent"
         $state.captureDownAlertSent = $true
     }
 } else {
     if ($state.captureDownAlertSent) {
-        Send-Notification "Aradhana Capture Server recovered" `
+        Send-Notification "AMBIC Capture Server recovered" `
             ("Back up after " + $state.captureConsecutiveDown + " failed check(s).") `
             "default"
     }

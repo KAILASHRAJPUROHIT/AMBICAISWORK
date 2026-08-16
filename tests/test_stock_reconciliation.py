@@ -182,6 +182,6 @@ def test_both_templates_have_bounded_safe_stock_popup():
     assert "window.isSecureContext" in capture_source
     assert "permissionConstraints.zoom = true" in capture_source
     assert "Requested ' + desiredZoom.toFixed(1)" in capture_source
-    assert "aradhana_camera_profile_v2" in capture_source
+    assert "AMBIC_camera_profile_v2" in capture_source
     assert "compactFingerprint" in capture_source
     assert "screen/touch fingerprint" in capture_source

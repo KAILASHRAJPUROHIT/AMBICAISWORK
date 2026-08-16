@@ -10,7 +10,7 @@ def test_capture_page_has_opt_in_local_assist_and_manual_override():
     assert 'id="camera-analysis-canvas"' in source
     assert 'id="camera-auto-enabled" type="checkbox"' in source
     assert "Assist mode · manual shutter" in source
-    assert "localStorage.getItem('aradhana_auto_capture_v1') || 'auto'" in source
+    assert "localStorage.getItem('AMBIC_auto_capture_v1') || 'auto'" in source
     assert "cameraShutter.addEventListener('click', () => captureOptimizedPhoto('manual', null))" in source
     assert "new Worker('/static/capture_quality_worker.js?v='" in source
 

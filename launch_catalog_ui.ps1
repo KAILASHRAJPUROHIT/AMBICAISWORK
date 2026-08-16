@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 
 $catalogueRoot = $PSScriptRoot
 Set-Location -LiteralPath $catalogueRoot
-$env:ARADHANA_ENGINE = "azure_flux2_pro"
+$env:AMBIC_ENGINE = "azure_flux2_pro"
 
 $azureConfig = Join-Path $catalogueRoot "config\azure_flux2_guard.json"
 $azureKey = Join-Path $catalogueRoot "config\azure_flux2_pro_key.dpapi"

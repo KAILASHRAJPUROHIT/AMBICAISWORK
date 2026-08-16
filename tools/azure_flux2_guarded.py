@@ -206,12 +206,22 @@ def totals(config: dict, usage: dict) -> dict:
 
 
 def enforce_caps(config: dict, usage: dict, requested: float) -> None:
+    """Lifetime hard cap removed on request (2026-08-16) -- a $5 lifetime
+    ceiling was never realistic for real commercial usage and was blocking
+    genuine production calls. The per-image cap below is the real safety
+    net now: no single call can ever reserve more than
+    per_image_hard_cap_usd, regardless of how much has been spent overall.
+    Daily cap + daily call-count limit are unrelated and untouched.
+    """
     summary = totals(config, usage)
-    lifetime_cap = float(config["lifetime_hard_cap_usd"])
+    per_image_cap = float(config.get("per_image_hard_cap_usd", 0.15))
     daily_cap = float(config["daily_hard_cap_usd"])
     daily_calls = int(config["maximum_calls_per_day"])
-    if summary["lifetime_reserved"] + requested > lifetime_cap + 1e-9:
-        raise RuntimeError(f"BLOCKED: lifetime hard cap ${lifetime_cap:.2f} would be exceeded")
+    if requested > per_image_cap + 1e-9:
+        raise RuntimeError(
+            f"BLOCKED: this image's estimated cost ${requested:.2f} exceeds "
+            f"the per-image hard cap ${per_image_cap:.2f}"
+        )
     if summary["today_reserved"] + requested > daily_cap + 1e-9:
         raise RuntimeError(f"BLOCKED: daily hard cap ${daily_cap:.2f} would be exceeded")
     if summary["today_calls"] + 1 > daily_calls:

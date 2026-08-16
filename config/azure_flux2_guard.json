@@ -10,6 +10,7 @@
     "maximum_reference_megapixels":  4,
     "default_prompt_file":  "D:\\AI_PROJECTS\\ambic-catalogue-studio\\config\\flux2_pro_catalogue_prompt.txt",
     "lifetime_hard_cap_usd":  5,
+    "per_image_hard_cap_usd":  0.25,
     "daily_hard_cap_usd":  0.5,
     "maximum_calls_per_day":  4,
     "cost_safety_factor":  1.25,

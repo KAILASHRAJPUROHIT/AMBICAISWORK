@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$TaskName = "AradhanaOrnItemUpload",
+    [string]$TaskName = "AMBICOrnItemUpload",
     [string]$ToolDirectory = (Split-Path -Parent $PSScriptRoot),
     [string]$PythonwPath = "$env:LOCALAPPDATA\Programs\Python\Python311\pythonw.exe"
 )

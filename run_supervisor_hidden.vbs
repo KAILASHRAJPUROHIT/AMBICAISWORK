@@ -1,4 +1,4 @@
-' Hidden-window wrapper for the AradhanaCatalogueSupervisor scheduled task.
+' Hidden-window wrapper for the AMBICCatalogueSupervisor scheduled task.
 ' The task previously invoked powershell.exe directly, which — regardless of
 ' the task's own "Hidden" setting (that only hides the task from the Task
 ' Scheduler UI, not the process window) — pops a visible console every time

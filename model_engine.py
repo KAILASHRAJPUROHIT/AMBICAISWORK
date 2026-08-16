@@ -1,5 +1,5 @@
 """
-Aradhana Jewellers — Professional Catalogue Model Engine
+AMBIC Jewellers — Professional Catalogue Model Engine
 Generates lifestyle/model images using the Codex engine.
 Full template library, model roster, camera specs, and lighting language.
 """

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Aradhana — Capture</title>
+<title>AMBIC — Capture</title>
 <script src="/static/jsQR.js"></script>
 <style>
 :root {
@@ -356,7 +356,7 @@ select:focus, input[type="text"]:focus { outline: none; border-color: var(--gold
   <div class="logo">AJ</div>
   <div>
     <h1>Capture</h1>
-    <div class="sub">Aradhana Catalogue Studio</div>
+    <div class="sub">AMBIC Catalogue Studio</div>
   </div>
   <a href="/" class="back-link">&larr; Home</a>
 </div>
@@ -503,7 +503,7 @@ const planCategory = document.getElementById('capture-plan-category');
 const planDetail = document.getElementById('capture-plan-detail');
   let pending = false;
   let shownSignature = null;
-  const acknowledgedKey = 'aradhana_stock_transition_capture_v1';
+  const acknowledgedKey = 'AMBIC_stock_transition_capture_v1';
   let currentItems = [];
 
   close.addEventListener('click', () => {
@@ -719,7 +719,7 @@ let _qualityCooldownUntil = 0;
 const _qualityTagCanvas = document.createElement('canvas');
 
 try {
-  cameraAutoEnabled.checked = (localStorage.getItem('aradhana_auto_capture_v1') || 'auto') !== 'manual';
+  cameraAutoEnabled.checked = (localStorage.getItem('AMBIC_auto_capture_v1') || 'auto') !== 'manual';
 } catch (_) {
   cameraAutoEnabled.checked = true;
 }
@@ -730,7 +730,7 @@ function updateAutoCaptureMode() {
   cameraAutoSwitch.classList.toggle('active', enabled);
   _qualityStableFrames = 0;
   _qualityAutoFired = false;
-  try { localStorage.setItem('aradhana_auto_capture_v1', enabled ? 'auto' : 'manual'); } catch (_) {}
+  try { localStorage.setItem('AMBIC_auto_capture_v1', enabled ? 'auto' : 'manual'); } catch (_) {}
 }
 cameraAutoEnabled.addEventListener('change', updateAutoCaptureMode);
 updateAutoCaptureMode();
@@ -1249,7 +1249,7 @@ async function detectedCameraProfile() {
   ].join('|');
   _cameraFingerprint = compactFingerprint(fingerprintSource);
   try {
-    const saved = JSON.parse(localStorage.getItem('aradhana_camera_profile_v2') || 'null');
+    const saved = JSON.parse(localStorage.getItem('AMBIC_camera_profile_v2') || 'null');
     if (saved && saved.fingerprint === _cameraFingerprint && CAMERA_PROFILES[saved.profile]) {
       _cameraDetectionReason = 'saved device fingerprint';
       return saved.profile;
@@ -1271,7 +1271,7 @@ async function detectedCameraProfile() {
     _cameraDetectionReason = 'screen/touch fingerprint';
   }
   try {
-    localStorage.setItem('aradhana_camera_profile_v2', JSON.stringify({
+    localStorage.setItem('AMBIC_camera_profile_v2', JSON.stringify({
       fingerprint: _cameraFingerprint, profile,
     }));
   } catch (_) {}
@@ -1288,7 +1288,7 @@ function setActiveCameraProfile(profile, reason) {
   updateCaptureGuide(_capturePhase || 'front');
   if (_cameraProfile && _cameraFingerprint) {
     try {
-      localStorage.setItem('aradhana_camera_profile_v2', JSON.stringify({
+      localStorage.setItem('AMBIC_camera_profile_v2', JSON.stringify({
         fingerprint: _cameraFingerprint, profile: _cameraProfile,
       }));
     } catch (_) {}
@@ -1332,7 +1332,7 @@ async function applyContinuousCameraControls() {
 }
 
 function cameraDevicePreferenceKey() {
-  return 'aradhana_camera_device_v1_' + (_cameraFingerprint || 'unknown');
+  return 'AMBIC_camera_device_v1_' + (_cameraFingerprint || 'unknown');
 }
 
 function cameraDeviceScore(device, currentDeviceId) {
@@ -1731,7 +1731,7 @@ cameraNative.addEventListener('click', () => {
 // them, so the jewel photo is persisted there the moment it's taken —
 // BEFORE the risky "camera backgrounds the tab" window even opens — and any
 // fresh page load checks for one and offers to resume instead of losing it.
-const RESUME_DB_NAME = 'aradhana_capture_resume';
+const RESUME_DB_NAME = 'AMBIC_capture_resume';
 const RESUME_STORE = 'pending';
 
 function _openResumeDB() {

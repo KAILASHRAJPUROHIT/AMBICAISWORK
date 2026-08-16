@@ -27,7 +27,7 @@ from pathlib import Path
 import ornament_code_map
 import stock_category_map
 
-# Only these license values represent imagery Ambic/Aradhana actually has
+# Only these license values represent imagery Ambic/AMBIC actually has
 # the rights to train on. Anything else (blank, "unknown", a customer's own
 # photo with no transfer of rights, ...) must never enter a training set.
 _ALLOWED_LICENSES = {"company-owned", "licensed", "public-domain"}

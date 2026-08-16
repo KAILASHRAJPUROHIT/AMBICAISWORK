@@ -9,7 +9,7 @@ $cloudflared = Join-Path $PSScriptRoot "cloudflared.exe"
 $secretDir = Join-Path $toolRoot "config"
 $secretPath = Join-Path $secretDir "cloudflare_tunnel_token.dpapi"
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-$runName = "AradhanaCloudflareTunnel"
+$runName = "AMBICCloudflareTunnel"
 
 if (-not (Test-Path -LiteralPath $cloudflared)) {
     throw "Missing cloudflared.exe at $cloudflared"
@@ -57,7 +57,7 @@ $encryptedToken = (Get-Content -LiteralPath $secretPath -Raw).Trim()
 $secureToken = ConvertTo-SecureString $encryptedToken
 $credential = [pscredential]::new("tunnel", $secureToken)
 $plainToken = $credential.GetNetworkCredential().Password
-$tokenFile = Join-Path $env:TEMP ("aradhana-cloudflare-{0}.token" -f ([guid]::NewGuid().ToString("N")))
+$tokenFile = Join-Path $env:TEMP ("AMBIC-cloudflare-{0}.token" -f ([guid]::NewGuid().ToString("N")))
 
 try {
     Set-Content -LiteralPath $tokenFile -Value $plainToken -Encoding ASCII -NoNewline

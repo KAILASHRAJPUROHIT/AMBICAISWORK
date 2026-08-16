@@ -51,7 +51,7 @@ _SSL_META_PATH = os.path.join(BASE, "data", "capture_https_meta.json")
 
 # Duplicated deliberately, not imported from app.py — see module docstring.
 # Keep in sync with app.py's ADMIN_PASSWORD if it's ever changed.
-ADMIN_PASSWORD = "Aradhana1992"
+ADMIN_PASSWORD = "AMBIC1992"
 
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
