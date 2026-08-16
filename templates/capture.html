@@ -1237,18 +1237,25 @@ async function waitForPlacement(result) {
   }
   const now = Date.now();
   if (now - _qualityLastZoomAdjustAt < CAPTURE_ZOOM_ADJUST_INTERVAL_MS) return true;
-  // Stop climbing the instant focus visibly breaks down, rather than
-  // chasing coverage all the way to the device's zoom ceiling regardless of
-  // whether the lens can still resolve anything there. Checked here, not
-  // immediately after a zoom step -- the lens needs the full
-  // CAPTURE_ZOOM_ADJUST_INTERVAL_MS to refocus after a zoom change, so
-  // judging sharpness any earlier just reads transient post-zoom blur as
-  // "this level is unfocusable" and halts after a single step.
+  // Stop climbing once focus visibly and CONSISTENTLY breaks down, rather
+  // than chasing coverage all the way to the device's zoom ceiling
+  // regardless of whether the lens can still resolve anything there. Two
+  // things guard against false triggers: waiting a full
+  // CAPTURE_ZOOM_ADJUST_INTERVAL_MS after each zoom step before judging
+  // (the lens needs that time to refocus), and requiring 2 CONSECUTIVE
+  // low readings, not one -- a single reading is noisy enough (this is the
+  // coarse, downscaled live analysis, not the refined crop) that one dip
+  // was previously enough to halt climbing after essentially a single step.
   // currentZoom > 1 guards the very first reading, which can be noisily
   // low before the object is centred at all.
   if (currentZoom > 1 && typeof result.sharpnessScore === 'number' && result.sharpnessScore < CAPTURE_ZOOM_SHARPNESS_FLOOR) {
-    _qualityZoomSettled = true;
-    return true;
+    _qualityLowSharpStreak += 1;
+    if (_qualityLowSharpStreak >= 2) {
+      _qualityZoomSettled = true;
+      return true;
+    }
+  } else {
+    _qualityLowSharpStreak = 0;
   }
   _qualityLastZoomAdjustAt = now;
   if (currentZoom >= _qualityMaxUsableZoom - 0.01) {
