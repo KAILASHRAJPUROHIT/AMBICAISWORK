@@ -45,6 +45,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+# Duplicated deliberately, not imported from app.py -- see module docstring
+# on process isolation. Same computed value app.py's OUTPUT resolves to.
+OUTPUT = os.path.join(BASE, "output")
 PORT = int(os.environ.get("CAPTURE_PORT", "7660"))
 _SSL_CERT_PATH = os.path.join(BASE, "data", "capture_https_cert.pem")
 _SSL_KEY_PATH = os.path.join(BASE, "data", "capture_https_key.pem")
