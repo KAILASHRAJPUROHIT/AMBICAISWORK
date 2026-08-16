@@ -1273,7 +1273,7 @@ async function _maybeBackOffZoom(result, now) {
   if (backedOff >= currentZoom - 0.05) return; // already at the device's own minimum, nothing left to try
   _qualityMaxUsableZoom = backedOff;
   await applyCameraZoom(backedOff);
-  await applyContinuousCameraControls();
+  _qualityFocusLockedAt = 0; // forces one fresh focus-lock pass at the new, lower zoom level
   cameraQualityLabel.textContent = `Easing zoom for sharper focus… ${backedOff.toFixed(1)}×`;
   cameraStatus.textContent = 'Backing off zoom for a sharper shot…';
   _qualitySharpBlockedAt = now; // restart the stuck-timer at the new, lower zoom level
