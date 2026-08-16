@@ -9,3 +9,9 @@ xlrd>=2.0.1,<3
 openpyxl>=3.1,<4
 opencv-python
 numpy
+# sam_locate.py: object-segmentation crop for captured jewellery
+# (SAM-2/sam2 and groundingdino-py are also installed on this machine but
+# unused by the chosen integration path -- transformers' built-in
+# GroundingDinoForObjectDetection is what sam_locate.py actually imports).
+torch
+transformers
