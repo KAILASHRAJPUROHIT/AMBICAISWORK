@@ -390,7 +390,20 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val coverageOk = result.coverage >= MIN_LIVE_COVERAGE
+        val zoom = focusZoom.currentZoomRatio()
+        val zoomRange = focusZoom.zoomRatioRange()
+        val atZoomCeiling = zoom >= min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO) - 0.02f ||
+            zoom >= maxUsableZoom - 0.02f
+        // At the ceiling, accept whatever coverage is on offer as "the best
+        // framing available" -- but this must NOT mean skipping focus
+        // verification. It previously called captureJewel() directly here,
+        // which is exactly how a shot could come out both too-far-away AND
+        // blurry at once: an item too small to ever cross MIN_LIVE_COVERAGE
+        // within the zoom cap got captured with focus never even checked.
+        // Folding the ceiling into coverageOk instead just changes what
+        // "enough of the frame" means for THIS item; every capture still
+        // goes through the same focusLocked + sharpEnough gate below.
+        val coverageOk = result.coverage >= MIN_LIVE_COVERAGE || atZoomCeiling
         val zoomSettled = now - lastZoomChangeAt >= ZOOM_SETTLE_MS
         val afState = focusZoom.afState.value
         val focusLocked = focusZoom.isFocusLocked(afState)
@@ -403,11 +416,6 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val zoom = focusZoom.currentZoomRatio()
-        val zoomRange = focusZoom.zoomRatioRange()
-        val atZoomCeiling = zoom >= min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO) - 0.02f ||
-            zoom >= maxUsableZoom - 0.02f
-
         if (!coverageOk) {
             // Too small to trust a focus verdict either way yet -- climb on
             // coverage alone, same reasoning as the web version's identical
@@ -419,10 +427,6 @@ class MainActivity : AppCompatActivity() {
             // which is what "focus hunting too rapid" actually was. Focus
             // is only ever triggered once coverage is trustworthy AND the
             // zoom has been sitting still for ZOOM_SETTLE_MS, see below.
-            if (atZoomCeiling) {
-                captureJewel() // nowhere left to climb -- accept what's on offer
-                return
-            }
             if (now - lastZoomChangeAt < ZOOM_STEP_INTERVAL_MS) {
                 setStatus("Filling frame before capture…", ready = false)
                 return
