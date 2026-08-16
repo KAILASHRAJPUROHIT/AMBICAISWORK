@@ -1241,13 +1241,41 @@ async function waitForPlacement(result) {
     if (Date.now() - _qualityFocusLockedAt < CAPTURE_FOCUS_SETTLE_MS) return true;
     return false;
   }
-  const plan = result.capturePlan || _qualityLastPlan;
+  // LIVE reading only -- deliberately NOT the _qualityLastPlan fallback used
+  // elsewhere for the cosmetic label. Falling back to a stale plan here (the
+  // previous behaviour) meant that once the item drifted out of the live
+  // frame, the climb kept using the last-known-good coverage number and
+  // pushed zoom all the way to the device ceiling on an empty background,
+  // completely oblivious the item was gone. Browser zoom is anchored to the
+  // frame CENTRE, not to the item's box (no API for the latter -- see
+  // applyCameraZoom), so any item that isn't dead-centre gets walked toward
+  // the edge and eventually out of frame on every 1.15x zoom-in step; a
+  // held-by-hand shot is essentially never perfectly centred.
+  const plan = result.capturePlan;
   const coverage = plan && typeof plan.coverage === 'number' ? plan.coverage : null;
   const range = _cameraCapabilities.zoom;
   const currentZoom = Number((_cameraTrack && _cameraTrack.getSettings().zoom) || cameraZoom.value || 1);
   const noZoomCapability = !range || typeof range.max !== 'number';
   const atDeviceMax = !noZoomCapability && currentZoom >= range.max - 0.01;
-  if (coverage === null || coverage >= CAPTURE_FILL_TARGET || noZoomCapability || atDeviceMax) {
+  if (coverage === null) {
+    // No live detection this tick. At 1x that's normal placement noise --
+    // ignore it, _ornamentPresent already gated arming. Once already zoomed
+    // in, though, this is the drift signature above: give it a couple of
+    // ticks in case it's just one missed analysis frame, then ease back
+    // down to re-acquire the item instead of continuing to climb toward a
+    // ceiling that only makes the drift worse.
+    if (currentZoom <= 1.05 || noZoomCapability) return true;
+    _qualityLostFrames += 1;
+    if (_qualityLostFrames < 3) return true;
+    _qualityLostFrames = 0;
+    const recovered = Math.max((range && range.min) || 1, currentZoom * CAPTURE_ZOOM_BACKOFF_RATIO);
+    if (recovered < currentZoom - 0.05) await applyCameraZoom(recovered);
+    cameraQualityLabel.textContent = `Lost the piece · easing back to ${recovered.toFixed(1)}×`;
+    cameraStatus.textContent = 'Re-centre the item…';
+    return true;
+  }
+  _qualityLostFrames = 0;
+  if (coverage >= CAPTURE_FILL_TARGET || noZoomCapability || atDeviceMax) {
     _qualityZoomSettled = true;
     return true; // next tick handles the focus-lock step above
   }
