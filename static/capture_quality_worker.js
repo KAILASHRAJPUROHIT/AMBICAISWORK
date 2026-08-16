@@ -641,6 +641,19 @@ function analysePixels(imageData, kind, finalFrame) {
   const goldDominant = !tagMode && (
     goldBlob.warmCoverage >= 0.06 && goldBlob.blobRatio >= 0.40
   );
+  // A piece paved with diamonds/stones (bright, near-white facets) has its
+  // gold pixels fragmented into thin slivers -- shank, prongs, border --
+  // around a large non-gold-coloured face. That keeps warmCoverage/goldRatio
+  // low even when the piece is sharp, well-lit, and dead-centre in frame
+  // (measured: a diamond-paved ring reading warmCoverage/goldRatio well
+  // under the 0.02/0.08 thresholds for 10+ seconds straight while sharpness
+  // scored 90+). The blob's BOUNDING BOX area doesn't have that problem --
+  // the sparse gold slivers still spatially span the whole piece -- so a
+  // large box is independent evidence of a real object even when the pixel
+  // density inside it is low.
+  const goldBoxArea = goldBlob.bounds
+    ? Math.max(0, goldBlob.bounds.x1 - goldBlob.bounds.x0) * Math.max(0, goldBlob.bounds.y1 - goldBlob.bounds.y0)
+    : 0;
 
   const previousKey = tagMode ? 'tag' : 'jewel';
   const previous = previousFrames.get(previousKey);
