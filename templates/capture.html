@@ -1151,8 +1151,16 @@ const CAPTURE_ZOOM_ADJUST_INTERVAL_MS = 300;
 // the lens likely can't resolve detail at this zoom level at all (autofocus
 // not catching up after the jump, or past the point where zoom stops being
 // optical and starts just magnifying existing softness) -- back off rather
-// than sitting blocked forever. See _maybeBackOffZoom.
-const CAPTURE_SHARP_STUCK_TIMEOUT_MS = 2000;
+// than sitting blocked forever. See _maybeBackOffZoom. Tuned down from an
+// original 2000ms: at 90% coverage (near/at device max on a small item) this
+// stuck-then-retry-then-backoff cascade fires on essentially every capture,
+// not as a rare fallback, so its cost is paid every time and is worth
+// trimming aggressively.
+const CAPTURE_SHARP_STUCK_TIMEOUT_MS = 1100;
+// The ONE retry (see _maybeBackOffZoom) gets a shorter follow-up window than
+// the initial wait -- it's judging "did that specific extra pass land",
+// not giving the lens the full benefit of the doubt a first attempt gets.
+const CAPTURE_SHARP_RETRY_TIMEOUT_MS = 650;
 const CAPTURE_ZOOM_BACKOFF_RATIO = 0.8;
 // Grace period after a single decisive focus-lock trigger before the
 // sharpness gate is judged -- gives the lens time to actually complete one
