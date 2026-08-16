@@ -713,6 +713,19 @@ const CAPTURE_PHASE_PROMPTS = {
 // tick()). Only applies to the 'front' (jewel) phase, never 'tag' -- the
 // QR/label needs the whole tag in frame at native 1x to decode.
 const CAPTURE_FILL_TARGET = 0.90;
+// Diminishing-returns early stop for the climb (see waitForPlacement):
+// once coverage is already substantial and the last zoom-in step gained
+// less than CAPTURE_COVERAGE_STALL_DELTA, further zooming is measured to
+// not be filling the frame any more -- most likely the background/support
+// region the coverage estimate is measured against has already been
+// filled, not that the item itself would keep growing with more zoom.
+// Repeated real captures this session never actually settled anywhere near
+// CAPTURE_FILL_TARGET; they always plateaued around 40-60% coverage and
+// then spent 15-20+ wasted seconds climbing to the device ceiling and
+// backing back down to that same plateau. Stopping AT the plateau instead
+// skips that whole wasted excursion.
+const CAPTURE_COVERAGE_MIN_TO_SETTLE_EARLY = 0.30;
+const CAPTURE_COVERAGE_STALL_DELTA = 0.03;
 let _cameraStream = null;
 let _cameraTrack = null;
 let _cameraImageCapture = null;
