@@ -312,6 +312,7 @@ class MainActivity : AppCompatActivity() {
      * here with a stronger focus signal.
      */
     private fun tickJewel() {
+        if (previewShowing) return
         val now = System.currentTimeMillis()
         val result = latestMaterial
 
