@@ -575,17 +575,16 @@ def check_duplicate(tag_code: str) -> dict | None:
 
 @_stock_write_guard
 def save_pair(category: str, jewel_bytes: bytes, tag_bytes: bytes, tag_code: str,
-             staff_name: str = "", studs_bytes: bytes | None = None,
-             detail_bytes: bytes | None = None, override_duplicate: bool = False,
+             staff_name: str = "", override_duplicate: bool = False,
              override_blur: bool = False, override_visibility: bool = False) -> dict:
     """
     Persist one item into the CURRENT tray for this category (auto-creates
-    tray #1 if none started yet). The front jewellery photo is saved into the
-    tray as the primary deliverable, named directly from tag_code (see
-    _safe_filename_from_tag) — no sequence numbers. Optional studs and detail
-    close-ups are saved beside it using the same stem. The tag photo is used
-    only to read the code; its decoded data is stamped into the saved front
-    image metadata and the raw tag shot is not archived separately. Returns:
+    tray #1 if none started yet). The jewellery photo (auto-captured, zoomed
+    to fill the frame) is saved into the tray as the primary deliverable,
+    named directly from tag_code (see _safe_filename_from_tag) — no sequence
+    numbers. The tag photo is used only to read the code; its decoded data is
+    stamped into the saved jewellery image metadata and the raw tag shot is
+    not archived separately. Returns:
       {"ok": True, "folder": ..., "tray_number": N, "filename": ..., "tray_captured": N,
        "blur_score": float|None}
       or {"ok": False, "error": "duplicate", "prior": {...}} if tag_code was
