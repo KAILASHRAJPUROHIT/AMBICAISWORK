@@ -780,25 +780,28 @@ function captureZoomForPhase(profile, phase, plan) {
   return phaseZoom[profile]?.[phase] || settings.zoom || 1;
 }
 
+// Was previously a separate, looser reimplementation of "is this good
+// enough" (sharpness >= 34-38) than the worker's own authoritative `pass`
+// verdict that the burst capture re-validates against (sharpness >= 46-58,
+// plus boxFits) -- see jewelStrictPass/jewelRelaxedPass in
+// capture_quality_worker.js. That gap meant the shutter would show "ready"
+// and auto-fire a burst that the worker's own stricter re-check then
+// rejected, looping forever between "Auto burst" and "trying again" without
+// ever actually saving a photo. Deferring to result.pass directly guarantees
+// the fire decision and the burst's own pass/fail check use identical
+// criteria.
 function isCaptureGateReady(result) {
   if (!result) return false;
   if (_cameraKind === 'tag') {
     return !!_qualityStableTag;
   }
-  const plan = result.capturePlan || _qualityLastPlan || null;
-  const ornamentSeen = !!(
-    result.pass ||
-    result.goldDominant ||
-    result.goldBlobCoverage >= 0.012 ||
-    result.goldRatio >= 0.035 ||
-    (plan && plan.coverage >= 0.01)
-  );
+  if (!result.pass) return false;
   const strongGold = result.goldDominant || result.goldBlobCoverage >= 0.012 || result.goldRatio >= 0.035;
   const sharpEnough = result.detailSharpnessConfirmed === true &&
-    result.sharpnessScore >= (plan && plan.coverage >= 0.02 ? 34 : 38);
+    result.sharpnessScore >= (result.capturePlan && result.capturePlan.coverage >= 0.02 ? 34 : 38);
   const cleanEnough = result.clippedRatio < 0.30 && (strongGold || result.skinRatio < 0.12);
   const stableEnough = result.motion !== null && result.motion <= 0.08;
-  return ornamentSeen && sharpEnough && cleanEnough && stableEnough;
+  return sharpEnough && cleanEnough && stableEnough;
 }
 
 // Names the single most likely reason isCaptureGateReady is blocking capture,
