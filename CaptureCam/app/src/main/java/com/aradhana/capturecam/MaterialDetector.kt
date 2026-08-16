@@ -203,11 +203,23 @@ object MaterialDetector {
 
         if (warm == 0) return Result(false, null, 0f, 0f, 0f, 0f, points)
 
-        // Connected-component largest blob (8-connectivity), same as
-        // goldBlobDominance in the web worker.
+        // Connected components (8-connectivity), same as goldBlobDominance
+        // in the web worker -- but tracking EVERY component, not just the
+        // largest by raw size. A presentation/display box's gold or dark
+        // trim forms a thin rectangular OUTLINE that can have a larger raw
+        // pixel count than the actual ring/pendant sitting inside it (the
+        // trim runs the whole perimeter of the box), which was getting
+        // picked as "the piece" and immediately satisfied the coverage
+        // floor without ever needing to zoom in -- the box's trim, not the
+        // jewellery, was "close enough" already. A thin outline has a much
+        // lower FILL RATIO (pixels-in-blob / pixels-in-its-own-bounding-
+        // box) than a compact solid shape like a ring does, so prefer the
+        // largest component that's actually reasonably filled; only fall
+        // back to the largest-by-size if nothing meets that bar.
+        data class Component(val size: Int, val minCol: Int, val minRow: Int, val maxCol: Int, val maxRow: Int)
+
         val visited = BooleanArray(mask.size)
-        var bestSize = 0
-        var bestMinCol = cols; var bestMinRow = rows; var bestMaxCol = -1; var bestMaxRow = -1
+        val components = mutableListOf<Component>()
         val stack = ArrayDeque<Int>()
         for (start in mask.indices) {
             if (!mask[start] || visited[start]) continue
@@ -237,11 +249,20 @@ object MaterialDetector {
                     }
                 }
             }
-            if (size > bestSize) {
-                bestSize = size; bestMinCol = minCol; bestMinRow = minRow; bestMaxCol = maxCol; bestMaxRow = maxRow
-            }
+            components.add(Component(size, minCol, minRow, maxCol, maxRow))
         }
-        if (bestSize == 0) return Result(false, null, 0f, 0f, 0f, 0f, points)
+        if (components.isEmpty()) return Result(false, null, 0f, 0f, 0f, 0f, points)
+
+        fun fillRatio(c: Component): Float {
+            val bboxCells = (c.maxCol - c.minCol + 1) * (c.maxRow - c.minRow + 1)
+            return c.size.toFloat() / max(1, bboxCells)
+        }
+        val MIN_FILL_RATIO = 0.28f
+        val chosen = components.filter { fillRatio(it) >= MIN_FILL_RATIO }.maxByOrNull { it.size }
+            ?: components.maxByOrNull { it.size }!!
+        val bestSize = chosen.size
+        val bestMinCol = chosen.minCol; val bestMinRow = chosen.minRow
+        val bestMaxCol = chosen.maxCol; val bestMaxRow = chosen.maxRow
 
         val bounds = Bounds(
             x0 = (startX + bestMinCol * step).toFloat() / width,
