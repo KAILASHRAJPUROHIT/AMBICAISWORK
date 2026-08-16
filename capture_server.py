@@ -76,36 +76,6 @@ def _load_or_create_secret_key():
 app.secret_key = _load_or_create_secret_key()
 app.config["PERMANENT_SESSION_LIFETIME"] = 60 * 60 * 24 * 30
 
-_LOGIN_EXEMPT_PATHS = {"/login", "/api/health"}
-
-
-@app.before_request
-def _require_login():
-    if request.path in _LOGIN_EXEMPT_PATHS or request.path.startswith("/static/"):
-        return None
-    if not session.get("authed"):
-        if request.path.startswith("/api/"):
-            return jsonify({"error": "not authenticated"}), 401
-        return redirect(url_for("login", next=request.path))
-    return None
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    error = None
-    if request.method == "POST":
-        if request.form.get("password") == ADMIN_PASSWORD:
-            session.permanent = True
-            session["authed"] = True
-            return redirect(request.args.get("next") or url_for("capture_page"))
-        error = "Wrong password"
-    return render_template("login.html", error=error)
-
-
-@app.route("/logout", methods=["POST"])
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
 
 
 # TYPES kept minimal and local — capture only needs category labels, not the
