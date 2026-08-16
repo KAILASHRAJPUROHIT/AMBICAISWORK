@@ -47,8 +47,8 @@ def test_android_main_lens_is_selected_by_device_id_and_defaults_to_one_x():
     assert "cameraDevicePreferenceKey()" in source
     assert "automatic main-lens selection" in source
     assert "ultra[ -]?wide|tele|periscope|macro|depth" in source
-    assert "nothing: {front: 1, studs: 1, detail: 1, tag: 1}" in source
-    assert "redmi: {front: 1, studs: 1, detail: 1, tag: 1}" in source
+    assert "nothing: {front: 1, tag: 1}" in source
+    assert "redmi: {front: 1, tag: 1}" in source
     assert 'id="camera-recheck-lens"' in source
 
 
