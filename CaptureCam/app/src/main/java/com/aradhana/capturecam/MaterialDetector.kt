@@ -77,16 +77,22 @@ object MaterialDetector {
     /** Diamonds/cut stones/studs read as bright, near-white specular
      * highlights -- the opposite signature deliberately excluded from
      * looksLikeSilver (which caps at yLuma<240 specifically to avoid
-     * clipped-highlight false positives on real silver). Wanted here
-     * anyway purely for the visual overlay -- this never feeds coverage/
-     * material-detected, only the dot cloud. */
+     * clipped-highlight false positives on real silver). This alone is far
+     * too loose on its own (any bright, low-saturation surface qualifies --
+     * a white background, a skin highlight, studio lighting) -- it is only
+     * ever trusted when it lands within METAL_PROXIMITY_CELLS of an actual
+     * metal-classified sample, i.e. a stone actually set INTO or next to
+     * gold/silver, not a random bright thing anywhere in frame. Never
+     * feeds coverage/material-detected either way, only the dot cloud. */
     private fun looksLikeSparkle(r: Int, g: Int, b: Int): Boolean {
         val maxV = max(r, max(g, b))
         val minV = min(r, min(g, b))
         val delta = maxV - minV
         val yLuma = 0.299f * r + 0.587f * g + 0.114f * b
-        return yLuma >= 232 && delta < 45
+        return yLuma >= 240 && delta < 35
     }
+
+    private const val METAL_PROXIMITY_CELLS = 3
 
     /** Standard BT.601 YCbCr -> RGB, same conversion browsers already do
      * internally on camera frames before exposing RGBA pixel data -- close
