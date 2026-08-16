@@ -67,6 +67,15 @@ class MainActivity : AppCompatActivity() {
     private var armedAt = 0L
     private var stepFocusAttempts = 0
     private var maxUsableZoom = Float.MAX_VALUE
+    // Timestamp of the last actual zoom change (climb step or backoff
+    // step) -- ZOOM_SETTLE_MS after this is the earliest focus may be
+    // triggered/judged; ZOOM_STEP_INTERVAL_MS after this is the earliest
+    // another climb step may be taken. See tickJewel.
+    private var lastZoomChangeAt = 0L
+    // Whether a decisive AF trigger has already been sent for the CURRENT
+    // zoom level -- the single-shot discipline that stops AF being
+    // re-triggered every tick while waiting for its result.
+    private var focusTriggeredThisLevel = false
     private var jewelJpeg: ByteArray? = null
     private var tagJpeg: ByteArray? = null
     private var tagCodeHistory = mutableListOf<String>()
