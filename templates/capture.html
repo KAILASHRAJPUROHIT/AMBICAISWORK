@@ -1328,6 +1328,82 @@ function stopOptimizedCamera() {
   cameraOverlay.classList.add('hidden');
 }
 
+// Optional post-save step: record the turntable rotation and hand it to
+// spin_processor.py (server-side, ffmpeg + OpenCV) for multi-angle frame
+// extraction, a 360 interactive viewer, and a cropped 360 video. No quality
+// gating/auto-capture here -- the operator just watches the turntable
+// complete one visible rotation and taps Stop; the server-side processing
+// does the real work.
+function _stopSpinStream() {
+  if (_spinStream) _spinStream.getTracks().forEach(track => track.stop());
+  _spinStream = null;
+  spinVideo.srcObject = null;
+  spinRecordBtn.style.display = '';
+  spinStopBtn.style.display = 'none';
+  spinOverlay.classList.add('hidden');
+}
+
+async function startSpinRecording(tagCode, category) {
+  spinOverlay.classList.remove('hidden');
+  spinStatus.textContent = 'Starting camera…';
+  spinRecordBtn.style.display = '';
+  spinStopBtn.style.display = 'none';
+  try {
+    _spinStream = await requestCameraStream(_cameraProfile || 'nothing', null);
+    spinVideo.srcObject = _spinStream;
+    await spinVideo.play();
+    spinStatus.textContent = 'Start the turntable, then tap Record.';
+  } catch (error) {
+    spinStatus.textContent = 'Camera unavailable: ' + (error.message || String(error));
+    return;
+  }
+
+  spinRecordBtn.onclick = () => {
+    _spinChunks = [];
+    const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+      .find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || '';
+    try {
+      _spinRecorder = mimeType ? new MediaRecorder(_spinStream, {mimeType}) : new MediaRecorder(_spinStream);
+    } catch (error) {
+      spinStatus.textContent = 'Could not start recording: ' + (error.message || String(error));
+      return;
+    }
+    _spinRecorder.ondataavailable = event => { if (event.data && event.data.size) _spinChunks.push(event.data); };
+    _spinRecorder.start();
+    spinRecordBtn.style.display = 'none';
+    spinStopBtn.style.display = '';
+    spinStatus.textContent = 'Recording… spin the turntable through one full rotation, then tap Stop.';
+  };
+
+  spinStopBtn.onclick = async () => {
+    if (!_spinRecorder) return;
+    spinStopBtn.disabled = true;
+    spinStatus.textContent = 'Uploading…';
+    const uploadPromise = new Promise(resolve => { _spinRecorder.onstop = resolve; });
+    _spinRecorder.stop();
+    await uploadPromise;
+    const blob = new Blob(_spinChunks, {type: _spinRecorder.mimeType || 'video/webm'});
+    _stopSpinStream();
+    const fd = new FormData();
+    fd.append('category', category);
+    fd.append('tag_code', tagCode);
+    fd.append('video', blob, 'spin.webm');
+    try {
+      const r = await fetch('/api/capture/spin', {method: 'POST', body: fd});
+      const j = await r.json().catch(() => ({}));
+      showToast(r.ok && j.ok ? '360 spin uploaded — processing…' : ('Spin upload failed: ' + (j.error || r.status)));
+    } catch (error) {
+      showToast('Spin upload failed: ' + (error.message || String(error)));
+    }
+    spinStopBtn.disabled = false;
+  };
+
+  spinCancelBtn.onclick = () => {
+    if (_spinRecorder && _spinRecorder.state !== 'inactive') _spinRecorder.stop();
+    _stopSpinStream();
+  };
+}
+
 function compactFingerprint(value) {
   // FNV-1a: stable local identifier without storing/sending the raw device UA.
   let hash = 2166136261;
