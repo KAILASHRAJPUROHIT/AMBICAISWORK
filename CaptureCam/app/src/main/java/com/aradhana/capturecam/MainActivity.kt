@@ -1045,6 +1045,14 @@ class MainActivity : AppCompatActivity() {
      * ANGLE_1/ANGLE_2 sequence before moving to the TAG phase; otherwise
      * falls straight through to the existing single-image TAG phase
      * unchanged -- the gimbal is additive, never required.
+     *
+     * ANGLE_1/ANGLE_2 are staff-driven, not a scripted gimbal sweep: the
+     * operator physically rotates the ornament to show a side profile
+     * (a real rotation of the piece, which panning a camera around a
+     * stationary object can't replicate) and taps READY when it's
+     * positioned. Only then does the gimbal act, and only to fine RE-CENTER
+     * on wherever the piece ended up (see centerThenCapture), not to sweep
+     * to a preset pose.
      */
     private fun onMainCaptureAccepted() {
         Log.i(TAG, "onMainCaptureAccepted: rsc2.isReady=${rsc2.isReady}")
@@ -1054,38 +1062,58 @@ class MainActivity : AppCompatActivity() {
             return
         }
         inAngleSequence = true
-        setStatus("Moving to angle 1…", ready = false)
-        Log.i(TAG, "moveOut angle1 pan=$PAN_LEFT_AXIS3")
-        showDirectionArrow(left = true)
-        rsc2.moveOut(axis3 = PAN_LEFT_AXIS3, durationMs = PAN_STEP_MS) {
-            Log.i(TAG, "moveOut angle1 arrived")
-            hideDirectionArrow()
-            waitForStableFrame("Turn the ornament to show its LEFT side, then hold still") { captureAngle1() }
+        promptForSideProfile("Turn the ornament to show a SIDE profile, then tap READY") {
+            centerThenCapture { captureAngle1() }
         }
     }
 
-    /** Big on-screen cue for staff, shown only while the gimbal is
-     * physically panning toward that angle's shot -- not during the whole
-     * dwell/detect window, so it doesn't linger and get mistaken for a
-     * "keep the item there" indicator once the camera has already arrived. */
-    private fun showDirectionArrow(left: Boolean) {
-        binding.directionArrow.text = if (left) "◀" else "▶"
-        binding.directionArrow.visibility = View.VISIBLE
+    /** Shows the instruction + big READY button and waits for the staff tap
+     * before calling [onReady] -- no auto-timeout fire here, unlike the old
+     * pan-sweep gate. The staff decides when the piece is actually
+     * positioned; nothing should capture before that. */
+    private fun promptForSideProfile(instruction: String, onReady: () -> Unit) {
+        setStatus(instruction, ready = false)
+        showReadyButton {
+            centeringAttempts = 0
+            setStatus("Centering the ornament…", ready = false)
+            onReady()
+        }
     }
 
-    private fun hideDirectionArrow() {
-        binding.directionArrow.visibility = View.GONE
+    private fun showReadyButton(onReady: () -> Unit) {
+        pendingReadyAction = onReady
+        binding.manualShutterButton.visibility = View.GONE
+        binding.readyButton.visibility = View.VISIBLE
+    }
+
+    private fun hideReadyButton() {
+        pendingReadyAction = null
+        binding.readyButton.visibility = View.GONE
+        binding.manualShutterButton.visibility = View.VISIBLE
+    }
+
+    /** Runs attemptCenteringCorrection() in a loop (single-axis nudge,
+     * re-measure, repeat -- same fragile-BLE-safe primitive MAIN uses, see
+     * its doc comment) until the ornament is within the centering deadband
+     * or ANGLE_CENTERING_MAX_ATTEMPTS is exhausted, then re-triggers
+     * autofocus and waits for a genuinely sharp, focus-locked frame
+     * (waitForStableFrame) before calling [onCentered]. Staff-placed poses
+     * can start much further off-center than MAIN's fine correction ever
+     * has to travel, hence the larger attempt budget passed here. */
+    private fun centerThenCapture(onCentered: () -> Unit) {
+        val result = latestMaterial
+        if (result != null && result.material &&
+            attemptCenteringCorrection(result, ANGLE_CENTERING_MAX_ATTEMPTS)) {
+            handler.postDelayed({ centerThenCapture(onCentered) }, CENTERING_TICK_MS + 200L)
+            return
+        }
+        focusZoom.triggerAutoFocus()
+        waitForStableFrame("Focusing…", onCentered)
     }
 
     /** Gate for angle1/angle2 shots -- mirrors tickJewel()'s MAIN-capture
      * gate (presence + focus-lock + sharpness, held for several consecutive
      * ticks) rather than just checking the ornament is somewhere in frame.
-     * The old presence-only check let a genuinely out-of-focus or
-     * mid-rotation frame get captured the instant the piece was merely
-     * detected -- this never fires until the frame is actually clean.
-     * [instruction] is shown as the on-screen staff prompt for this pose
-     * (e.g. "rotate to show the left side") for the whole wait, so the
-     * operator has time to physically turn the piece before the gate opens.
      * Still fails open at ANGLE_STABLE_TIMEOUT_MS so a stubborn low-texture
      * surface or a piece staff can't get sharp can't stall the item
      * forever -- it just captures the best frame on offer at that point. */
@@ -1142,29 +1170,13 @@ class MainActivity : AppCompatActivity() {
             bytes,
             onProceed = {
                 angle1Jpeg = bytes
-                proceedToAngle2()
+                promptForSideProfile("Turn the ornament to show the OTHER side profile, then tap READY") {
+                    centerThenCapture { captureAngle2() }
+                }
             },
             onRetake = { captureAngle1() },
             onCancel = { cancelItem() }
         )
-    }
-
-    private fun proceedToAngle2() {
-        setStatus("Returning to center…", ready = false)
-        // MUST return home before moving out to angle 2 -- these are
-        // velocity commands, not absolute positions (see RSC2Controller's
-        // moveOut/returnHome doc). Skipping this left the gimbal drifted
-        // for angle 2, and for the NEXT item's angle 1.
-        rsc2.returnHome(axis3 = PAN_LEFT_AXIS3, durationMs = PAN_STEP_MS) {
-            setStatus("Moving to angle 2…", ready = false)
-            Log.i(TAG, "moveOut angle2 pan=$PAN_RIGHT_AXIS3 rsc2.isReady=${rsc2.isReady}")
-            showDirectionArrow(left = false)
-            rsc2.moveOut(axis3 = PAN_RIGHT_AXIS3, durationMs = PAN_STEP_MS) {
-                Log.i(TAG, "moveOut angle2 arrived")
-                hideDirectionArrow()
-                waitForStableFrame("Turn the ornament to show its RIGHT side, then hold still") { captureAngle2() }
-            }
-        }
     }
 
     private fun captureAngle2() {
@@ -1188,12 +1200,14 @@ class MainActivity : AppCompatActivity() {
             bytes,
             onProceed = {
                 angle2Jpeg = bytes
-                setStatus("Returning to main position…", ready = false)
-                rsc2.returnHome(axis3 = PAN_RIGHT_AXIS3, durationMs = PAN_STEP_MS) {
-                    undoCenteringThenAdvance {
-                        inAngleSequence = false
-                        resetForNewItem(Phase.TAG)
-                    }
+                setStatus("Returning to center…", ready = false)
+                // Undoes the net tilt/pan correction accumulated across
+                // MAIN + angle1 + angle2's centering nudges in one shot, so
+                // the gimbal starts the next item from true center rather
+                // than wherever the last item's corrections left it.
+                undoCenteringThenAdvance {
+                    inAngleSequence = false
+                    resetForNewItem(Phase.TAG)
                 }
             },
             onRetake = { captureAngle2() },
