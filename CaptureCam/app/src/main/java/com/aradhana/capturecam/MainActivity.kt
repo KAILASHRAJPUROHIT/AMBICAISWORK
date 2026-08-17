@@ -70,6 +70,16 @@ class MainActivity : AppCompatActivity() {
     private val rsc2 = RSC2Controller()
     private var angle1Jpeg: ByteArray? = null
     private var angle2Jpeg: ByteArray? = null
+    // Set for the whole MAIN-accepted -> angle1 -> angle2 sequence. tickJewel()
+    // keeps running on its own timer the entire time phase stays JEWEL (which
+    // it does until the sequence finishes and calls resetForNewItem(Phase.TAG))
+    // -- without this guard it kept re-arming and re-firing captureJewel()
+    // mid-sequence, starting a SECOND overlapping angle sequence that raced
+    // the first one, sending contradictory BLE commands to the gimbal and
+    // occasionally corrupting a capture (bytes=null). This was the real cause
+    // of "works on item 1, breaks on item 2" -- item 2 inherited whatever mess
+    // the race left behind.
+    private var inAngleSequence = false
 
     private val prefs by lazy { getSharedPreferences("capturecam", MODE_PRIVATE) }
     private val handler = Handler(Looper.getMainLooper())
