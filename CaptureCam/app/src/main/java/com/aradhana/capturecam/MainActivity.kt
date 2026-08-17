@@ -80,6 +80,10 @@ class MainActivity : AppCompatActivity() {
     // must not judge focus, take another step, or capture while the zoom
     // is still physically moving. Set false when the ramp reaches target.
     private var isZooming = false
+    // Set the instant MAX_STALL_MS first expires, so the safety valve below
+    // gets one last forced re-focus attempt instead of shuttering on
+    // whatever frame happens to be live at that exact millisecond.
+    private var stallGraceAt = 0L
     private var jewelJpeg: ByteArray? = null
     private var tagJpeg: ByteArray? = null
     private var tagCodeHistory = mutableListOf<String>()
