@@ -144,11 +144,12 @@ class MainActivity : AppCompatActivity() {
     private var centerAvoidAxis = CenterAxis.NONE
 
     // ---- Blind search (MAIN only): active only before anything has ever
-    // been detected for this item -- see huntStep().
-    private var huntAxis = CenterAxis.PAN
-    private var huntDirection = 1
-    private var huntStepsThisAxis = 0
-    private var huntCyclesWithoutFind = 0
+    // been detected for this item -- see huntStep(). Deterministic sweep
+    // order per explicit spec: DOWN first, then level->LEFT, then
+    // center->RIGHT, stopping the instant gold is found at any point.
+    private enum class HuntPhase { SCAN_DOWN, RETURN_TILT, SCAN_LEFT, RETURN_PAN, SCAN_RIGHT, GIVE_UP }
+    private var huntPhase = HuntPhase.SCAN_DOWN
+    private var huntPhaseMsSpent = 0
     private var huntBusy = false
     private var huntStartedAt = 0L
 
