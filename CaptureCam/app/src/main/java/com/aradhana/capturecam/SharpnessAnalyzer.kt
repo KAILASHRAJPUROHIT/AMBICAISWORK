@@ -60,4 +60,51 @@ object SharpnessAnalyzer {
         // shots the web worker's CAPTURE_SHARP thresholds were tuned on.
         return ((variance - 20.0) / 170.0 * 100.0).coerceIn(0.0, 100.0).toFloat()
     }
+
+    /**
+     * Raw (unnormalized) Laplacian variance over the actual captured
+     * full-resolution bitmap -- deliberately NOT mapped onto [score]'s 0..100
+     * scale, because that scale was tuned against the low-res ImageAnalysis
+     * stream (a fraction of the sensor's native resolution). A frame can
+     * read as "sharp enough" on that downsampled live stream while still
+     * showing real blur once viewed at full resolution, since the
+     * downsample itself throws away the fine detail that would reveal it.
+     * This exists purely to measure sharpness against the actual delivered
+     * pixels, not to replace the live gate. Not yet given a pass/fail
+     * threshold in code -- the raw variance scale needs one real capture's
+     * numbers (logged by the caller) before a cutoff can be picked with any
+     * confidence, rather than guessed blind.
+     */
+    fun scoreBitmapRaw(bitmap: Bitmap, step: Int = 6): Double {
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width < 8 || height < 8) return 0.0
+
+        fun luma(x: Int, y: Int): Int {
+            val p = bitmap.getPixel(x, y)
+            val r = (p shr 16) and 0xFF
+            val g = (p shr 8) and 0xFF
+            val b = p and 0xFF
+            return (r * 299 + g * 587 + b * 114) / 1000
+        }
+
+        var sum = 0.0
+        var sumSquares = 0.0
+        var count = 0
+        var y = 1
+        while (y < height - 1) {
+            var x = 1
+            while (x < width - 1) {
+                val lap = 4 * luma(x, y) - luma(x - 1, y) - luma(x + 1, y) - luma(x, y - 1) - luma(x, y + 1)
+                sum += lap
+                sumSquares += lap.toDouble() * lap
+                count += 1
+                x += step
+            }
+            y += step
+        }
+        if (count == 0) return 0.0
+        val mean = sum / count
+        return max(0.0, sumSquares / count - mean * mean)
+    }
 }
