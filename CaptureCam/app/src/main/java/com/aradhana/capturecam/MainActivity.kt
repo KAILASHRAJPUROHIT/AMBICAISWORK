@@ -1679,8 +1679,8 @@ class MainActivity : AppCompatActivity() {
         // the gimbal may be physically left wherever those nudges put it
         // (no undo fires on this path), but at least the NEXT item's
         // bookkeeping starts clean instead of compounding stale ticks.
-        centeringPanTicks = 0
-        centeringTiltTicks = 0
+        centeringPanMs = 0
+        centeringTiltMs = 0
         centeringAttempts = 0
         lastCenterAxis = CenterAxis.NONE
         centerAvoidAxis = CenterAxis.NONE
