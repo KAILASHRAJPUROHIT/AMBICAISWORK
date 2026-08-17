@@ -805,8 +805,10 @@ class MainActivity : AppCompatActivity() {
         )
         val material = latestMaterial
         binding.debugText.text = if (phase == Phase.JEWEL) {
-            "zoom=%.1fx  coverage=%.3f  sharp=%.0f  af=%s".format(
+            val range = focusZoom.zoomRatioRange()
+            "zoom=%.1fx range=[%.1f,%.1f] max=%.1f  coverage=%.3f  sharp=%.0f  af=%s".format(
                 focusZoom.currentZoomRatio(),
+                range.start, range.endInclusive, maxUsableZoom,
                 material?.coverage ?: 0f,
                 latestSharpness,
                 afStateLabel(focusZoom.afState.value)
