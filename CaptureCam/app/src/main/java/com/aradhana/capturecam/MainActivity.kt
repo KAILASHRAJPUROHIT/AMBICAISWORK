@@ -301,7 +301,17 @@ class MainActivity : AppCompatActivity() {
         // opposite total can be undone in one shot at the end of the item.
         private const val CENTERING_DEFLECTION = 120
         private const val CENTERING_DEADBAND = 0.06f
+        // Nudge duration scales with how far off-center the object is
+        // (centeringDurationFor()): CENTERING_TICK_MS at a small offset,
+        // climbing linearly to CENTERING_TICK_MS_MAX at a half-frame
+        // (0.5) offset. A fixed 200ms nudge was proven far too weak live:
+        // logged offsets barely moved across 8 consecutive same-direction
+        // nudges (dx stuck around -0.45 to -0.43 the whole attempt budget)
+        // -- CENTERING_DEFLECTION(120) x 200ms is roughly 10x less
+        // cumulative "push" than the old confirmed-working pan sweep
+        // (250 x 900ms), nowhere near enough to close a large offset.
         private const val CENTERING_TICK_MS = 200L
+        private const val CENTERING_TICK_MS_MAX = 900L
         private const val CENTERING_MAX_ATTEMPTS = 4
         // Angle shots reuse the same centering primitive but need a bigger
         // budget: staff places the piece by hand after rotating it, which
