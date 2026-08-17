@@ -575,31 +575,38 @@ def check_duplicate(tag_code: str) -> dict | None:
     return prior
 
 
-def _segment_jewel_async(jewel_path: str) -> None:
-    """Replace the saved jewel photo in-place with a SAM2/DINO segmentation
-    crop, off the request thread.
+def _segment_paths_async(paths: list) -> None:
+    """Replace each of the given saved photos in-place with a SAM2/DINO
+    segmentation crop, off the request thread.
 
-    This runs after save_pair() has already written the file and is about to
-    return its response to the phone -- segmentation is real GPU inference
-    (SAM2-large + Grounding DINO) and the save confirmation shouldn't wait on
-    it. tight_crop() is already fail-open (returns the original path
-    untouched on any error), so a slow/missing model never blocks a capture,
-    it just leaves the digital fill-crop from capture.html as the final
-    result for that piece.
+    Runs after save_pair()/save_multi() has already written the file(s) and
+    is about to return its response to the phone -- segmentation is real GPU
+    inference (SAM2-large + Grounding DINO) and the save confirmation
+    shouldn't wait on it. tight_crop() is already fail-open (returns the
+    original path untouched on any error), so a slow/missing model never
+    blocks a capture, it just leaves the digital fill-crop from capture.html
+    as the final result for that piece.
+
+    All paths in one call share a single loaded predictor and release it
+    once at the end, rather than each image reloading SAM2/DINO from
+    scratch -- for save_multi's 3-image sets this is the difference between
+    one model load per item and three.
     """
     if not sam_locate.available():
         logging.getLogger("capture_tool").warning(
-            "sam_locate.available() is False -- skipping segmentation for %s", jewel_path
+            "sam_locate.available() is False -- skipping segmentation for %s", paths
         )
         return
 
     def _run():
         log = logging.getLogger("capture_tool")
         try:
-            result_path, angle = sam_locate.tight_crop(jewel_path, jewel_path, expect=1, straighten=True)
-            log.info("sam_locate.tight_crop done for %s (angle=%s)", jewel_path, angle)
-        except Exception:
-            log.exception("sam_locate.tight_crop FAILED for %s", jewel_path)
+            for path in paths:
+                try:
+                    result_path, angle = sam_locate.tight_crop(path, path, expect=1, straighten=True)
+                    log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
+                except Exception:
+                    log.exception("sam_locate.tight_crop FAILED for %s", path)
         finally:
             sam_locate.release()
 
