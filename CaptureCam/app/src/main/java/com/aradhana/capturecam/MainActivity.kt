@@ -436,6 +436,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        OpenCvKcfProbe.run()
         // This is a kiosk-style capture station -- the operator's hands are
         // usually busy holding jewellery/tags, not touching the screen, so
         // an unexpected sleep mid-workflow (requiring a touch + possibly a
