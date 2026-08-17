@@ -53,20 +53,28 @@ class RSC2Controller {
     /**
      * The captured Ronin-app BLE traffic never went quiet -- it sent SOME
      * frame roughly once a second for the whole session, including while
-     * completely idle. A single item's move-capture-move-capture sequence
-     * worked, then a subsequent item never moved at all, with no BLE
-     * disconnect logged -- consistent with the RSC 2 treating a joystick
-     * session as ended after a period of silence (the pause between items
-     * while the operator repositions/scans the next tag). This keeps a
-     * trickle of neutral frames going during any such pause so the session
-     * the gimbal thinks is active actually stays active.
+     * completely idle. A neutral-joystick-only heartbeat was NOT enough:
+     * live testing showed the RSC 2 still dropping the connection ~15-25s
+     * after the last real joystick activity even with that running. The
+     * real app was also continuously sending ping frames to several OTHER
+     * receiver IDs (0x04/0xbf/0xdf) plus a status-report frame (0xe5) the
+     * whole time -- cycling through all of them here since it's not known
+     * which one the RSC 2 actually requires to consider the session alive.
      */
     private fun startHeartbeat() {
         stopHeartbeat()
+        var tick = 0
         val runnable = object : Runnable {
             override fun run() {
                 if (isReady && activeMoveRunnable == null) {
-                    writeFrame(DumlProtocol.neutralFrame(seq)); seq += 1
+                    val frame = when (tick % 4) {
+                        0 -> DumlProtocol.neutralFrame(seq)
+                        1 -> DumlProtocol.pingFrame(DumlProtocol.PING_RECEIVERS[0], seq)
+                        2 -> DumlProtocol.pingFrame(DumlProtocol.PING_RECEIVERS[1], seq)
+                        else -> DumlProtocol.statusReportFrame(seq)
+                    }
+                    writeFrame(frame); seq += 1
+                    tick += 1
                 }
                 handler.postDelayed(this, 900L)
             }
