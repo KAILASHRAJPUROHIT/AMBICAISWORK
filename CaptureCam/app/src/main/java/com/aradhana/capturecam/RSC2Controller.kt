@@ -200,11 +200,22 @@ class RSC2Controller {
             Log.w(TAG, "writeFrame: no-op, char=$char gatt=$g")
             return
         }
-        char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-        char.value = frame
         try {
-            val ok = g.writeCharacteristic(char)
-            if (!ok) Log.w(TAG, "writeCharacteristic() returned false")
+            // The old characteristic.value=/writeCharacteristic(characteristic)
+            // pair (API <33) was returning false on essentially every call on
+            // this device/stack, even with 900ms between idle heartbeats --
+            // not a pacing issue, a real reliability problem with the
+            // deprecated API. The API 33+ writeCharacteristic(char, value,
+            // writeType) overload is Android's own fix for exactly this.
+            val ok = if (Build.VERSION.SDK_INT >= 33) {
+                val result = g.writeCharacteristic(char, frame, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE)
+                result == android.bluetooth.BluetoothStatusCodes.SUCCESS
+            } else {
+                char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                char.value = frame
+                g.writeCharacteristic(char)
+            }
+            if (!ok) Log.w(TAG, "writeCharacteristic() failed (sdk=${Build.VERSION.SDK_INT})")
         } catch (e: SecurityException) {
             Log.w(TAG, "Missing permission to write: ${e.message}")
         }
