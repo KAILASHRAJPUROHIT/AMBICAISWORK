@@ -121,8 +121,16 @@ class JewelleryTracker {
             val corrected = kf.correct(measurement)
             val cx = (corrected.get(0, 0)[0] / frameW).toFloat()
             val cy = (corrected.get(1, 0)[0] / frameH).toFloat()
-            lastW = box.width.toFloat() / frameW
-            lastH = box.height.toFloat() / frameH
+            // Size is tracked SEPARATELY from the Kalman position filter
+            // (its own light exponential smoothing, not stuffed into the
+            // same [cx,cy,vx,vy] state) -- zoom control cares about a
+            // stable size trend, position control cares about a stable
+            // position+velocity trend; conflating them means a size
+            // fluctuation would perturb the position estimate and vice versa.
+            val rawW = box.width.toFloat() / frameW
+            val rawH = box.height.toFloat() / frameH
+            lastW += SIZE_SMOOTHING * (rawW - lastW)
+            lastH += SIZE_SMOOTHING * (rawH - lastH)
             return TrackResult(cx, cy, lastW, lastH, predicted = false)
         }
 
