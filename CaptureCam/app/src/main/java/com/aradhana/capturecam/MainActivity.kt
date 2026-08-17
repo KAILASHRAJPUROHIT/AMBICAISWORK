@@ -225,6 +225,12 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_STALL_MS = 12_000L
         private const val TICK_INTERVAL_MS = 150L
         private const val SHARPNESS_THRESHOLD = 40f
+        // Below this, autofocus isn't "struggling" -- it never converged at
+        // all. Real-world observed range for a genuinely too-close subject
+        // was ~2-4 (see the sharpness=2.0-4.3 readings that forced a soft
+        // capture through the old stall valve); 15 is well above that noise
+        // floor but still well below SHARPNESS_THRESHOLD*0.6 (24).
+        private const val TOO_CLOSE_SHARPNESS_FLOOR = 15f
         private const val REQUIRED_READY_TICKS = 3
         // Fixed test values for the RSC 2 3-angle workflow -- NOT real
         // per-category calibration yet. Single-axis pan sweep: center -> pan
