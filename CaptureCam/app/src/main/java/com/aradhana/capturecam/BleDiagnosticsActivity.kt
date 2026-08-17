@@ -477,6 +477,12 @@ class BleDiagnosticsActivity : AppCompatActivity() {
         super.onDestroy()
         try {
             if (scanning) bluetoothAdapter.bluetoothLeScanner?.stopScan(scanCallback)
+            // disconnect() before close() -- close() alone just tears down
+            // the local client object without necessarily telling the
+            // peripheral the link is ending, which can leave the RSC 2
+            // thinking this screen still holds its single connection slot
+            // and refusing a new connection from the main capture screen.
+            gatt?.disconnect()
             gatt?.close()
         } catch (_: SecurityException) {}
     }
