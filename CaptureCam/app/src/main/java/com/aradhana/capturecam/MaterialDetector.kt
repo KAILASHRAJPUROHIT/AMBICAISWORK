@@ -219,7 +219,8 @@ object MaterialDetector {
                 val uVal = uBuffer.get(uIndex).toInt() and 0xFF
                 val vVal = vBuffer.get(vIndex).toInt() and 0xFF
                 val rgb = yuvToRgb(yVal, uVal, vVal)
-                val isMetal = looksLikeMetal(rgb[0], rgb[1], rgb[2])
+                val isMetal = looksLikeMetal(rgb[0], rgb[1], rgb[2]) &&
+                    hasLocalContrast(yBuffer, yRowStride, x, yPix, width, height)
                 val cell = row * cols + col
                 if (isMetal) {
                     mask[cell] = true
