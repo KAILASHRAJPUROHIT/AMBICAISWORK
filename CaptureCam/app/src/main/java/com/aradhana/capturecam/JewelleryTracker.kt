@@ -56,26 +56,28 @@ class JewelleryTracker {
 
         val kf = KalmanFilter(4, 2, 0, CvType.CV_32F)
         // Constant-velocity model: state=[cx,cy,vx,vy], measurement=[cx,cy].
-        kf._transitionMatrix = Mat.eye(4, 4, CvType.CV_32F).also {
+        kf.set_transitionMatrix(Mat.eye(4, 4, CvType.CV_32F).also {
             it.put(0, 2, 1.0)
             it.put(1, 3, 1.0)
-        }
-        kf._measurementMatrix = Mat.zeros(2, 4, CvType.CV_32F).also {
+        })
+        kf.set_measurementMatrix(Mat.zeros(2, 4, CvType.CV_32F).also {
             it.put(0, 0, 1.0)
             it.put(1, 1, 1.0)
-        }
-        Mat.eye(4, 4, CvType.CV_32F).copyTo(kf._processNoiseCov)
-        kf._processNoiseCov.let { m -> for (i in 0 until 4) m.put(i, i, 1e-2) }
-        Mat.eye(2, 2, CvType.CV_32F).copyTo(kf._measurementNoiseCov)
-        kf._measurementNoiseCov.let { m -> for (i in 0 until 2) m.put(i, i, 1e-1) }
+        })
+        val processNoise = Mat.eye(4, 4, CvType.CV_32F)
+        for (i in 0 until 4) processNoise.put(i, i, 1e-2)
+        kf.set_processNoiseCov(processNoise)
+        val measurementNoise = Mat.eye(2, 2, CvType.CV_32F)
+        for (i in 0 until 2) measurementNoise.put(i, i, 1e-1)
+        kf.set_measurementNoiseCov(measurementNoise)
         val cx = box.centerX() * frameW
         val cy = box.centerY() * frameH
-        kf._statePost = Mat(4, 1, CvType.CV_32F).also {
+        kf.set_statePost(Mat(4, 1, CvType.CV_32F).also {
             it.put(0, 0, cx.toDouble())
             it.put(1, 0, cy.toDouble())
             it.put(2, 0, 0.0)
             it.put(3, 0, 0.0)
-        }
+        })
         kalman = kf
         lastW = box.width(); lastH = box.height()
         Log.i(TAG, "Seeded tracker at box=$box (px=$px py=$py pw=$pw ph=$ph)")
