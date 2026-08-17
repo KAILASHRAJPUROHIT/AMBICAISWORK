@@ -817,8 +817,32 @@ class MainActivity : AppCompatActivity() {
         Log.i(TAG, "moveOut angle1 pan=$PAN_LEFT_AXIS3")
         rsc2.moveOut(axis3 = PAN_LEFT_AXIS3, durationMs = PAN_STEP_MS) {
             Log.i(TAG, "moveOut angle1 arrived")
-            captureAngle1()
+            waitForOrnamentThenCapture { captureAngle1() }
         }
+    }
+
+    /** Confirms the ornament is actually detected in frame at the new pose
+     * before shooting -- a pan that's too aggressive for the current
+     * distance/zoom could otherwise walk the item out of frame and this
+     * would capture an empty shot without anyone noticing until review.
+     * Fails open after ORNAMENT_DETECT_TIMEOUT_MS so a genuinely marginal
+     * detection can't stall the whole item forever. onFrame() keeps
+     * updating latestMaterial continuously through the angle sequence --
+     * only tickJewel()'s AUTO-CAPTURE decision is paused by
+     * inAngleSequence, not frame analysis itself. */
+    private fun waitForOrnamentThenCapture(onDetected: () -> Unit) {
+        setStatus("Detecting ornament…", ready = false)
+        val deadline = System.currentTimeMillis() + ORNAMENT_DETECT_TIMEOUT_MS
+        val check = object : Runnable {
+            override fun run() {
+                if (latestMaterial?.material == true || System.currentTimeMillis() >= deadline) {
+                    onDetected()
+                    return
+                }
+                handler.postDelayed(this, 150L)
+            }
+        }
+        handler.post(check)
     }
 
     private fun captureAngle1() {
@@ -834,11 +858,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun onAngle1Captured(bytes: ByteArray?) {
         if (bytes == null) {
-            setStatus("Angle 1 capture failed — returning and retrying", ready = false)
-            rsc2.returnHome(axis3 = PAN_LEFT_AXIS3, durationMs = PAN_STEP_MS) { onMainCaptureAccepted() }
+            setStatus("Angle 1 capture failed — retrying", ready = false)
+            captureAngle1()
             return
         }
-        angle1Jpeg = bytes
+        showCapturePreview(
+            bytes,
+            onProceed = {
+                angle1Jpeg = bytes
+                proceedToAngle2()
+            },
+            onRetake = { captureAngle1() },
+            onCancel = { cancelItem() }
+        )
+    }
+
+    private fun proceedToAngle2() {
         setStatus("Returning to center…", ready = false)
         // MUST return home before moving out to angle 2 -- these are
         // velocity commands, not absolute positions (see RSC2Controller's
@@ -849,7 +884,7 @@ class MainActivity : AppCompatActivity() {
             Log.i(TAG, "moveOut angle2 pan=$PAN_RIGHT_AXIS3 rsc2.isReady=${rsc2.isReady}")
             rsc2.moveOut(axis3 = PAN_RIGHT_AXIS3, durationMs = PAN_STEP_MS) {
                 Log.i(TAG, "moveOut angle2 arrived")
-                captureAngle2()
+                waitForOrnamentThenCapture { captureAngle2() }
             }
         }
     }
@@ -867,16 +902,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun onAngle2Captured(bytes: ByteArray?) {
         if (bytes == null) {
-            setStatus("Angle 2 capture failed — returning and retrying", ready = false)
-            rsc2.returnHome(axis3 = PAN_RIGHT_AXIS3, durationMs = PAN_STEP_MS) { onMainCaptureAccepted() }
+            setStatus("Angle 2 capture failed — retrying", ready = false)
+            captureAngle2()
             return
         }
-        angle2Jpeg = bytes
-        setStatus("Returning to main position…", ready = false)
-        rsc2.returnHome(axis3 = PAN_RIGHT_AXIS3, durationMs = PAN_STEP_MS) {
-            inAngleSequence = false
-            resetForNewItem(Phase.TAG)
-        }
+        showCapturePreview(
+            bytes,
+            onProceed = {
+                angle2Jpeg = bytes
+                setStatus("Returning to main position…", ready = false)
+                rsc2.returnHome(axis3 = PAN_RIGHT_AXIS3, durationMs = PAN_STEP_MS) {
+                    inAngleSequence = false
+                    resetForNewItem(Phase.TAG)
+                }
+            },
+            onRetake = { captureAngle2() },
+            onCancel = { cancelItem() }
+        )
     }
 
     private fun forceCaptureCurrentPhase() {
