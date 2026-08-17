@@ -218,7 +218,7 @@ def _dino_boxes(bgr: np.ndarray, expect: int, box_threshold: float = 0.25) -> li
     with torch.no_grad():
         outputs = model(**inputs)
     results = processor.post_process_grounded_object_detection(
-        outputs, inputs["input_ids"], box_threshold=box_threshold,
+        outputs, inputs["input_ids"], threshold=box_threshold,
         text_threshold=box_threshold, target_sizes=[rgb.shape[:2]],
     )[0]
     scored = sorted(zip(results["scores"].tolist(), results["boxes"].tolist()), reverse=True)
