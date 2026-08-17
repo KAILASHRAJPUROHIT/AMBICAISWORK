@@ -764,19 +764,27 @@ class MainActivity : AppCompatActivity() {
      * unchanged -- the gimbal is additive, never required.
      */
     private fun onMainCaptureAccepted() {
+        Log.i(TAG, "onMainCaptureAccepted: rsc2.isReady=${rsc2.isReady}")
         if (!rsc2.isReady) {
             resetForNewItem(Phase.TAG)
             return
         }
         setStatus("Moving to angle 1…", ready = false)
-        rsc2.moveTo(ANGLE1_AXIS1, ANGLE1_AXIS2) { captureAngle1() }
+        Log.i(TAG, "moveTo angle1 axis=($ANGLE1_AXIS1,$ANGLE1_AXIS2)")
+        rsc2.moveTo(ANGLE1_AXIS1, ANGLE1_AXIS2) {
+            Log.i(TAG, "moveTo angle1 onDone fired")
+            captureAngle1()
+        }
     }
 
     private fun captureAngle1() {
         setStatus("Capturing angle 1…", ready = false)
         focusZoom.triggerAutoFocus()
         handler.postDelayed({
-            captureFullRes { bytes -> onAngle1Captured(bytes) }
+            captureFullRes { bytes ->
+                Log.i(TAG, "captureAngle1 result bytes=${bytes?.size}")
+                onAngle1Captured(bytes)
+            }
         }, 400L)
     }
 
@@ -788,14 +796,21 @@ class MainActivity : AppCompatActivity() {
         }
         angle1Jpeg = bytes
         setStatus("Moving to angle 2…", ready = false)
-        rsc2.moveTo(ANGLE2_AXIS1, ANGLE2_AXIS2) { captureAngle2() }
+        Log.i(TAG, "moveTo angle2 axis=($ANGLE2_AXIS1,$ANGLE2_AXIS2) rsc2.isReady=${rsc2.isReady}")
+        rsc2.moveTo(ANGLE2_AXIS1, ANGLE2_AXIS2) {
+            Log.i(TAG, "moveTo angle2 onDone fired")
+            captureAngle2()
+        }
     }
 
     private fun captureAngle2() {
         setStatus("Capturing angle 2…", ready = false)
         focusZoom.triggerAutoFocus()
         handler.postDelayed({
-            captureFullRes { bytes -> onAngle2Captured(bytes) }
+            captureFullRes { bytes ->
+                Log.i(TAG, "captureAngle2 result bytes=${bytes?.size}")
+                onAngle2Captured(bytes)
+            }
         }, 400L)
     }
 
