@@ -800,7 +800,7 @@ class MainActivity : AppCompatActivity() {
         }
         inAngleSequence = true
         setStatus("Moving to angle 1…", ready = false)
-        Log.i(TAG, "moveOut angle1 pan=$PAN_LEFT_AXIS2")
+        Log.i(TAG, "moveOut angle1 pan=$PAN_LEFT_AXIS1")
         rsc2.moveOut(PAN_LEFT_AXIS1, DumlProtocol.AXIS_CENTER, PAN_STEP_MS) {
             Log.i(TAG, "moveOut angle1 arrived")
             captureAngle1()
