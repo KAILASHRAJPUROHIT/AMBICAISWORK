@@ -457,6 +457,21 @@ class MainActivity : AppCompatActivity() {
                 Log.i("CameraDiag", "id=$id facing=$facing focalLen=${focal?.joinToString()}mm " +
                     "minFocusDist=${minFocusDist}diopters closestFocus=${closestFocusCm}cm " +
                     "sensor=${sensorSize} pixels=${pixelArray} logical=$isLogical physIds=$physIds")
+                for (physId in physIds) {
+                    try {
+                        val pch = mgr.getCameraCharacteristics(physId)
+                        val pFocal = pch.get(android.hardware.camera2.CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                        val pMinFocus = pch.get(android.hardware.camera2.CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE)
+                        val pSensor = pch.get(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
+                        val pPixels = pch.get(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+                        val pClosestCm = if (pMinFocus != null && pMinFocus > 0f) 100f / pMinFocus else null
+                        Log.i("CameraDiag", "  physId=$physId focalLen=${pFocal?.joinToString()}mm " +
+                            "minFocusDist=${pMinFocus}diopters closestFocus=${pClosestCm}cm " +
+                            "sensor=$pSensor pixels=$pPixels")
+                    } catch (e: Exception) {
+                        Log.w("CameraDiag", "  physId=$physId characteristics failed: ${e.message}")
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e("CameraDiag", "logCameraDiagnostics failed", e)
