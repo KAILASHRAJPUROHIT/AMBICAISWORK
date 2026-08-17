@@ -219,6 +219,126 @@ def api_capture_resolve_category():
     return jsonify({"ok": True, "key": cat.key, "label": cat.label, "prefix": cat.prefix})
 
 
+# ── Multi-angle calibration (RSC 2 category profiles) ────────────────────────
+# Calibration belongs to the CATEGORY, resolved above via resolve_category —
+# never to an individual tag. See calibration_repository.py's own docstring.
+
+def _profile_to_json(profile):
+    return {
+        "categoryKey": profile.category_key,
+        "displayName": profile.display_name,
+        "status": profile.status,
+        "main": profile.main.as_dict(),
+        "angle1": profile.angle1.as_dict(),
+        "angle2": profile.angle2.as_dict(),
+        "derivedFromCategoryKey": profile.derived_from_category_key,
+        "version": profile.version,
+        "createdAt": profile.created_at,
+        "updatedAt": profile.updated_at,
+    }
+
+
+def _pose_from_json(d):
+    import calibration_repository as cal
+    if not isinstance(d, dict):
+        raise ValueError("pose must be an object with yaw/pitch/roll")
+    return cal.CapturePose.from_dict(d)
+
+
+@app.route("/api/capture/calibration/status")
+def api_calibration_status():
+    import calibration_repository as cal
+    return jsonify(cal.repository.get_calibration_status())
+
+
+@app.route("/api/capture/calibration/<category_key>")
+def api_calibration_get(category_key):
+    import calibration_repository as cal
+    profile = cal.repository.get_profile(category_key)
+    if profile is None:
+        return jsonify({"ok": False, "error": "not_configured"}), 404
+    return jsonify({"ok": True, "profile": _profile_to_json(profile)})
+
+
+@app.route("/api/capture/calibration", methods=["POST"])
+def api_calibration_save():
+    """Save a fresh (or fine-tuned) profile for a category. The category
+    display name is taken from ornament_code_map — the source of truth for
+    the visible label (spec rule 10) — not from client-supplied text."""
+    import calibration_repository as cal
+    import ornament_code_map as ocm
+    body = request.get_json(silent=True) or {}
+    category_key = body.get("categoryKey", "")
+    cat = ocm.BY_KEY.get(category_key)
+    if not cat:
+        return jsonify({"ok": False, "error": f"unknown category key: {category_key!r}"}), 400
+    try:
+        main = _pose_from_json(body.get("main"))
+        angle1 = _pose_from_json(body.get("angle1"))
+        angle2 = _pose_from_json(body.get("angle2"))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    warnings = cal.check_pose_separation(main, angle1, angle2)
+    if warnings and not body.get("acceptCloseAngles"):
+        return jsonify({"ok": False, "error": "angles_too_close", "warnings": warnings}), 409
+
+    existing = cal.repository.get_profile(category_key)
+    derived_from = existing.derived_from_category_key if existing else None
+    status = cal.STATUS_COPIED_AND_MODIFIED if derived_from else cal.STATUS_CALIBRATED
+    profile = cal.CategoryCaptureProfile(
+        category_key=category_key,
+        display_name=cat.label,
+        status=status,
+        main=main, angle1=angle1, angle2=angle2,
+        derived_from_category_key=derived_from,
+        version=(existing.version + 1) if existing else 1,
+        created_at=existing.created_at if existing else time.time(),
+    )
+    cal.repository.save_profile(profile)
+    return jsonify({"ok": True, "profile": _profile_to_json(profile)})
+
+
+@app.route("/api/capture/calibration/copy", methods=["POST"])
+def api_calibration_copy():
+    import calibration_repository as cal
+    body = request.get_json(silent=True) or {}
+    source = body.get("sourceCategoryKey", "")
+    destination = body.get("destinationCategoryKey", "")
+    if not source or not destination:
+        return jsonify({"ok": False, "error": "sourceCategoryKey and destinationCategoryKey required"}), 400
+    try:
+        profile = cal.repository.copy_profile(source, destination)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+    return jsonify({"ok": True, "profile": _profile_to_json(profile)})
+
+
+@app.route("/api/capture/calibration/<category_key>", methods=["DELETE"])
+def api_calibration_delete(category_key):
+    import calibration_repository as cal
+    cal.repository.delete_profile(category_key)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/capture/calibration/export")
+def api_calibration_export():
+    import calibration_repository as cal
+    return jsonify(cal.repository.export_backup())
+
+
+@app.route("/api/capture/calibration/import", methods=["POST"])
+def api_calibration_import():
+    import calibration_repository as cal
+    body = request.get_json(silent=True) or {}
+    overwrite = bool(body.get("overwrite"))
+    try:
+        count = cal.repository.import_backup(body, overwrite=overwrite)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True, "imported": count})
+
+
 # ── Capture history admin ────────────────────────────────────────────────────
 # "Forget" is intentionally destructive: after a separately fetched preview
 # and an exact confirmation token, it removes the selected tray's downstream
