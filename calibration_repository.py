@@ -233,7 +233,10 @@ class CalibrationRepository:
                     continue
                 # Validate shape before accepting -- a corrupt/foreign backup
                 # must not silently poison the live store.
-                CategoryCaptureProfile.from_dict(entry)
+                try:
+                    CategoryCaptureProfile.from_dict(entry)
+                except KeyError as exc:
+                    raise ValueError(f"Malformed profile for {key!r}: missing {exc}") from exc
                 raw[key] = entry
                 imported += 1
             _atomic_write_json(self.path, raw)
