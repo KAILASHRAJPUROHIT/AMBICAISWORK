@@ -109,7 +109,7 @@ class VisionServoController(private val log: (String) -> Unit) {
 
     private fun applyDinoResult(mat: Mat, dino: NormalizedBox) {
         when (state) {
-            VisionState.SEARCHING -> {
+            VisionState.SEARCHING, VisionState.ACQUIRING -> {
                 tracker.seed(mat, dino.toRectF())
                 trackedBox = dino
                 log("[STATE] SEARCHING -> ACQUIRING")
