@@ -194,12 +194,17 @@ class RSC2Controller {
 
     @Suppress("DEPRECATION")
     private fun writeFrame(frame: ByteArray) {
-        val char = commandCharacteristic ?: return
-        val g = gatt ?: return
+        val char = commandCharacteristic
+        val g = gatt
+        if (char == null || g == null) {
+            Log.w(TAG, "writeFrame: no-op, char=$char gatt=$g")
+            return
+        }
         char.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
         char.value = frame
         try {
-            g.writeCharacteristic(char)
+            val ok = g.writeCharacteristic(char)
+            if (!ok) Log.w(TAG, "writeCharacteristic() returned false")
         } catch (e: SecurityException) {
             Log.w(TAG, "Missing permission to write: ${e.message}")
         }
