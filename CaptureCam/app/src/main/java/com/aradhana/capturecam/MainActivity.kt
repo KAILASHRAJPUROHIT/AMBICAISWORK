@@ -650,7 +650,8 @@ class MainActivity : AppCompatActivity() {
         jpeg: ByteArray,
         onProceed: () -> Unit,
         onRetake: () -> Unit,
-        onCancel: () -> Unit
+        onCancel: () -> Unit,
+        requireManualConfirm: Boolean = false
     ) {
         val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
         if (bitmap == null) {
@@ -680,6 +681,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         previewCountdownRunnable?.let { handler.removeCallbacks(it) }
+        if (requireManualConfirm) {
+            // Auto-retry already exhausted its attempts and the shot is
+            // still soft -- don't let a silent 5s countdown wave a blurred
+            // photo through. Force the operator to explicitly retake.
+            binding.previewCountdown.text = "Still soft after retries — tap Retake"
+            previewCountdownRunnable = null
+            return
+        }
         var secondsLeft = 5
         val tick = object : Runnable {
             override fun run() {
