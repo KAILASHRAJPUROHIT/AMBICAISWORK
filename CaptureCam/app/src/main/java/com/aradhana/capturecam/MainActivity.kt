@@ -611,7 +611,7 @@ class MainActivity : AppCompatActivity() {
         camera = cameraProvider.bindToLifecycle(
             this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis, imageCapture
         )
-        camera?.let { focusZoom.bind(it) }
+        camera?.let { focusZoom.bind(it, getSystemService(android.hardware.camera2.CameraManager::class.java)) }
 
         resetForNewItem(Phase.JEWEL)
         handler.post(tickRunnable)
