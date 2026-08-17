@@ -605,7 +605,7 @@ class MainActivity : AppCompatActivity() {
 
         if (!armed) {
             if (result == null || !result.material) {
-                setStatus("Place the item in frame…", ready = false)
+                setStatus("Center the ornament, front side up…", ready = false)
                 return
             }
             armed = true
@@ -1283,7 +1283,7 @@ class MainActivity : AppCompatActivity() {
         centeringAttempts = 0
         latestObjectBoxesUpright = emptyList()
         focusZoom.setZoomRatio(1f)
-        setStatus("Place the item in frame…", ready = false)
+        setStatus("Center the ornament, front side up…", ready = false)
     }
 
     /** Discards the tag shot only -- the jewel shot already captured
@@ -1569,7 +1569,7 @@ class MainActivity : AppCompatActivity() {
             stableTagCode = null
             focusZoom.setZoomRatio(1f)
         }
-        setStatus(if (next == Phase.JEWEL) "Place the item in frame…" else "Show the tag QR/barcode…", ready = false)
+        setStatus(if (next == Phase.JEWEL) "Center the ornament, front side up…" else "Show the tag QR/barcode…", ready = false)
     }
 
     private fun setStatus(text: String, ready: Boolean) {
