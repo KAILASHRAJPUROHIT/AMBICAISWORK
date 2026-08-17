@@ -171,6 +171,14 @@ class MainActivity : AppCompatActivity() {
         private const val TICK_INTERVAL_MS = 150L
         private const val SHARPNESS_THRESHOLD = 40f
         private const val REQUIRED_READY_TICKS = 3
+        // Fixed test deflections for the RSC 2 3-angle workflow -- NOT real
+        // per-category calibration yet, just enough offset from center
+        // (1024) to produce two visibly distinct views for an end-to-end
+        // pipeline test. axis1=tilt, axis2=pan (confirmed on real hardware).
+        private const val ANGLE1_AXIS1 = DumlProtocol.AXIS_CENTER
+        private const val ANGLE1_AXIS2 = DumlProtocol.AXIS_CENTER + 260 // pan right
+        private const val ANGLE2_AXIS1 = DumlProtocol.AXIS_CENTER - 260 // tilt down
+        private const val ANGLE2_AXIS2 = DumlProtocol.AXIS_CENTER
         // Conservative live-zoom cap per the "physical distance should do
         // most of the framing" principle -- pushing digital/hybrid zoom
         // much past this loses detail the catalogue pipeline later wants.
