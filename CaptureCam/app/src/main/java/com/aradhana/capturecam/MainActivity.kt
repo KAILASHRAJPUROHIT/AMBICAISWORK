@@ -663,18 +663,6 @@ class MainActivity : AppCompatActivity() {
 
     // ---------------------------------------------------------------- Capture + upload
 
-    /**
-     * Blurred photos are not acceptable output -- this checks the ACTUAL
-     * captured full-res pixels (not the low-res live-analysis estimate that
-     * gated the shutter; see SharpnessAnalyzer.scoreBitmapRaw for why those
-     * two can disagree) and, if soft, forces a real re-focus and re-shoot
-     * rather than accepting it. Capped at MAX_FULLRES_CAPTURE_RETRIES so a
-     * genuinely unfocusable subject (e.g. macro distance the lens can't
-     * resolve) can't loop forever; if every attempt comes back soft, the
-     * preview is shown WITHOUT the auto-continue countdown so the operator
-     * must explicitly retake rather than a blurred shot silently sailing
-     * through on the 5s timer.
-     */
     private fun captureJewel() {
         captureFullRes { bytes ->
             if (bytes == null) {
