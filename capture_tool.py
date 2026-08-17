@@ -896,6 +896,10 @@ def delete_item(tag_code: str) -> dict:
         sidecar_paths = (
             os.path.join(CAPTURE_ROOT, item["folder"], f"{stem}_studs.jpg"),
             os.path.join(CAPTURE_ROOT, item["folder"], f"{stem}_detail.jpg"),
+            # save_multi()'s ANGLE_1/ANGLE_2 sidecars -- must be deleted
+            # together with the main image, never left orphaned.
+            os.path.join(CAPTURE_ROOT, item["folder"], f"{stem}_1.jpg"),
+            os.path.join(CAPTURE_ROOT, item["folder"], f"{stem}_2.jpg"),
         )
         for path in (jewel_path, *sidecar_paths):
             try:
