@@ -238,6 +238,19 @@ class MainActivity : AppCompatActivity() {
         // from far away"). 0.24 asks for the piece to fill about half the
         // guide box before settling, which actually uses the climb.
         private const val MIN_LIVE_COVERAGE = 0.24f
+        // Non-negotiable hard capture gate (user requirement): the ornament
+        // must occupy at least this fraction of the FULL frame, and be
+        // centered, or nothing fires -- not even the stall-safety-valve.
+        // Checked against ML Kit's real object box specifically, NOT
+        // MaterialDetector's coverage -- that colour-heuristic metric is
+        // measured within a 64%x68% guide region and mathematically caps
+        // out around 0.435, so it can never express "75% of the frame" no
+        // matter how tight the framing actually is. ML Kit's box is
+        // reported in full-frame-normalized space and has no such cap.
+        // If ML Kit hasn't found a box at all, this rule fails closed
+        // (can't verify compliance -> don't capture) rather than falling
+        // back to a metric that can't represent the requirement.
+        private const val CAPTURE_MIN_OCCUPANCY = 0.75f
         private const val MAX_FOCUS_RETRIES = 2
         private const val ZOOM_BACKOFF_RATIO = 0.8f
         // Gentler per-step ratio (was 1.15x) and a real pause between steps
