@@ -133,6 +133,7 @@ class MainActivity : AppCompatActivity() {
         private const val MAX_STALL_MS = 12_000L
         private const val TICK_INTERVAL_MS = 150L
         private const val SHARPNESS_THRESHOLD = 40f
+        private const val REQUIRED_READY_TICKS = 3
         // Conservative live-zoom cap per the "physical distance should do
         // most of the framing" principle -- pushing digital/hybrid zoom
         // much past this loses detail the catalogue pipeline later wants.
