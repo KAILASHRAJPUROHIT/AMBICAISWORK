@@ -120,6 +120,17 @@ class MainActivity : AppCompatActivity() {
     private var centeringTiltTicks = 0
     private var centeringAttempts = 0
 
+    private enum class CenterAxis { NONE, PAN, TILT }
+    // Which axis the LAST centering nudge moved, and its sign -- lets the
+    // next call detect "that nudge just lost the ornament" and undo
+    // precisely that move rather than guessing.
+    private var lastCenterAxis = CenterAxis.NONE
+    private var lastCenterSign = 0
+    // Set for exactly one subsequent attempt after a revert, so centering
+    // tries the OTHER axis first instead of immediately re-trying the one
+    // that just overshot.
+    private var centerAvoidAxis = CenterAxis.NONE
+
     private val prefs by lazy { getSharedPreferences("capturecam", MODE_PRIVATE) }
     private val handler = Handler(Looper.getMainLooper())
     private val barcodeScanner by lazy { BarcodeScanning.getClient() }
