@@ -926,6 +926,14 @@ class MainActivity : AppCompatActivity() {
             }
             readyStreak = 0
             centeringAttempts = 0
+            if (!meetsHardCaptureRules()) {
+                // Non-negotiable: centering conceded (deadband reached or
+                // attempts exhausted) but the object still isn't ≥75% of
+                // frame AND centered together -- don't capture. Next tick
+                // re-enters this branch with a fresh centering budget.
+                setStatus("Adjusting framing…", ready = false)
+                return
+            }
             setStatus("Ready. Capturing…", ready = true)
             captureJewel()
             return
