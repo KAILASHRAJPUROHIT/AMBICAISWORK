@@ -1235,6 +1235,13 @@ class MainActivity : AppCompatActivity() {
         stallGraceAt = 0L
         readyStreak = 0
         jewelCaptureRetries = 0
+        // Defensive only -- a retake mid-centering/mid-angle-sequence means
+        // the gimbal may be physically left wherever those nudges put it
+        // (no undo fires on this path), but at least the NEXT item's
+        // bookkeeping starts clean instead of compounding stale ticks.
+        centeringPanTicks = 0
+        centeringTiltTicks = 0
+        centeringAttempts = 0
         latestObjectBoxesUpright = emptyList()
         focusZoom.setZoomRatio(1f)
         setStatus("Place the item in frame…", ready = false)
