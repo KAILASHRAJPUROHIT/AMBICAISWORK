@@ -271,6 +271,7 @@ class MainActivity : AppCompatActivity() {
         if (::cameraProvider.isInitialized) {
             resetForNewItem(Phase.JEWEL)
         }
+        attemptGimbalConnect()
     }
 
     // ---------------------------------------------------------------- Camera setup
