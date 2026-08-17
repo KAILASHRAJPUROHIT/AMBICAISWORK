@@ -453,6 +453,40 @@ def api_capture_save():
     return jsonify(result)
 
 
+@app.route("/api/capture/save_multi", methods=["POST"])
+def api_capture_save_multi():
+    """RSC 2 3-angle capture set: MAIN + ANGLE_1 + ANGLE_2 -> <tag>.jpg /
+    <tag>_1.jpg / <tag>_2.jpg (see capture_tool.save_multi). The tag photo
+    itself is read client-side for its code only and never uploaded here —
+    same contract as /api/capture/save's tag_code field."""
+    import capture_tool as ct
+    import ornament_code_map as ocm
+    category = request.form.get("category", "")
+    tag_code = request.form.get("tag_code", "")
+    staff_name = request.form.get("staff_name", "")
+    override_duplicate = request.form.get("override_duplicate") == "1"
+    override_blur = request.form.get("override_blur") == "1"
+    override_visibility = request.form.get("override_visibility") == "1"
+    main_file = request.files.get("main")
+    angle1_file = request.files.get("angle1")
+    angle2_file = request.files.get("angle2")
+    if not category and tag_code:
+        auto = ocm.category_from_tag_code(tag_code)
+        if auto:
+            category = auto.key
+    if not category or category not in ct.CATEGORY_LABELS:
+        return jsonify({"ok": False, "error": f"missing or unknown category: {category!r}"}), 400
+    if not main_file or not angle1_file or not angle2_file:
+        return jsonify({"ok": False, "error": "missing main, angle1, or angle2 image"}), 400
+    if not tag_code:
+        return jsonify({"ok": False, "error": "tag_code is required for the multi-angle workflow"}), 400
+
+    result = ct.save_multi(category, main_file.read(), angle1_file.read(), angle2_file.read(),
+                           tag_code, staff_name=staff_name, override_duplicate=override_duplicate,
+                           override_blur=override_blur, override_visibility=override_visibility)
+    return jsonify(result)
+
+
 def _run_spin_processing(video_path: str, output_dir: str, tag_stem: str) -> None:
     import spin_processor
     try:
