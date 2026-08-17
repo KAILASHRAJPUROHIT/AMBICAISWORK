@@ -984,6 +984,90 @@ class MainActivity : AppCompatActivity() {
         return bytes
     }
 
+    /** Dispatches to the 3-angle upload when the RSC 2 sequence produced
+     * angle1/angle2 shots, otherwise the original single-image path --
+     * called from both the auto-fire and manual-shutter TAG capture sites. */
+    private fun uploadCapturedSet() {
+        if (angle1Jpeg != null && angle2Jpeg != null) uploadMulti() else uploadPair()
+    }
+
+    private fun uploadMulti() {
+        val main = jewelJpeg
+        val angle1 = angle1Jpeg
+        val angle2 = angle2Jpeg
+        val tagCode = stableTagCode
+        if (main == null || angle1 == null || angle2 == null || tagCode == null) {
+            setStatus("Missing photo — retake", ready = false)
+            resetForNewItem(Phase.JEWEL)
+            return
+        }
+        phase = Phase.UPLOADING
+        setStatus("Uploading 3-angle set…", ready = false)
+        val serverUrl = prefs.getString("server_url", "") ?: ""
+        val staffName = prefs.getString("staff_name", "") ?: ""
+        if (serverUrl.isBlank()) {
+            Toast.makeText(this, "Set the capture server URL in Settings first", Toast.LENGTH_LONG).show()
+            showSettingsDialog()
+            resetForNewItem(Phase.JEWEL)
+            return
+        }
+        lifecycleScope.launch {
+            val result = try {
+                UploadClient.saveMulti(serverUrl, tagCode, staffName, main, angle1, angle2)
+            } catch (e: Exception) {
+                Log.e(TAG, "Multi-angle upload failed", e)
+                null
+            }
+            if (result == null) {
+                Toast.makeText(this@MainActivity, "Upload failed — check server URL/network", Toast.LENGTH_LONG).show()
+                resetForNewItem(Phase.JEWEL)
+                return@launch
+            }
+            when {
+                result.ok -> {
+                    Toast.makeText(this@MainActivity, "Saved 3-angle set: $tagCode", Toast.LENGTH_SHORT).show()
+                    finishOrResetForNewItem()
+                }
+                result.duplicate -> confirmOverrideAndRetry("Duplicate tag $tagCode — save anyway?") { overrideDup ->
+                    retryUploadMulti(tagCode, staffName, main, angle1, angle2, overrideDuplicate = overrideDup)
+                }
+                result.blurry -> confirmOverrideAndRetry("A photo in the set looked blurry — save anyway?") { overrideBlur ->
+                    retryUploadMulti(tagCode, staffName, main, angle1, angle2, overrideBlur = overrideBlur)
+                }
+                result.notVisible -> confirmOverrideAndRetry("Jewellery not clearly visible — save anyway?") { overrideVis ->
+                    retryUploadMulti(tagCode, staffName, main, angle1, angle2, overrideVisibility = overrideVis)
+                }
+                else -> {
+                    Toast.makeText(this@MainActivity, "Save failed: ${result.error}", Toast.LENGTH_LONG).show()
+                    resetForNewItem(Phase.JEWEL)
+                }
+            }
+        }
+    }
+
+    private fun retryUploadMulti(
+        tagCode: String, staffName: String, main: ByteArray, angle1: ByteArray, angle2: ByteArray,
+        overrideDuplicate: Boolean = false, overrideBlur: Boolean = false, overrideVisibility: Boolean = false
+    ) {
+        lifecycleScope.launch {
+            val result = try {
+                UploadClient.saveMulti(
+                    prefs.getString("server_url", "") ?: "", tagCode, staffName, main, angle1, angle2,
+                    overrideDuplicate, overrideBlur, overrideVisibility
+                )
+            } catch (e: Exception) {
+                null
+            }
+            if (result?.ok == true) {
+                Toast.makeText(this@MainActivity, "Saved 3-angle set: $tagCode", Toast.LENGTH_SHORT).show()
+                finishOrResetForNewItem()
+            } else {
+                Toast.makeText(this@MainActivity, "Save failed: ${result?.error}", Toast.LENGTH_LONG).show()
+                resetForNewItem(Phase.JEWEL)
+            }
+        }
+    }
+
     private fun uploadPair() {
         val jewel = jewelJpeg
         val tag = tagJpeg
