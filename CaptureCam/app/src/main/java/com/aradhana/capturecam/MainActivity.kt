@@ -952,6 +952,82 @@ class MainActivity : AppCompatActivity() {
      * overlay above. */
     private fun bestObjectBox(): RectF? = latestObjectBoxesUpright.maxByOrNull { it.width() * it.height() }
 
+    /** Hybrid detection check: true if EITHER signal sees something --
+     * ML Kit's real object box, or MaterialDetector's colour/contrast
+     * heuristic. Using both (not just MaterialDetector alone) is what lets
+     * this arm/hunt correctly for silver, which MaterialDetector's
+     * gold-hue heuristic under-detects. */
+    private fun detectedNow(): Boolean = (latestMaterial?.material == true) || bestObjectBox() != null
+
+    /** Active gimbal search for MAIN, used only once nothing has been
+     * detected at all for HUNT_GRACE_MS -- rather than just waiting
+     * indefinitely for the operator to reposition the item under a fixed
+     * camera. Sequential single-axis steps only, same BLE-safety reasoning
+     * as attemptCenteringCorrection(). Pan is swept first and through the
+     * widest range: DJI's published RSC2 spec has pan as a 360° continuous
+     * slip-ring (no hard mechanical limit) while tilt has a real -112..+214
+     * range (see TILT_TICK_LIMIT), so pan is both safer to range widely on
+     * and the axis normal placement variance mostly falls on. Each step
+     * checks detectedNow() and stops the INSTANT either signal fires,
+     * handing off to tickJewel's normal arm/zoom/focus/capture path from
+     * wherever the piece was found -- it does not try to center it, that's
+     * attemptCenteringCorrection's job on the very next tick. */
+    private fun huntStep() {
+        if (huntBusy) return
+        if (detectedNow()) {
+            huntStartedAt = 0L
+            huntStepsThisAxis = 0
+            return
+        }
+        if (huntStepsThisAxis >= HUNT_MAX_STEPS_PER_AXIS) {
+            if (huntDirection > 0) {
+                // Reverse through center to explore the opposite side.
+                huntDirection = -1
+                huntStepsThisAxis = 0
+            } else if (huntAxis == CenterAxis.PAN) {
+                huntAxis = CenterAxis.TILT
+                huntDirection = 1
+                huntStepsThisAxis = 0
+            } else {
+                huntAxis = CenterAxis.PAN
+                huntDirection = 1
+                huntStepsThisAxis = 0
+                huntCyclesWithoutFind += 1
+                if (huntCyclesWithoutFind >= HUNT_MAX_CYCLES) {
+                    // Exhausted the search grid -- give up and return home
+                    // rather than leave the camera pointed somewhere odd
+                    // with no item ever found; let the operator reposition
+                    // it manually.
+                    huntCyclesWithoutFind = 0
+                    huntStartedAt = 0L
+                    undoCenteringThenAdvance {
+                        setStatus("Center the ornament, front side up…", ready = false)
+                    }
+                    return
+                }
+            }
+        }
+        if (huntAxis == CenterAxis.TILT && abs(centeringTiltTicks + huntDirection) > TILT_TICK_LIMIT) {
+            // Tilt budget exhausted this direction -- skip straight to
+            // reversing/switching next call rather than risk the
+            // mechanical stop.
+            huntStepsThisAxis = HUNT_MAX_STEPS_PER_AXIS
+            return
+        }
+        huntBusy = true
+        setStatus("Searching for the ornament…", ready = false)
+        if (huntAxis == CenterAxis.PAN) {
+            centeringPanTicks += huntDirection
+            val axis = DumlProtocol.AXIS_CENTER + huntDirection * HUNT_STEP_DEFLECTION
+            rsc2.moveOut(axis3 = axis, durationMs = HUNT_STEP_MS) { huntBusy = false }
+        } else {
+            centeringTiltTicks += huntDirection
+            val axis = DumlProtocol.AXIS_CENTER + huntDirection * HUNT_STEP_DEFLECTION
+            rsc2.moveOut(axis1 = axis, durationMs = HUNT_STEP_MS) { huntBusy = false }
+        }
+        huntStepsThisAxis += 1
+    }
+
     /**
      * Checks the detected ornament's position against true frame-center and,
      * if it's off by more than CENTERING_DEADBAND, issues ONE bounded
