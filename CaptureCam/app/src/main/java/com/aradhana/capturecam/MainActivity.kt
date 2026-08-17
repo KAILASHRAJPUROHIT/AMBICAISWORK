@@ -1034,6 +1034,7 @@ class MainActivity : AppCompatActivity() {
      * finishOrResetForNewItem: the browser is the anchor, this app's job
      * for this item is simply over. Otherwise loop for a fresh item. */
     private fun cancelItem() {
+        inAngleSequence = false
         rsc2.stopAndReturnToCenter()
         if (launchedFromBrowser) {
             finish()
