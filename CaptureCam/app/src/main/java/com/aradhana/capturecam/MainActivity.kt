@@ -659,6 +659,7 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             if (rsc2.isReady && attemptCenteringCorrection(result)) {
+                readyStreak = 0
                 return
             }
             readyStreak = 0
