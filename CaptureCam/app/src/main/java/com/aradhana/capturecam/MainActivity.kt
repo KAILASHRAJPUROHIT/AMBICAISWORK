@@ -183,17 +183,23 @@ class MainActivity : AppCompatActivity() {
         private const val SHARPNESS_THRESHOLD = 40f
         private const val REQUIRED_READY_TICKS = 3
         // Fixed test values for the RSC 2 3-angle workflow -- NOT real
-        // per-category calibration yet. Single-axis pan sweep (axis2,
-        // confirmed on real hardware): center -> pan LEFT one step (angle 1)
-        // -> pan RIGHT two steps, crossing back through center to the
-        // mirrored right-side position (angle 2) -> pan LEFT one step,
-        // returning to true center for the next item. "Step" is expressed
-        // as a fixed deflection held for PAN_STEP_MS, not a calibrated
-        // degree value -- these are velocity commands (see RSC2Controller),
-        // so travelled angle is deflection x time, not a fixed number.
+        // per-category calibration yet. Single-axis pan sweep: center -> pan
+        // LEFT one step (angle 1) -> pan RIGHT two steps, crossing back
+        // through center to the mirrored right-side position (angle 2) ->
+        // pan LEFT one step, returning to true center for the next item.
+        // "Step" is expressed as a fixed deflection held for PAN_STEP_MS,
+        // not a calibrated degree value -- these are velocity commands (see
+        // RSC2Controller), so travelled angle is deflection x time.
+        //
+        // Using axis1 for pan, NOT axis2 -- axis2 was confirmed producing a
+        // TILT on this physical setup (2026-08-17 live test), despite an
+        // earlier session reporting the opposite. Axis-to-motion mapping is
+        // apparently sensitive to how the gimbal is currently mounted/
+        // oriented, not a fixed hardware fact -- re-verify live if this
+        // still looks wrong rather than assuming the mapping again.
         private const val PAN_DEFLECTION = 260
-        private const val PAN_LEFT_AXIS2 = DumlProtocol.AXIS_CENTER - PAN_DEFLECTION
-        private const val PAN_RIGHT_AXIS2 = DumlProtocol.AXIS_CENTER + PAN_DEFLECTION
+        private const val PAN_LEFT_AXIS1 = DumlProtocol.AXIS_CENTER - PAN_DEFLECTION
+        private const val PAN_RIGHT_AXIS1 = DumlProtocol.AXIS_CENTER + PAN_DEFLECTION
         private const val PAN_STEP_MS = 900L
         // Conservative live-zoom cap per the "physical distance should do
         // most of the framing" principle -- pushing digital/hybrid zoom
