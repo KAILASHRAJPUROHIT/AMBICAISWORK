@@ -1098,6 +1098,9 @@ class MainActivity : AppCompatActivity() {
                     .apply()
             }
             .setNegativeButton(R.string.cancel, null)
+            .setNeutralButton("RSC2 BLE test") { _, _ ->
+                startActivity(Intent(this, BleDiagnosticsActivity::class.java))
+            }
             .show()
     }
 
