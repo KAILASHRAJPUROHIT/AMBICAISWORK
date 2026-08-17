@@ -837,7 +837,7 @@ class MainActivity : AppCompatActivity() {
             // Kit's real object box, so a silver piece (weak/no colour
             // signal) still arms the pipeline, not just gold.
             if (!detectedNow()) {
-                if (rsc2.isReady) {
+                if (rsc2.isReady && now >= huntCooldownUntil) {
                     if (huntStartedAt == 0L) huntStartedAt = now
                     if (now - huntStartedAt > HUNT_GRACE_MS) {
                         huntStep()
