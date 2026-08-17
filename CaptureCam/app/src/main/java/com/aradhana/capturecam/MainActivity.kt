@@ -720,6 +720,7 @@ class MainActivity : AppCompatActivity() {
         isZooming = false
         stallGraceAt = 0L
         readyStreak = 0
+        jewelCaptureRetries = 0
         focusZoom.setZoomRatio(1f)
         setStatus("Place the item in frame…", ready = false)
     }
