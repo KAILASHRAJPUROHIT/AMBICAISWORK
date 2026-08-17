@@ -65,6 +65,10 @@ class MainActivity : AppCompatActivity() {
     private val focusZoom = FocusZoomController()
     private var imageCapture: ImageCapture? = null
     private var camera: Camera? = null
+    // Throttles rebindUseCases-on-capture-failure so a genuinely dead
+    // session gets one recovery attempt per cooldown window instead of a
+    // rebind storm if failures keep coming.
+    private var lastCameraRebindAt = 0L
     // RSC 2 3-angle workflow -- fails open to the existing single-image
     // flow when no gimbal is connected (spec rule 61: single-image mode
     // must not break just because the gimbal/calibration layer isn't
