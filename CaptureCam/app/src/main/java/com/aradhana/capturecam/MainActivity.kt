@@ -312,6 +312,15 @@ class MainActivity : AppCompatActivity() {
         // technique used to confirm axis mapping) to replace this with an
         // actual degree-based limit.
         private const val TILT_TICK_LIMIT = 12
+        // Blind search (huntStep()) -- only runs before anything has ever
+        // been detected for this item. Bigger, longer steps than fine
+        // centering (CENTERING_*) since this is covering ground, not
+        // fine-tuning.
+        private const val HUNT_GRACE_MS = 2500L
+        private const val HUNT_STEP_DEFLECTION = 180
+        private const val HUNT_STEP_MS = 500L
+        private const val HUNT_MAX_STEPS_PER_AXIS = 4
+        private const val HUNT_MAX_CYCLES = 3
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
