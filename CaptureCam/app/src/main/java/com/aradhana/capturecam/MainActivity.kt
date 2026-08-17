@@ -399,6 +399,35 @@ class MainActivity : AppCompatActivity() {
             cameraProvider = providerFuture.get()
             bindUseCases()
             logCameraDiagnostics()
+            logExtensionsDiagnostics()
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    /** Checks whether this phone exposes its own computational-photography
+     * pipeline (Nothing's "TrueLens engine", HDR/Night/Auto fusion) to
+     * third-party CameraX apps via the standard OEM vendor-extensions
+     * interface -- the only way that processing is reachable from OUR app
+     * at all, since GCam-style ports are standalone APKs, not something a
+     * custom app can link against. */
+    private fun logExtensionsDiagnostics() {
+        val future = androidx.camera.extensions.ExtensionsManager.getInstanceAsync(this, cameraProvider)
+        future.addListener({
+            try {
+                val mgr = future.get()
+                val modes = mapOf(
+                    "AUTO" to androidx.camera.extensions.ExtensionMode.AUTO,
+                    "HDR" to androidx.camera.extensions.ExtensionMode.HDR,
+                    "NIGHT" to androidx.camera.extensions.ExtensionMode.NIGHT,
+                    "BOKEH" to androidx.camera.extensions.ExtensionMode.BOKEH,
+                    "FACE_RETOUCH" to androidx.camera.extensions.ExtensionMode.FACE_RETOUCH,
+                )
+                for ((name, mode) in modes) {
+                    val available = mgr.isExtensionAvailable(CameraSelector.DEFAULT_BACK_CAMERA, mode)
+                    Log.i("CameraDiag", "extension $name available=$available")
+                }
+            } catch (e: Exception) {
+                Log.e("CameraDiag", "logExtensionsDiagnostics failed", e)
+            }
         }, ContextCompat.getMainExecutor(this))
     }
 
