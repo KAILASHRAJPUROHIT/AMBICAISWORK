@@ -916,6 +916,8 @@ class MainActivity : AppCompatActivity() {
      * scratch, staying in this session (not returning to the browser). */
     private fun retakeJewel() {
         jewelJpeg = null
+        angle1Jpeg = null
+        angle2Jpeg = null
         armed = false
         stepFocusAttempts = 0
         maxUsableZoom = Float.MAX_VALUE
