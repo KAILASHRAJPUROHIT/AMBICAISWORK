@@ -1643,6 +1643,13 @@ class MainActivity : AppCompatActivity() {
         centeringPanTicks = 0
         centeringTiltTicks = 0
         centeringAttempts = 0
+        lastCenterAxis = CenterAxis.NONE
+        centerAvoidAxis = CenterAxis.NONE
+        huntAxis = CenterAxis.PAN
+        huntDirection = 1
+        huntStepsThisAxis = 0
+        huntCyclesWithoutFind = 0
+        huntStartedAt = 0L
         latestObjectBoxesUpright = emptyList()
         focusZoom.setZoomRatio(1f)
         setStatus("Center the ornament, front side up…", ready = false)
