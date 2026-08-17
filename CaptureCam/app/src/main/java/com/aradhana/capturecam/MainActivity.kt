@@ -1015,16 +1015,32 @@ class MainActivity : AppCompatActivity() {
         // reliable. Corrects whichever axis is off by more, UNLESS that
         // axis just reverted for overshooting (centerAvoidAxis) -- then the
         // other axis gets one turn first, if it also needs correcting.
-        centeringAttempts += 1
-        setStatus("Centering ornament…", ready = false)
         val avoid = centerAvoidAxis
         centerAvoidAxis = CenterAxis.NONE
-        val choosePan = when {
+        var choosePan = when {
             needsPan && avoid == CenterAxis.PAN && needsTilt -> false
             needsTilt && avoid == CenterAxis.TILT && needsPan -> true
             needsPan && (!needsTilt || abs(dx) >= abs(dy)) -> true
             else -> false
         }
+        // Tilt is the one axis with a real mechanical hard-stop (see
+        // TILT_TICK_LIMIT). If tilt was chosen but its budget is exhausted,
+        // fall back to pan when pan also needs correcting; otherwise this
+        // attempt has nothing safe left to do.
+        if (!choosePan) {
+            val tiltSign = if (dy > 0) -1 else 1
+            if (abs(centeringTiltTicks + tiltSign) > TILT_TICK_LIMIT) {
+                if (needsPan) {
+                    choosePan = true
+                } else {
+                    Log.w(TAG, "centering: tilt budget exhausted (ticks=$centeringTiltTicks) and pan not needed -- giving up this round")
+                    lastCenterAxis = CenterAxis.NONE
+                    return false
+                }
+            }
+        }
+        centeringAttempts += 1
+        setStatus("Centering ornament…", ready = false)
         if (choosePan) {
             // Object right-of-center (dx>0) -> pan camera right to bring it in.
             // axis3 ABOVE center = the "right" direction.
