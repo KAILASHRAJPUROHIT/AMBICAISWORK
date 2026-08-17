@@ -782,9 +782,9 @@ class MainActivity : AppCompatActivity() {
         }
         inAngleSequence = true
         setStatus("Moving to angle 1…", ready = false)
-        Log.i(TAG, "moveTo angle1 axis=($ANGLE1_AXIS1,$ANGLE1_AXIS2)")
-        rsc2.moveTo(ANGLE1_AXIS1, ANGLE1_AXIS2) {
-            Log.i(TAG, "moveTo angle1 onDone fired")
+        Log.i(TAG, "moveOut angle1 axis=($ANGLE1_AXIS1,$ANGLE1_AXIS2)")
+        rsc2.moveOut(ANGLE1_AXIS1, ANGLE1_AXIS2) {
+            Log.i(TAG, "moveOut angle1 arrived")
             captureAngle1()
         }
     }
@@ -802,16 +802,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun onAngle1Captured(bytes: ByteArray?) {
         if (bytes == null) {
-            setStatus("Angle 1 capture failed — retrying", ready = false)
-            onMainCaptureAccepted()
+            setStatus("Angle 1 capture failed — returning and retrying", ready = false)
+            rsc2.returnHome(ANGLE1_AXIS1, ANGLE1_AXIS2) { onMainCaptureAccepted() }
             return
         }
         angle1Jpeg = bytes
-        setStatus("Moving to angle 2…", ready = false)
-        Log.i(TAG, "moveTo angle2 axis=($ANGLE2_AXIS1,$ANGLE2_AXIS2) rsc2.isReady=${rsc2.isReady}")
-        rsc2.moveTo(ANGLE2_AXIS1, ANGLE2_AXIS2) {
-            Log.i(TAG, "moveTo angle2 onDone fired")
-            captureAngle2()
+        setStatus("Returning from angle 1…", ready = false)
+        // MUST return home before moving out to angle 2 -- these are
+        // velocity commands, not absolute positions (see RSC2Controller's
+        // moveOut/returnHome doc). Skipping this left the gimbal drifted
+        // for angle 2, and for the NEXT item's angle 1.
+        rsc2.returnHome(ANGLE1_AXIS1, ANGLE1_AXIS2) {
+            setStatus("Moving to angle 2…", ready = false)
+            Log.i(TAG, "moveOut angle2 axis=($ANGLE2_AXIS1,$ANGLE2_AXIS2) rsc2.isReady=${rsc2.isReady}")
+            rsc2.moveOut(ANGLE2_AXIS1, ANGLE2_AXIS2) {
+                Log.i(TAG, "moveOut angle2 arrived")
+                captureAngle2()
+            }
         }
     }
 
@@ -828,14 +835,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun onAngle2Captured(bytes: ByteArray?) {
         if (bytes == null) {
-            setStatus("Angle 2 capture failed — retrying", ready = false)
-            onMainCaptureAccepted()
+            setStatus("Angle 2 capture failed — returning and retrying", ready = false)
+            rsc2.returnHome(ANGLE2_AXIS1, ANGLE2_AXIS2) { onMainCaptureAccepted() }
             return
         }
         angle2Jpeg = bytes
-        rsc2.stopAndReturnToCenter()
-        inAngleSequence = false
-        resetForNewItem(Phase.TAG)
+        setStatus("Returning to main position…", ready = false)
+        rsc2.returnHome(ANGLE2_AXIS1, ANGLE2_AXIS2) {
+            inAngleSequence = false
+            resetForNewItem(Phase.TAG)
+        }
     }
 
     private fun forceCaptureCurrentPhase() {
