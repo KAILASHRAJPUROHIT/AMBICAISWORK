@@ -121,7 +121,7 @@ class CalibrationRepository:
 
     def get_profile(self, category_key: str) -> CategoryCaptureProfile | None:
         with _lock:
-            raw = _load_raw()
+            raw = _load_raw(self.path)
         entry = raw.get(category_key)
         if entry is None:
             return None
@@ -129,7 +129,7 @@ class CalibrationRepository:
 
     def save_profile(self, profile: CategoryCaptureProfile) -> None:
         with _lock:
-            raw = _load_raw()
+            raw = _load_raw(self.path)
             updated = CategoryCaptureProfile(
                 category_key=profile.category_key,
                 display_name=profile.display_name,
@@ -173,14 +173,14 @@ class CalibrationRepository:
         47) should read the profile before deleting if they want to keep it,
         this just removes the active entry."""
         with _lock:
-            raw = _load_raw()
+            raw = _load_raw(self.path)
             if category_key in raw:
                 del raw[category_key]
                 _atomic_write_json(self.path, raw)
 
     def all_profiles(self) -> dict[str, CategoryCaptureProfile]:
         with _lock:
-            raw = _load_raw()
+            raw = _load_raw(self.path)
         return {k: CategoryCaptureProfile.from_dict(v) for k, v in raw.items()}
 
     def get_calibration_status(self) -> dict:
@@ -218,7 +218,7 @@ class CalibrationRepository:
         """Spec rule 48-49: 57 categories' worth of manual calibration work
         must not live only in one JSON file with no export path."""
         with _lock:
-            raw = _load_raw()
+            raw = _load_raw(self.path)
         return {"exported_at": time.time(), "profiles": raw}
 
     def import_backup(self, backup: dict, *, overwrite: bool = False) -> int:
@@ -226,7 +226,7 @@ class CalibrationRepository:
         if not isinstance(profiles, dict):
             raise ValueError("Backup payload missing 'profiles' object")
         with _lock:
-            raw = _load_raw()
+            raw = _load_raw(self.path)
             imported = 0
             for key, entry in profiles.items():
                 if key in raw and not overwrite:
