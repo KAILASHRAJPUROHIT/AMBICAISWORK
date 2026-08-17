@@ -432,7 +432,7 @@ class MainActivity : AppCompatActivity() {
                 tagJpeg = bytes
                 showCapturePreview(
                     bytes,
-                    onProceed = { uploadPair() },
+                    onProceed = { uploadCapturedSet() },
                     onRetake = { retakeTag() },
                     onCancel = { cancelItem() }
                 )
@@ -766,7 +766,7 @@ class MainActivity : AppCompatActivity() {
                     tagJpeg = bytes
                     showCapturePreview(
                         bytes,
-                        onProceed = { uploadPair() },
+                        onProceed = { uploadCapturedSet() },
                         onRetake = { retakeTag() },
                         onCancel = { cancelItem() }
                     )
