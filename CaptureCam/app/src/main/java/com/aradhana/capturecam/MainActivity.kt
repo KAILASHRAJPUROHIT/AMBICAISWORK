@@ -382,6 +382,9 @@ class MainActivity : AppCompatActivity() {
         // -- not literally 360°, which would be impractical for a fixed
         // camera rig.
         private const val HUNT_PAN_SWEEP_MAX_MS = 8000
+        // Real pause after a full sweep finds nothing, before trying again
+        // automatically -- prevents the "hunts forever" restart loop.
+        private const val HUNT_COOLDOWN_MS = 6000L
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
