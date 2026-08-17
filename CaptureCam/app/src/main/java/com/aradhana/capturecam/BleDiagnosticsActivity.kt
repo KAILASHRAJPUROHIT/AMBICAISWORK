@@ -453,6 +453,7 @@ class BleDiagnosticsActivity : AppCompatActivity() {
     }
 
     private fun disconnect() {
+        cancelActiveRepeat()
         try {
             gatt?.disconnect()
             gatt?.close()
