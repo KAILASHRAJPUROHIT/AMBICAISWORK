@@ -202,6 +202,7 @@ class MainActivity : AppCompatActivity() {
         private const val PAN_LEFT_AXIS3 = DumlProtocol.AXIS_CENTER - PAN_DEFLECTION
         private const val PAN_RIGHT_AXIS3 = DumlProtocol.AXIS_CENTER + PAN_DEFLECTION
         private const val PAN_STEP_MS = 900L
+        private const val ORNAMENT_DETECT_TIMEOUT_MS = 2500L
         // Conservative live-zoom cap per the "physical distance should do
         // most of the framing" principle -- pushing digital/hybrid zoom
         // much past this loses detail the catalogue pipeline later wants.
