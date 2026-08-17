@@ -191,12 +191,13 @@ class MainActivity : AppCompatActivity() {
         // not a calibrated degree value -- these are velocity commands (see
         // RSC2Controller), so travelled angle is deflection x time.
         //
-        // Using axis1 for pan, NOT axis2 -- axis2 was confirmed producing a
-        // TILT on this physical setup (2026-08-17 live test), despite an
-        // earlier session reporting the opposite. Axis-to-motion mapping is
-        // apparently sensitive to how the gimbal is currently mounted/
-        // oriented, not a fixed hardware fact -- re-verify live if this
-        // still looks wrong rather than assuming the mapping again.
+        // Using axis3 for pan. Both axis1 and axis2 were tried first and
+        // both produced tilt instead of a real turn on this physical setup
+        // (2026-08-17 live tests) -- axis-to-motion mapping is apparently
+        // sensitive to how the gimbal is currently mounted/oriented, not a
+        // fixed hardware fact. Re-verify live (BLE diagnostics screen's
+        // custom joystick frame tester) if this still looks wrong rather
+        // than assuming the mapping again.
         private const val PAN_DEFLECTION = 260
         private const val PAN_LEFT_AXIS3 = DumlProtocol.AXIS_CENTER - PAN_DEFLECTION
         private const val PAN_RIGHT_AXIS3 = DumlProtocol.AXIS_CENTER + PAN_DEFLECTION
