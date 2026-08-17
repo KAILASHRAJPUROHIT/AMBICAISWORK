@@ -979,21 +979,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Confirms the ornament is actually detected in frame at the new pose
-     * before shooting -- a pan that's too aggressive for the current
-     * distance/zoom could otherwise walk the item out of frame and this
-     * would capture an empty shot without anyone noticing until review.
-     * Fails open after ORNAMENT_DETECT_TIMEOUT_MS so a genuinely marginal
-     * detection can't stall the whole item forever. onFrame() keeps
-     * updating latestMaterial continuously through the angle sequence --
-     * only tickJewel()'s AUTO-CAPTURE decision is paused by
-     * inAngleSequence, not frame analysis itself. */
-    private fun waitForOrnamentThenCapture(onDetected: () -> Unit) {
-        setStatus("Detecting ornament…", ready = false)
-        val deadline = System.currentTimeMillis() + ORNAMENT_DETECT_TIMEOUT_MS
+    /** Gate for angle1/angle2 shots -- mirrors tickJewel()'s MAIN-capture
+     * gate (presence + focus-lock + sharpness, held for several consecutive
+     * ticks) rather than just checking the ornament is somewhere in frame.
+     * The old presence-only check let a genuinely out-of-focus or
+     * mid-rotation frame get captured the instant the piece was merely
+     * detected -- this never fires until the frame is actually clean.
+     * [instruction] is shown as the on-screen staff prompt for this pose
+     * (e.g. "rotate to show the left side") for the whole wait, so the
+     * operator has time to physically turn the piece before the gate opens.
+     * Still fails open at ANGLE_STABLE_TIMEOUT_MS so a stubborn low-texture
+     * surface or a piece staff can't get sharp can't stall the item
+     * forever -- it just captures the best frame on offer at that point. */
+    private fun waitForStableFrame(instruction: String, onDetected: () -> Unit) {
+        setStatus(instruction, ready = false)
+        angleStableStreak = 0
+        val deadline = System.currentTimeMillis() + ANGLE_STABLE_TIMEOUT_MS
         val check = object : Runnable {
             override fun run() {
-                if (latestMaterial?.material == true || System.currentTimeMillis() >= deadline) {
+                val result = latestMaterial
+                val present = result?.material == true
+                val focusLocked = focusZoom.isFocusLocked(focusZoom.afState.value)
+                val sharpEnough = latestSharpness >= SHARPNESS_THRESHOLD
+                val now = System.currentTimeMillis()
+                if (present && focusLocked && sharpEnough) {
+                    angleStableStreak += 1
+                    if (angleStableStreak >= ANGLE_STABLE_TICKS) {
+                        setStatus("Holding steady…", ready = true)
+                        onDetected()
+                        return
+                    }
+                } else {
+                    angleStableStreak = 0
+                }
+                if (now >= deadline) {
+                    Log.w(TAG, "waitForStableFrame forced after timeout present=$present focusLocked=$focusLocked sharp=$latestSharpness")
                     onDetected()
                     return
                 }
