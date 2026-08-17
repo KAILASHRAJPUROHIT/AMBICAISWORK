@@ -865,7 +865,19 @@ class MainActivity : AppCompatActivity() {
         // Folding the ceiling into coverageOk instead just changes what
         // "enough of the frame" means for THIS item; every capture still
         // goes through the same focusLocked + sharpEnough gate below.
-        val coverageOk = result.coverage >= MIN_LIVE_COVERAGE || atZoomCeiling
+        // Use the STRICTER of the two coverage signals, not MaterialDetector's
+        // colour-blob coverage alone -- a warm/reflective close-up subject
+        // can read as "already filling enough of the frame" by colour even
+        // when it's genuinely small, which is exactly how zoom stayed
+        // parked at 1x all session despite the object clearly needing to
+        // be bigger in frame. ML Kit's box is a real detected-object
+        // boundary; when it disagrees with MaterialDetector by reporting a
+        // SMALLER box, that's the more trustworthy number.
+        val mlBoxForCoverage = bestObjectBox()
+        val mlCoverage = mlBoxForCoverage?.let { it.width() * it.height() }
+        val effectiveCoverage = if (mlCoverage != null) min(result.coverage, mlCoverage) else result.coverage
+        val coverageOk = effectiveCoverage >= MIN_LIVE_COVERAGE || atZoomCeiling
+        Log.d(TAG, "tickJewel coverage=${result.coverage} mlCoverage=$mlCoverage effective=$effectiveCoverage zoom=$zoom coverageOk=$coverageOk")
         val zoomSettled = now - lastZoomChangeAt >= ZOOM_SETTLE_MS
         val afState = focusZoom.afState.value
         val focusLocked = focusZoom.isFocusLocked(afState)
