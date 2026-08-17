@@ -1432,6 +1432,7 @@ class MainActivity : AppCompatActivity() {
         setStatus(instruction, ready = false)
         showReadyButton {
             centeringAttempts = 0
+            angleZoomRounds = 0
             setStatus("Centering the ornament…", ready = false)
             onReady()
         }
