@@ -224,7 +224,7 @@ class MainActivity : AppCompatActivity() {
         // fixed hardware fact. Re-verify live (BLE diagnostics screen's
         // custom joystick frame tester) if this still looks wrong rather
         // than assuming the mapping again.
-        private const val PAN_DEFLECTION = 208 // 260 * 0.8 -- reduced 20% both sides per live feedback
+        private const val PAN_DEFLECTION = 235 // nudged up from 208 -- "too less" per live feedback
         private const val PAN_LEFT_AXIS3 = DumlProtocol.AXIS_CENTER - PAN_DEFLECTION
         private const val PAN_RIGHT_AXIS3 = DumlProtocol.AXIS_CENTER + PAN_DEFLECTION
         private const val PAN_STEP_MS = 900L
