@@ -305,6 +305,13 @@ class MainActivity : AppCompatActivity() {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
         attemptGimbalConnect()
+        val filter = IntentFilter("com.aradhana.capturecam.TEST_MOVE")
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(testMoveReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(testMoveReceiver, filter)
+        }
     }
 
     /**
