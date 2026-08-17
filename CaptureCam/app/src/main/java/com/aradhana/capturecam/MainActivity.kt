@@ -134,6 +134,17 @@ class MainActivity : AppCompatActivity() {
         private const val TICK_INTERVAL_MS = 150L
         private const val SHARPNESS_THRESHOLD = 40f
         private const val REQUIRED_READY_TICKS = 3
+        // Hard gate on the ACTUAL captured full-res photo (see
+        // SharpnessAnalyzer.scoreBitmapRaw) -- separate scale from
+        // SHARPNESS_THRESHOLD, which only ever sees the low-res live
+        // preview stream. Deliberately set high (strict): the owner wants
+        // blurred photos never accepted, so this is tuned to bias toward
+        // extra retries over a false accept. Refine from real logged
+        // values (Log.i "jewel capture fullRes sharpness") once there's
+        // live-device evidence of where genuinely sharp vs. blurred shots
+        // actually land on this scale.
+        private const val MIN_FULLRES_SHARPNESS_RAW = 300.0
+        private const val MAX_FULLRES_CAPTURE_RETRIES = 4
         // Conservative live-zoom cap per the "physical distance should do
         // most of the framing" principle -- pushing digital/hybrid zoom
         // much past this loses detail the catalogue pipeline later wants.
