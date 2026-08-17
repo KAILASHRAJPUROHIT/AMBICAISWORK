@@ -1129,70 +1129,127 @@ class MainActivity : AppCompatActivity() {
     /** Active gimbal search for MAIN, used only once nothing has been
      * detected at all for HUNT_GRACE_MS -- rather than just waiting
      * indefinitely for the operator to reposition the item under a fixed
-     * camera. Sequential single-axis steps only, same BLE-safety reasoning
-     * as attemptCenteringCorrection(). Pan is swept first and through the
-     * widest range: DJI's published RSC2 spec has pan as a 360° continuous
-     * slip-ring (no hard mechanical limit) while tilt has a real -112..+214
-     * range (see TILT_MS_LIMIT), so pan is both safer to range widely on
-     * and the axis normal placement variance mostly falls on. Each step
-     * checks detectedNow() and stops the INSTANT either signal fires,
-     * handing off to tickJewel's normal arm/zoom/focus/capture path from
-     * wherever the piece was found -- it does not try to center it, that's
-     * attemptCenteringCorrection's job on the very next tick. */
+     * camera. Deterministic sweep order, exactly per spec:
+     *   1. SCAN_DOWN -- tilt down from level, budget-limited (TILT_MS_LIMIT)
+     *   2. RETURN_TILT -- back to level
+     *   3. SCAN_LEFT -- pan left from center, budget-limited (HUNT_PAN_SWEEP_MAX_MS)
+     *   4. RETURN_PAN -- back to center
+     *   5. SCAN_RIGHT -- pan right from center, same budget
+     *   6. GIVE_UP -- return home, let the operator reposition manually
+     * Sequential single-axis steps only, same BLE-safety reasoning as
+     * attemptCenteringCorrection() (each phase is broken into small steps,
+     * not one giant burst, specifically so detection can be checked
+     * between steps and the sweep stops "wherever, whenever" gold shows
+     * up mid-motion). The instant detectedNow() fires, the sweep halts
+     * immediately and hands off to tickJewel's normal armed path --
+     * attemptCenteringCorrection's one-axis-at-a-time center/zoom/focus
+     * loop -- from wherever the piece was found. */
     private fun huntStep() {
         if (huntBusy) return
         if (detectedNow()) {
-            huntStartedAt = 0L
-            huntStepsThisAxis = 0
-            return
-        }
-        if (huntStepsThisAxis >= HUNT_MAX_STEPS_PER_AXIS) {
-            if (huntDirection > 0) {
-                // Reverse through center to explore the opposite side.
-                huntDirection = -1
-                huntStepsThisAxis = 0
-            } else if (huntAxis == CenterAxis.PAN) {
-                huntAxis = CenterAxis.TILT
-                huntDirection = 1
-                huntStepsThisAxis = 0
-            } else {
-                huntAxis = CenterAxis.PAN
-                huntDirection = 1
-                huntStepsThisAxis = 0
-                huntCyclesWithoutFind += 1
-                if (huntCyclesWithoutFind >= HUNT_MAX_CYCLES) {
-                    // Exhausted the search grid -- give up and return home
-                    // rather than leave the camera pointed somewhere odd
-                    // with no item ever found; let the operator reposition
-                    // it manually.
-                    huntCyclesWithoutFind = 0
-                    huntStartedAt = 0L
-                    undoCenteringThenAdvance {
-                        setStatus("Center the ornament, front side up…", ready = false)
-                    }
-                    return
-                }
-            }
-        }
-        if (huntAxis == CenterAxis.TILT && abs(centeringTiltMs + huntDirection * HUNT_STEP_MS.toInt()) > TILT_MS_LIMIT) {
-            // Tilt budget exhausted this direction -- skip straight to
-            // reversing/switching next call rather than risk the
-            // mechanical stop.
-            huntStepsThisAxis = HUNT_MAX_STEPS_PER_AXIS
+            resetHuntState()
             return
         }
         huntBusy = true
-        setStatus("Searching for the ornament…", ready = false)
-        if (huntAxis == CenterAxis.PAN) {
-            centeringPanMs += huntDirection * HUNT_STEP_MS.toInt()
-            val axis = DumlProtocol.AXIS_CENTER + huntDirection * HUNT_STEP_DEFLECTION
-            rsc2.moveOut(axis3 = axis, durationMs = HUNT_STEP_MS) { huntBusy = false }
-        } else {
-            centeringTiltMs += huntDirection * HUNT_STEP_MS.toInt()
-            val axis = DumlProtocol.AXIS_CENTER + huntDirection * HUNT_STEP_DEFLECTION
-            rsc2.moveOut(axis1 = axis, durationMs = HUNT_STEP_MS) { huntBusy = false }
+        setStatus(huntStatusText(), ready = false)
+        when (huntPhase) {
+            HuntPhase.SCAN_DOWN -> {
+                if (huntPhaseMsSpent >= TILT_MS_LIMIT) {
+                    huntPhase = HuntPhase.RETURN_TILT
+                    huntBusy = false
+                    huntStep()
+                    return
+                }
+                val step = min(HUNT_STEP_MS, (TILT_MS_LIMIT - huntPhaseMsSpent).toLong())
+                centeringTiltMs -= step.toInt()
+                huntPhaseMsSpent += step.toInt()
+                val axis = DumlProtocol.AXIS_CENTER - HUNT_STEP_DEFLECTION
+                rsc2.moveOut(axis1 = axis, durationMs = step) { huntBusy = false }
+            }
+            HuntPhase.RETURN_TILT -> {
+                if (centeringTiltMs == 0) {
+                    huntPhase = HuntPhase.SCAN_LEFT
+                    huntPhaseMsSpent = 0
+                    huntBusy = false
+                    huntStep()
+                    return
+                }
+                val undoTilt = if (centeringTiltMs > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
+                val durMs = abs(centeringTiltMs)
+                centeringTiltMs = 0
+                rsc2.moveOut(axis1 = undoTilt, durationMs = durMs.toLong()) {
+                    huntBusy = false
+                    huntStep()
+                }
+            }
+            HuntPhase.SCAN_LEFT -> {
+                if (huntPhaseMsSpent >= HUNT_PAN_SWEEP_MAX_MS) {
+                    huntPhase = HuntPhase.RETURN_PAN
+                    huntBusy = false
+                    huntStep()
+                    return
+                }
+                val step = min(HUNT_STEP_MS, (HUNT_PAN_SWEEP_MAX_MS - huntPhaseMsSpent).toLong())
+                centeringPanMs -= step.toInt()
+                huntPhaseMsSpent += step.toInt()
+                val axis = DumlProtocol.AXIS_CENTER - HUNT_STEP_DEFLECTION
+                rsc2.moveOut(axis3 = axis, durationMs = step) { huntBusy = false }
+            }
+            HuntPhase.RETURN_PAN -> {
+                if (centeringPanMs == 0) {
+                    huntPhase = HuntPhase.SCAN_RIGHT
+                    huntPhaseMsSpent = 0
+                    huntBusy = false
+                    huntStep()
+                    return
+                }
+                val undoPan = if (centeringPanMs > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
+                val durMs = abs(centeringPanMs)
+                centeringPanMs = 0
+                rsc2.moveOut(axis3 = undoPan, durationMs = durMs.toLong()) {
+                    huntBusy = false
+                    huntStep()
+                }
+            }
+            HuntPhase.SCAN_RIGHT -> {
+                if (huntPhaseMsSpent >= HUNT_PAN_SWEEP_MAX_MS) {
+                    huntPhase = HuntPhase.GIVE_UP
+                    huntBusy = false
+                    huntStep()
+                    return
+                }
+                val step = min(HUNT_STEP_MS, (HUNT_PAN_SWEEP_MAX_MS - huntPhaseMsSpent).toLong())
+                centeringPanMs += step.toInt()
+                huntPhaseMsSpent += step.toInt()
+                val axis = DumlProtocol.AXIS_CENTER + HUNT_STEP_DEFLECTION
+                rsc2.moveOut(axis3 = axis, durationMs = step) { huntBusy = false }
+            }
+            HuntPhase.GIVE_UP -> {
+                huntBusy = false
+                resetHuntState()
+                // Undoes whatever net pan/tilt the sweep left behind (should
+                // already be ~0 after RETURN_TILT/RETURN_PAN, this is the
+                // defensive belt-and-suspenders close-out) and returns home.
+                undoCenteringThenAdvance {
+                    setStatus("Center the ornament, front side up…", ready = false)
+                }
+            }
         }
-        huntStepsThisAxis += 1
+    }
+
+    private fun huntStatusText(): String = when (huntPhase) {
+        HuntPhase.SCAN_DOWN -> "Searching below…"
+        HuntPhase.RETURN_TILT -> "Returning to level…"
+        HuntPhase.SCAN_LEFT -> "Searching left…"
+        HuntPhase.RETURN_PAN -> "Returning to center…"
+        HuntPhase.SCAN_RIGHT -> "Searching right…"
+        HuntPhase.GIVE_UP -> "Returning home…"
+    }
+
+    private fun resetHuntState() {
+        huntStartedAt = 0L
+        huntPhase = HuntPhase.SCAN_DOWN
+        huntPhaseMsSpent = 0
     }
 
     /** Nudge duration scaled to how far off-center the object is -- see
