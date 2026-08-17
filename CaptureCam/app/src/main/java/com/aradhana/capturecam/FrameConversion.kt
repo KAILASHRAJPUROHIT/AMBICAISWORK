@@ -3,7 +3,6 @@ package com.aradhana.capturecam
 import android.graphics.Bitmap
 import android.graphics.RectF
 import androidx.camera.core.ImageProxy
-import androidx.camera.view.PreviewView
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
