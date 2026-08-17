@@ -91,7 +91,6 @@ def test_no_partial_set_survives_a_corrupt_angle_image(ct):
     )
     assert result["ok"] is False
     assert result["error"] == "corrupt_capture"
-    tray_dir = os.path.join(ct.CAPTURE_ROOT, "_TEST" if category == ct.TEST_CATEGORY else None or "")
     # Search the whole capture root -- nothing named TESTBAD* may exist
     # anywhere, whichever tray it would have landed in.
     found = []
