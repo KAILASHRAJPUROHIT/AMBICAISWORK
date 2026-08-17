@@ -1322,6 +1322,7 @@ class MainActivity : AppCompatActivity() {
      * for this item is simply over. Otherwise loop for a fresh item. */
     private fun cancelItem() {
         inAngleSequence = false
+        hideDirectionArrow()
         rsc2.stopAndReturnToCenter()
         if (launchedFromBrowser) {
             finish()
