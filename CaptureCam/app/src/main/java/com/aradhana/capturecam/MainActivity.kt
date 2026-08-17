@@ -440,10 +440,23 @@ class MainActivity : AppCompatActivity() {
         val sharpEnough = latestSharpness >= SHARPNESS_THRESHOLD
 
         if (coverageOk && zoomSettled && focusLocked && sharpEnough) {
+            // Require this to hold for a few consecutive ticks, not just one
+            // instant read -- a single tick can catch a momentarily-still
+            // hand between small shakes, and the few hundred ms the shutter
+            // then takes internally (CAPTURE_MODE_MAXIMIZE_QUALITY has real
+            // pipeline latency) is enough time to drift back into blur
+            // before the sensor actually exposes.
+            readyStreak += 1
+            if (readyStreak < REQUIRED_READY_TICKS) {
+                setStatus("Holding steady…", ready = false)
+                return
+            }
+            readyStreak = 0
             setStatus("Ready. Capturing…", ready = true)
             captureJewel()
             return
         }
+        readyStreak = 0
 
         if (!coverageOk) {
             // Too small to trust a focus verdict either way yet -- climb on
