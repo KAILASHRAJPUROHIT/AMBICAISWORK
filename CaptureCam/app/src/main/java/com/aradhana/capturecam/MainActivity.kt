@@ -1041,7 +1041,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        if (huntAxis == CenterAxis.TILT && abs(centeringTiltTicks + huntDirection) > TILT_TICK_LIMIT) {
+        if (huntAxis == CenterAxis.TILT && abs(centeringTiltMs + huntDirection * HUNT_STEP_MS.toInt()) > TILT_MS_LIMIT) {
             // Tilt budget exhausted this direction -- skip straight to
             // reversing/switching next call rather than risk the
             // mechanical stop.
@@ -1051,15 +1051,26 @@ class MainActivity : AppCompatActivity() {
         huntBusy = true
         setStatus("Searching for the ornament…", ready = false)
         if (huntAxis == CenterAxis.PAN) {
-            centeringPanTicks += huntDirection
+            centeringPanMs += huntDirection * HUNT_STEP_MS.toInt()
             val axis = DumlProtocol.AXIS_CENTER + huntDirection * HUNT_STEP_DEFLECTION
             rsc2.moveOut(axis3 = axis, durationMs = HUNT_STEP_MS) { huntBusy = false }
         } else {
-            centeringTiltTicks += huntDirection
+            centeringTiltMs += huntDirection * HUNT_STEP_MS.toInt()
             val axis = DumlProtocol.AXIS_CENTER + huntDirection * HUNT_STEP_DEFLECTION
             rsc2.moveOut(axis1 = axis, durationMs = HUNT_STEP_MS) { huntBusy = false }
         }
         huntStepsThisAxis += 1
+    }
+
+    /** Nudge duration scaled to how far off-center the object is -- see
+     * CENTERING_TICK_MS's doc comment for why a fixed duration was
+     * measured too weak to close a large offset. Linear from
+     * CENTERING_TICK_MS at magnitude=0 to CENTERING_TICK_MS_MAX at
+     * magnitude=0.5 (half the frame, the worst realistic case), clamped
+     * beyond that rather than extrapolating further. */
+    private fun centeringDurationFor(magnitude: Float): Long {
+        val t = (magnitude / 0.5f).coerceIn(0f, 1f)
+        return (CENTERING_TICK_MS + t * (CENTERING_TICK_MS_MAX - CENTERING_TICK_MS)).toLong()
     }
 
     /**
