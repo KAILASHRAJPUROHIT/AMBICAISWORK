@@ -63,18 +63,13 @@ object DumlProtocol {
         return byteArrayOf((v and 0xFF).toByte(), ((v ushr 8) and 0xFF).toByte())
     }
 
-    /**
-     * Builds a valid, checksummed joystick/pose frame ready to write
-     * directly to FFF5. axis1/axis2/axis3 are raw values centered on
-     * AXIS_CENTER (1024) -- callers deflect away from center to command
-     * movement, matching exactly what was observed from the real app.
-     */
-    fun buildJoystickFrame(axis1: Int, axis2: Int, axis3: Int, seq: Int): ByteArray {
-        val data = u16le(axis1) + u16le(axis2) + u16le(axis3) + byteArrayOf(0x00, 0x00, 0x02)
+    /** Generic frame builder -- every other builder in this file is a thin
+     * wrapper over this with a fixed receiver/cmd_type/cmd_set/cmd_id/data. */
+    fun buildFrame(receiver: Int, cmdType: Int, cmdSet: Int, cmdId: Int, data: ByteArray, seq: Int): ByteArray {
         val bodyAfterLenVer = byteArrayOf(
-            0x02, 0x04,                                  // sender, receiver
+            0x02, receiver.toByte(),                      // sender, receiver
             (seq and 0xFF).toByte(), ((seq ushr 8) and 0xFF).toByte(), // seq LE
-            0x40, 0x04, 0x01                              // cmd_type, cmd_set, cmd_id
+            cmdType.toByte(), cmdSet.toByte(), cmdId.toByte()
         ) + data
         val totalLen = 4 + bodyAfterLenVer.size + 2 // SOF+LEN+VER+CRC8 + body + CRC16
         val header = byteArrayOf(SOF.toByte(), totalLen.toByte(), VERSION.toByte())
@@ -84,6 +79,36 @@ object DumlProtocol {
         return frameNoTrailer + u16le(crc16Value)
     }
 
+    /**
+     * Builds a valid, checksummed joystick/pose frame ready to write
+     * directly to FFF5. axis1/axis2/axis3 are raw values centered on
+     * AXIS_CENTER (1024) -- callers deflect away from center to command
+     * movement, matching exactly what was observed from the real app.
+     */
+    fun buildJoystickFrame(axis1: Int, axis2: Int, axis3: Int, seq: Int): ByteArray {
+        val data = u16le(axis1) + u16le(axis2) + u16le(axis3) + byteArrayOf(0x00, 0x00, 0x02)
+        return buildFrame(receiver = 0x04, cmdType = 0x40, cmdSet = 0x04, cmdId = 0x01, data = data, seq = seq)
+    }
+
     /** Neutral/center frame -- sending this stops movement. */
     fun neutralFrame(seq: Int): ByteArray = buildJoystickFrame(AXIS_CENTER, AXIS_CENTER, AXIS_CENTER, seq)
+
+    /**
+     * The Ronin app never actually stopped sending traffic, even fully
+     * idle -- alongside (not instead of) joystick frames, it continuously
+     * sent two OTHER message types about once a second each. Sending only
+     * neutral joystick frames as a "heartbeat" was not enough: the RSC 2
+     * still dropped the connection ~15-25s after the last real joystick
+     * activity in live testing. These two replicate the actual observed
+     * idle traffic instead of guessing at a third message type.
+     */
+    fun pingFrame(seq: Int): ByteArray =
+        buildFrame(receiver = 0x04, cmdType = 0x40, cmdSet = 0x00, cmdId = 0x01, data = ByteArray(0), seq = seq)
+
+    private val STATUS_REPORT_DATA = byteArrayOf(
+        0x10, 0x51, 0x01, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x50,
+        0x00, 0xf1.toByte(), 0x03, 0x66, 0x24, 0xc0.toByte(), 0x1d, 0x00, 0x00, 0x1c
+    )
+    fun statusReportFrame(seq: Int): ByteArray =
+        buildFrame(receiver = 0xe5, cmdType = 0x00, cmdSet = 0x04, cmdId = 0x12, data = STATUS_REPORT_DATA, seq = seq)
 }
