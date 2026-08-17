@@ -64,20 +64,23 @@ object FrameConversion {
 
     /** Full-color, downscaled JPEG of this frame in SENSOR space (not
      * rotated -- cheaper, and uprightBox() above compensates on the way
-     * back). Used only for the network send to detector_server.py. */
+     * back). Used only for the network send to detector_server.py.
+     * Uses CameraX's own ImageProxy.toBitmap() (camera-core 1.3+) rather
+     * than a hand-rolled NV21 pack -- an early hand-rolled version produced
+     * a corrupted (mostly-black, false-color-striped) frame server-side,
+     * consistent with a stride/plane-interleave bug; CameraX's own
+     * conversion is the well-tested path. */
     fun imageProxyToJpegColor(imageProxy: ImageProxy, targetLongEdge: Int, quality: Int): ByteArray {
-        val nv21 = imageProxyToNv21(imageProxy)
-        val yuvImage = YuvImage(nv21, ImageFormat.NV21, imageProxy.width, imageProxy.height, null)
-        val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, imageProxy.width, imageProxy.height), quality, out)
-        val fullJpeg = out.toByteArray()
-        val bmp = BitmapFactory.decodeByteArray(fullJpeg, 0, fullJpeg.size) ?: return fullJpeg
+        val bmp = imageProxy.toBitmap()
         val scale = targetLongEdge.toFloat() / maxOf(bmp.width, bmp.height)
-        if (scale >= 1f) return fullJpeg
-        val scaled = Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true)
-        val out2 = ByteArrayOutputStream()
-        scaled.compress(Bitmap.CompressFormat.JPEG, quality, out2)
-        return out2.toByteArray()
+        val out = ByteArrayOutputStream()
+        if (scale >= 1f) {
+            bmp.compress(Bitmap.CompressFormat.JPEG, quality, out)
+        } else {
+            val scaled = Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true)
+            scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
+        }
+        return out.toByteArray()
     }
 
     private fun imageProxyToNv21(imageProxy: ImageProxy): ByteArray {
