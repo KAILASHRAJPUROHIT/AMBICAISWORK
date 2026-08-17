@@ -1190,6 +1190,8 @@ class MainActivity : AppCompatActivity() {
         }
         if (next == Phase.JEWEL) {
             jewelJpeg = null
+            angle1Jpeg = null
+            angle2Jpeg = null
             tagJpeg = null
             tagCodeHistory = mutableListOf()
             stableTagCode = null
