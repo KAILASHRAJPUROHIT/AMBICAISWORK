@@ -335,6 +335,11 @@ class MainActivity : AppCompatActivity() {
         // can start much further off-center than MAIN's fine pre-capture
         // correction ever has to travel from.
         private const val ANGLE_CENTERING_MAX_ATTEMPTS = 8
+        // Angle shots have no independent zoom-climb loop like MAIN's
+        // tickJewel -- centerThenCapture() does bounded manual zoom steps
+        // toward CAPTURE_MIN_OCCUPANCY instead, capped so a piece that
+        // genuinely can't reach 75% at this distance doesn't zoom forever.
+        private const val ANGLE_ZOOM_MAX_ROUNDS = 6
         // DJI's published RSC 2 mechanical range (dji.com/support/product/
         // rsc-2): pan is a 360° continuous slip-ring (no hard limit -- safe
         // to sweep freely), roll is -240..+95, tilt is -112..+214. Roll is
