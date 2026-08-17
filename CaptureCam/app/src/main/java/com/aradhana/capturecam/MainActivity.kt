@@ -830,39 +830,48 @@ class MainActivity : AppCompatActivity() {
             // if that final attempt also failed.
             val relaxedSharp = latestSharpness >= SHARPNESS_THRESHOLD * 0.6f
             if (relaxedSharp) {
-                captureJewel()
-                return
+                if (meetsHardCaptureRules()) {
+                    captureJewel()
+                    return
+                }
+                // Focus is fine but the non-negotiable occupancy/centering
+                // rules aren't met -- fall through to the normal zoom-climb
+                // /centering logic below instead of returning, so the
+                // pipeline keeps actively working toward compliance rather
+                // than getting stuck re-entering this stall branch forever.
+            } else {
+                if (stallGraceAt == 0L) {
+                    stallGraceAt = now
+                    focusZoom.triggerAutoFocus()
+                    setStatus("Focusing…", ready = false)
+                    return
+                }
+                if (now - stallGraceAt < 800L) {
+                    setStatus("Focusing…", ready = false)
+                    return
+                }
+                // Final forced re-focus also failed. A CATASTROPHICALLY low
+                // reading here (not just "a bit soft") means autofocus
+                // never converged at all in 12+ seconds of trying -- the
+                // signature of a subject closer than this lens can
+                // physically focus (this phone's main lens floor is ~10cm,
+                // confirmed via Camera2 characteristics; see CameraDiag
+                // logs). Capturing anyway would silently save an unusable
+                // photo with no way for staff to know why.
+                if (latestSharpness < TOO_CLOSE_SHARPNESS_FLOOR && !tooCloseWarned) {
+                    tooCloseWarned = true
+                    armedAt = now
+                    stallGraceAt = 0L
+                    setStatus("Too close to focus — move the ornament back a little", ready = false)
+                    return
+                }
+                if (meetsHardCaptureRules()) {
+                    captureJewel()
+                    return
+                }
+                // Focus forced through but occupancy/centering still not
+                // met -- same fall-through as above, non-negotiable either way.
             }
-            if (stallGraceAt == 0L) {
-                stallGraceAt = now
-                focusZoom.triggerAutoFocus()
-                setStatus("Focusing…", ready = false)
-                return
-            }
-            if (now - stallGraceAt < 800L) {
-                setStatus("Focusing…", ready = false)
-                return
-            }
-            // Final forced re-focus also failed. A CATASTROPHICALLY low
-            // reading here (not just "a bit soft") means autofocus never
-            // converged at all in 12+ seconds of trying -- the signature of
-            // a subject closer than this lens can physically focus (this
-            // phone's main lens floor is ~10cm, confirmed via Camera2
-            // characteristics; see CameraDiag logs). Capturing anyway would
-            // silently save an unusable photo with no way for staff to know
-            // why. One extended retry with a plain, actionable warning
-            // instead of "Focusing…" -- then still gives up and captures
-            // rather than risk deadlocking the item if it's some other
-            // cause (never blocks forever, per the reasoning above).
-            if (latestSharpness < TOO_CLOSE_SHARPNESS_FLOOR && !tooCloseWarned) {
-                tooCloseWarned = true
-                armedAt = now
-                stallGraceAt = 0L
-                setStatus("Too close to focus — move the ornament back a little", ready = false)
-                return
-            }
-            captureJewel()
-            return
         }
 
         val zoom = focusZoom.currentZoomRatio()
