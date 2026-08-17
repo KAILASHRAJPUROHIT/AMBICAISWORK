@@ -287,6 +287,22 @@ class MainActivity : AppCompatActivity() {
         // can start much further off-center than MAIN's fine pre-capture
         // correction ever has to travel from.
         private const val ANGLE_CENTERING_MAX_ATTEMPTS = 8
+        // DJI's published RSC 2 mechanical range (dji.com/support/product/
+        // rsc-2): pan is a 360° continuous slip-ring (no hard limit -- safe
+        // to sweep freely), roll is -240..+95, tilt is -112..+214. Roll is
+        // never commanded in production (axis2, confirmed unused). Only
+        // tilt (axis1) can actually hit a hard mechanical stop from
+        // anything this app sends.
+        //
+        // PROVISIONAL cap, not yet calibrated: we don't have a live
+        // ticks-to-degrees conversion for this rig (no absolute-position
+        // feedback over BLE, only velocity commands), so this is a
+        // deliberately conservative tick budget -- small relative to the
+        // ~326° total tilt range -- rather than a value derived from real
+        // testing. Needs a live one-axis sweep-to-hard-stop test (same
+        // technique used to confirm axis mapping) to replace this with an
+        // actual degree-based limit.
+        private const val TILT_TICK_LIMIT = 12
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
