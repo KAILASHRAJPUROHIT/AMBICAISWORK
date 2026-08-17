@@ -1050,6 +1050,28 @@ class MainActivity : AppCompatActivity() {
      * overlay above. */
     private fun bestObjectBox(): RectF? = latestObjectBoxesUpright.maxByOrNull { it.width() * it.height() }
 
+    /** Continuously steers the AF/AE tracking region at wherever the
+     * ornament currently is -- called every tick once armed, including
+     * while the gimbal is mid-move, so continuous AF follows the object
+     * through motion instead of losing it and having to re-search once
+     * the gimbal stops. Prefers ML Kit's real box, falls back to
+     * MaterialDetector's bounds, no-ops if neither has anything this tick
+     * (nothing to steer toward). */
+    private fun updateTrackingRegionFor(result: MaterialDetector.Result?) {
+        val box = bestObjectBox()
+        val cx: Float
+        val cy: Float
+        if (box != null) {
+            cx = (box.left + box.right) / 2f
+            cy = (box.top + box.bottom) / 2f
+        } else {
+            val bounds = result?.bounds ?: return
+            cx = (bounds.x0 + bounds.x1) / 2f
+            cy = (bounds.y0 + bounds.y1) / 2f
+        }
+        focusZoom.updateTrackingRegion(cx, cy)
+    }
+
     /** The NON-NEGOTIABLE capture rules: the gimbal must not be mid-move
      * (tracking continues through motion, capture never does -- see
      * RSC2Controller.isMoving), the ornament must occupy at least
