@@ -208,6 +208,10 @@ class MainActivity : AppCompatActivity() {
     private var tooCloseWarned = false
     private var readyStreak = 0
     private var angleStableStreak = 0
+    // Bounds how many zoom-in steps centerThenCapture() will take chasing
+    // CAPTURE_MIN_OCCUPANCY for ONE angle shot -- reset per side (see
+    // promptForSideProfile), not per item.
+    private var angleZoomRounds = 0
     private var jewelCaptureRetries = 0
     private var jewelJpeg: ByteArray? = null
     private var tagJpeg: ByteArray? = null
