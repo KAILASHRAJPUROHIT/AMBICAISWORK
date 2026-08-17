@@ -78,49 +78,4 @@ object FrameConversion {
         }
         return out.toByteArray()
     }
-
-    private fun imageProxyToNv21(imageProxy: ImageProxy): ByteArray {
-        val width = imageProxy.width
-        val height = imageProxy.height
-        val nv21 = ByteArray(width * height * 3 / 2)
-
-        val yPlane = imageProxy.planes[0]
-        val yBuffer = yPlane.buffer
-        val yRowStride = yPlane.rowStride
-        var pos = 0
-        if (yRowStride == width) {
-            yBuffer.get(nv21, 0, minOf(yBuffer.remaining(), width * height))
-            pos = width * height
-        } else {
-            val row = ByteArray(yRowStride)
-            for (r in 0 until height) {
-                val n = minOf(yRowStride, yBuffer.remaining())
-                if (n <= 0) break
-                yBuffer.get(row, 0, n)
-                System.arraycopy(row, 0, nv21, pos, minOf(width, n))
-                pos += width
-            }
-        }
-
-        val uPlane = imageProxy.planes[1]
-        val vPlane = imageProxy.planes[2]
-        val uBytes = ByteArray(uPlane.buffer.remaining()).also { uPlane.buffer.get(it) }
-        val vBytes = ByteArray(vPlane.buffer.remaining()).also { vPlane.buffer.get(it) }
-        val uRowStride = uPlane.rowStride
-        val uPixelStride = uPlane.pixelStride
-        val vRowStride = vPlane.rowStride
-        val vPixelStride = vPlane.pixelStride
-        val chromaHeight = height / 2
-        val chromaWidth = width / 2
-        var outPos = width * height
-        for (row in 0 until chromaHeight) {
-            for (col in 0 until chromaWidth) {
-                val uIndex = row * uRowStride + col * uPixelStride
-                val vIndex = row * vRowStride + col * vPixelStride
-                nv21[outPos++] = vBytes.getOrElse(vIndex) { 0 }
-                nv21[outPos++] = uBytes.getOrElse(uIndex) { 0 }
-            }
-        }
-        return nv21
-    }
 }
