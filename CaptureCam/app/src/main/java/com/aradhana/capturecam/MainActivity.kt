@@ -1784,6 +1784,7 @@ class MainActivity : AppCompatActivity() {
         centeringPanMs = 0
         centeringTiltMs = 0
         centeringAttempts = 0
+        angleZoomRounds = 0
         lastCenterAxis = CenterAxis.NONE
         centerAvoidAxis = CenterAxis.NONE
         huntAxis = CenterAxis.PAN
