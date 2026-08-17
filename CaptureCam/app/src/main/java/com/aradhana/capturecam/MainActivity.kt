@@ -305,9 +305,13 @@ class MainActivity : AppCompatActivity() {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
         attemptGimbalConnect()
+        // EXPORTED (not NOT_EXPORTED) deliberately -- this needs to be
+        // reachable from `adb shell am broadcast`, which runs as a
+        // different UID than this app. Debug-only test hook on a LAN-only
+        // tool, not a production attack surface.
         val filter = IntentFilter("com.aradhana.capturecam.TEST_MOVE")
         if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(testMoveReceiver, filter, RECEIVER_NOT_EXPORTED)
+            registerReceiver(testMoveReceiver, filter, RECEIVER_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(testMoveReceiver, filter)
