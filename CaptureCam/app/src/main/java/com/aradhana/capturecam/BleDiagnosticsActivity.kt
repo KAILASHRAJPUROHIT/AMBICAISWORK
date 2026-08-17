@@ -90,6 +90,7 @@ class BleDiagnosticsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.scanButton).setOnClickListener { requestPermissionsThenScan() }
         findViewById<Button>(R.id.disconnectButton).setOnClickListener { disconnect() }
         findViewById<Button>(R.id.sendBytesButton).setOnClickListener { sendHexToSelected() }
+        findViewById<Button>(R.id.repeatSendButton).setOnClickListener { sendHexRepeatedly() }
 
         log("Ready. Turn on the RSC 2, put it in Bluetooth pairing mode (per its manual), then tap Scan.")
     }
