@@ -674,6 +674,13 @@ class MainActivity : AppCompatActivity() {
 
         when (phase) {
             Phase.JEWEL -> {
+                if (TRACKING_PIPELINE_ACTIVE) {
+                    // Synchronous, on the analyzer thread, BEFORE anything
+                    // below might touch/close the ImageProxy's underlying
+                    // Image -- both the local Mat and the network JPEG need
+                    // the buffers to still be valid.
+                    runVisionServoFrame(imageProxy, now)
+                }
                 // Full-frame scan while still hunting (not armed) -- the
                 // guide-box restriction is a confirmed blind spot for a
                 // corner-positioned object during a search sweep (see
