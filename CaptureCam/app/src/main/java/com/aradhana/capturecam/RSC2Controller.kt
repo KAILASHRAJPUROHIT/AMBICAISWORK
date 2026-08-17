@@ -46,8 +46,39 @@ class RSC2Controller {
     private var commandCharacteristic: BluetoothGattCharacteristic? = null
     private var seq = 1
     private var activeMoveRunnable: Runnable? = null
+    private var heartbeatRunnable: Runnable? = null
 
     val isReady: Boolean get() = commandCharacteristic != null && gatt != null
+
+    /**
+     * The captured Ronin-app BLE traffic never went quiet -- it sent SOME
+     * frame roughly once a second for the whole session, including while
+     * completely idle. A single item's move-capture-move-capture sequence
+     * worked, then a subsequent item never moved at all, with no BLE
+     * disconnect logged -- consistent with the RSC 2 treating a joystick
+     * session as ended after a period of silence (the pause between items
+     * while the operator repositions/scans the next tag). This keeps a
+     * trickle of neutral frames going during any such pause so the session
+     * the gimbal thinks is active actually stays active.
+     */
+    private fun startHeartbeat() {
+        stopHeartbeat()
+        val runnable = object : Runnable {
+            override fun run() {
+                if (isReady && activeMoveRunnable == null) {
+                    writeFrame(DumlProtocol.neutralFrame(seq)); seq += 1
+                }
+                handler.postDelayed(this, 900L)
+            }
+        }
+        heartbeatRunnable = runnable
+        handler.postDelayed(runnable, 900L)
+    }
+
+    private fun stopHeartbeat() {
+        heartbeatRunnable?.let { handler.removeCallbacks(it) }
+        heartbeatRunnable = null
+    }
 
     private fun hasPermission(context: Context, permission: String): Boolean =
         ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
