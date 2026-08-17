@@ -1464,8 +1464,37 @@ class MainActivity : AppCompatActivity() {
             handler.postDelayed({ centerThenCapture(onCentered) }, CENTERING_TICK_MS + 200L)
             return
         }
+        // Centering settled (or gave up) -- now chase the other
+        // non-negotiable rule, occupancy. Bounded manual zoom-in step (see
+        // ANGLE_ZOOM_MAX_ROUNDS); re-centers after each step since zooming
+        // shifts framing, hence looping back through centerThenCapture
+        // rather than just re-checking here.
+        val occupancy = bestObjectBox()?.let { it.width() * it.height() }
+        if ((occupancy == null || occupancy < CAPTURE_MIN_OCCUPANCY) && angleZoomRounds < ANGLE_ZOOM_MAX_ROUNDS) {
+            val zoom = focusZoom.currentZoomRatio()
+            val zoomRange = focusZoom.zoomRatioRange()
+            val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO))
+            if (next > zoom + 0.01f) {
+                angleZoomRounds += 1
+                setStatus("Zooming in…", ready = false)
+                smoothZoomTo(next) {
+                    handler.postDelayed({ centerThenCapture(onCentered) }, ZOOM_SETTLE_MS)
+                }
+                return
+            }
+        }
         focusZoom.triggerAutoFocus()
-        waitForStableFrame("Focusing…", onCentered)
+        waitForStableFrame("Focusing…") {
+            if (!meetsHardCaptureRules()) {
+                // Non-negotiable: still not ≥75% of frame AND centered
+                // together. Keep re-checking (centering budget refills
+                // each call) rather than capturing out of compliance.
+                setStatus("Adjusting framing…", ready = false)
+                handler.postDelayed({ centerThenCapture(onCentered) }, 500L)
+                return@waitForStableFrame
+            }
+            onCentered()
+        }
     }
 
     /** Gate for angle1/angle2 shots -- mirrors tickJewel()'s MAIN-capture
