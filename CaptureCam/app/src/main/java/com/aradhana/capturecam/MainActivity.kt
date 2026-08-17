@@ -1219,23 +1219,23 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun undoCenteringPan(onDone: () -> Unit) {
-        if (centeringPanTicks == 0) { onDone(); return }
-        val undoPan = if (centeringPanTicks > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
-        val ticks = abs(centeringPanTicks)
-        Log.i(TAG, "undoing centering pan: ticks=$centeringPanTicks")
-        rsc2.moveOut(axis3 = undoPan, durationMs = CENTERING_TICK_MS * ticks) {
-            centeringPanTicks = 0
+        if (centeringPanMs == 0) { onDone(); return }
+        val undoPan = if (centeringPanMs > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
+        val durMs = abs(centeringPanMs)
+        Log.i(TAG, "undoing centering pan: ms=$centeringPanMs")
+        rsc2.moveOut(axis3 = undoPan, durationMs = durMs.toLong()) {
+            centeringPanMs = 0
             onDone()
         }
     }
 
     private fun undoCenteringTilt(onDone: () -> Unit) {
-        if (centeringTiltTicks == 0) { onDone(); return }
-        val undoTilt = if (centeringTiltTicks > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
-        val ticks = abs(centeringTiltTicks)
-        Log.i(TAG, "undoing centering tilt: ticks=$centeringTiltTicks")
-        rsc2.moveOut(axis1 = undoTilt, durationMs = CENTERING_TICK_MS * ticks) {
-            centeringTiltTicks = 0
+        if (centeringTiltMs == 0) { onDone(); return }
+        val undoTilt = if (centeringTiltMs > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
+        val durMs = abs(centeringTiltMs)
+        Log.i(TAG, "undoing centering tilt: ms=$centeringTiltMs")
+        rsc2.moveOut(axis1 = undoTilt, durationMs = durMs.toLong()) {
+            centeringTiltMs = 0
             onDone()
         }
     }
