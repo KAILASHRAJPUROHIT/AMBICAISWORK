@@ -680,6 +680,7 @@ class MainActivity : AppCompatActivity() {
         lastZoomChangeAt = 0L
         focusTriggeredThisLevel = false
         isZooming = false
+        stallGraceAt = 0L
         focusZoom.setZoomRatio(1f)
         setStatus("Place the item in frame…", ready = false)
     }
