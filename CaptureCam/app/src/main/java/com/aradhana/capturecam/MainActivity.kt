@@ -998,6 +998,7 @@ class MainActivity : AppCompatActivity() {
         jewelJpeg = null
         angle1Jpeg = null
         angle2Jpeg = null
+        inAngleSequence = false
         armed = false
         stepFocusAttempts = 0
         maxUsableZoom = Float.MAX_VALUE
