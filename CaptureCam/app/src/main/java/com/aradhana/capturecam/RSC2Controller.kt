@@ -57,6 +57,13 @@ class RSC2Controller {
 
     val isReady: Boolean get() = commandCharacteristic != null && gatt != null
 
+    /** True while a moveOut()/returnHome() burst is actively streaming
+     * frames (i.e. the gimbal is physically in motion or settling from
+     * one) -- false once its onDone/onArrived/onReturned callback fires.
+     * The capture pipeline must never evaluate "ready to shoot" while this
+     * is true: tracking during motion is for framing/focus follow only. */
+    val isMoving: Boolean get() = activeMoveRunnable != null
+
     /**
      * The captured Ronin-app BLE traffic never went quiet -- it sent SOME
      * frame roughly once a second for the whole session, including while
