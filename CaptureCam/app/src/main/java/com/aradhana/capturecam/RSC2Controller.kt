@@ -211,21 +211,26 @@ class RSC2Controller {
     }
 
     /**
-     * Moves toward (axis1, axis2) by streaming the deflected frame at the
-     * same ~200ms cadence observed from the real Ronin app for
-     * [durationMs], then returns to neutral. Calls onDone when the whole
-     * sequence (including the settle time after returning to neutral) has
-     * finished. axis3 is left at center -- see class doc, its effect isn't
-     * confirmed yet.
+     * These are joystick/velocity commands, not absolute-position commands
+     * -- confirmed the hard way: sending "neutral" after a deflected move
+     * only STOPS further movement, it does not undo the deflection that
+     * already happened. The gimbal never returned to the true MAIN/home
+     * position between items, so item 2's "same" angle offsets landed on an
+     * already-drifted position. moveOut()/returnHome() are a matched pair:
+     * moveOut deflects for durationMs then stops (for the capture), and the
+     * caller MUST call returnHome with the same axis values afterward,
+     * which deflects in the mirrored direction for the same duration to
+     * physically undo the move, then stops again. Every call site in
+     * MainActivity's angle sequence must pair these, or drift returns.
      */
-    fun moveTo(axis1: Int, axis2: Int, durationMs: Long = 900L, settleMs: Long = 500L, onDone: () -> Unit) {
+    private fun streamDeflection(axis1: Int, axis2: Int, durationMs: Long, settleMs: Long, onDone: () -> Unit) {
         activeMoveRunnable?.let { handler.removeCallbacks(it) }
         if (!isReady) {
-            Log.w(TAG, "moveTo($axis1,$axis2): not ready (char=$commandCharacteristic gatt=$gatt) -- skipping move")
+            Log.w(TAG, "streamDeflection($axis1,$axis2): not ready (char=$commandCharacteristic gatt=$gatt) -- skipping")
             onDone()
             return
         }
-        Log.i(TAG, "moveTo($axis1,$axis2) starting")
+        Log.i(TAG, "streamDeflection($axis1,$axis2) starting")
         val ticks = (durationMs / 200L).toInt().coerceAtLeast(1)
         var sent = 0
         val runnable = object : Runnable {
@@ -246,6 +251,20 @@ class RSC2Controller {
         }
         activeMoveRunnable = runnable
         handler.post(runnable)
+    }
+
+    /** Deflects toward (axis1, axis2) and stops there -- call returnHome
+     * with the SAME axis1/axis2 afterward to physically undo this move. */
+    fun moveOut(axis1: Int, axis2: Int, durationMs: Long = 900L, settleMs: Long = 400L, onArrived: () -> Unit) {
+        streamDeflection(axis1, axis2, durationMs, settleMs, onArrived)
+    }
+
+    /** Mirrors (axis1, axis2) around center and deflects that direction for
+     * the same duration, physically undoing a matching moveOut() call. */
+    fun returnHome(axis1: Int, axis2: Int, durationMs: Long = 900L, settleMs: Long = 400L, onReturned: () -> Unit) {
+        val mirrored1 = 2 * DumlProtocol.AXIS_CENTER - axis1
+        val mirrored2 = 2 * DumlProtocol.AXIS_CENTER - axis2
+        streamDeflection(mirrored1, mirrored2, durationMs, settleMs, onReturned)
     }
 
     fun stopAndReturnToCenter() {
