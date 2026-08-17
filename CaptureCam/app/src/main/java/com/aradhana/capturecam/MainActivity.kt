@@ -810,7 +810,18 @@ class MainActivity : AppCompatActivity() {
             huntStepsThisAxis = 0
             armed = true
             armedAt = now
+            // Continuous AF becomes the baseline the instant something's
+            // detected -- not a one-shot trigger. Region tracking below
+            // keeps steering it at the object every tick from here on; the
+            // zoom-climb logic further down still does its own decisive
+            // triggerAutoFocus() calls when it needs a definitive lock,
+            // which is fine layered on top (triggerAutoFocus always
+            // explicitly sets AF_MODE=AUTO regardless of what continuous
+            // tracking set it to).
+            focusZoom.startContinuousTracking()
         }
+
+        updateTrackingRegionFor(result)
 
         if (result == null || !result.material) {
             // Lost the piece -- likely walked out of frame on a zoom step
