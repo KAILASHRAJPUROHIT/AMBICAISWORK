@@ -689,6 +689,130 @@ def save_pair(category: str, jewel_bytes: bytes, tag_bytes: bytes, tag_code: str
                "session_captured": tray_captured}
 
 
+@_stock_write_guard
+def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_bytes: bytes,
+               tag_code: str, staff_name: str = "", override_duplicate: bool = False,
+               override_blur: bool = False, override_visibility: bool = False) -> dict:
+    """
+    Persist a 3-image multi-angle capture set (MAIN / ANGLE_1 / ANGLE_2) from
+    the RSC 2 workflow. The tag photo itself is never received here or
+    archived -- same as save_pair, only its already-decoded tag_code and
+    resolved category cross the wire; there is nothing server-side to
+    "delete after verification" because nothing tag-shaped was ever written.
+    (The phone-side staging/delete-after-verify described in the handover
+    spec is a client-side concern over the phone's own local temp files.)
+
+    Final names, matching the spec exactly:
+      MAIN   -> <tag>.jpg     (the hero/primary catalogue image)
+      ANGLE1 -> <tag>_1.jpg
+      ANGLE2 -> <tag>_2.jpg
+
+    All three are staged and decode-verified BEFORE any is placed under its
+    final name, and the rename is all-three-or-none -- nothing downstream
+    (this tool's own tray view, or anything else watching capture_intake)
+    can ever observe a partial 1-of-3 or 2-of-3 item.
+
+    Returns the same shape as save_pair on success, plus angle1_filename/
+    angle2_filename, or an {"ok": False, ...} error dict (duplicate / blurry
+    / not_clearly_visible / corrupt_capture) matching save_pair's existing
+    error contract so callers can reuse the same handling.
+    """
+    with _lock:
+        is_test = category == TEST_CATEGORY
+        if not is_test and not override_duplicate:
+            prior = check_duplicate(tag_code)
+            if prior:
+                return {"ok": False, "error": "duplicate", "prior": prior}
+
+        images = {"main": main_bytes, "angle1": angle1_bytes, "angle2": angle2_bytes}
+        blur_scores = {}
+        for slot, data in images.items():
+            score = _blur_variance(data)
+            blur_scores[slot] = round(score, 1) if score is not None else None
+            if not override_blur and score is not None and score < BLUR_VARIANCE_THRESHOLD:
+                return {"ok": False, "error": "blurry", "slot": slot, "blur_score": blur_scores[slot]}
+
+        if not override_visibility:
+            vis = _jewellery_clearly_visible(main_bytes)
+            if not vis["ok"]:
+                return {"ok": False, "error": "not_clearly_visible", "reason": vis["reason"],
+                        "unverified": vis["unverified"]}
+
+        tray = get_current_tray(category)
+        tray_dir = os.path.join(CAPTURE_ROOT, tray["folder"])
+        os.makedirs(tray_dir, exist_ok=True)
+
+        safe_name = _safe_filename_from_tag(tag_code) if tag_code else f"untagged_{int(time.time())}"
+        main_path = os.path.join(tray_dir, f"{safe_name}.jpg")
+        angle1_path = os.path.join(tray_dir, f"{safe_name}_1.jpg")
+        angle2_path = os.path.join(tray_dir, f"{safe_name}_2.jpg")
+
+        # Duplicate-tag protection (spec rule 8): if the final name already
+        # exists, this must NEVER silently create "(1)"/"_3" -- that breaks
+        # catalogue identity. Getting here at all means override_duplicate
+        # was explicitly set by the operator (confirmed replace) or the
+        # dedup record was missing while the file wasn't; either way this
+        # needs an explicit operator decision, never an auto-renamed sibling.
+        if os.path.exists(main_path) and not override_duplicate:
+            return {"ok": False, "error": "duplicate",
+                    "prior": {"folder": tray["folder"], "filename": f"{safe_name}.jpg"}}
+
+        staging_dir = os.path.join(tray_dir, ".staging", f"{safe_name}_{int(time.time() * 1000)}")
+        os.makedirs(staging_dir, exist_ok=True)
+        staged = {
+            "main": os.path.join(staging_dir, "main.jpg"),
+            "angle1": os.path.join(staging_dir, "angle1.jpg"),
+            "angle2": os.path.join(staging_dir, "angle2.jpg"),
+        }
+        try:
+            for slot, path in staged.items():
+                with open(path, "wb") as f:
+                    f.write(images[slot])
+
+            # Decode-verify, not just File.exists() (spec rule 52) -- a
+            # truncated upload must not become a permanent catalogue file.
+            for slot, path in staged.items():
+                img = cv2.imread(path)
+                if img is None or img.size == 0:
+                    return {"ok": False, "error": "corrupt_capture", "slot": slot}
+
+            os.replace(staged["main"], main_path)
+            os.replace(staged["angle1"], angle1_path)
+            os.replace(staged["angle2"], angle2_path)
+        finally:
+            for path in staged.values():
+                if os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+            try:
+                os.rmdir(staging_dir)
+            except OSError:
+                pass
+
+        _embed_tag_metadata(main_path, tag_code=tag_code, category=category, staff_name=staff_name)
+        _segment_jewel_async(main_path)
+
+        if tag_code and not is_test:
+            dedup = _load_dedup()
+            dedup[tag_code] = {
+                "folder": tray["folder"], "filename": f"{safe_name}.jpg",
+                "category": category, "staff": staff_name, "ts": time.time(),
+            }
+            _atomic_write_json(DEDUP_PATH, dedup)
+
+        tray_captured = _count_tray_items(tray_dir)
+        return {
+            "ok": True, "folder": tray["folder"], "tray_number": tray["tray_number"],
+            "filename": f"{safe_name}.jpg",
+            "angle1_filename": f"{safe_name}_1.jpg",
+            "angle2_filename": f"{safe_name}_2.jpg",
+            "tray_captured": tray_captured,
+            "blur_scores": blur_scores,
+        }
+
+
 def _count_tray_items(tray_dir: str) -> int:
     if not os.path.isdir(tray_dir):
         return 0
