@@ -588,6 +588,17 @@ class MainActivity : AppCompatActivity() {
                 setStatus("Capture failed — retrying", ready = false)
                 return@captureFullRes
             }
+            // Log the ACTUAL captured pixels' sharpness, not the low-res
+            // live-analysis-stream estimate that gated the shutter -- the
+            // two are on different scales (see SharpnessAnalyzer.scoreBitmapRaw)
+            // and this number is what tells us whether the live gate is
+            // trustworthy or whether full-res blur is slipping through it
+            // undetected.
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { bmp ->
+                val raw = SharpnessAnalyzer.scoreBitmapRaw(bmp)
+                Log.i(TAG, "jewel capture fullRes sharpness raw=$raw size=${bmp.width}x${bmp.height} liveSharp=$latestSharpness")
+                bmp.recycle()
+            }
             jewelJpeg = bytes
             showCapturePreview(
                 bytes,
