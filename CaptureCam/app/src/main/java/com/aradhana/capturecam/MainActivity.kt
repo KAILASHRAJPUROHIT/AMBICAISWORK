@@ -1051,8 +1051,10 @@ class MainActivity : AppCompatActivity() {
                 angle2Jpeg = bytes
                 setStatus("Returning to main position…", ready = false)
                 rsc2.returnHome(axis3 = PAN_RIGHT_AXIS3, durationMs = PAN_STEP_MS) {
-                    inAngleSequence = false
-                    resetForNewItem(Phase.TAG)
+                    undoCenteringThenAdvance {
+                        inAngleSequence = false
+                        resetForNewItem(Phase.TAG)
+                    }
                 }
             },
             onRetake = { captureAngle2() },
