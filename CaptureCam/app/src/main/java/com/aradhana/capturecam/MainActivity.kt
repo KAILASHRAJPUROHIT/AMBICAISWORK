@@ -62,6 +62,28 @@ class MainActivity : AppCompatActivity() {
     private val prefs by lazy { getSharedPreferences("capturecam", MODE_PRIVATE) }
     private val handler = Handler(Looper.getMainLooper())
     private val barcodeScanner by lazy { BarcodeScanning.getClient() }
+    // Lightweight on-device "Google Lens"-style object localizer -- a small
+    // bundled TFLite model (no network, no server round-trip), the same
+    // class of tech behind Lens's live object framing. Only gives coarse
+    // categories (Fashion goods/Home goods/etc, not "necklace" specifically
+    // -- that still needs the server-side Grounding DINO pass after
+    // capture), but its bounding box is a genuine detected-object boundary,
+    // not a color/contrast guess, so it's a strictly better fence for the
+    // live dot overlay than MaterialDetector's heuristic alone.
+    private val objectDetector by lazy {
+        ObjectDetection.getClient(
+            ObjectDetectorOptions.Builder()
+                .setDetectorMode(ObjectDetectorOptions.STREAM_MODE)
+                .enableMultipleObjects()
+                .build()
+        )
+    }
+    @Volatile private var objectDetectBusy = false
+    // Normalized (0..1) against the UPRIGHT (rotation-applied) frame --
+    // same space ML Kit itself returns boxes in. See uprightPoint() for why
+    // MaterialDetector's raw sensor-space points need converting before
+    // they can be tested against these.
+    @Volatile private var latestObjectBoxesUpright: List<RectF> = emptyList()
 
     // ---- Pipeline state (mirrors capture.html's module-level _quality* vars) ----
     private enum class Phase { JEWEL, TAG, UPLOADING }
