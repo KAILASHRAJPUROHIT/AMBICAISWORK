@@ -234,14 +234,14 @@ class RSC2Controller {
      * physically undo the move, then stops again. Every call site in
      * MainActivity's angle sequence must pair these, or drift returns.
      */
-    private fun streamDeflection(axis1: Int, axis2: Int, durationMs: Long, settleMs: Long, onDone: () -> Unit) {
+    private fun streamDeflection(axis1: Int, axis2: Int, axis3: Int, durationMs: Long, settleMs: Long, onDone: () -> Unit) {
         activeMoveRunnable?.let { handler.removeCallbacks(it) }
         if (!isReady) {
-            Log.w(TAG, "streamDeflection($axis1,$axis2): not ready (char=$commandCharacteristic gatt=$gatt) -- skipping")
+            Log.w(TAG, "streamDeflection($axis1,$axis2,$axis3): not ready (char=$commandCharacteristic gatt=$gatt) -- skipping")
             onDone()
             return
         }
-        Log.i(TAG, "streamDeflection($axis1,$axis2) starting")
+        Log.i(TAG, "streamDeflection($axis1,$axis2,$axis3) starting")
         val ticks = (durationMs / 200L).toInt().coerceAtLeast(1)
         var sent = 0
         val runnable = object : Runnable {
@@ -253,7 +253,7 @@ class RSC2Controller {
                     handler.postDelayed(onDone, settleMs)
                     return
                 }
-                val frame = DumlProtocol.buildJoystickFrame(axis1, axis2, DumlProtocol.AXIS_CENTER, seq)
+                val frame = DumlProtocol.buildJoystickFrame(axis1, axis2, axis3, seq)
                 seq += 1
                 writeFrame(frame)
                 sent += 1
@@ -264,18 +264,29 @@ class RSC2Controller {
         handler.post(runnable)
     }
 
-    /** Deflects toward (axis1, axis2) and stops there -- call returnHome
-     * with the SAME axis1/axis2 afterward to physically undo this move. */
-    fun moveOut(axis1: Int, axis2: Int, durationMs: Long = 900L, settleMs: Long = 400L, onArrived: () -> Unit) {
-        streamDeflection(axis1, axis2, durationMs, settleMs, onArrived)
+    /** Deflects toward (axis1, axis2, axis3) and stops there -- call
+     * returnHome with the SAME values afterward to physically undo this
+     * move. Any axis left at DumlProtocol.AXIS_CENTER doesn't move. */
+    fun moveOut(
+        axis1: Int = DumlProtocol.AXIS_CENTER, axis2: Int = DumlProtocol.AXIS_CENTER,
+        axis3: Int = DumlProtocol.AXIS_CENTER, durationMs: Long = 900L, settleMs: Long = 400L,
+        onArrived: () -> Unit
+    ) {
+        streamDeflection(axis1, axis2, axis3, durationMs, settleMs, onArrived)
     }
 
-    /** Mirrors (axis1, axis2) around center and deflects that direction for
-     * the same duration, physically undoing a matching moveOut() call. */
-    fun returnHome(axis1: Int, axis2: Int, durationMs: Long = 900L, settleMs: Long = 400L, onReturned: () -> Unit) {
+    /** Mirrors (axis1, axis2, axis3) around center and deflects that
+     * direction for the same duration, physically undoing a matching
+     * moveOut() call. */
+    fun returnHome(
+        axis1: Int = DumlProtocol.AXIS_CENTER, axis2: Int = DumlProtocol.AXIS_CENTER,
+        axis3: Int = DumlProtocol.AXIS_CENTER, durationMs: Long = 900L, settleMs: Long = 400L,
+        onReturned: () -> Unit
+    ) {
         val mirrored1 = 2 * DumlProtocol.AXIS_CENTER - axis1
         val mirrored2 = 2 * DumlProtocol.AXIS_CENTER - axis2
-        streamDeflection(mirrored1, mirrored2, durationMs, settleMs, onReturned)
+        val mirrored3 = 2 * DumlProtocol.AXIS_CENTER - axis3
+        streamDeflection(mirrored1, mirrored2, mirrored3, durationMs, settleMs, onReturned)
     }
 
     fun stopAndReturnToCenter() {
