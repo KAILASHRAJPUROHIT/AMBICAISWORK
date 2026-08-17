@@ -221,9 +221,11 @@ class RSC2Controller {
     fun moveTo(axis1: Int, axis2: Int, durationMs: Long = 900L, settleMs: Long = 500L, onDone: () -> Unit) {
         activeMoveRunnable?.let { handler.removeCallbacks(it) }
         if (!isReady) {
+            Log.w(TAG, "moveTo($axis1,$axis2): not ready (char=$commandCharacteristic gatt=$gatt) -- skipping move")
             onDone()
             return
         }
+        Log.i(TAG, "moveTo($axis1,$axis2) starting")
         val ticks = (durationMs / 200L).toInt().coerceAtLeast(1)
         var sent = 0
         val runnable = object : Runnable {
