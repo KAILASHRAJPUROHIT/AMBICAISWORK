@@ -30,6 +30,8 @@ class FocusZoomController {
     private val _afState = MutableStateFlow<Int?>(null)
     val afState: StateFlow<Int?> = _afState
 
+    private var lastLoggedPhysicalId: String? = null
+
     /** Must be called on the Preview.Builder BEFORE binding -- Camera2
      * interop callbacks can only be attached at use-case build time. */
     fun attachCaptureCallback(previewBuilder: Preview.Builder) {
@@ -41,6 +43,20 @@ class FocusZoomController {
                 result: TotalCaptureResult
             ) {
                 _afState.value = result.get(CaptureResult.CONTROL_AF_STATE)
+                // Diagnostic: the logical multi-camera silently switches its
+                // ACTIVE physical lens as zoom ratio changes. Logging every
+                // transition (not every frame) lets us find exactly which
+                // zoom ratio crosses over to the telephoto lens -- that
+                // lens's minimum focus distance is 40cm (see CameraDiag
+                // physId=3), far past typical jewellery shooting distance,
+                // so a crossover mid-shoot would explain a soft/blurred
+                // capture with no other symptom.
+                val activeId = result.get(CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+                if (activeId != null && activeId != lastLoggedPhysicalId) {
+                    lastLoggedPhysicalId = activeId
+                    val zoom = camera?.cameraInfo?.zoomState?.value?.zoomRatio
+                    android.util.Log.i("CameraDiag", "active physical camera switched to id=$activeId at zoomRatio=$zoom")
+                }
             }
         })
     }
