@@ -194,6 +194,35 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // Best-effort, silent RSC 2 connect -- fails open (single-image mode)
+    // if permissions are denied or no gimbal is found; never blocks the
+    // camera pipeline on this.
+    private val requestBlePermissions = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        if (results.values.all { it }) attemptGimbalConnect()
+    }
+
+    private fun attemptGimbalConnect() {
+        val needed = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= 31) {
+            needed += Manifest.permission.BLUETOOTH_SCAN
+            needed += Manifest.permission.BLUETOOTH_CONNECT
+        } else {
+            needed += Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        val missing = needed.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) {
+            requestBlePermissions.launch(missing.toTypedArray())
+            return
+        }
+        rsc2.connect(this) { success ->
+            Log.i(TAG, if (success) "RSC 2 connected -- 3-angle capture enabled" else "No RSC 2 found -- single-image mode")
+        }
+    }
+
     // True when launched via the capturecam://start deep link from
     // capture.html, rather than tapped from the launcher directly. Drives
     // whether a successful upload hands control back to the browser
