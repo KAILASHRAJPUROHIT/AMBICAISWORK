@@ -1164,16 +1164,17 @@ class MainActivity : AppCompatActivity() {
             else -> false
         }
         // Tilt is the one axis with a real mechanical hard-stop (see
-        // TILT_TICK_LIMIT). If tilt was chosen but its budget is exhausted,
+        // TILT_MS_LIMIT). If tilt was chosen but its budget is exhausted,
         // fall back to pan when pan also needs correcting; otherwise this
         // attempt has nothing safe left to do.
+        val tiltDurMs = centeringDurationFor(abs(dy))
         if (!choosePan) {
             val tiltSign = if (dy > 0) -1 else 1
-            if (abs(centeringTiltTicks + tiltSign) > TILT_TICK_LIMIT) {
+            if (abs(centeringTiltMs + tiltSign * tiltDurMs) > TILT_MS_LIMIT) {
                 if (needsPan) {
                     choosePan = true
                 } else {
-                    Log.w(TAG, "centering: tilt budget exhausted (ticks=$centeringTiltTicks) and pan not needed -- giving up this round")
+                    Log.w(TAG, "centering: tilt budget exhausted (ms=$centeringTiltMs) and pan not needed -- giving up this round")
                     lastCenterAxis = CenterAxis.NONE
                     return false
                 }
@@ -1183,24 +1184,28 @@ class MainActivity : AppCompatActivity() {
         setStatus("Centering ornament…", ready = false)
         if (choosePan) {
             // Object right-of-center (dx>0) -> pan camera right to bring it in.
-            // axis3 ABOVE center = the "right" direction.
+            // axis3 ABOVE center = the "right" direction. Duration scales
+            // with how far off it is -- see centeringDurationFor().
             val sign = if (dx > 0) 1 else -1
-            centeringPanTicks += sign
+            val durMs = centeringDurationFor(abs(dx))
+            centeringPanMs += sign * durMs.toInt()
             lastCenterAxis = CenterAxis.PAN
             lastCenterSign = sign
+            lastCenterDurationMs = durMs.toInt()
             val panAxis = DumlProtocol.AXIS_CENTER + sign * CENTERING_DEFLECTION
-            Log.i(TAG, "centering nudge #$centeringAttempts (pan) dx=$dx dy=$dy pan=$panAxis")
-            rsc2.moveOut(axis3 = panAxis, durationMs = CENTERING_TICK_MS) {}
+            Log.i(TAG, "centering nudge #$centeringAttempts (pan) dx=$dx dy=$dy pan=$panAxis durMs=$durMs")
+            rsc2.moveOut(axis3 = panAxis, durationMs = durMs) {}
         } else {
             // Object low-in-frame (dy>0, y grows downward) -> tilt camera
             // down. axis1 ABOVE center = look up (confirmed live).
             val sign = if (dy > 0) -1 else 1
-            centeringTiltTicks += sign
+            centeringTiltMs += sign * tiltDurMs.toInt()
             lastCenterAxis = CenterAxis.TILT
             lastCenterSign = sign
+            lastCenterDurationMs = tiltDurMs.toInt()
             val tiltAxis = DumlProtocol.AXIS_CENTER + sign * CENTERING_DEFLECTION
-            Log.i(TAG, "centering nudge #$centeringAttempts (tilt) dx=$dx dy=$dy tilt=$tiltAxis")
-            rsc2.moveOut(axis1 = tiltAxis, durationMs = CENTERING_TICK_MS) {}
+            Log.i(TAG, "centering nudge #$centeringAttempts (tilt) dx=$dx dy=$dy tilt=$tiltAxis durMs=$tiltDurMs")
+            rsc2.moveOut(axis1 = tiltAxis, durationMs = tiltDurMs) {}
         }
         return true
     }
