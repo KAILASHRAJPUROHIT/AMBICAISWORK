@@ -758,37 +758,45 @@ class MainActivity : AppCompatActivity() {
             return
         }
         setStatus("Moving to angle 1…", ready = false)
-        rsc2.moveTo(ANGLE1_AXIS1, ANGLE1_AXIS2) {
-            setStatus("Capturing angle 1…", ready = false)
-            focusZoom.triggerAutoFocus()
-            handler.postDelayed({
-                captureFullRes { bytes ->
-                    if (bytes == null) {
-                        setStatus("Angle 1 capture failed — retrying", ready = false)
-                        onMainCaptureAccepted()
-                        return@captureFullRes
-                    }
-                    angle1Jpeg = bytes
-                    setStatus("Moving to angle 2…", ready = false)
-                    rsc2.moveTo(ANGLE2_AXIS1, ANGLE2_AXIS2) {
-                        setStatus("Capturing angle 2…", ready = false)
-                        focusZoom.triggerAutoFocus()
-                        handler.postDelayed({
-                            captureFullRes { bytes2 ->
-                                if (bytes2 == null) {
-                                    setStatus("Angle 2 capture failed — retrying", ready = false)
-                                    onMainCaptureAccepted()
-                                    return@captureFullRes
-                                }
-                                angle2Jpeg = bytes2
-                                rsc2.stopAndReturnToCenter()
-                                resetForNewItem(Phase.TAG)
-                            }
-                        }, 400L)
-                    }
-                }
-            }, 400L)
+        rsc2.moveTo(ANGLE1_AXIS1, ANGLE1_AXIS2) { captureAngle1() }
+    }
+
+    private fun captureAngle1() {
+        setStatus("Capturing angle 1…", ready = false)
+        focusZoom.triggerAutoFocus()
+        handler.postDelayed({
+            captureFullRes { bytes -> onAngle1Captured(bytes) }
+        }, 400L)
+    }
+
+    private fun onAngle1Captured(bytes: ByteArray?) {
+        if (bytes == null) {
+            setStatus("Angle 1 capture failed — retrying", ready = false)
+            onMainCaptureAccepted()
+            return
         }
+        angle1Jpeg = bytes
+        setStatus("Moving to angle 2…", ready = false)
+        rsc2.moveTo(ANGLE2_AXIS1, ANGLE2_AXIS2) { captureAngle2() }
+    }
+
+    private fun captureAngle2() {
+        setStatus("Capturing angle 2…", ready = false)
+        focusZoom.triggerAutoFocus()
+        handler.postDelayed({
+            captureFullRes { bytes -> onAngle2Captured(bytes) }
+        }, 400L)
+    }
+
+    private fun onAngle2Captured(bytes: ByteArray?) {
+        if (bytes == null) {
+            setStatus("Angle 2 capture failed — retrying", ready = false)
+            onMainCaptureAccepted()
+            return
+        }
+        angle2Jpeg = bytes
+        rsc2.stopAndReturnToCenter()
+        resetForNewItem(Phase.TAG)
     }
 
     private fun forceCaptureCurrentPhase() {
