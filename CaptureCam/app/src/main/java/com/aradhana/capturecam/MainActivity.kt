@@ -776,6 +776,83 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Checks the detected ornament's position against true frame-center and,
+     * if it's off by more than CENTERING_DEADBAND, issues ONE bounded
+     * corrective nudge on tilt (axis1) and/or pan (axis3) and returns true
+     * (caller should wait for the next tick rather than capture now). Once
+     * within the deadband, or once CENTERING_MAX_ATTEMPTS is used up,
+     * returns false so the caller proceeds to capture as-is -- this never
+     * blocks a capture indefinitely on a correction that isn't converging.
+     *
+     * LIMITATION: these are velocity commands (see RSC2Controller), not
+     * "move to this position" -- each nudge is a small fixed burst in a
+     * direction, then re-measure. It is a real proportional-ish loop
+     * (keeps nudging the same direction if still off after a nudge) but not
+     * a precise servo; expect a few pixels of residual offset within the
+     * deadband, not exact centering.
+     */
+    private fun attemptCenteringCorrection(result: MaterialDetector.Result): Boolean {
+        if (centeringAttempts >= CENTERING_MAX_ATTEMPTS) return false
+        val bounds = result.bounds ?: return false
+        val cx = (bounds.x0 + bounds.x1) / 2f
+        val cy = (bounds.y0 + bounds.y1) / 2f
+        val dx = cx - 0.5f
+        val dy = cy - 0.5f
+        val needsPan = abs(dx) > CENTERING_DEADBAND
+        val needsTilt = abs(dy) > CENTERING_DEADBAND
+        if (!needsPan && !needsTilt) return false
+
+        // Object right-of-center (dx>0) -> pan camera right to bring it in.
+        // Object low-in-frame (dy>0, y grows downward) -> tilt camera down.
+        // axis1 tilt: ABOVE center = look up (confirmed live); axis3 pan:
+        // ABOVE center = the "right" direction used by PAN_RIGHT_AXIS3.
+        val panAxis = when {
+            !needsPan -> DumlProtocol.AXIS_CENTER
+            dx > 0 -> { centeringPanTicks += 1; DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION }
+            else -> { centeringPanTicks -= 1; DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION }
+        }
+        val tiltAxis = when {
+            !needsTilt -> DumlProtocol.AXIS_CENTER
+            dy > 0 -> { centeringTiltTicks -= 1; DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION }
+            else -> { centeringTiltTicks += 1; DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION }
+        }
+        centeringAttempts += 1
+        setStatus("Centering ornament…", ready = false)
+        Log.i(TAG, "centering nudge #$centeringAttempts dx=$dx dy=$dy pan=$panAxis tilt=$tiltAxis")
+        rsc2.moveOut(tiltAxis, DumlProtocol.AXIS_CENTER, panAxis, durationMs = CENTERING_TICK_MS) {}
+        return true
+    }
+
+    /** Undoes every nudge attemptCenteringCorrection() applied, in one
+     * combined move, before handing off to the TAG phase -- without this
+     * each item would start further off-center than the last. Called once,
+     * after the angle sequence (or its single-image fallback) is otherwise
+     * done with gimbal motion for this item. */
+    private fun undoCenteringThenAdvance(onDone: () -> Unit) {
+        if (centeringPanTicks == 0 && centeringTiltTicks == 0) {
+            onDone()
+            return
+        }
+        val undoPan = when {
+            centeringPanTicks > 0 -> DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION
+            centeringPanTicks < 0 -> DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
+            else -> DumlProtocol.AXIS_CENTER
+        }
+        val undoTilt = when {
+            centeringTiltTicks > 0 -> DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION
+            centeringTiltTicks < 0 -> DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
+            else -> DumlProtocol.AXIS_CENTER
+        }
+        val ticks = maxOf(abs(centeringPanTicks), abs(centeringTiltTicks))
+        Log.i(TAG, "undoing centering: panTicks=$centeringPanTicks tiltTicks=$centeringTiltTicks")
+        rsc2.moveOut(undoTilt, DumlProtocol.AXIS_CENTER, undoPan, durationMs = CENTERING_TICK_MS * ticks) {
+            centeringPanTicks = 0
+            centeringTiltTicks = 0
+            onDone()
+        }
+    }
+
     private fun min(a: Float, b: Float) = if (a < b) a else b
 
     /** Converts a MaterialDetector.Point (normalized, raw sensor-space, same
