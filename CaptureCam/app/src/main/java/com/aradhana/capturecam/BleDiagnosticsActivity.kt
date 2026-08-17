@@ -201,6 +201,11 @@ class BleDiagnosticsActivity : AppCompatActivity() {
                     if (writable) {
                         handler.post { addCharacteristicButton(characteristic) }
                     }
+                    val notifiable = characteristic.properties and
+                        (BluetoothGattCharacteristic.PROPERTY_NOTIFY or BluetoothGattCharacteristic.PROPERTY_INDICATE) != 0
+                    if (notifiable) {
+                        subscribeToNotifications(g, characteristic)
+                    }
                 }
             }
             log("--- end of GATT services ---")
@@ -209,6 +214,52 @@ class BleDiagnosticsActivity : AppCompatActivity() {
 
         override fun onCharacteristicWrite(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
             log("Write to ${characteristic.uuid} -> status=$status (${if (status == 0) "SUCCESS" else "FAILED"})")
+        }
+
+        // Two overloads exist because the byte[]-value version was only
+        // added in API 33; onDestroy/minSdk 26 means the pre-33 deprecated
+        // one still needs handling on most real devices in the field.
+        override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+            logNotification(characteristic, value)
+        }
+
+        @Suppress("DEPRECATION")
+        override fun onCharacteristicChanged(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+            if (Build.VERSION.SDK_INT < 33) logNotification(characteristic, characteristic.value ?: ByteArray(0))
+        }
+
+        override fun onDescriptorWrite(g: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            log("Notify subscribe on ${descriptor.characteristic.uuid} -> status=$status (${if (status == 0) "SUCCESS" else "FAILED"})")
+        }
+    }
+
+    private fun logNotification(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+        val hex = value.joinToString(" ") { "%02X".format(it) }
+        log(">>> NOTIFY from ${characteristic.uuid}: $hex")
+    }
+
+    /** Subscribes locally (setCharacteristicNotification) AND tells the
+     * peripheral to actually start sending (writing the standard Client
+     * Characteristic Configuration descriptor, 0x2902) -- the first half
+     * alone is a common no-op mistake; without the descriptor write the
+     * device never turns notifications on at its end. */
+    @Suppress("DEPRECATION")
+    private fun subscribeToNotifications(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+        try {
+            g.setCharacteristicNotification(characteristic, true)
+            val cccd = characteristic.getDescriptor(
+                java.util.UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+            ) ?: return
+            val value = if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) {
+                BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            } else {
+                BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+            }
+            cccd.value = value
+            g.writeDescriptor(cccd)
+            log("Subscribing to notifications on ${characteristic.uuid}...")
+        } catch (e: SecurityException) {
+            log("Missing permission to subscribe: ${e.message}")
         }
     }
 
