@@ -781,6 +781,105 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---------------------------------------------------------------- Vision servo pipeline (DINO + MIL)
+    //
+    // Orchestration only -- VisionServoController owns all state/servo
+    // decisions, JewelleryTracker owns MIL+Kalman, DetectorClient owns the
+    // WebSocket, FrameConversion owns pixel-format plumbing. MainActivity's
+    // job is: feed frames in, feed DINO results in, execute the ServoCommand
+    // that comes back via applyServoCommand() -- the ONE function in this
+    // class allowed to call rsc2.moveOut/focusZoom for this pipeline.
+    //
+    // shutterEnabled stays false for the physical checkpoint: reaching
+    // LOCKED only logs "CAPTURE WOULD FIRE", nothing here ever calls
+    // captureJewel(). Do not wire that until the checkpoint has passed.
+
+    private fun connectDetector() {
+        val serverUrl = prefs.getString("server_url", "") ?: return
+        val host = try { java.net.URI(serverUrl).host } catch (e: Exception) { null }
+        if (host.isNullOrBlank()) return
+        val wsUrl = "ws://$host:8765"
+        val client = DetectorClient { result -> handler.post { onDinoResult(result) } }
+        client.connect(wsUrl)
+        detectorClient = client
+        Log.i("VisionServo", "[DINO] connecting to $wsUrl")
+    }
+
+    private fun onDinoResult(result: DetectorClient.DetectionResult) {
+        if (!result.detected) return
+        val sensorBox = RectF(result.x, result.y, result.x + result.w, result.y + result.h)
+        val upright = FrameConversion.uprightBox(sensorBox, cachedRotationDegrees)
+        visionServo.onDinoDetection(
+            result.frameId, result.ageMs(),
+            NormalizedBox(upright.left, upright.top, upright.right, upright.bottom)
+        )
+    }
+
+    private fun runVisionServoFrame(imageProxy: ImageProxy, nowMs: Long) {
+        cachedRotationDegrees = imageProxy.imageInfo.rotationDegrees
+
+        val gray = FrameConversion.imageProxyToGrayMat(imageProxy)
+        val upright = FrameConversion.rotateMatUpright(gray, cachedRotationDegrees)
+        val cmd = try {
+            visionServo.onCameraFrame(upright, nowMs)
+        } finally {
+            if (upright !== gray) upright.release()
+            gray.release()
+        }
+
+        if (cmd != null) applyServoCommand(cmd)
+
+        val client = detectorClient
+        if (client != null && client.isConnected && nowMs - lastDetectorSendAt >= DETECTOR_SEND_INTERVAL_MS) {
+            val jpeg = FrameConversion.imageProxyToJpegColor(imageProxy, DETECTOR_FRAME_LONG_EDGE, DETECTOR_JPEG_QUALITY)
+            if (client.sendFrame(jpeg) >= 0) lastDetectorSendAt = nowMs
+        }
+    }
+
+    /** The single funnel for every pan/tilt/zoom command this pipeline
+     * issues. Pan and tilt are fired as alternating single-axis bursts,
+     * never combined in one BLE frame -- combining tilt+pan in a single
+     * DUML frame caused an immediate, unrecoverable RSC2 disconnect the one
+     * time it was tried (see RSC2Controller's own doc comment); alternating
+     * fast small proportional nudges is the closest safe approximation of
+     * "simultaneous" this hardware allows. */
+    private fun applyServoCommand(cmd: VisionServoController.ServoCommand) {
+        if (!rsc2.isReady) return
+        focusZoom.updateTrackingRegion(cmd.targetCx, cmd.targetCy)
+
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastServoAt >= SERVO_INTERVAL_MS && (cmd.pan != 0f || cmd.tilt != 0f)) {
+            lastServoAt = nowMs
+            val choosePan = if (cmd.pan != 0f && cmd.tilt != 0f) {
+                lastServoAxisWasPan = !lastServoAxisWasPan
+                lastServoAxisWasPan
+            } else cmd.pan != 0f
+            if (choosePan) {
+                val mag = abs(cmd.pan)
+                val durMs = (SERVO_MIN_MS + mag * (SERVO_MAX_MS - SERVO_MIN_MS)).toLong()
+                val deflection = (mag * SERVO_MAX_DEFLECTION).toInt()
+                val axis = DumlProtocol.AXIS_CENTER + (if (cmd.pan > 0) deflection else -deflection)
+                rsc2.moveOut(axis3 = axis, durationMs = durMs, settleMs = 0L) {}
+            } else {
+                val mag = abs(cmd.tilt)
+                val durMs = (SERVO_MIN_MS + mag * (SERVO_MAX_MS - SERVO_MIN_MS)).toLong()
+                val deflection = (mag * SERVO_MAX_DEFLECTION).toInt()
+                // Positive tilt error (ey<0 handled inside VisionServoController)
+                // maps the same direction sense as the existing centering code.
+                val axis = DumlProtocol.AXIS_CENTER + (if (cmd.tilt > 0) deflection else -deflection)
+                rsc2.moveOut(axis1 = axis, durationMs = durMs, settleMs = 0L) {}
+            }
+        }
+
+        if (nowMs - lastZoomServoAt >= ZOOM_SERVO_INTERVAL_MS && cmd.zoomStep != 0f) {
+            lastZoomServoAt = nowMs
+            val zoom = focusZoom.currentZoomRatio()
+            val range = focusZoom.zoomRatioRange()
+            val next = (zoom * (1f + cmd.zoomStep)).coerceIn(range.start, min(range.endInclusive, MAX_LIVE_ZOOM_RATIO))
+            focusZoom.setZoomRatio(next)
+        }
+    }
+
     private fun recordTagCode(code: String?) {
         if (code == null) {
             stableTagCode = null
