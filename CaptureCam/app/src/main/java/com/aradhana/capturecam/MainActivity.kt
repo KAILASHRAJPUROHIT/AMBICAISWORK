@@ -120,16 +120,24 @@ class MainActivity : AppCompatActivity() {
     // axis). Tracked so the exact opposite total can be undone in one move
     // at the end of the item -- these are velocity commands, so "centered"
     // isn't a position we can just command back to directly.
-    private var centeringPanTicks = 0
-    private var centeringTiltTicks = 0
+    // Signed CUMULATIVE move-time (ms) applied to each axis by centering +
+    // hunting this item, positive = toward AXIS_CENTER+CENTERING_DEFLECTION
+    // direction. ms, not a tick count -- centering nudge duration is
+    // proportional to how far off-center the object is (see
+    // centeringDurationFor()), so a plain nudge COUNT can no longer tell
+    // the undo how long to run; total accumulated time can.
+    private var centeringPanMs = 0
+    private var centeringTiltMs = 0
     private var centeringAttempts = 0
 
     private enum class CenterAxis { NONE, PAN, TILT }
-    // Which axis the LAST centering nudge moved, and its sign -- lets the
-    // next call detect "that nudge just lost the ornament" and undo
-    // precisely that move rather than guessing.
+    // Which axis the LAST centering nudge moved, its sign, and its actual
+    // duration -- lets the next call detect "that nudge just lost the
+    // ornament" and undo precisely that move (same duration) rather than
+    // guessing a fixed one.
     private var lastCenterAxis = CenterAxis.NONE
     private var lastCenterSign = 0
+    private var lastCenterDurationMs = 0
     // Set for exactly one subsequent attempt after a revert, so centering
     // tries the OTHER axis first instead of immediately re-trying the one
     // that just overshot.
