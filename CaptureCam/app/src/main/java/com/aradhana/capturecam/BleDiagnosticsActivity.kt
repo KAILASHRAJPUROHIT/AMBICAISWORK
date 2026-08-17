@@ -286,14 +286,7 @@ class BleDiagnosticsActivity : AppCompatActivity() {
         characteristicListContainer.addView(button)
     }
 
-    @Suppress("DEPRECATION")
-    private fun sendHexToSelected() {
-        val characteristic = selectedCharacteristic
-        val g = gatt
-        if (characteristic == null || g == null) {
-            log("No characteristic selected -- connect and tap a writable characteristic first.")
-            return
-        }
+    private fun parseHexInput(): ByteArray? {
         val hex = hexBytesInput.text.toString().trim()
         val bytes = try {
             hex.split(Regex("[\\s,]+")).filter { it.isNotBlank() }
@@ -301,11 +294,22 @@ class BleDiagnosticsActivity : AppCompatActivity() {
                 .toByteArray()
         } catch (e: Exception) {
             log("Could not parse hex bytes '$hex': ${e.message}")
-            return
+            return null
         }
         if (bytes.isEmpty()) {
             log("Enter hex bytes first, e.g. 55 AA 01")
-            return
+            return null
+        }
+        return bytes
+    }
+
+    @Suppress("DEPRECATION")
+    private fun writeBytesToSelected(bytes: ByteArray, quiet: Boolean = false): Boolean {
+        val characteristic = selectedCharacteristic
+        val g = gatt
+        if (characteristic == null || g == null) {
+            log("No characteristic selected -- connect and tap a writable characteristic first.")
+            return false
         }
         // A characteristic that only advertises WRITE_NO_RESPONSE (like
         // FFF3/FFF5 here) needs that write type set EXPLICITLY -- the
@@ -320,15 +324,50 @@ class BleDiagnosticsActivity : AppCompatActivity() {
             BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
         }
         characteristic.writeType = writeType
-        val writeTypeName = if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) "NO_RESPONSE" else "DEFAULT"
-        log("Writing ${bytes.joinToString(" ") { "%02X".format(it) }} to ${characteristic.uuid} (writeType=$writeTypeName)")
+        if (!quiet) {
+            log("Writing ${bytes.joinToString(" ") { "%02X".format(it) }} to ${characteristic.uuid}")
+        }
         characteristic.value = bytes
-        try {
+        return try {
             val ok = g.writeCharacteristic(characteristic)
-            log(if (ok) "writeCharacteristic() accepted -- queued to send" else "writeCharacteristic() returned FALSE (queue busy or invalid state)")
+            if (!quiet) log(if (ok) "writeCharacteristic() accepted" else "writeCharacteristic() returned FALSE (queue busy or invalid state)")
+            ok
         } catch (e: SecurityException) {
             log("Missing BLUETOOTH_CONNECT permission to write: ${e.message}")
+            false
         }
+    }
+
+    private fun sendHexToSelected() {
+        val bytes = parseHexInput() ?: return
+        writeBytesToSelected(bytes)
+    }
+
+    /**
+     * Replays a captured command repeatedly, matching the real ~200ms cadence
+     * DJI's own Ronin app uses while a joystick is held (confirmed from the
+     * captured btsnoop log) -- a single write of a deflected value is
+     * unlikely to produce visible motion since the real protocol appears to
+     * treat each frame as "move toward this target for this tick", not "go
+     * to this position and stay". This is the actual reproduction of a held
+     * stick, not a new guess at the protocol.
+     */
+    private fun sendHexRepeatedly(count: Int = 15, intervalMs: Long = 200L) {
+        val bytes = parseHexInput() ?: return
+        log("Sending ${bytes.joinToString(" ") { "%02X".format(it) }} x$count @ ${intervalMs}ms -- watch the gimbal now")
+        var sent = 0
+        val runnable = object : Runnable {
+            override fun run() {
+                if (sent >= count) {
+                    log("Repeat send complete ($sent sent).")
+                    return
+                }
+                writeBytesToSelected(bytes, quiet = true)
+                sent += 1
+                handler.postDelayed(this, intervalMs)
+            }
+        }
+        handler.post(runnable)
     }
 
     private fun disconnect() {
