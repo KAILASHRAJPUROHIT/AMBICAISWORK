@@ -171,9 +171,21 @@ object MaterialDetector {
      * Analyses one frame. `step` controls sampling density in pixels
      * (higher = faster, coarser); the guide box restricts analysis to the
      * central region the operator is expected to frame the piece in,
-     * matching the web worker's own guide-box restriction.
+     * matching the web worker's own guide-box restriction -- UNLESS
+     * [fullFrame] is set, which scans the entire frame instead.
+     *
+     * fullFrame exists specifically for the gimbal hunt: the guide-box
+     * restriction is a real, confirmed blind spot for that use case --
+     * gold sitting in a frame CORNER during a search sweep is completely
+     * invisible to the guide-box-restricted scan (outside its 18-82%/
+     * 16-84% window entirely), which is exactly why hunting kept sweeping
+     * past visibly-present gold without ever detecting it. Once armed and
+     * tracking a specific candidate, the guide box's original purpose
+     * (ignore background clutter/hand edges at the frame's margins) is
+     * still the right behaviour, so callers should only pass fullFrame
+     * while still searching, not during normal centered operation.
      */
-    fun analyse(image: ImageProxy, step: Int = 6): Result {
+    fun analyse(image: ImageProxy, step: Int = 6, fullFrame: Boolean = false): Result {
         val width = image.width
         val height = image.height
         val yPlane = image.planes[0]
@@ -190,11 +202,12 @@ object MaterialDetector {
 
         // Guide box: central 64% x 68% of frame, matching capture.html's
         // on-screen framing guide -- analysis outside it is noise (edges of
-        // hand, background clutter at frame corners).
-        val startX = (width * 0.18).toInt()
-        val endX = (width * 0.82).toInt()
-        val startY = (height * 0.16).toInt()
-        val endY = (height * 0.84).toInt()
+        // hand, background clutter at frame corners). Skipped entirely in
+        // fullFrame mode (see doc comment above).
+        val startX = if (fullFrame) 0 else (width * 0.18).toInt()
+        val endX = if (fullFrame) width else (width * 0.82).toInt()
+        val startY = if (fullFrame) 0 else (height * 0.16).toInt()
+        val endY = if (fullFrame) height else (height * 0.84).toInt()
 
         val cols = max(1, (endX - startX) / step)
         val rows = max(1, (endY - startY) / step)
