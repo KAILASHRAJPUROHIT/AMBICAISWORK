@@ -391,8 +391,30 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (result.material && now - armedAt > MAX_STALL_MS) {
-            // Absolute safety valve -- accept the best frame on offer
-            // rather than cycling forever.
+            // Absolute safety valve -- accept the best frame on offer rather
+            // than cycling forever. This used to call captureJewel() with
+            // zero regard for focus/sharpness at all, which is exactly how
+            // a shot could come out blurred: if AF genuinely never
+            // converges (low-texture surface, awkward angle), stall expiry
+            // fired mid-scan and shuttered on whatever was live that
+            // instant. Now it still gives up eventually, but only after one
+            // last forced re-focus, and only accepts a plainly-soft frame
+            // if that final attempt also failed.
+            val relaxedSharp = latestSharpness >= SHARPNESS_THRESHOLD * 0.6f
+            if (relaxedSharp) {
+                captureJewel()
+                return
+            }
+            if (stallGraceAt == 0L) {
+                stallGraceAt = now
+                focusZoom.triggerAutoFocus()
+                setStatus("Focusing…", ready = false)
+                return
+            }
+            if (now - stallGraceAt < 800L) {
+                setStatus("Focusing…", ready = false)
+                return
+            }
             captureJewel()
             return
         }
