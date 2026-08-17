@@ -35,6 +35,7 @@ import dashboard_stats
 import stock_excel
 import category_dashboard
 import capture_tool
+import website_auth
 
 
 BASE = Path(__file__).resolve().parent
@@ -75,6 +76,17 @@ def _generated_password(env_var: str, filename: str) -> str:
 
 PROCESS_PASSWORD = _generated_password("AMBIC_PROCESS_PASSWORD", "process_password.txt")
 ADMIN_PASSWORD = _generated_password("AMBIC_ADMIN_PASSWORD", "admin_password.txt")
+WEBSITE_SERVICE_TOKEN = _generated_password("AMBIC_WEBSITE_SERVICE_TOKEN", "website_service_token.txt")
+
+
+def _valid_service_token(req) -> bool:
+    """True if this request carries the shared secret the website's
+    server-to-server proxy sends as X-Website-Service-Token. A match here
+    authorizes the request the same as a real browser session -- the
+    website is a trusted server, never a browser, calling on behalf of an
+    already-authenticated owner (see website_auth.py's module docstring)."""
+    supplied = req.headers.get("X-Website-Service-Token", "")
+    return bool(supplied) and hmac.compare_digest(supplied, WEBSITE_SERVICE_TOKEN)
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 TYPES = sorted({
     "earrings", "ladies_rings", "gents_rings", "ladies_chains", "gents_chains",
@@ -165,6 +177,17 @@ def _two_factor_enabled() -> bool:
 @app.before_request
 def require_login():
     if request.path in {"/login", "/verify-otp", "/api/health"} or request.path.startswith("/static/"):
+        return None
+    # /api/website-auth/* is server-to-server only (see website_auth.py's
+    # module docstring) -- a browser session must never satisfy it, even an
+    # authenticated one, since these routes exist specifically to let a
+    # server that ISN'T logged in here (the website) ask "is this login
+    # real" on behalf of a user it authenticated itself.
+    if request.path.startswith("/api/website-auth/"):
+        if _valid_service_token(request):
+            return None
+        return jsonify({"ok": False, "error": "invalid service token"}), 401
+    if _valid_service_token(request):
         return None
     if session.get("authed"):
         return None
@@ -262,6 +285,49 @@ def verify_otp():
             return redirect(_safe_next(destination))
         error = "Incorrect verification code"
     return render_template("verify_otp.html", error=error, email=email_2fa.OTP_RECIPIENT)
+
+
+_WEBSITE_AUTH_ACTIONS = {
+    "login": lambda data: website_auth.login(data.get("email", ""), data.get("password", "")),
+    "verify-2fa": lambda data: website_auth.verify_second_factor(
+        data.get("email", ""), data.get("auth_version"), data.get("code", "")
+    ),
+    "session": lambda data: website_auth.verify_session(data.get("email", ""), data.get("auth_version")),
+    "2fa-status": lambda data: website_auth.two_factor_status(data.get("email", ""), data.get("auth_version")),
+    "2fa-begin": lambda data: website_auth.begin_two_factor(
+        data.get("email", ""), data.get("auth_version"), data.get("current_password", "")
+    ),
+    "2fa-confirm": lambda data: website_auth.confirm_two_factor(
+        data.get("email", ""), data.get("auth_version"), data.get("code", "")
+    ),
+    "2fa-disable": lambda data: website_auth.disable_two_factor(
+        data.get("email", ""), data.get("auth_version"), data.get("current_password", ""), data.get("code", "")
+    ),
+    "change-password": lambda data: website_auth.change_password(
+        data.get("email", ""), data.get("current_password", ""), data.get("new_password", "")
+    ),
+    "password-reset-request": lambda data: website_auth.password_reset_request(data.get("email", "")),
+    "password-reset-confirm": lambda data: website_auth.password_reset_confirm(),
+}
+
+
+@app.route("/api/website-auth/<action>", methods=["POST"])
+def api_website_auth(action):
+    """Server-to-server contract for ambicdigital-website's Catalogue
+    Studio owner-auth proxy (src/lib/catalogueStudioAuth.ts). Reachable
+    only with a valid X-Website-Service-Token (enforced in
+    require_login() before this ever runs). See website_auth.py's module
+    docstring for the full design."""
+    handler = _WEBSITE_AUTH_ACTIONS.get(action)
+    if handler is None:
+        return jsonify({"ok": False, "error": "Unknown website-auth action"}), 404
+    data = request.get_json(silent=True) or {}
+    try:
+        result = handler(data)
+    except Exception:
+        app.logger.exception("website-auth action %r failed", action)
+        return jsonify({"ok": False, "error": "internal error"}), 500
+    return jsonify(result)
 
 
 @app.post("/logout")
@@ -514,7 +580,10 @@ def serve_image(where: str, name: str):
             return "Not found", 404
         return send_from_directory(resolved.parent, resolved.name)
 
-    roots = {"input": INPUT, "processing": PROCESSING, "processed": PROCESSED, "output": OUTPUT, "backgrounds": BACKGROUNDS}
+    roots = {
+        "input": INPUT, "processing": PROCESSING, "processed": PROCESSED, "output": OUTPUT,
+        "backgrounds": BACKGROUNDS, "models": Path(MODELS_DIR),
+    }
     root = roots.get(where)
     candidate = _safe_child(root, name) if root else None
     if not candidate or not candidate.is_file():
@@ -671,8 +740,13 @@ def _run_batch(category: str, cancel: threading.Event, token: int, background: P
 @app.post("/api/process/start")
 def api_process_start():
     data = request.get_json(silent=True) or {}
-    if not hmac.compare_digest(str(data.get("process_password") or ""), PROCESS_PASSWORD):
-        return jsonify({"error": "Wrong processing password"}), 403
+    # A service-token request already proved it's the website acting for an
+    # owner who cleared password + TOTP 2FA at the website's own login --
+    # asking for this LAN UI's separate process_password on top of that
+    # doesn't add security, only friction the website has no field for.
+    if not _valid_service_token(request):
+        if not hmac.compare_digest(str(data.get("process_password") or ""), PROCESS_PASSWORD):
+            return jsonify({"error": "Wrong processing password"}), 403
     if not prompt_governance.approval_status()["approved"]:
         return jsonify({"error": "Prompt review required before processing", "prompt_review_required": True}), 428
     category = str(data.get("category") or "").strip().lower()
@@ -773,7 +847,19 @@ def api_process_stop():
 def api_engine_config():
     if request.method == "POST":
         return jsonify({"error": "Engine switching is disabled", "engine_mode": PROCESS_ENGINE}), 403
-    return jsonify({"engine_mode": PROCESS_ENGINE, "automatic_retries": 0})
+    import raw_intake_sync
+    captured = stock_category_map.captured_keys(
+        raw_intake_sync.CAPTURE_INTAKE_SOURCE, raw_intake_sync.RAW_FINAL_DIR
+    )
+    needs_setup_keys = {c.key for c in stock_category_map.NEEDS_SETUP}
+    categories = [
+        {"key": c.key, "label": c.label, "disabled": c.key in needs_setup_keys and c.key not in captured}
+        for c in stock_category_map.CATEGORIES
+    ]
+    return jsonify({
+        "engine_mode": PROCESS_ENGINE, "automatic_retries": 0,
+        "categories": categories, "types": [c["key"] for c in categories if not c["disabled"]],
+    })
 
 
 def _duplicate_guard_enabled() -> bool:

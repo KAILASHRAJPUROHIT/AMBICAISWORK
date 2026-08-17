@@ -11,6 +11,7 @@ process_password.txt
 admin_password.txt
 otp_recipient.txt
 2fa_disabled.txt
+website_service_token.txt
 data/capture_https_key.pem
 data/capture_https_cert.pem
 

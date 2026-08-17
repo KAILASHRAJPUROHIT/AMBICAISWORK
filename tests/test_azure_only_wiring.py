@@ -42,6 +42,44 @@ def test_azure_run_accepts_authorized_start(monkeypatch):
     assert response.get_json()["engine"] == "azure_flux2_pro"
 
 
+def test_azure_run_accepts_service_token_without_a_process_password(monkeypatch):
+    class ThreadWithoutStart:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(
+        app,
+        "_derive_single_items_from_disk",
+        lambda: [{"pair": 1, "jewel": "x.jpg", "label": "X", "folder": app.INPUT}],
+    )
+    monkeypatch.setattr(app.prompt_governance, "approval_status", lambda: {"approved": True})
+    monkeypatch.setattr(app.threading, "Thread", ThreadWithoutStart)
+    app.CGPT_JOB["running"] = False
+    # No session, no process_password -- the website proxy's service token
+    # alone must be enough, since the website already gated this call
+    # behind its own owner login + TOTP 2FA.
+    response = app.app.test_client().post(
+        "/api/process/start",
+        json={"category": "earrings"},
+        headers={"X-Website-Service-Token": app.WEBSITE_SERVICE_TOKEN},
+    )
+    app.CGPT_JOB["running"] = False
+    assert response.status_code == 200
+    assert response.get_json()["engine"] == "azure_flux2_pro"
+
+
+def test_engine_config_exposes_the_category_list_for_the_website_proxy():
+    response = _client().get("/api/engine/config")
+    data = response.get_json()
+    assert isinstance(data["categories"], list) and data["categories"]
+    assert {"key", "label", "disabled"} <= set(data["categories"][0])
+    assert isinstance(data["types"], list) and data["types"]
+    assert all(not c["disabled"] for c in data["categories"] if c["key"] in data["types"])
+
+
 def test_legacy_processing_routes_are_disabled():
     client = _client()
     for path in ("/api/copilot_run", "/api/chatgpt_run", "/api/codex_run", "/api/chat/send"):
