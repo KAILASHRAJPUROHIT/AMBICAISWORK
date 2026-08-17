@@ -507,6 +507,41 @@ class MainActivity : AppCompatActivity() {
 
     private fun min(a: Float, b: Float) = if (a < b) a else b
 
+    /**
+     * Ramps zoom from the current ratio to [target] over [durationMs] in
+     * small sub-steps instead of one instant jump -- setZoomRatio() itself
+     * doesn't animate, so every previous zoom change looked like a jerk
+     * cut rather than a continuous glide. tickJewel skips entirely while
+     * this is running (isZooming) and only starts settling once the ramp
+     * actually finishes at [target], so ZOOM_SETTLE_MS always measures
+     * quiet time from when the lens truly stopped moving.
+     */
+    private fun smoothZoomTo(target: Float, durationMs: Long = 260L, onDone: (() -> Unit)? = null) {
+        val start = focusZoom.currentZoomRatio()
+        val steps = 10
+        val stepDelay = durationMs / steps
+        isZooming = true
+        var i = 0
+        val ramp = object : Runnable {
+            override fun run() {
+                i += 1
+                val t = i.toFloat() / steps
+                // Ease-out: fast at first, settling gently into the target
+                // rather than a linear ramp that feels mechanical.
+                val eased = 1f - (1f - t) * (1f - t)
+                focusZoom.setZoomRatio(start + (target - start) * eased)
+                if (i >= steps) {
+                    isZooming = false
+                    lastZoomChangeAt = System.currentTimeMillis()
+                    onDone?.invoke()
+                } else {
+                    handler.postDelayed(this, stepDelay)
+                }
+            }
+        }
+        handler.postDelayed(ramp, stepDelay)
+    }
+
     // ---------------------------------------------------------------- Capture + upload
 
     private fun captureJewel() {
