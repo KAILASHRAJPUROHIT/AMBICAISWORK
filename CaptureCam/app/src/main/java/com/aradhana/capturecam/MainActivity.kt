@@ -748,10 +748,22 @@ class MainActivity : AppCompatActivity() {
         val result = latestMaterial
 
         if (!armed) {
-            if (result == null || !result.material) {
+            // Hybrid arm gate: MaterialDetector's colour heuristic OR ML
+            // Kit's real object box, so a silver piece (weak/no colour
+            // signal) still arms the pipeline, not just gold.
+            if (!detectedNow()) {
+                if (rsc2.isReady) {
+                    if (huntStartedAt == 0L) huntStartedAt = now
+                    if (now - huntStartedAt > HUNT_GRACE_MS) {
+                        huntStep()
+                        return
+                    }
+                }
                 setStatus("Center the ornament, front side up…", ready = false)
                 return
             }
+            huntStartedAt = 0L
+            huntStepsThisAxis = 0
             armed = true
             armedAt = now
         }
