@@ -420,6 +420,7 @@ class BleDiagnosticsActivity : AppCompatActivity() {
      */
     private fun sendCustomJoystickFrame(repeat: Boolean) {
         val (a1, a2, a3) = readAxisInputs() ?: return
+        cancelActiveRepeat()
         val count = if (repeat) 15 else 1
         log("Building frames axis=($a1,$a2,$a3) x$count -- watch the gimbal now")
         var sent = 0
@@ -427,19 +428,24 @@ class BleDiagnosticsActivity : AppCompatActivity() {
             override fun run() {
                 if (sent >= count) {
                     if (repeat) log("Repeat send complete ($sent sent).")
+                    activeRepeatRunnable = null
                     return
                 }
                 val frame = DumlProtocol.buildJoystickFrame(a1, a2, a3, duMLSeq)
                 duMLSeq += 1
                 writeBytesToSelected(frame, quiet = repeat)
                 sent += 1
-                if (repeat) handler.postDelayed(this, 200L)
+                handler.postDelayed(this, 200L)
             }
         }
+        if (repeat) activeRepeatRunnable = runnable
         handler.post(runnable)
     }
 
     private fun sendNeutral() {
+        // Stop must win outright: kill any pending repeat sends FIRST, then
+        // send neutral last so nothing queued afterward can override it.
+        cancelActiveRepeat()
         val frame = DumlProtocol.neutralFrame(duMLSeq)
         duMLSeq += 1
         log("Sending neutral (stop)")
