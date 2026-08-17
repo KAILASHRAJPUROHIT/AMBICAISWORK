@@ -1242,11 +1242,12 @@ class MainActivity : AppCompatActivity() {
             HuntPhase.GIVE_UP -> {
                 huntBusy = false
                 resetHuntState()
+                huntCooldownUntil = System.currentTimeMillis() + HUNT_COOLDOWN_MS
                 // Undoes whatever net pan/tilt the sweep left behind (should
                 // already be ~0 after RETURN_TILT/RETURN_PAN, this is the
                 // defensive belt-and-suspenders close-out) and returns home.
                 undoCenteringThenAdvance {
-                    setStatus("Center the ornament, front side up…", ready = false)
+                    setStatus("Not found — reposition the ornament", ready = false)
                 }
             }
         }
