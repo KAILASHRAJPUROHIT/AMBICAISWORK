@@ -398,7 +398,40 @@ class MainActivity : AppCompatActivity() {
         providerFuture.addListener({
             cameraProvider = providerFuture.get()
             bindUseCases()
+            logCameraDiagnostics()
         }, ContextCompat.getMainExecutor(this))
+    }
+
+    /** One-shot dump of every physical lens's focal length / min-focus
+     * distance / sensor size, straight from Camera2 -- used to figure out
+     * which of this phone's 3 rear lenses is best for close macro work,
+     * since CameraSelector.DEFAULT_BACK_CAMERA gives no visibility into
+     * that on its own. */
+    private fun logCameraDiagnostics() {
+        try {
+            val mgr = getSystemService(android.hardware.camera2.CameraManager::class.java)
+            for (id in mgr.cameraIdList) {
+                val ch = mgr.getCameraCharacteristics(id)
+                val facing = ch.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING)
+                val focal = ch.get(android.hardware.camera2.CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                val minFocusDist = ch.get(android.hardware.camera2.CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE)
+                val sensorSize = ch.get(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
+                val pixelArray = ch.get(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+                val caps = ch.get(android.hardware.camera2.CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+                val isLogical = caps?.contains(
+                    android.hardware.camera2.CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA
+                ) == true
+                val physIds = if (isLogical) ch.physicalCameraIds else emptySet()
+                // minFocusDistance is in DIOPTERS (1/meters); 0.0 means fixed-focus at infinity,
+                // a HIGHER value means it can focus CLOSER (distance_m = 1/diopters).
+                val closestFocusCm = if (minFocusDist != null && minFocusDist > 0f) 100f / minFocusDist else null
+                Log.i("CameraDiag", "id=$id facing=$facing focalLen=${focal?.joinToString()}mm " +
+                    "minFocusDist=${minFocusDist}diopters closestFocus=${closestFocusCm}cm " +
+                    "sensor=${sensorSize} pixels=${pixelArray} logical=$isLogical physIds=$physIds")
+            }
+        } catch (e: Exception) {
+            Log.e("CameraDiag", "logCameraDiagnostics failed", e)
+        }
     }
 
     private fun bindUseCases() {
