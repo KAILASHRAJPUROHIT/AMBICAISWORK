@@ -295,14 +295,54 @@ class MainActivity : AppCompatActivity() {
                 latestSharpness = if (result.bounds != null) {
                     SharpnessAnalyzer.score(imageProxy, result.bounds)
                 } else 0f
+
+                val rotation = imageProxy.imageInfo.rotationDegrees
+                val boxes = latestObjectBoxesUpright
+                // Once ML Kit has found at least one real object, only trust
+                // MaterialDetector's color/contrast points that actually
+                // fall inside a genuine detected-object box -- kills stray
+                // dots on background/skin/props that happen to pass the
+                // color heuristic but were never a real object boundary.
+                // Fails open (shows all heuristic points) until ML Kit's
+                // first detection lands, so the overlay isn't blank on the
+                // very first frames.
+                val filteredPoints = if (boxes.isEmpty()) {
+                    result.points
+                } else {
+                    result.points.filter { p ->
+                        val up = uprightPoint(p, rotation)
+                        boxes.any { it.contains(up[0], up[1]) }
+                    }
+                }
                 // Focus-peaking style overlay -- screen only, see
                 // BoundsOverlayView's own doc comment for why this can
                 // never leak into the actual captured photo.
-                binding.boundsOverlay.update(
-                    result.points, imageProxy.width, imageProxy.height,
-                    imageProxy.imageInfo.rotationDegrees
-                )
-                imageProxy.close()
+                binding.boundsOverlay.update(filteredPoints, imageProxy.width, imageProxy.height, rotation)
+
+                val mediaImage = imageProxy.image
+                if (!objectDetectBusy && mediaImage != null) {
+                    objectDetectBusy = true
+                    val inputImage = InputImage.fromMediaImage(mediaImage, rotation)
+                    val uprightW = if (rotation == 90 || rotation == 270) imageProxy.height else imageProxy.width
+                    val uprightH = if (rotation == 90 || rotation == 270) imageProxy.width else imageProxy.height
+                    objectDetector.process(inputImage)
+                        .addOnSuccessListener { objects ->
+                            latestObjectBoxesUpright = objects.map { obj ->
+                                val r = obj.boundingBox
+                                RectF(
+                                    r.left / uprightW.toFloat(), r.top / uprightH.toFloat(),
+                                    r.right / uprightW.toFloat(), r.bottom / uprightH.toFloat()
+                                )
+                            }
+                        }
+                        .addOnFailureListener { e -> Log.e(TAG, "Object detection failed", e) }
+                        .addOnCompleteListener {
+                            objectDetectBusy = false
+                            imageProxy.close()
+                        }
+                } else {
+                    imageProxy.close()
+                }
             }
             Phase.TAG -> {
                 binding.boundsOverlay.update(emptyList(), 0, 0, 0)
