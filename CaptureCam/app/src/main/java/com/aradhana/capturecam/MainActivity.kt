@@ -622,6 +622,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun min(a: Float, b: Float) = if (a < b) a else b
 
+    /** Converts a MaterialDetector.Point (normalized, raw sensor-space, same
+     * as BoundsOverlayView receives) into the UPRIGHT/rotation-applied
+     * normalized space ML Kit's bounding boxes are already in -- same
+     * per-point transform BoundsOverlayView.update() uses for display, just
+     * without the FILL_CENTER view-mapping step since this is purely for a
+     * containment test, not drawing. */
+    private fun uprightPoint(p: MaterialDetector.Point, rotationDegrees: Int): FloatArray = when (rotationDegrees) {
+        90 -> floatArrayOf(1f - p.y, p.x)
+        180 -> floatArrayOf(1f - p.x, 1f - p.y)
+        270 -> floatArrayOf(p.y, 1f - p.x)
+        else -> floatArrayOf(p.x, p.y)
+    }
+
     /**
      * Ramps zoom from the current ratio to [target] over [durationMs] in
      * small sub-steps instead of one instant jump -- setZoomRatio() itself
