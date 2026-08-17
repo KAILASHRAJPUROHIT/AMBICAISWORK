@@ -1075,8 +1075,10 @@ class MainActivity : AppCompatActivity() {
         rsc2.returnHome(axis3 = PAN_LEFT_AXIS3, durationMs = PAN_STEP_MS) {
             setStatus("Moving to angle 2…", ready = false)
             Log.i(TAG, "moveOut angle2 pan=$PAN_RIGHT_AXIS3 rsc2.isReady=${rsc2.isReady}")
+            showDirectionArrow(left = false)
             rsc2.moveOut(axis3 = PAN_RIGHT_AXIS3, durationMs = PAN_STEP_MS) {
                 Log.i(TAG, "moveOut angle2 arrived")
+                hideDirectionArrow()
                 waitForStableFrame("Turn the ornament to show its RIGHT side, then hold still") { captureAngle2() }
             }
         }
