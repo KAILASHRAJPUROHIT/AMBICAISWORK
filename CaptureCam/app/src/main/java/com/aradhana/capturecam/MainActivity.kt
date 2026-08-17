@@ -85,6 +85,7 @@ class MainActivity : AppCompatActivity() {
     // whatever frame happens to be live at that exact millisecond.
     private var stallGraceAt = 0L
     private var readyStreak = 0
+    private var jewelCaptureRetries = 0
     private var jewelJpeg: ByteArray? = null
     private var tagJpeg: ByteArray? = null
     private var tagCodeHistory = mutableListOf<String>()
