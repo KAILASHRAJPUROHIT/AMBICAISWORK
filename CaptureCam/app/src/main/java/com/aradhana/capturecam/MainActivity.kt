@@ -131,6 +131,15 @@ class MainActivity : AppCompatActivity() {
     // that just overshot.
     private var centerAvoidAxis = CenterAxis.NONE
 
+    // ---- Blind search (MAIN only): active only before anything has ever
+    // been detected for this item -- see huntStep().
+    private var huntAxis = CenterAxis.PAN
+    private var huntDirection = 1
+    private var huntStepsThisAxis = 0
+    private var huntCyclesWithoutFind = 0
+    private var huntBusy = false
+    private var huntStartedAt = 0L
+
     private val prefs by lazy { getSharedPreferences("capturecam", MODE_PRIVATE) }
     private val handler = Handler(Looper.getMainLooper())
     private val barcodeScanner by lazy { BarcodeScanning.getClient() }
