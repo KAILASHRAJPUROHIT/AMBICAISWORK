@@ -153,6 +153,13 @@ class MainActivity : AppCompatActivity() {
     private var huntPhaseMsSpent = 0
     private var huntBusy = false
     private var huntStartedAt = 0L
+    // Set after a full down/left/right sweep finds nothing -- without this,
+    // GIVE_UP fed straight back into the grace timer and restarted the
+    // WHOLE sweep every ~800ms forever ("hunts forever" -- confirmed live).
+    // A real pause after a genuine miss gives the operator a chance to
+    // reposition the item and lets a passive detection (no sweep needed)
+    // still arm normally in the meantime.
+    private var huntCooldownUntil = 0L
 
     private val prefs by lazy { getSharedPreferences("capturecam", MODE_PRIVATE) }
     private val handler = Handler(Looper.getMainLooper())
