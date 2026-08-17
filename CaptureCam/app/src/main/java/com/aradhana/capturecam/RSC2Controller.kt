@@ -251,6 +251,7 @@ class RSC2Controller {
     }
 
     fun disconnect() {
+        stopHeartbeat()
         activeMoveRunnable?.let { handler.removeCallbacks(it) }
         activeMoveRunnable = null
         try {
