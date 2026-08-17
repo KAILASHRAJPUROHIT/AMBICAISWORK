@@ -594,29 +594,46 @@ class MainActivity : AppCompatActivity() {
 
     // ---------------------------------------------------------------- Capture + upload
 
+    /**
+     * Blurred photos are not acceptable output -- this checks the ACTUAL
+     * captured full-res pixels (not the low-res live-analysis estimate that
+     * gated the shutter; see SharpnessAnalyzer.scoreBitmapRaw for why those
+     * two can disagree) and, if soft, forces a real re-focus and re-shoot
+     * rather than accepting it. Capped at MAX_FULLRES_CAPTURE_RETRIES so a
+     * genuinely unfocusable subject (e.g. macro distance the lens can't
+     * resolve) can't loop forever; if every attempt comes back soft, the
+     * preview is shown WITHOUT the auto-continue countdown so the operator
+     * must explicitly retake rather than a blurred shot silently sailing
+     * through on the 5s timer.
+     */
     private fun captureJewel() {
         captureFullRes { bytes ->
             if (bytes == null) {
                 setStatus("Capture failed — retrying", ready = false)
                 return@captureFullRes
             }
-            // Log the ACTUAL captured pixels' sharpness, not the low-res
-            // live-analysis-stream estimate that gated the shutter -- the
-            // two are on different scales (see SharpnessAnalyzer.scoreBitmapRaw)
-            // and this number is what tells us whether the live gate is
-            // trustworthy or whether full-res blur is slipping through it
-            // undetected.
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.let { bmp ->
-                val raw = SharpnessAnalyzer.scoreBitmapRaw(bmp)
-                Log.i(TAG, "jewel capture fullRes sharpness raw=$raw size=${bmp.width}x${bmp.height} liveSharp=$latestSharpness")
-                bmp.recycle()
+            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            val raw = bmp?.let { SharpnessAnalyzer.scoreBitmapRaw(it) } ?: Double.MAX_VALUE
+            Log.i(TAG, "jewel capture fullRes sharpness raw=$raw size=${bmp?.width}x${bmp?.height} liveSharp=$latestSharpness retries=$jewelCaptureRetries")
+            bmp?.recycle()
+
+            if (raw < MIN_FULLRES_SHARPNESS_RAW && jewelCaptureRetries < MAX_FULLRES_CAPTURE_RETRIES) {
+                jewelCaptureRetries += 1
+                focusZoom.triggerAutoFocus()
+                setStatus("Image soft — refocusing and retrying…", ready = false)
+                handler.postDelayed({ captureJewel() }, 600L)
+                return@captureFullRes
             }
+
+            val stillSoft = raw < MIN_FULLRES_SHARPNESS_RAW
+            jewelCaptureRetries = 0
             jewelJpeg = bytes
             showCapturePreview(
                 bytes,
                 onProceed = { resetForNewItem(Phase.TAG) },
                 onRetake = { retakeJewel() },
-                onCancel = { cancelItem() }
+                onCancel = { cancelItem() },
+                requireManualConfirm = stillSoft
             )
         }
     }
