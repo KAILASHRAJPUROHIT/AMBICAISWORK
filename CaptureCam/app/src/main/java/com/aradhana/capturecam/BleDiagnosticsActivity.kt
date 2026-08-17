@@ -93,11 +93,17 @@ class BleDiagnosticsActivity : AppCompatActivity() {
         deviceListContainer = findViewById(R.id.deviceListContainer)
         characteristicListContainer = findViewById(R.id.characteristicListContainer)
         hexBytesInput = findViewById(R.id.hexBytesInput)
+        axis1Input = findViewById(R.id.axis1Input)
+        axis2Input = findViewById(R.id.axis2Input)
+        axis3Input = findViewById(R.id.axis3Input)
 
         findViewById<Button>(R.id.scanButton).setOnClickListener { requestPermissionsThenScan() }
         findViewById<Button>(R.id.disconnectButton).setOnClickListener { disconnect() }
         findViewById<Button>(R.id.sendBytesButton).setOnClickListener { sendHexToSelected() }
         findViewById<Button>(R.id.repeatSendButton).setOnClickListener { sendHexRepeatedly() }
+        findViewById<Button>(R.id.sendCustomOnceButton).setOnClickListener { sendCustomJoystickFrame(repeat = false) }
+        findViewById<Button>(R.id.sendCustomRepeatButton).setOnClickListener { sendCustomJoystickFrame(repeat = true) }
+        findViewById<Button>(R.id.sendNeutralButton).setOnClickListener { sendNeutral() }
 
         log("Ready. Turn on the RSC 2, put it in Bluetooth pairing mode (per its manual), then tap Scan.")
     }
