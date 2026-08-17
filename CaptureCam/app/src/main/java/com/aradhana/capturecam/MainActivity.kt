@@ -257,6 +257,11 @@ class MainActivity : AppCompatActivity() {
         private const val CENTERING_DEADBAND = 0.06f
         private const val CENTERING_TICK_MS = 200L
         private const val CENTERING_MAX_ATTEMPTS = 4
+        // Angle shots reuse the same centering primitive but need a bigger
+        // budget: staff places the piece by hand after rotating it, which
+        // can start much further off-center than MAIN's fine pre-capture
+        // correction ever has to travel from.
+        private const val ANGLE_CENTERING_MAX_ATTEMPTS = 8
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
