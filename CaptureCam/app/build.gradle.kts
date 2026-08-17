@@ -40,6 +40,7 @@ dependencies {
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
+    implementation("com.google.mlkit:object-detection:17.0.2")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
