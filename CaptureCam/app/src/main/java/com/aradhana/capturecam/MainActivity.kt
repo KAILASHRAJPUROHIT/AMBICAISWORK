@@ -936,6 +936,34 @@ class MainActivity : AppCompatActivity() {
         maxAttempts: Int = CENTERING_MAX_ATTEMPTS
     ): Boolean {
         if (centeringAttempts >= maxAttempts) return false
+
+        // Safety check FIRST: if the last nudge this function issued was
+        // followed by the ornament vanishing entirely (visible right
+        // before that move, gone now), that move overshot it out of frame.
+        // Undo just that one nudge and prefer the OTHER axis on the next
+        // attempt, rather than continuing to push the axis that just lost
+        // it. "What works" pattern per live testing: one axis at a time,
+        // revert on loss, try the other axis next.
+        if (lastCenterAxis != CenterAxis.NONE && bestObjectBox() == null && result.bounds == null) {
+            centeringAttempts += 1
+            val axis = lastCenterAxis
+            val sign = lastCenterSign
+            Log.i(TAG, "centering nudge lost the ornament -- reverting axis=$axis sign=$sign")
+            centerAvoidAxis = axis
+            lastCenterAxis = CenterAxis.NONE
+            setStatus("Centering ornament…", ready = false)
+            if (axis == CenterAxis.PAN) {
+                centeringPanTicks -= sign
+                val undoPan = if (sign > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
+                rsc2.moveOut(axis3 = undoPan, durationMs = CENTERING_TICK_MS) {}
+            } else {
+                centeringTiltTicks -= sign
+                val undoTilt = if (sign > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
+                rsc2.moveOut(axis1 = undoTilt, durationMs = CENTERING_TICK_MS) {}
+            }
+            return true
+        }
+
         val mlBox = bestObjectBox()
         val cx: Float
         val cy: Float
@@ -951,34 +979,43 @@ class MainActivity : AppCompatActivity() {
         val dy = cy - 0.5f
         val needsPan = abs(dx) > CENTERING_DEADBAND
         val needsTilt = abs(dy) > CENTERING_DEADBAND
-        if (!needsPan && !needsTilt) return false
+        if (!needsPan && !needsTilt) { lastCenterAxis = CenterAxis.NONE; return false }
 
         // ONE axis per nudge, never both at once -- a combined tilt+pan
         // command triggered an immediate BLE disconnect in live testing
         // (the first time this app ever sent both axes deflected
         // simultaneously); every single-axis command all session was
-        // reliable. Corrects whichever axis is off by more, alternating
-        // across attempts as needed rather than risk the combined write again.
+        // reliable. Corrects whichever axis is off by more, UNLESS that
+        // axis just reverted for overshooting (centerAvoidAxis) -- then the
+        // other axis gets one turn first, if it also needs correcting.
         centeringAttempts += 1
         setStatus("Centering ornament…", ready = false)
-        if (needsPan && (!needsTilt || abs(dx) >= abs(dy))) {
+        val avoid = centerAvoidAxis
+        centerAvoidAxis = CenterAxis.NONE
+        val choosePan = when {
+            needsPan && avoid == CenterAxis.PAN && needsTilt -> false
+            needsTilt && avoid == CenterAxis.TILT && needsPan -> true
+            needsPan && (!needsTilt || abs(dx) >= abs(dy)) -> true
+            else -> false
+        }
+        if (choosePan) {
             // Object right-of-center (dx>0) -> pan camera right to bring it in.
-            // axis3 ABOVE center = the "right" direction (PAN_RIGHT_AXIS3).
-            val panAxis = if (dx > 0) {
-                centeringPanTicks += 1; DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
-            } else {
-                centeringPanTicks -= 1; DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION
-            }
+            // axis3 ABOVE center = the "right" direction.
+            val sign = if (dx > 0) 1 else -1
+            centeringPanTicks += sign
+            lastCenterAxis = CenterAxis.PAN
+            lastCenterSign = sign
+            val panAxis = DumlProtocol.AXIS_CENTER + sign * CENTERING_DEFLECTION
             Log.i(TAG, "centering nudge #$centeringAttempts (pan) dx=$dx dy=$dy pan=$panAxis")
             rsc2.moveOut(axis3 = panAxis, durationMs = CENTERING_TICK_MS) {}
         } else {
             // Object low-in-frame (dy>0, y grows downward) -> tilt camera
             // down. axis1 ABOVE center = look up (confirmed live).
-            val tiltAxis = if (dy > 0) {
-                centeringTiltTicks -= 1; DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION
-            } else {
-                centeringTiltTicks += 1; DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
-            }
+            val sign = if (dy > 0) -1 else 1
+            centeringTiltTicks += sign
+            lastCenterAxis = CenterAxis.TILT
+            lastCenterSign = sign
+            val tiltAxis = DumlProtocol.AXIS_CENTER + sign * CENTERING_DEFLECTION
             Log.i(TAG, "centering nudge #$centeringAttempts (tilt) dx=$dx dy=$dy tilt=$tiltAxis")
             rsc2.moveOut(axis1 = tiltAxis, durationMs = CENTERING_TICK_MS) {}
         }
