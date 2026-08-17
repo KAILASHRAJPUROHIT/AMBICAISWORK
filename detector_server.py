@@ -109,6 +109,8 @@ async def handle_connection(websocket):
             timestamp = latest["timestamp"]
             image = latest["image"]
             last_processed_id = frame_id
+            if frame_id % 20 == 0:
+                cv2.imwrite("debug_last_frame.jpg", image)
             t0 = time.time()
             try:
                 # DINO's torch call is blocking/synchronous -- run it off
