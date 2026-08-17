@@ -42,6 +42,11 @@ class JewelleryTracker {
      * space) on the given frame. Called both for a fresh DINO acquisition
      * and for a periodic DINO reseed of an already-tracking target. */
     fun seed(mat: Mat, box: RectF) {
+        // Explicit reseed: drop any existing tracker FIRST, never hold two
+        // native TrackerMIL instances alive at once (one nulled-out, one
+        // freshly created) -- the old one's native object is a real
+        // resource, not just a Kotlin reference to clear later.
+        tracker = null
         frameW = mat.cols()
         frameH = mat.rows()
         val px = (box.left * frameW).toInt().coerceIn(0, frameW - 1)
