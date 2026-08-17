@@ -744,6 +744,7 @@ class MainActivity : AppCompatActivity() {
 
     private val tickRunnable = object : Runnable {
         override fun run() {
+            updateGimbalStatusBadge()
             when (phase) {
                 Phase.JEWEL -> tickJewel()
                 Phase.TAG -> tickTag()
@@ -751,6 +752,22 @@ class MainActivity : AppCompatActivity() {
             }
             handler.postDelayed(this, TICK_INTERVAL_MS)
         }
+    }
+
+    /** On-screen "is the gimbal actually connected right now" indicator --
+     * previously the only way to know was watching logcat for "RSC 2
+     * ready"/"disconnected" lines, not something staff can check. Updated
+     * every tick so it reflects reality within ~150ms of a real
+     * connect/disconnect, including mid-move ("Moving…") so a stuck
+     * gimbal doesn't read as falsely idle-connected. */
+    private fun updateGimbalStatusBadge() {
+        val (text, color) = when {
+            !rsc2.isReady -> "Gimbal: not connected" to 0xB0663333.toInt()
+            rsc2.isMoving -> "Gimbal: moving" to 0xB0665C33.toInt()
+            else -> "Gimbal: connected" to 0xB0336633.toInt()
+        }
+        binding.gimbalStatusText.text = text
+        binding.gimbalStatusText.setBackgroundColor(color)
     }
 
     private fun tickTag() {
