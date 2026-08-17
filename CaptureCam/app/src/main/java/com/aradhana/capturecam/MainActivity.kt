@@ -1978,6 +1978,13 @@ class MainActivity : AppCompatActivity() {
             centeringPanMs = 0
             centeringTiltMs = 0
             centeringAttempts = 0
+            lastCenterAxis = CenterAxis.NONE
+            centerAvoidAxis = CenterAxis.NONE
+            huntAxis = CenterAxis.PAN
+            huntDirection = 1
+            huntStepsThisAxis = 0
+            huntCyclesWithoutFind = 0
+            huntStartedAt = 0L
         }
         if (next == Phase.TAG) {
             barcodeAttempts = 0
