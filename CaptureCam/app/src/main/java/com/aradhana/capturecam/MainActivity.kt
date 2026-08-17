@@ -360,12 +360,20 @@ class MainActivity : AppCompatActivity() {
         // Blind search (huntStep()) -- only runs before anything has ever
         // been detected for this item. Bigger, longer steps than fine
         // centering (CENTERING_*) since this is covering ground, not
-        // fine-tuning.
-        private const val HUNT_GRACE_MS = 2500L
+        // fine-tuning. Short grace (not zero) so a single bad frame right
+        // at arm-time doesn't kick off a full sweep -- "as soon as the
+        // shot starts" per spec, not a long wait.
+        private const val HUNT_GRACE_MS = 800L
         private const val HUNT_STEP_DEFLECTION = 180
         private const val HUNT_STEP_MS = 500L
-        private const val HUNT_MAX_STEPS_PER_AXIS = 4
-        private const val HUNT_MAX_CYCLES = 3
+        // "All the way down" for tilt is bounded by TILT_MS_LIMIT (the
+        // real mechanical-limit safety budget) rather than a literal
+        // hard-stop sweep. "All the way left/right" for pan has no such
+        // mechanical limit (DJI spec: pan is a 360° continuous slip-ring),
+        // so this is a deliberately generous practical search arc instead
+        // -- not literally 360°, which would be impractical for a fixed
+        // camera rig.
+        private const val HUNT_PAN_SWEEP_MAX_MS = 8000
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
