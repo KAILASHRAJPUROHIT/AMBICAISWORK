@@ -304,8 +304,29 @@ object MaterialDetector {
             val bboxCells = (c.maxCol - c.minCol + 1) * (c.maxRow - c.minRow + 1)
             return c.size.toFloat() / max(1, bboxCells)
         }
+        // A chain is naturally thin/low-fill-ratio too -- the fill-ratio
+        // bar alone can't tell "hollow display-box trim" and "genuine
+        // chain" apart, they have the same silhouette signature. What
+        // actually differs: box trim runs along the box's own edges, and a
+        // box large enough to be in frame at all almost always has its
+        // trim touching 2+ sides of the guide region. A chain the operator
+        // has actually framed sits WITHIN the guide region -- it might
+        // brush one edge, but not multiple. So: still prefer a filled blob
+        // when one exists (a ring/pendant), but a thin component is only
+        // rejected as "probably a container" when it also hugs multiple
+        // edges; a thin component that doesn't is trusted as chain mode.
+        fun edgesTouched(c: Component): Int {
+            val margin = 1
+            var count = 0
+            if (c.minCol <= margin) count += 1
+            if (c.maxCol >= cols - 1 - margin) count += 1
+            if (c.minRow <= margin) count += 1
+            if (c.maxRow >= rows - 1 - margin) count += 1
+            return count
+        }
         val MIN_FILL_RATIO = 0.28f
-        val chosen = components.filter { fillRatio(it) >= MIN_FILL_RATIO }.maxByOrNull { it.size }
+        val chosen = components.filter { fillRatio(it) >= MIN_FILL_RATIO || edgesTouched(it) < 2 }
+            .maxByOrNull { it.size }
             ?: components.maxByOrNull { it.size }!!
         val bestSize = chosen.size
         val bestMinCol = chosen.minCol; val bestMinRow = chosen.minRow
