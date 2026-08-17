@@ -311,6 +311,19 @@ class MainActivity : AppCompatActivity() {
         // Activity's life. attemptGimbalConnect() already no-ops if already
         // connected, so this is safe to call on every resume.
         attemptGimbalConnect()
+        // Navigating away (e.g. to the BLE diagnostics screen) pauses/stops
+        // this Activity, and CameraX's own lifecycle binding didn't reliably
+        // bring the camera back on its own -- a capture mid-flight during
+        // that window threw "ImageCaptureException: Camera is closed" and
+        // left focus/sharpness tracking permanently stuck afterward (the
+        // Camera2Interop AF-state callback was attached to the now-dead
+        // session). Explicitly rebinding on every resume is the same
+        // "re-verify all resources on resume" fix as the gimbal reconnect
+        // above -- bindUseCases() itself does cameraProvider.unbindAll()
+        // first, so this is safe to call repeatedly.
+        if (::cameraProvider.isInitialized) {
+            startCamera()
+        }
     }
 
     // ---------------------------------------------------------------- Camera setup
