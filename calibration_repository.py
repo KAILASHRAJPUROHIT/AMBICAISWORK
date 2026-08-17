@@ -102,10 +102,10 @@ def _atomic_write_json(path: str, data) -> None:
     os.replace(tmp, path)
 
 
-def _load_raw() -> dict:
-    if os.path.exists(CALIBRATION_PATH):
+def _load_raw(path: str) -> dict:
+    if os.path.exists(path):
         try:
-            with open(CALIBRATION_PATH, encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
