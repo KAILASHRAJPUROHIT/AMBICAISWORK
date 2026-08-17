@@ -890,6 +890,7 @@ class MainActivity : AppCompatActivity() {
         isZooming = false
         stallGraceAt = 0L
         readyStreak = 0
+        jewelCaptureRetries = 0
         if (next == Phase.TAG) {
             barcodeAttempts = 0
             lastBarcodeCount = -1
