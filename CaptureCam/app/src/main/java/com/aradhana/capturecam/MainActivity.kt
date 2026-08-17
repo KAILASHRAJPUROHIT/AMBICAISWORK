@@ -879,8 +879,11 @@ class MainActivity : AppCompatActivity() {
      * a precise servo; expect a few pixels of residual offset within the
      * deadband, not exact centering.
      */
-    private fun attemptCenteringCorrection(result: MaterialDetector.Result): Boolean {
-        if (centeringAttempts >= CENTERING_MAX_ATTEMPTS) return false
+    private fun attemptCenteringCorrection(
+        result: MaterialDetector.Result,
+        maxAttempts: Int = CENTERING_MAX_ATTEMPTS
+    ): Boolean {
+        if (centeringAttempts >= maxAttempts) return false
         val bounds = result.bounds ?: return false
         val cx = (bounds.x0 + bounds.x1) / 2f
         val cy = (bounds.y0 + bounds.y1) / 2f
