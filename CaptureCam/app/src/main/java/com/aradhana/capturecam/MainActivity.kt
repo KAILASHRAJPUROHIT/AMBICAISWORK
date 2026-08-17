@@ -1469,6 +1469,11 @@ class MainActivity : AppCompatActivity() {
         showReadyButton {
             centeringAttempts = 0
             angleZoomRounds = 0
+            // Re-arms continuous AF as the baseline for this side's
+            // tracking -- the MAIN capture's final triggerAutoFocus() lock
+            // (or this same side's own, on a retake) does not resume
+            // continuous scanning by itself.
+            focusZoom.startContinuousTracking()
             setStatus("Centering the ornament…", ready = false)
             onReady()
         }
