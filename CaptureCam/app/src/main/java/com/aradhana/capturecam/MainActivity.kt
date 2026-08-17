@@ -40,6 +40,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import kotlinx.coroutines.launch
+import org.opencv.core.Mat
 import java.nio.ByteBuffer
 import kotlin.math.abs
 import kotlin.math.min
