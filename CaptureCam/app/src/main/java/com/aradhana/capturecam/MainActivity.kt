@@ -71,6 +71,29 @@ class MainActivity : AppCompatActivity() {
     // calibration profiles are wired in; axis3 avoided since its effect
     // isn't confirmed (see RSC2Controller's doc comment).
     private val rsc2 = RSC2Controller()
+    // Debug-only hook so an axis can be tested live via ADB while someone
+    // watches the gimbal, without needing to operate the diagnostics
+    // screen's UI by hand: adb shell am broadcast -a
+    // com.aradhana.capturecam.TEST_MOVE --ei axis1 1024 --ei axis2 1024
+    // --ei axis3 1300 --el durationMs 900. Any axis omitted defaults to
+    // center. Moves out, holds briefly, then returns home automatically.
+    private val testMoveReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val a1 = intent.getIntExtra("axis1", DumlProtocol.AXIS_CENTER)
+            val a2 = intent.getIntExtra("axis2", DumlProtocol.AXIS_CENTER)
+            val a3 = intent.getIntExtra("axis3", DumlProtocol.AXIS_CENTER)
+            val duration = intent.getLongExtra("durationMs", 900L)
+            Log.i(TAG, "testMoveReceiver: axis=($a1,$a2,$a3) duration=$duration rsc2.isReady=${rsc2.isReady}")
+            rsc2.moveOut(a1, a2, a3, durationMs = duration) {
+                Log.i(TAG, "testMoveReceiver: arrived, holding 2s then returning")
+                handler.postDelayed({
+                    rsc2.returnHome(a1, a2, a3, durationMs = duration) {
+                        Log.i(TAG, "testMoveReceiver: returned home")
+                    }
+                }, 2000L)
+            }
+        }
+    }
     private var angle1Jpeg: ByteArray? = null
     private var angle2Jpeg: ByteArray? = null
     // Set for the whole MAIN-accepted -> angle1 -> angle2 sequence. tickJewel()
