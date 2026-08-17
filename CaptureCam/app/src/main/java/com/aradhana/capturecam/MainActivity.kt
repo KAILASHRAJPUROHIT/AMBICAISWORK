@@ -814,7 +814,7 @@ class MainActivity : AppCompatActivity() {
         inAngleSequence = true
         setStatus("Moving to angle 1…", ready = false)
         Log.i(TAG, "moveOut angle1 pan=$PAN_LEFT_AXIS1")
-        rsc2.moveOut(PAN_LEFT_AXIS1, DumlProtocol.AXIS_CENTER, PAN_STEP_MS) {
+        rsc2.moveOut(axis3 = PAN_LEFT_AXIS1, durationMs = PAN_STEP_MS) {
             Log.i(TAG, "moveOut angle1 arrived")
             captureAngle1()
         }
@@ -834,7 +834,7 @@ class MainActivity : AppCompatActivity() {
     private fun onAngle1Captured(bytes: ByteArray?) {
         if (bytes == null) {
             setStatus("Angle 1 capture failed — returning and retrying", ready = false)
-            rsc2.returnHome(PAN_LEFT_AXIS1, DumlProtocol.AXIS_CENTER, PAN_STEP_MS) { onMainCaptureAccepted() }
+            rsc2.returnHome(axis3 = PAN_LEFT_AXIS1, durationMs = PAN_STEP_MS) { onMainCaptureAccepted() }
             return
         }
         angle1Jpeg = bytes
@@ -843,7 +843,7 @@ class MainActivity : AppCompatActivity() {
         // velocity commands, not absolute positions (see RSC2Controller's
         // moveOut/returnHome doc). Skipping this left the gimbal drifted
         // for angle 2, and for the NEXT item's angle 1.
-        rsc2.returnHome(PAN_LEFT_AXIS1, DumlProtocol.AXIS_CENTER, PAN_STEP_MS) {
+        rsc2.returnHome(axis3 = PAN_LEFT_AXIS1, durationMs = PAN_STEP_MS) {
             setStatus("Moving to angle 2…", ready = false)
             Log.i(TAG, "moveOut angle2 pan=$PAN_RIGHT_AXIS1 rsc2.isReady=${rsc2.isReady}")
             rsc2.moveOut(PAN_RIGHT_AXIS1, DumlProtocol.AXIS_CENTER, PAN_STEP_MS) {
