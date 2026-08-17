@@ -41,6 +41,7 @@ import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
+import kotlin.math.abs
 
 /**
  * Smart-camera companion for JewelleryCatalogTool's browser-based capture
