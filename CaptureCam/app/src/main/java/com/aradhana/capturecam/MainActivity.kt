@@ -274,6 +274,17 @@ class MainActivity : AppCompatActivity() {
         attemptGimbalConnect()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Coming back to this screen (e.g. from the BLE diagnostics screen,
+        // or after turning the gimbal on) is exactly when a previously
+        // failed/never-attempted connect should be retried -- onCreate's
+        // one-shot attempt otherwise never runs again for the rest of this
+        // Activity's life. attemptGimbalConnect() already no-ops if already
+        // connected, so this is safe to call on every resume.
+        attemptGimbalConnect()
+    }
+
     // ---------------------------------------------------------------- Camera setup
 
     private fun startCamera() {
