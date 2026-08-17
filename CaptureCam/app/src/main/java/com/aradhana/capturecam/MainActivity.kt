@@ -1289,5 +1289,6 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacks(tickRunnable)
+        rsc2.disconnect(this)
     }
 }
