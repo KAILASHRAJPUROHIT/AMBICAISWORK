@@ -205,6 +205,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun attemptGimbalConnect() {
+        if (rsc2.isReady) return
         val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= 31) {
             needed += Manifest.permission.BLUETOOTH_SCAN
