@@ -825,6 +825,7 @@ class MainActivity : AppCompatActivity() {
         stallGraceAt = 0L
         readyStreak = 0
         jewelCaptureRetries = 0
+        latestObjectBoxesUpright = emptyList()
         focusZoom.setZoomRatio(1f)
         setStatus("Place the item in frame…", ready = false)
     }
