@@ -107,6 +107,14 @@ class MainActivity : AppCompatActivity() {
     // of "works on item 1, breaks on item 2" -- item 2 inherited whatever mess
     // the race left behind.
     private var inAngleSequence = false
+    // Net whole-tick nudges applied by attemptCenteringCorrection(), signed
+    // (positive = toward AXIS_CENTER+CENTERING_DEFLECTION direction on that
+    // axis). Tracked so the exact opposite total can be undone in one move
+    // at the end of the item -- these are velocity commands, so "centered"
+    // isn't a position we can just command back to directly.
+    private var centeringPanTicks = 0
+    private var centeringTiltTicks = 0
+    private var centeringAttempts = 0
 
     private val prefs by lazy { getSharedPreferences("capturecam", MODE_PRIVATE) }
     private val handler = Handler(Looper.getMainLooper())
