@@ -326,14 +326,14 @@ class MainActivity : AppCompatActivity() {
         // anything this app sends.
         //
         // PROVISIONAL cap, not yet calibrated: we don't have a live
-        // ticks-to-degrees conversion for this rig (no absolute-position
+        // ms-to-degrees conversion for this rig (no absolute-position
         // feedback over BLE, only velocity commands), so this is a
-        // deliberately conservative tick budget -- small relative to the
-        // ~326° total tilt range -- rather than a value derived from real
-        // testing. Needs a live one-axis sweep-to-hard-stop test (same
-        // technique used to confirm axis mapping) to replace this with an
-        // actual degree-based limit.
-        private const val TILT_TICK_LIMIT = 12
+        // deliberately conservative total-move-time budget -- small
+        // relative to the ~326° total tilt range -- rather than a value
+        // derived from real testing. Needs a live one-axis sweep-to-
+        // hard-stop test (same technique used to confirm axis mapping) to
+        // replace this with an actual degree-based limit.
+        private const val TILT_MS_LIMIT = 2400
         // Blind search (huntStep()) -- only runs before anything has ever
         // been detected for this item. Bigger, longer steps than fine
         // centering (CENTERING_*) since this is covering ground, not
