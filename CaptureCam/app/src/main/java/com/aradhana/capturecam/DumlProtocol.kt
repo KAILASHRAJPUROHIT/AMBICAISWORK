@@ -102,8 +102,16 @@ object DumlProtocol {
      * activity in live testing. These two replicate the actual observed
      * idle traffic instead of guessing at a third message type.
      */
-    fun pingFrame(seq: Int): ByteArray =
-        buildFrame(receiver = 0x04, cmdType = 0x40, cmdSet = 0x00, cmdId = 0x01, data = ByteArray(0), seq = seq)
+    // The captured session actually pinged several different receiver IDs
+    // this way (0x04 only 3 times, but 0xbf and 0xdf 32 and 30 times
+    // respectively) -- almost certainly separate subsystems (motor
+    // controller, IMU, battery, etc.), each apparently needing its own
+    // keep-alive independent of the joystick target. Cycling through all
+    // observed receivers rather than guessing which one actually gates the
+    // connection-level timeout.
+    val PING_RECEIVERS = intArrayOf(0x04, 0xbf, 0xdf)
+    fun pingFrame(receiver: Int, seq: Int): ByteArray =
+        buildFrame(receiver = receiver, cmdType = 0x40, cmdSet = 0x00, cmdId = 0x01, data = ByteArray(0), seq = seq)
 
     private val STATUS_REPORT_DATA = byteArrayOf(
         0x10, 0x51, 0x01, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x50,
