@@ -72,6 +72,12 @@ class BleDiagnosticsActivity : AppCompatActivity() {
     private var selectedCharacteristic: BluetoothGattCharacteristic? = null
     private val seenAddresses = mutableSetOf<String>()
     private var scanning = false
+    // The repeat-send loop schedules up to 15 sends over ~3s via
+    // postDelayed -- nothing was cancelling that when the user then hit
+    // STOP mid-loop, so leftover scheduled sends kept re-deflecting the
+    // gimbal right after the neutral frame landed ("neutral doesn't work").
+    // Tracking the active loop lets every stop/new-send path cancel it.
+    private var activeRepeatRunnable: Runnable? = null
     // DUML sequence counter -- increments per frame sent this session. The
     // real device didn't appear to require strict continuity from a fresh
     // start, but incrementing avoids relying on that being true.
