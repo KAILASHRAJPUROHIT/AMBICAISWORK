@@ -245,6 +245,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // This is a kiosk-style capture station -- the operator's hands are
+        // usually busy holding jewellery/tags, not touching the screen, so
+        // an unexpected sleep mid-workflow (requiring a touch + possibly a
+        // PIN to recover) is actively disruptive. Explicit flag rather than
+        // relying on system sleep settings/wake locks being configured
+        // correctly on every deployed device.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         launchedFromBrowser = intent?.data?.scheme == "capturecam"
 
