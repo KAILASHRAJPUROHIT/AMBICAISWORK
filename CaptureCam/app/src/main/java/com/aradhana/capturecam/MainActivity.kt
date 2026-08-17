@@ -329,6 +329,11 @@ class MainActivity : AppCompatActivity() {
 
         binding.settingsButton.setOnClickListener { showSettingsDialog() }
         binding.manualShutterButton.setOnClickListener { forceCaptureCurrentPhase() }
+        binding.readyButton.setOnClickListener {
+            val action = pendingReadyAction ?: return@setOnClickListener
+            hideReadyButton()
+            action()
+        }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
