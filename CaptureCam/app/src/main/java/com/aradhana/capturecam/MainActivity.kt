@@ -77,6 +77,21 @@ class MainActivity : AppCompatActivity() {
     // calibration profiles are wired in; axis3 avoided since its effect
     // isn't confirmed (see RSC2Controller's doc comment).
     private val rsc2 = RSC2Controller()
+
+    // ---- DINO(laptop)+MIL(phone) tracking pipeline -----------------------
+    // VisionServoController is the single control authority for this
+    // pipeline's state and servo decisions; MainActivity only feeds it
+    // camera frames + DINO results and executes the ServoCommand it
+    // returns via applyServoCommand() -- see that function's doc comment
+    // for why it's the ONLY place issuing rsc2/zoom calls for this path.
+    private val visionServo = VisionServoController { msg -> Log.i("VisionServo", msg) }
+    private var detectorClient: DetectorClient? = null
+    private var lastDetectorSendAt = 0L
+    private var cachedRotationDegrees = 0
+    private var lastServoAt = 0L
+    private var lastServoAxisWasPan = true
+    private var lastZoomServoAt = 0L
+
     // Debug-only hook so an axis can be tested live via ADB while someone
     // watches the gimbal, without needing to operate the diagnostics
     // screen's UI by hand: adb shell am broadcast -a
