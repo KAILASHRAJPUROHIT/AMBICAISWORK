@@ -165,7 +165,9 @@ class RSC2Controller {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     try { g.discoverServices() } catch (e: SecurityException) { finish(false) }
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    Log.w(TAG, "RSC 2 disconnected (status=$status)")
                     commandCharacteristic = null
+                    stopHeartbeat()
                     if (!resolved) finish(false)
                 }
             }
@@ -174,6 +176,10 @@ class RSC2Controller {
                 val service = g.getService(SERVICE_UUID)
                 val char = service?.getCharacteristic(COMMAND_CHAR_UUID)
                 commandCharacteristic = char
+                if (char != null) {
+                    Log.i(TAG, "RSC 2 ready -- command channel found")
+                    startHeartbeat()
+                }
                 finish(char != null)
             }
         }
