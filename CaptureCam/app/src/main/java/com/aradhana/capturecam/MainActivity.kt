@@ -358,7 +358,7 @@ class MainActivity : AppCompatActivity() {
      * here with a stronger focus signal.
      */
     private fun tickJewel() {
-        if (previewShowing) return
+        if (previewShowing || isZooming) return
         val now = System.currentTimeMillis()
         val result = latestMaterial
 
@@ -378,10 +378,9 @@ class MainActivity : AppCompatActivity() {
             // further on an empty frame.
             val zoom = focusZoom.currentZoomRatio()
             if (zoom > 1.05f) {
-                focusZoom.setZoomRatio((zoom * ZOOM_BACKOFF_RATIO).coerceAtLeast(1f))
+                smoothZoomTo((zoom * ZOOM_BACKOFF_RATIO).coerceAtLeast(1f))
                 stepFocusAttempts = 0
                 focusTriggeredThisLevel = false
-                lastZoomChangeAt = now
             }
             setStatus("Re-centre the item…", ready = false)
             return
@@ -432,7 +431,7 @@ class MainActivity : AppCompatActivity() {
             // is only ever triggered once coverage is trustworthy AND the
             // zoom has been sitting still for ZOOM_SETTLE_MS, see below.
             if (now - lastZoomChangeAt < ZOOM_STEP_INTERVAL_MS) {
-                setStatus("Filling frame before capture…", ready = false)
+                setStatus("Zooming in…", ready = false)
                 return
             }
             // Must also respect maxUsableZoom -- a level a previous backoff
@@ -443,11 +442,10 @@ class MainActivity : AppCompatActivity() {
             // keeps cycling" loop.
             val climbCeiling = min(min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO), maxUsableZoom)
             val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(climbCeiling)
-            focusZoom.setZoomRatio(next)
-            lastZoomChangeAt = now
+            smoothZoomTo(next)
             stepFocusAttempts = 0
             focusTriggeredThisLevel = false
-            setStatus("Filling frame before capture…", ready = false)
+            setStatus("Zooming in…", ready = false)
             return
         }
 
@@ -456,7 +454,7 @@ class MainActivity : AppCompatActivity() {
         // -- triggering AF against a target that's still moving is judged
         // on a moving target and reads as more hunting.
         if (!zoomSettled) {
-            setStatus("Settling…", ready = false)
+            setStatus("Zooming in…", ready = false)
             return
         }
 
@@ -484,7 +482,7 @@ class MainActivity : AppCompatActivity() {
                     // level (falls through to the focusTriggeredThisLevel
                     // branch above on the next tick).
                     focusTriggeredThisLevel = false
-                    setStatus("Refocusing…", ready = false)
+                    setStatus("Focusing…", ready = false)
                     return
                 }
                 // Retries exhausted -- step BACK, never forward into a level
@@ -493,11 +491,10 @@ class MainActivity : AppCompatActivity() {
                 val backedOff = (zoom * ZOOM_BACKOFF_RATIO).coerceAtLeast(zoomRange.start)
                 if (backedOff < zoom - 0.05f) {
                     maxUsableZoom = backedOff
-                    focusZoom.setZoomRatio(backedOff)
-                    lastZoomChangeAt = now
+                    smoothZoomTo(backedOff)
                 }
                 focusTriggeredThisLevel = false
-                setStatus("Refocusing…", ready = false)
+                setStatus("Focusing…", ready = false)
                 return
             }
             setStatus("Focusing…", ready = false)
