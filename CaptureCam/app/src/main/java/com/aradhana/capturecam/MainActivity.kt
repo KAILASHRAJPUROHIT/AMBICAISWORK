@@ -1975,8 +1975,8 @@ class MainActivity : AppCompatActivity() {
             // Normal completion already undid these via
             // undoCenteringThenAdvance() before calling here -- this is
             // just the defensive reset for abort/cancel paths that skip it.
-            centeringPanTicks = 0
-            centeringTiltTicks = 0
+            centeringPanMs = 0
+            centeringTiltMs = 0
             centeringAttempts = 0
         }
         if (next == Phase.TAG) {
