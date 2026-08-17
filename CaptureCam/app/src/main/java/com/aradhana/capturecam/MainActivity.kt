@@ -646,7 +646,14 @@ class MainActivity : AppCompatActivity() {
 
         when (phase) {
             Phase.JEWEL -> {
-                val result = MaterialDetector.analyse(imageProxy)
+                // Full-frame scan while still hunting (not armed) -- the
+                // guide-box restriction is a confirmed blind spot for a
+                // corner-positioned object during a search sweep (see
+                // MaterialDetector.analyse's fullFrame doc comment). Reverts
+                // to the guide-box scan once armed, its original purpose
+                // (ignore background clutter at the margins) being the
+                // right behaviour again once actually tracking a candidate.
+                val result = MaterialDetector.analyse(imageProxy, fullFrame = !armed)
                 latestMaterial = result
                 latestSharpness = if (result.bounds != null) {
                     SharpnessAnalyzer.score(imageProxy, result.bounds)
