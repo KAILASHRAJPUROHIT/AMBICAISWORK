@@ -1114,18 +1114,19 @@ class MainActivity : AppCompatActivity() {
             centeringAttempts += 1
             val axis = lastCenterAxis
             val sign = lastCenterSign
-            Log.i(TAG, "centering nudge lost the ornament -- reverting axis=$axis sign=$sign")
+            val durMs = lastCenterDurationMs
+            Log.i(TAG, "centering nudge lost the ornament -- reverting axis=$axis sign=$sign durMs=$durMs")
             centerAvoidAxis = axis
             lastCenterAxis = CenterAxis.NONE
             setStatus("Centering ornament…", ready = false)
             if (axis == CenterAxis.PAN) {
-                centeringPanTicks -= sign
+                centeringPanMs -= sign * durMs
                 val undoPan = if (sign > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
-                rsc2.moveOut(axis3 = undoPan, durationMs = CENTERING_TICK_MS) {}
+                rsc2.moveOut(axis3 = undoPan, durationMs = durMs.toLong()) {}
             } else {
-                centeringTiltTicks -= sign
+                centeringTiltMs -= sign * durMs
                 val undoTilt = if (sign > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
-                rsc2.moveOut(axis1 = undoTilt, durationMs = CENTERING_TICK_MS) {}
+                rsc2.moveOut(axis1 = undoTilt, durationMs = durMs.toLong()) {}
             }
             return true
         }
