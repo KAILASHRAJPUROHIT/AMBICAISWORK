@@ -170,6 +170,10 @@ class MainActivity : AppCompatActivity() {
     // gets one last forced re-focus attempt instead of shuttering on
     // whatever frame happens to be live at that exact millisecond.
     private var stallGraceAt = 0L
+    // One-shot per item: whether the "too close to focus" warning has
+    // already extended the stall clock once. Prevents it from looping
+    // forever if the piece genuinely never gets moved back.
+    private var tooCloseWarned = false
     private var readyStreak = 0
     private var angleStableStreak = 0
     private var jewelCaptureRetries = 0
