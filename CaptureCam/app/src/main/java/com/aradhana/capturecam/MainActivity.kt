@@ -1700,6 +1700,21 @@ class MainActivity : AppCompatActivity() {
 
                 override fun onError(exception: ImageCaptureException) {
                     Log.e(TAG, "Capture failed", exception)
+                    // A dead/unbound camera session ("Camera is not active"
+                    // -- CameraControl$OperationCanceledException) does not
+                    // recover on its own: every retry keeps hitting the same
+                    // dead session forever, which is how an item could fail
+                    // to save with zero path to succeed. Same fix as the
+                    // onResume() rebind for navigating away and back: rebind
+                    // the use cases so the NEXT attempt has a live session.
+                    // Cooldown so a genuinely one-off transient error doesn't
+                    // trigger a rebind storm.
+                    val now = System.currentTimeMillis()
+                    if (now - lastCameraRebindAt > 3000L && ::cameraProvider.isInitialized) {
+                        lastCameraRebindAt = now
+                        Log.w(TAG, "Rebinding camera use cases after capture failure")
+                        bindUseCases()
+                    }
                     onResult(null)
                 }
             }
