@@ -1000,7 +1000,7 @@ class MainActivity : AppCompatActivity() {
      * as attemptCenteringCorrection(). Pan is swept first and through the
      * widest range: DJI's published RSC2 spec has pan as a 360° continuous
      * slip-ring (no hard mechanical limit) while tilt has a real -112..+214
-     * range (see TILT_TICK_LIMIT), so pan is both safer to range widely on
+     * range (see TILT_MS_LIMIT), so pan is both safer to range widely on
      * and the axis normal placement variance mostly falls on. Each step
      * checks detectedNow() and stops the INSTANT either signal fires,
      * handing off to tickJewel's normal arm/zoom/focus/capture path from
