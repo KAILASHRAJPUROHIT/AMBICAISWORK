@@ -182,14 +182,19 @@ class MainActivity : AppCompatActivity() {
         private const val TICK_INTERVAL_MS = 150L
         private const val SHARPNESS_THRESHOLD = 40f
         private const val REQUIRED_READY_TICKS = 3
-        // Fixed test deflections for the RSC 2 3-angle workflow -- NOT real
-        // per-category calibration yet, just enough offset from center
-        // (1024) to produce two visibly distinct views for an end-to-end
-        // pipeline test. axis1=tilt, axis2=pan (confirmed on real hardware).
-        private const val ANGLE1_AXIS1 = DumlProtocol.AXIS_CENTER
-        private const val ANGLE1_AXIS2 = DumlProtocol.AXIS_CENTER + 260 // pan right
-        private const val ANGLE2_AXIS1 = DumlProtocol.AXIS_CENTER - 260 // tilt down
-        private const val ANGLE2_AXIS2 = DumlProtocol.AXIS_CENTER
+        // Fixed test values for the RSC 2 3-angle workflow -- NOT real
+        // per-category calibration yet. Single-axis pan sweep (axis2,
+        // confirmed on real hardware): center -> pan LEFT one step (angle 1)
+        // -> pan RIGHT two steps, crossing back through center to the
+        // mirrored right-side position (angle 2) -> pan LEFT one step,
+        // returning to true center for the next item. "Step" is expressed
+        // as a fixed deflection held for PAN_STEP_MS, not a calibrated
+        // degree value -- these are velocity commands (see RSC2Controller),
+        // so travelled angle is deflection x time, not a fixed number.
+        private const val PAN_DEFLECTION = 260
+        private const val PAN_LEFT_AXIS2 = DumlProtocol.AXIS_CENTER - PAN_DEFLECTION
+        private const val PAN_RIGHT_AXIS2 = DumlProtocol.AXIS_CENTER + PAN_DEFLECTION
+        private const val PAN_STEP_MS = 900L
         // Conservative live-zoom cap per the "physical distance should do
         // most of the framing" principle -- pushing digital/hybrid zoom
         // much past this loses detail the catalogue pipeline later wants.
