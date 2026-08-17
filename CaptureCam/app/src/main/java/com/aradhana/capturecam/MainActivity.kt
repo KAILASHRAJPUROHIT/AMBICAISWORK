@@ -230,6 +230,20 @@ class MainActivity : AppCompatActivity() {
         // most of the framing" principle -- pushing digital/hybrid zoom
         // much past this loses detail the catalogue pipeline later wants.
         private const val MAX_LIVE_ZOOM_RATIO = 3.4f
+        // Auto-centering (runs before MAIN, using axis1=tilt/axis3=pan --
+        // confirmed mapping, see RSC2Controller). Gentler deflection than
+        // the angle sweep since this is fine correction, not a deliberate
+        // wide angle change. IMPORTANT LIMITATION: these are velocity
+        // commands, not absolute-position commands (see RSC2Controller's
+        // moveOut/returnHome doc) -- there is no "move to X degrees", only
+        // "move this direction for this long". Centering therefore works by
+        // small bounded nudges + re-measuring, not a single calculated
+        // move, and each nudge is tracked in whole ticks so the exact
+        // opposite total can be undone in one shot at the end of the item.
+        private const val CENTERING_DEFLECTION = 120
+        private const val CENTERING_DEADBAND = 0.06f
+        private const val CENTERING_TICK_MS = 200L
+        private const val CENTERING_MAX_ATTEMPTS = 4
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
