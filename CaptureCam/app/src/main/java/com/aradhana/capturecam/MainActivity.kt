@@ -872,6 +872,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Largest ML Kit detected-object box (upright-normalized, same space
+     * the on-screen overlay already trusts) -- picks the biggest on the
+     * assumption a small piece on a stand is the dominant object in frame,
+     * same heuristic already implicit in how these boxes filter the dot
+     * overlay above. */
+    private fun bestObjectBox(): RectF? = latestObjectBoxesUpright.maxByOrNull { it.width() * it.height() }
+
     /**
      * Checks the detected ornament's position against true frame-center and,
      * if it's off by more than CENTERING_DEADBAND, issues ONE bounded
@@ -880,6 +887,14 @@ class MainActivity : AppCompatActivity() {
      * within the deadband, or once CENTERING_MAX_ATTEMPTS is used up,
      * returns false so the caller proceeds to capture as-is -- this never
      * blocks a capture indefinitely on a correction that isn't converging.
+     *
+     * Prefers ML Kit's real detected-object box (bestObjectBox()) over
+     * MaterialDetector's color/contrast bounds when available -- a genuine
+     * object boundary rather than a gold-hue guess, and it works the same
+     * for silver (MaterialDetector's colour heuristic is gold-biased and
+     * gives silver pieces a weaker signal). Falls back to MaterialDetector's
+     * bounds only on the rare frame where ML Kit hasn't found anything yet
+     * (same fail-open pattern the dot-overlay filter above already uses).
      *
      * LIMITATION: these are velocity commands (see RSC2Controller), not
      * "move to this position" -- each nudge is a small fixed burst in a
@@ -893,9 +908,17 @@ class MainActivity : AppCompatActivity() {
         maxAttempts: Int = CENTERING_MAX_ATTEMPTS
     ): Boolean {
         if (centeringAttempts >= maxAttempts) return false
-        val bounds = result.bounds ?: return false
-        val cx = (bounds.x0 + bounds.x1) / 2f
-        val cy = (bounds.y0 + bounds.y1) / 2f
+        val mlBox = bestObjectBox()
+        val cx: Float
+        val cy: Float
+        if (mlBox != null) {
+            cx = (mlBox.left + mlBox.right) / 2f
+            cy = (mlBox.top + mlBox.bottom) / 2f
+        } else {
+            val bounds = result.bounds ?: return false
+            cx = (bounds.x0 + bounds.x1) / 2f
+            cy = (bounds.y0 + bounds.y1) / 2f
+        }
         val dx = cx - 0.5f
         val dy = cy - 0.5f
         val needsPan = abs(dx) > CENTERING_DEADBAND
