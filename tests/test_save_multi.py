@@ -43,6 +43,11 @@ def ct(tmp_path, monkeypatch):
     # its own scope narrow.
     monkeypatch.setattr(capture_tool, "_jewellery_clearly_visible",
                         lambda b: {"ok": True, "reason": "test bypass", "unverified": True})
+    # A flat-color test JPEG has ~zero Laplacian variance (no edges), which
+    # would trip the real blur gate regardless of what this suite is
+    # actually testing -- bypass it the same way, so corrupt-image handling
+    # is tested via a genuinely undecodable byte string, not blur scoring.
+    monkeypatch.setattr(capture_tool, "_blur_variance", lambda b: 999.0)
     return capture_tool
 
 
