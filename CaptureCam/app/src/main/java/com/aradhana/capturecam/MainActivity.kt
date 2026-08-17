@@ -776,9 +776,11 @@ class MainActivity : AppCompatActivity() {
     private fun onMainCaptureAccepted() {
         Log.i(TAG, "onMainCaptureAccepted: rsc2.isReady=${rsc2.isReady}")
         if (!rsc2.isReady) {
+            inAngleSequence = false
             resetForNewItem(Phase.TAG)
             return
         }
+        inAngleSequence = true
         setStatus("Moving to angle 1…", ready = false)
         Log.i(TAG, "moveTo angle1 axis=($ANGLE1_AXIS1,$ANGLE1_AXIS2)")
         rsc2.moveTo(ANGLE1_AXIS1, ANGLE1_AXIS2) {
