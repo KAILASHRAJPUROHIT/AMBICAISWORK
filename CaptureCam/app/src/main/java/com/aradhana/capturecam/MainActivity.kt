@@ -690,28 +690,29 @@ class MainActivity : AppCompatActivity() {
                 setStatus("Capture failed — retrying", ready = false)
                 return@captureFullRes
             }
+            // Logged for calibration only -- NOT used as a pass/fail gate.
+            // The first attempt at a real threshold (300) was a guess from
+            // extrapolating the low-res live scale, and it was wrong by two
+            // orders of magnitude: real captures land at 0.6-15 raw, so
+            // literally every photo failed regardless of actual sharpness
+            // (this is what "even sharp images tagged as soft" was). Rather
+            // than guess a second number blind, this gate is off until it
+            // can be calibrated against labeled sharp-vs-blurred examples.
+            // Real focus verification still comes from Camera2's actual
+            // CONTROL_AF_STATE + the steady-hold debounce in tickJewel,
+            // which ARE trustworthy.
             val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            val raw = bmp?.let { SharpnessAnalyzer.scoreBitmapRaw(it) } ?: Double.MAX_VALUE
-            Log.i(TAG, "jewel capture fullRes sharpness raw=$raw size=${bmp?.width}x${bmp?.height} liveSharp=$latestSharpness retries=$jewelCaptureRetries")
+            val raw = bmp?.let { SharpnessAnalyzer.scoreBitmapRaw(it) }
+            Log.i(TAG, "jewel capture fullRes sharpness raw=$raw size=${bmp?.width}x${bmp?.height} liveSharp=$latestSharpness")
             bmp?.recycle()
 
-            if (raw < MIN_FULLRES_SHARPNESS_RAW && jewelCaptureRetries < MAX_FULLRES_CAPTURE_RETRIES) {
-                jewelCaptureRetries += 1
-                focusZoom.triggerAutoFocus()
-                setStatus("Image soft — refocusing and retrying…", ready = false)
-                handler.postDelayed({ captureJewel() }, 600L)
-                return@captureFullRes
-            }
-
-            val stillSoft = raw < MIN_FULLRES_SHARPNESS_RAW
             jewelCaptureRetries = 0
             jewelJpeg = bytes
             showCapturePreview(
                 bytes,
                 onProceed = { resetForNewItem(Phase.TAG) },
                 onRetake = { retakeJewel() },
-                onCancel = { cancelItem() },
-                requireManualConfirm = stillSoft
+                onCancel = { cancelItem() }
             )
         }
     }
