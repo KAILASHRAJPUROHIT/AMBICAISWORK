@@ -84,6 +84,7 @@ class MainActivity : AppCompatActivity() {
     // gets one last forced re-focus attempt instead of shuttering on
     // whatever frame happens to be live at that exact millisecond.
     private var stallGraceAt = 0L
+    private var readyStreak = 0
     private var jewelJpeg: ByteArray? = null
     private var tagJpeg: ByteArray? = null
     private var tagCodeHistory = mutableListOf<String>()
