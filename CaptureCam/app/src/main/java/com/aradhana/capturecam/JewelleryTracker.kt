@@ -158,5 +158,6 @@ class JewelleryTracker {
     companion object {
         private const val TAG = "JewelleryTracker"
         private const val MAX_MISSES = 5
+        private const val SIZE_SMOOTHING = 0.35f
     }
 }
