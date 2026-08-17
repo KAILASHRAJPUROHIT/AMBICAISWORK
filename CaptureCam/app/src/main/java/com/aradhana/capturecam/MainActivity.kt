@@ -975,7 +975,7 @@ class MainActivity : AppCompatActivity() {
         Log.i(TAG, "moveOut angle1 pan=$PAN_LEFT_AXIS3")
         rsc2.moveOut(axis3 = PAN_LEFT_AXIS3, durationMs = PAN_STEP_MS) {
             Log.i(TAG, "moveOut angle1 arrived")
-            waitForOrnamentThenCapture { captureAngle1() }
+            waitForStableFrame("Turn the ornament to show its LEFT side, then hold still") { captureAngle1() }
         }
     }
 
