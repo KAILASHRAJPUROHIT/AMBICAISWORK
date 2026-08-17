@@ -2427,7 +2427,7 @@
     "ok": false,
     "label": "LR22_90",
     "error": "ValueError: LR22_90: expected one current-stock label, found 0",
-    "attempted_at": 1786950124.5567155
+    "attempted_at": 1786950183.5704005
   },
   "LR22_91": {
     "ok": true,

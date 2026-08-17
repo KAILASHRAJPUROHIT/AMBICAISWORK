@@ -820,6 +820,7 @@ class MainActivity : AppCompatActivity() {
         latestMaterial = null
         lastZoomChangeAt = 0L
         focusTriggeredThisLevel = false
+        isZooming = false
         if (next == Phase.TAG) {
             barcodeAttempts = 0
             lastBarcodeCount = -1
