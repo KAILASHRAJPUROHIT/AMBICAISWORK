@@ -1327,6 +1327,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Explicit confirmation before the pipeline moves on -- a silent Toast
+     * was easy to miss mid-workflow with hands full of jewellery/tags. The
+     * operator has to actually acknowledge the save before the next item
+     * starts, rather than the app silently looping underneath them. */
+    private fun showItemSavedPopup(tagCode: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Saved")
+            .setMessage("3-angle set saved for $tagCode.")
+            .setCancelable(false)
+            .setPositiveButton("Next item") { _, _ -> finishOrResetForNewItem() }
+            .show()
+    }
+
     private fun confirmOverrideAndRetry(message: String, onChoice: (Boolean) -> Unit) {
         AlertDialog.Builder(this)
             .setMessage(message)
