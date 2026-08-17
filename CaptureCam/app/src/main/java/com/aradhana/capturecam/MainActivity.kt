@@ -31,6 +31,8 @@ import com.aradhana.capturecam.databinding.ActivityMainBinding
 import com.aradhana.capturecam.databinding.DialogSettingsBinding
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.objects.ObjectDetection
+import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 
