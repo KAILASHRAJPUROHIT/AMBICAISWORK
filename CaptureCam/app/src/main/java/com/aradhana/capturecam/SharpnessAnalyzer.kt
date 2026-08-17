@@ -1,5 +1,6 @@
 package com.aradhana.capturecam
 
+import android.graphics.Bitmap
 import androidx.camera.core.ImageProxy
 import kotlin.math.max
 import kotlin.math.min
