@@ -833,7 +833,7 @@ class MainActivity : AppCompatActivity() {
         rsc2.returnHome(PAN_LEFT_AXIS1, DumlProtocol.AXIS_CENTER, PAN_STEP_MS) {
             setStatus("Moving to angle 2…", ready = false)
             Log.i(TAG, "moveOut angle2 pan=$PAN_RIGHT_AXIS2 rsc2.isReady=${rsc2.isReady}")
-            rsc2.moveOut(DumlProtocol.AXIS_CENTER, PAN_RIGHT_AXIS2, PAN_STEP_MS) {
+            rsc2.moveOut(PAN_RIGHT_AXIS1, DumlProtocol.AXIS_CENTER, PAN_STEP_MS) {
                 Log.i(TAG, "moveOut angle2 arrived")
                 captureAngle2()
             }
@@ -854,12 +854,12 @@ class MainActivity : AppCompatActivity() {
     private fun onAngle2Captured(bytes: ByteArray?) {
         if (bytes == null) {
             setStatus("Angle 2 capture failed — returning and retrying", ready = false)
-            rsc2.returnHome(DumlProtocol.AXIS_CENTER, PAN_RIGHT_AXIS2, PAN_STEP_MS) { onMainCaptureAccepted() }
+            rsc2.returnHome(PAN_RIGHT_AXIS1, DumlProtocol.AXIS_CENTER, PAN_STEP_MS) { onMainCaptureAccepted() }
             return
         }
         angle2Jpeg = bytes
         setStatus("Returning to main position…", ready = false)
-        rsc2.returnHome(DumlProtocol.AXIS_CENTER, PAN_RIGHT_AXIS2, PAN_STEP_MS) {
+        rsc2.returnHome(PAN_RIGHT_AXIS1, DumlProtocol.AXIS_CENTER, PAN_STEP_MS) {
             inAngleSequence = false
             resetForNewItem(Phase.TAG)
         }
