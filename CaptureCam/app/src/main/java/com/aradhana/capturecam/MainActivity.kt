@@ -834,6 +834,7 @@ class MainActivity : AppCompatActivity() {
         }
         angle2Jpeg = bytes
         rsc2.stopAndReturnToCenter()
+        inAngleSequence = false
         resetForNewItem(Phase.TAG)
     }
 
