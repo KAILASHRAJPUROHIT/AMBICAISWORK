@@ -832,7 +832,7 @@ class MainActivity : AppCompatActivity() {
         // for angle 2, and for the NEXT item's angle 1.
         rsc2.returnHome(PAN_LEFT_AXIS1, DumlProtocol.AXIS_CENTER, PAN_STEP_MS) {
             setStatus("Moving to angle 2…", ready = false)
-            Log.i(TAG, "moveOut angle2 pan=$PAN_RIGHT_AXIS2 rsc2.isReady=${rsc2.isReady}")
+            Log.i(TAG, "moveOut angle2 pan=$PAN_RIGHT_AXIS1 rsc2.isReady=${rsc2.isReady}")
             rsc2.moveOut(PAN_RIGHT_AXIS1, DumlProtocol.AXIS_CENTER, PAN_STEP_MS) {
                 Log.i(TAG, "moveOut angle2 arrived")
                 captureAngle2()
