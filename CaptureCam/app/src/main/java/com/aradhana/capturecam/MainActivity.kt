@@ -148,7 +148,7 @@ class MainActivity : AppCompatActivity() {
         // Conservative live-zoom cap per the "physical distance should do
         // most of the framing" principle -- pushing digital/hybrid zoom
         // much past this loses detail the catalogue pipeline later wants.
-        private const val MAX_LIVE_ZOOM_RATIO = 4.0f
+        private const val MAX_LIVE_ZOOM_RATIO = 3.4f
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
