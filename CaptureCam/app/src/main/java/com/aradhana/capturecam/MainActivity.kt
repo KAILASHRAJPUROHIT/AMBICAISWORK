@@ -1011,6 +1011,25 @@ class MainActivity : AppCompatActivity() {
      * overlay above. */
     private fun bestObjectBox(): RectF? = latestObjectBoxesUpright.maxByOrNull { it.width() * it.height() }
 
+    /** The two NON-NEGOTIABLE capture rules: the ornament must occupy at
+     * least CAPTURE_MIN_OCCUPANCY of the full frame (checked via ML Kit's
+     * box specifically -- see its doc comment), AND be centered within
+     * CENTERING_DEADBAND on both axes ("centered from all 4 sides" is
+     * exactly what a small centre-offset means for a bounding box: if the
+     * box's center sits at true frame-center, its margins on all 4 edges
+     * are equal by construction). No caller may bypass this for an
+     * automatic capture -- only the manual-shutter override (an explicit
+     * staff decision) skips it. Fails closed (returns false) whenever ML
+     * Kit hasn't found a box, since occupancy can't be verified without one. */
+    private fun meetsHardCaptureRules(): Boolean {
+        val box = bestObjectBox() ?: return false
+        val occupancy = box.width() * box.height()
+        if (occupancy < CAPTURE_MIN_OCCUPANCY) return false
+        val cx = (box.left + box.right) / 2f
+        val cy = (box.top + box.bottom) / 2f
+        return abs(cx - 0.5f) <= CENTERING_DEADBAND && abs(cy - 0.5f) <= CENTERING_DEADBAND
+    }
+
     /** Hybrid detection check: true if EITHER signal sees something --
      * ML Kit's real object box, or MaterialDetector's colour/contrast
      * heuristic. Using both (not just MaterialDetector alone) is what lets
