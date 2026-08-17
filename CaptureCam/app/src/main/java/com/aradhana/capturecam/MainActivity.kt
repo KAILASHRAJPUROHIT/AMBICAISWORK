@@ -478,6 +478,7 @@ class MainActivity : AppCompatActivity() {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
         attemptGimbalConnect()
+        connectDetector()
         // EXPORTED (not NOT_EXPORTED) deliberately -- this needs to be
         // reachable from `adb shell am broadcast`, which runs as a
         // different UID than this app. Debug-only test hook on a LAN-only
