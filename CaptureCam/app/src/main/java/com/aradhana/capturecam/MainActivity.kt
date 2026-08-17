@@ -1193,10 +1193,7 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
             when {
-                result.ok -> {
-                    Toast.makeText(this@MainActivity, "Saved 3-angle set: $tagCode", Toast.LENGTH_SHORT).show()
-                    finishOrResetForNewItem()
-                }
+                result.ok -> showItemSavedPopup(tagCode)
                 result.duplicate -> confirmOverrideAndRetry("Duplicate tag $tagCode — save anyway?") { overrideDup ->
                     retryUploadMulti(tagCode, staffName, main, angle1, angle2, overrideDuplicate = overrideDup)
                 }
