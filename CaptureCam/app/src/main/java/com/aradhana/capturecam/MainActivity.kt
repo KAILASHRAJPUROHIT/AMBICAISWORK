@@ -60,6 +60,15 @@ class MainActivity : AppCompatActivity() {
     private val focusZoom = FocusZoomController()
     private var imageCapture: ImageCapture? = null
     private var camera: Camera? = null
+    // RSC 2 3-angle workflow -- fails open to the existing single-image
+    // flow when no gimbal is connected (spec rule 61: single-image mode
+    // must not break just because the gimbal/calibration layer isn't
+    // available). Fixed test deflections until real per-category
+    // calibration profiles are wired in; axis3 avoided since its effect
+    // isn't confirmed (see RSC2Controller's doc comment).
+    private val rsc2 = RSC2Controller()
+    private var angle1Jpeg: ByteArray? = null
+    private var angle2Jpeg: ByteArray? = null
 
     private val prefs by lazy { getSharedPreferences("capturecam", MODE_PRIVATE) }
     private val handler = Handler(Looper.getMainLooper())
