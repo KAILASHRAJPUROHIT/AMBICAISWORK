@@ -1501,6 +1501,13 @@ class MainActivity : AppCompatActivity() {
      * has to travel, hence the larger attempt budget passed here. */
     private fun centerThenCapture(onCentered: () -> Unit) {
         val result = latestMaterial
+        // Continuous tracking follows the object through every nudge this
+        // loop issues, including while the gimbal is physically still
+        // moving from the last one -- meetsHardCaptureRules() (via
+        // rsc2.isMoving) is what actually blocks capture during motion,
+        // not this call; this just keeps AF/AE aimed at the right place
+        // the whole time so there's nothing to re-acquire once it stops.
+        updateTrackingRegionFor(result)
         if (result != null && result.material &&
             attemptCenteringCorrection(result, ANGLE_CENTERING_MAX_ATTEMPTS)) {
             handler.postDelayed({ centerThenCapture(onCentered) }, CENTERING_TICK_MS + 200L)
