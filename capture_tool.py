@@ -587,13 +587,18 @@ def _segment_jewel_async(jewel_path: str) -> None:
     result for that piece.
     """
     if not sam_locate.available():
+        logging.getLogger("capture_tool").warning(
+            "sam_locate.available() is False -- skipping segmentation for %s", jewel_path
+        )
         return
 
     def _run():
+        log = logging.getLogger("capture_tool")
         try:
-            sam_locate.tight_crop(jewel_path, jewel_path, expect=1, straighten=True)
+            result_path, angle = sam_locate.tight_crop(jewel_path, jewel_path, expect=1, straighten=True)
+            log.info("sam_locate.tight_crop done for %s (angle=%s)", jewel_path, angle)
         except Exception:
-            pass
+            log.exception("sam_locate.tight_crop FAILED for %s", jewel_path)
         finally:
             sam_locate.release()
 
