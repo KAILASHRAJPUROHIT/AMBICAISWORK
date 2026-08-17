@@ -1471,5 +1471,6 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         handler.removeCallbacks(tickRunnable)
         rsc2.disconnect()
+        try { unregisterReceiver(testMoveReceiver) } catch (_: IllegalArgumentException) {}
     }
 }
