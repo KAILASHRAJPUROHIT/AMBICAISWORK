@@ -887,19 +887,21 @@ class MainActivity : AppCompatActivity() {
         // Folding the ceiling into coverageOk instead just changes what
         // "enough of the frame" means for THIS item; every capture still
         // goes through the same focusLocked + sharpEnough gate below.
-        // Use the STRICTER of the two coverage signals, not MaterialDetector's
-        // colour-blob coverage alone -- a warm/reflective close-up subject
-        // can read as "already filling enough of the frame" by colour even
-        // when it's genuinely small, which is exactly how zoom stayed
-        // parked at 1x all session despite the object clearly needing to
-        // be bigger in frame. ML Kit's box is a real detected-object
-        // boundary; when it disagrees with MaterialDetector by reporting a
-        // SMALLER box, that's the more trustworthy number.
+        // The climb target IS the non-negotiable occupancy rule now, not
+        // MaterialDetector's capped colour coverage -- that metric is
+        // measured within a 64%x68% guide region and mathematically caps
+        // out around 0.435, so climbing only to MIN_LIVE_COVERAGE(0.24)
+        // stopped WAY short of the real CAPTURE_MIN_OCCUPANCY(0.75)
+        // requirement, and meetsHardCaptureRules() would then refuse to
+        // capture forever. ML Kit's box is full-frame-normalized with no
+        // such cap, so it's what the climb targets once it's available;
+        // falls back to the softer colour metric only before ML Kit's
+        // first detection lands (something to climb toward, not nothing).
         val mlBoxForCoverage = bestObjectBox()
-        val mlCoverage = mlBoxForCoverage?.let { it.width() * it.height() }
-        val effectiveCoverage = if (mlCoverage != null) min(result.coverage, mlCoverage) else result.coverage
-        val coverageOk = effectiveCoverage >= MIN_LIVE_COVERAGE || atZoomCeiling
-        Log.d(TAG, "tickJewel coverage=${result.coverage} mlCoverage=$mlCoverage effective=$effectiveCoverage zoom=$zoom coverageOk=$coverageOk")
+        val mlOccupancy = mlBoxForCoverage?.let { it.width() * it.height() }
+        val coverageOk = (if (mlOccupancy != null) mlOccupancy >= CAPTURE_MIN_OCCUPANCY
+                          else result.coverage >= MIN_LIVE_COVERAGE) || atZoomCeiling
+        Log.d(TAG, "tickJewel coverage=${result.coverage} mlOccupancy=$mlOccupancy zoom=$zoom coverageOk=$coverageOk")
         val zoomSettled = now - lastZoomChangeAt >= ZOOM_SETTLE_MS
         val afState = focusZoom.afState.value
         val focusLocked = focusZoom.isFocusLocked(afState)
