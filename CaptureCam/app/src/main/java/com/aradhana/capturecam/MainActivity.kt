@@ -1225,8 +1225,7 @@ class MainActivity : AppCompatActivity() {
                 null
             }
             if (result?.ok == true) {
-                Toast.makeText(this@MainActivity, "Saved 3-angle set: $tagCode", Toast.LENGTH_SHORT).show()
-                finishOrResetForNewItem()
+                showItemSavedPopup(tagCode)
             } else {
                 Toast.makeText(this@MainActivity, "Save failed: ${result?.error}", Toast.LENGTH_LONG).show()
                 resetForNewItem(Phase.JEWEL)
