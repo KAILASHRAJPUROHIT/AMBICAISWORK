@@ -213,7 +213,7 @@ class RSC2Controller {
         }
     }
 
-    fun disconnect(context: Context) {
+    fun disconnect() {
         activeMoveRunnable?.let { handler.removeCallbacks(it) }
         activeMoveRunnable = null
         try {
