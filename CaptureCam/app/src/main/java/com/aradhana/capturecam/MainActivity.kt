@@ -1917,10 +1917,8 @@ class MainActivity : AppCompatActivity() {
         angleZoomRounds = 0
         lastCenterAxis = CenterAxis.NONE
         centerAvoidAxis = CenterAxis.NONE
-        huntAxis = CenterAxis.PAN
-        huntDirection = 1
-        huntStepsThisAxis = 0
-        huntCyclesWithoutFind = 0
+        huntPhase = HuntPhase.SCAN_DOWN
+        huntPhaseMsSpent = 0
         huntStartedAt = 0L
         latestObjectBoxesUpright = emptyList()
         focusZoom.setZoomRatio(1f)
