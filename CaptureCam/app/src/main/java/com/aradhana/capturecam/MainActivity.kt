@@ -825,7 +825,6 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             huntStartedAt = 0L
-            huntStepsThisAxis = 0
             armed = true
             armedAt = now
             // Continuous AF becomes the baseline the instant something's
