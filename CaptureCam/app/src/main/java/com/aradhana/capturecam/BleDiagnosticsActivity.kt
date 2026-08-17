@@ -371,14 +371,24 @@ class BleDiagnosticsActivity : AppCompatActivity() {
      * to this position and stay". This is the actual reproduction of a held
      * stick, not a new guess at the protocol.
      */
+    /** Cancels any in-flight repeat-send loop -- must be called before
+     * starting a new one, and by every stop/neutral action, or leftover
+     * scheduled sends keep firing after a "stop" and undo it. */
+    private fun cancelActiveRepeat() {
+        activeRepeatRunnable?.let { handler.removeCallbacks(it) }
+        activeRepeatRunnable = null
+    }
+
     private fun sendHexRepeatedly(count: Int = 15, intervalMs: Long = 200L) {
         val bytes = parseHexInput() ?: return
+        cancelActiveRepeat()
         log("Sending ${bytes.joinToString(" ") { "%02X".format(it) }} x$count @ ${intervalMs}ms -- watch the gimbal now")
         var sent = 0
         val runnable = object : Runnable {
             override fun run() {
                 if (sent >= count) {
                     log("Repeat send complete ($sent sent).")
+                    activeRepeatRunnable = null
                     return
                 }
                 writeBytesToSelected(bytes, quiet = true)
@@ -386,6 +396,7 @@ class BleDiagnosticsActivity : AppCompatActivity() {
                 handler.postDelayed(this, intervalMs)
             }
         }
+        activeRepeatRunnable = runnable
         handler.post(runnable)
     }
 
