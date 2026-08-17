@@ -401,6 +401,23 @@ class MainActivity : AppCompatActivity() {
         // Real pause after a full sweep finds nothing, before trying again
         // automatically -- prevents the "hunts forever" restart loop.
         private const val HUNT_COOLDOWN_MS = 6000L
+
+        // ---- DINO+MIL tracking pipeline (checkpoint build) ----
+        // Master switch for the whole pipeline. TRUE for the physical
+        // tracking checkpoint: VisionServoController drives pan/tilt/zoom
+        // once it has a target, subordinating the legacy gold hunt (see the
+        // visionServo.state == SEARCHING gate in huntStep()'s call site).
+        // shutterEnabled on VisionServoController stays false regardless --
+        // no capture call exists anywhere in this pipeline's code path yet.
+        private const val TRACKING_PIPELINE_ACTIVE = true
+        private const val DETECTOR_SEND_INTERVAL_MS = 120L
+        private const val DETECTOR_FRAME_LONG_EDGE = 960
+        private const val DETECTOR_JPEG_QUALITY = 75
+        private const val SERVO_INTERVAL_MS = 130L
+        private const val SERVO_MIN_MS = 90L
+        private const val SERVO_MAX_MS = 260L
+        private const val SERVO_MAX_DEFLECTION = 220
+        private const val ZOOM_SERVO_INTERVAL_MS = 250L
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
