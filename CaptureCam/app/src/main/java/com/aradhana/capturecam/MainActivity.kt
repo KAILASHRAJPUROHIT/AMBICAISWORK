@@ -1447,6 +1447,7 @@ class MainActivity : AppCompatActivity() {
         focusTriggeredThisLevel = false
         isZooming = false
         stallGraceAt = 0L
+        tooCloseWarned = false
         readyStreak = 0
         jewelCaptureRetries = 0
         // Defensive only -- a retake mid-centering/mid-angle-sequence means
