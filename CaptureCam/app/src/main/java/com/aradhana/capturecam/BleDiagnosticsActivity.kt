@@ -383,6 +383,52 @@ class BleDiagnosticsActivity : AppCompatActivity() {
         handler.post(runnable)
     }
 
+    private fun readAxisInputs(): Triple<Int, Int, Int>? {
+        return try {
+            val a1 = axis1Input.text.toString().trim().toInt()
+            val a2 = axis2Input.text.toString().trim().toInt()
+            val a3 = axis3Input.text.toString().trim().toInt()
+            Triple(a1, a2, a3)
+        } catch (e: Exception) {
+            log("Enter valid integer axis values (default 1024 = center).")
+            null
+        }
+    }
+
+    /**
+     * Builds a real, checksummed DUML joystick frame for arbitrary axis
+     * values (see DumlProtocol.kt) instead of replaying a fixed captured
+     * byte string -- this is what makes arbitrary-angle calibration
+     * possible later, not just the couple of values we happened to capture.
+     */
+    private fun sendCustomJoystickFrame(repeat: Boolean) {
+        val (a1, a2, a3) = readAxisInputs() ?: return
+        val count = if (repeat) 15 else 1
+        log("Building frames axis=($a1,$a2,$a3) x$count -- watch the gimbal now")
+        var sent = 0
+        val runnable = object : Runnable {
+            override fun run() {
+                if (sent >= count) {
+                    if (repeat) log("Repeat send complete ($sent sent).")
+                    return
+                }
+                val frame = DumlProtocol.buildJoystickFrame(a1, a2, a3, duMLSeq)
+                duMLSeq += 1
+                writeBytesToSelected(frame, quiet = repeat)
+                sent += 1
+                if (repeat) handler.postDelayed(this, 200L)
+            }
+        }
+        handler.post(runnable)
+    }
+
+    private fun sendNeutral() {
+        val frame = DumlProtocol.neutralFrame(duMLSeq)
+        duMLSeq += 1
+        log("Sending neutral (stop)")
+        writeBytesToSelected(frame)
+    }
+
     private fun disconnect() {
         try {
             gatt?.disconnect()
