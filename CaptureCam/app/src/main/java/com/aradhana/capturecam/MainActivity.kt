@@ -107,6 +107,10 @@ class MainActivity : AppCompatActivity() {
     // of "works on item 1, breaks on item 2" -- item 2 inherited whatever mess
     // the race left behind.
     private var inAngleSequence = false
+    // Set while the READY button is showing, waiting for the staff to
+    // confirm the ornament is positioned for this angle's shot; null the
+    // rest of the time so an accidental late tap does nothing.
+    private var pendingReadyAction: (() -> Unit)? = null
     // Net whole-tick nudges applied by attemptCenteringCorrection(), signed
     // (positive = toward AXIS_CENTER+CENTERING_DEFLECTION direction on that
     // axis). Tracked so the exact opposite total can be undone in one move
