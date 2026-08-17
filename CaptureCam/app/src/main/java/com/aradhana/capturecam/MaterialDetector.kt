@@ -354,8 +354,27 @@ object MaterialDetector {
         val warmCoverage = bestSize.toFloat() / mask.size
         val goldRatio = warm.toFloat() / mask.size
         val goldBoxArea = bounds.area()
+        // warmCoverage/goldRatio are fractions of the SCANNED region
+        // (mask.size), not the full frame -- fullFrame mode scans ~2.3x
+        // more area (1.0 vs the guide box's 0.64x0.68=0.4352 of the
+        // frame), so the same physical object produces a smaller ratio
+        // purely from the larger denominator, not because it's actually
+        // less present. Rescale both to a full-frame-equivalent fraction
+        // so the thresholds below mean the same physical object size in
+        // either mode -- otherwise switching to fullFrame for hunting
+        // would make small/distant objects (spec: "gold can be as small
+        // as 5%") HARDER to detect, the opposite of the fix's intent.
+        // goldBoxArea already IS full-frame-normalized (bounds are always
+        // expressed in full-frame coordinates regardless of scan region),
+        // so it needs no such rescaling.
+        val scannedRegionFraction = ((endX - startX).toFloat() / width) * ((endY - startY).toFloat() / height)
+        val warmCoverageFullFrame = warmCoverage * scannedRegionFraction
+        val goldRatioFullFrame = goldRatio * scannedRegionFraction
         val goldDominant = warmCoverage >= 0.06f && (bestSize.toFloat() / warm) >= 0.40f
-        val material = goldDominant || warmCoverage >= 0.012f || goldRatio >= 0.035f || goldBoxArea >= 0.05f
+        // 0.05 -> 0.035 for goldBoxArea specifically: "as small as 5%" per
+        // spec means shots right at that bar need margin, not a threshold
+        // sitting exactly on the edge of the reported worst case.
+        val material = goldDominant || warmCoverageFullFrame >= 0.012f || goldRatioFullFrame >= 0.035f || goldBoxArea >= 0.035f
 
         return Result(
             material = material,
