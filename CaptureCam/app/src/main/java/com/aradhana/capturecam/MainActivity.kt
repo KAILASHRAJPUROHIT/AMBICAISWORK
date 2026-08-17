@@ -247,6 +247,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
+        attemptGimbalConnect()
     }
 
     /**
