@@ -233,7 +233,13 @@ class MainActivity : AppCompatActivity() {
         private const val PAN_LEFT_AXIS3 = DumlProtocol.AXIS_CENTER - PAN_DEFLECTION
         private const val PAN_RIGHT_AXIS3 = DumlProtocol.AXIS_CENTER + PAN_DEFLECTION
         private const val PAN_STEP_MS = 900L
-        private const val ORNAMENT_DETECT_TIMEOUT_MS = 2500L
+        // Longer than a bare presence-detect timeout -- this window also
+        // has to cover the staff physically rotating the piece to the
+        // requested side profile and AF re-converging on the new pose, not
+        // just the gimbal settling. Still fails open at the deadline rather
+        // than blocking an item forever.
+        private const val ANGLE_STABLE_TIMEOUT_MS = 4500L
+        private const val ANGLE_STABLE_TICKS = 3
         // Conservative live-zoom cap per the "physical distance should do
         // most of the framing" principle -- pushing digital/hybrid zoom
         // much past this loses detail the catalogue pipeline later wants.
