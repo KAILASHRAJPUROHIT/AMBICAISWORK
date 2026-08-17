@@ -976,6 +976,30 @@ class MainActivity : AppCompatActivity() {
         val now = System.currentTimeMillis()
         val result = latestMaterial
 
+        if (TRACKING_PIPELINE_ACTIVE) {
+            // VisionServoController is fully in charge of centering/framing/
+            // zoom once it has a target -- the legacy arm/zoom-climb/capture
+            // logic below must not run at all while it's active, so it can
+            // never fire a shutter during the physical checkpoint (capture
+            // stays hard-disabled pipeline-wide: VisionServoController.
+            // shutterEnabled is false and nothing here ever calls it anyway).
+            // The legacy deterministic hunt sweep is kept as the SEARCHING-
+            // only fallback search behaviour, and becomes fully subordinate
+            // to vision servo the instant a target is found -- it must not
+            // move the gimbal once tracking has started.
+            if (visionServo.state == VisionState.SEARCHING) {
+                if (!detectedNow() && rsc2.isReady && now >= huntCooldownUntil) {
+                    if (huntStartedAt == 0L) huntStartedAt = now
+                    if (now - huntStartedAt > HUNT_GRACE_MS) huntStep()
+                }
+                setStatus("Searching (DINO+MIL checkpoint)…", ready = false)
+            } else {
+                huntStartedAt = 0L
+                setStatus("Tracking (checkpoint -- capture disabled): ${visionServo.state}", ready = false)
+            }
+            return
+        }
+
         if (!armed) {
             // Hybrid arm gate: MaterialDetector's colour heuristic OR ML
             // Kit's real object box, so a silver piece (weak/no colour
