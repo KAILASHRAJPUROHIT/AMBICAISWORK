@@ -816,7 +816,10 @@ def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_byt
 def _count_tray_items(tray_dir: str) -> int:
     if not os.path.isdir(tray_dir):
         return 0
-    sidecar_suffixes = ("_studs.jpg", "_detail.jpg", "_tag.jpg")
+    # _1.jpg/_2.jpg are save_multi()'s ANGLE_1/ANGLE_2 sidecars for the same
+    # item as <tag>.jpg -- without excluding them here, every multi-angle
+    # item would count as 3 instead of 1.
+    sidecar_suffixes = ("_studs.jpg", "_detail.jpg", "_tag.jpg", "_1.jpg", "_2.jpg")
     return len([
         f for f in os.listdir(tray_dir)
         if f.lower().endswith(".jpg")
