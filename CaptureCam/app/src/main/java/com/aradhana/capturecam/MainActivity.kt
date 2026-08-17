@@ -229,16 +229,14 @@ class MainActivity : AppCompatActivity() {
         //
         // Axis mapping fully confirmed 2026-08-17 via isolated one-axis
         // tests (see RSC2Controller's doc comment): axis1=tilt, axis2=roll,
-        // axis3=pan. Pan sweep correctly uses axis3.
-        private const val PAN_DEFLECTION = 250 // confirmed correct on both sides via live testing
-        private const val PAN_LEFT_AXIS3 = DumlProtocol.AXIS_CENTER - PAN_DEFLECTION
-        private const val PAN_RIGHT_AXIS3 = DumlProtocol.AXIS_CENTER + PAN_DEFLECTION
-        private const val PAN_STEP_MS = 900L
-        // Longer than a bare presence-detect timeout -- this window also
-        // has to cover the staff physically rotating the piece to the
-        // requested side profile and AF re-converging on the new pose, not
-        // just the gimbal settling. Still fails open at the deadline rather
-        // than blocking an item forever.
+        // axis3=pan.
+        //
+        // ANGLE_1/ANGLE_2 no longer use a scripted gimbal pan sweep -- the
+        // staff physically rotates the ornament itself to show each side
+        // profile (a real rotation of the piece, which a camera pan around
+        // a stationary object can't replicate), taps READY when it's
+        // positioned, and the gimbal's job becomes fine RE-CENTERING via
+        // tilt/pan on wherever the piece ended up, not a preset sweep.
         private const val ANGLE_STABLE_TIMEOUT_MS = 4500L
         private const val ANGLE_STABLE_TICKS = 3
         // Conservative live-zoom cap per the "physical distance should do
