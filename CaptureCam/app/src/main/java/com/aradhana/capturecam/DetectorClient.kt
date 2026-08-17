@@ -1,13 +1,11 @@
 package com.aradhana.capturecam
 
 import android.util.Log
-import kotlinx.coroutines.Runnable
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import okio.ByteString
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
