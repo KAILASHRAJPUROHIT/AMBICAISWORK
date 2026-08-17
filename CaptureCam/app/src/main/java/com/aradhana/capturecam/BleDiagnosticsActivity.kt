@@ -60,6 +60,9 @@ class BleDiagnosticsActivity : AppCompatActivity() {
     private lateinit var deviceListContainer: LinearLayout
     private lateinit var characteristicListContainer: LinearLayout
     private lateinit var hexBytesInput: EditText
+    private lateinit var axis1Input: EditText
+    private lateinit var axis2Input: EditText
+    private lateinit var axis3Input: EditText
 
     private val handler = Handler(Looper.getMainLooper())
     private val bluetoothAdapter by lazy {
@@ -69,6 +72,10 @@ class BleDiagnosticsActivity : AppCompatActivity() {
     private var selectedCharacteristic: BluetoothGattCharacteristic? = null
     private val seenAddresses = mutableSetOf<String>()
     private var scanning = false
+    // DUML sequence counter -- increments per frame sent this session. The
+    // real device didn't appear to require strict continuity from a fresh
+    // start, but incrementing avoids relying on that being true.
+    private var duMLSeq = 1
 
     private val requestPermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
