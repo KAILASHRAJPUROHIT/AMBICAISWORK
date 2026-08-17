@@ -306,11 +306,25 @@ class BleDiagnosticsActivity : AppCompatActivity() {
             log("Enter hex bytes first, e.g. 55 AA 01")
             return
         }
-        log("Writing ${bytes.joinToString(" ") { "%02X".format(it) }} to ${characteristic.uuid}")
+        // A characteristic that only advertises WRITE_NO_RESPONSE (like
+        // FFF3/FFF5 here) needs that write type set EXPLICITLY -- the
+        // default is WRITE_TYPE_DEFAULT (with-response), and sending that
+        // to a no-response-only characteristic is a well-known silent
+        // failure on several Android BLE stacks: writeCharacteristic()
+        // returns true, no exception, no error, the peripheral just never
+        // receives it. This is almost certainly why "00" produced nothing.
+        val writeType = if (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) {
+            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        } else {
+            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+        }
+        characteristic.writeType = writeType
+        val writeTypeName = if (writeType == BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) "NO_RESPONSE" else "DEFAULT"
+        log("Writing ${bytes.joinToString(" ") { "%02X".format(it) }} to ${characteristic.uuid} (writeType=$writeTypeName)")
         characteristic.value = bytes
         try {
             val ok = g.writeCharacteristic(characteristic)
-            if (!ok) log("writeCharacteristic() returned false (queue busy or invalid state)")
+            log(if (ok) "writeCharacteristic() accepted -- queued to send" else "writeCharacteristic() returned FALSE (queue busy or invalid state)")
         } catch (e: SecurityException) {
             log("Missing BLUETOOTH_CONNECT permission to write: ${e.message}")
         }
