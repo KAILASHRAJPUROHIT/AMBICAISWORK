@@ -848,12 +848,12 @@ class MainActivity : AppCompatActivity() {
     private fun onAngle2Captured(bytes: ByteArray?) {
         if (bytes == null) {
             setStatus("Angle 2 capture failed — returning and retrying", ready = false)
-            rsc2.returnHome(ANGLE2_AXIS1, ANGLE2_AXIS2) { onMainCaptureAccepted() }
+            rsc2.returnHome(DumlProtocol.AXIS_CENTER, PAN_RIGHT_AXIS2, PAN_STEP_MS) { onMainCaptureAccepted() }
             return
         }
         angle2Jpeg = bytes
         setStatus("Returning to main position…", ready = false)
-        rsc2.returnHome(ANGLE2_AXIS1, ANGLE2_AXIS2) {
+        rsc2.returnHome(DumlProtocol.AXIS_CENTER, PAN_RIGHT_AXIS2, PAN_STEP_MS) {
             inAngleSequence = false
             resetForNewItem(Phase.TAG)
         }
