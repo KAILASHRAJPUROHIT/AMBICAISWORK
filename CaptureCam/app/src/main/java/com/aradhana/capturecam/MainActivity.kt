@@ -706,10 +706,55 @@ class MainActivity : AppCompatActivity() {
             jewelJpeg = bytes
             showCapturePreview(
                 bytes,
-                onProceed = { resetForNewItem(Phase.TAG) },
+                onProceed = { onMainCaptureAccepted() },
                 onRetake = { retakeJewel() },
                 onCancel = { cancelItem() }
             )
+        }
+    }
+
+    /**
+     * MAIN shot accepted. If the RSC 2 is connected, continues into the
+     * ANGLE_1/ANGLE_2 sequence before moving to the TAG phase; otherwise
+     * falls straight through to the existing single-image TAG phase
+     * unchanged -- the gimbal is additive, never required.
+     */
+    private fun onMainCaptureAccepted() {
+        if (!rsc2.isReady) {
+            resetForNewItem(Phase.TAG)
+            return
+        }
+        setStatus("Moving to angle 1…", ready = false)
+        rsc2.moveTo(ANGLE1_AXIS1, ANGLE1_AXIS2) {
+            setStatus("Capturing angle 1…", ready = false)
+            focusZoom.triggerAutoFocus()
+            handler.postDelayed({
+                captureFullRes { bytes ->
+                    if (bytes == null) {
+                        setStatus("Angle 1 capture failed — retrying", ready = false)
+                        onMainCaptureAccepted()
+                        return@captureFullRes
+                    }
+                    angle1Jpeg = bytes
+                    setStatus("Moving to angle 2…", ready = false)
+                    rsc2.moveTo(ANGLE2_AXIS1, ANGLE2_AXIS2) {
+                        setStatus("Capturing angle 2…", ready = false)
+                        focusZoom.triggerAutoFocus()
+                        handler.postDelayed({
+                            captureFullRes { bytes2 ->
+                                if (bytes2 == null) {
+                                    setStatus("Angle 2 capture failed — retrying", ready = false)
+                                    onMainCaptureAccepted()
+                                    return@captureFullRes
+                                }
+                                angle2Jpeg = bytes2
+                                rsc2.stopAndReturnToCenter()
+                                resetForNewItem(Phase.TAG)
+                            }
+                        }, 400L)
+                    }
+                }
+            }, 400L)
         }
     }
 
