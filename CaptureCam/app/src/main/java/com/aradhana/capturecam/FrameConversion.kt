@@ -1,12 +1,9 @@
 package com.aradhana.capturecam
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ImageFormat
-import android.graphics.Rect
 import android.graphics.RectF
-import android.graphics.YuvImage
 import androidx.camera.core.ImageProxy
+import androidx.camera.view.PreviewView
 import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
