@@ -1,6 +1,7 @@
 package com.aradhana.capturecam
 
 import androidx.camera.core.ImageProxy
+import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
 
