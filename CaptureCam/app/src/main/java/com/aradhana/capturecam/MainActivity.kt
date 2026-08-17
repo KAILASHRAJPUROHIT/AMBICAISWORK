@@ -658,7 +658,11 @@ class MainActivity : AppCompatActivity() {
                 setStatus("Holding steady…", ready = false)
                 return
             }
+            if (rsc2.isReady && attemptCenteringCorrection(result)) {
+                return
+            }
             readyStreak = 0
+            centeringAttempts = 0
             setStatus("Ready. Capturing…", ready = true)
             captureJewel()
             return
