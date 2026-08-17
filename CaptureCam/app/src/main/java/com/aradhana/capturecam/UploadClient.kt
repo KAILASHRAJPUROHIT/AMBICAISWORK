@@ -92,4 +92,50 @@ object UploadClient {
             )
         }
     }
+
+    /** RSC 2 3-angle workflow -- posts to capture_server.py's
+     * /api/capture/save_multi (capture_tool.save_multi): MAIN/ANGLE_1/
+     * ANGLE_2 -> <tag>.jpg/<tag>_1.jpg/<tag>_2.jpg. No separate tag image
+     * upload -- same as save_pair, only the already-decoded tag_code
+     * crosses the wire. */
+    suspend fun saveMulti(
+        baseUrl: String,
+        tagCode: String,
+        staffName: String,
+        mainJpeg: ByteArray,
+        angle1Jpeg: ByteArray,
+        angle2Jpeg: ByteArray,
+        overrideDuplicate: Boolean = false,
+        overrideBlur: Boolean = false,
+        overrideVisibility: Boolean = false
+    ): SaveResult = withContext(Dispatchers.IO) {
+        val bodyBuilder = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("tag_code", tagCode)
+            .addFormDataPart("staff_name", staffName)
+            .addFormDataPart("main", "main.jpg", mainJpeg.toRequestBody("image/jpeg".toMediaType()))
+            .addFormDataPart("angle1", "angle1.jpg", angle1Jpeg.toRequestBody("image/jpeg".toMediaType()))
+            .addFormDataPart("angle2", "angle2.jpg", angle2Jpeg.toRequestBody("image/jpeg".toMediaType()))
+        if (overrideDuplicate) bodyBuilder.addFormDataPart("override_duplicate", "1")
+        if (overrideBlur) bodyBuilder.addFormDataPart("override_blur", "1")
+        if (overrideVisibility) bodyBuilder.addFormDataPart("override_visibility", "1")
+
+        val request = Request.Builder()
+            .url("${baseUrl.trimEnd('/')}/api/capture/save_multi")
+            .post(bodyBuilder.build())
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val text = response.body?.string() ?: "{}"
+            val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
+            val errorField = if (json.has("error")) json.getString("error") else null
+            SaveResult(
+                ok = json.optBoolean("ok", false),
+                error = errorField,
+                duplicate = errorField == "duplicate",
+                blurry = errorField == "blurry",
+                notVisible = errorField == "not_clearly_visible",
+                raw = json
+            )
+        }
+    }
 }
