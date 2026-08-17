@@ -674,7 +674,7 @@ def save_pair(category: str, jewel_bytes: bytes, tag_bytes: bytes, tag_code: str
         with open(jewel_path, "wb") as f:
             f.write(jewel_bytes)
         _embed_tag_metadata(jewel_path, tag_code=tag_code, category=category, staff_name=staff_name)
-        _segment_jewel_async(jewel_path)
+        _segment_paths_async([jewel_path])
 
         # Test captures never touch the global dedup file — recording them
         # there would risk a practice tag code later blocking (or being
