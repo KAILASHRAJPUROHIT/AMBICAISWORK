@@ -45,6 +45,15 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    // Official OpenCV Android AAR (Maven Central since 4.9.0 -- normal
+    // Gradle dependency, no manual SDK download/import needed). 4.12.0
+    // specifically: fixes the 16KB-page-size Android packaging issue that
+    // affected earlier releases, and avoids a page-alignment issue
+    // reported against 5.0's AAR. Used for org.opencv.tracking.TrackerKCF,
+    // the local on-phone tracker that owns frame-to-frame following
+    // between the laptop's periodic Grounding DINO corrections.
+    implementation("org.opencv:opencv:4.12.0")
+
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
