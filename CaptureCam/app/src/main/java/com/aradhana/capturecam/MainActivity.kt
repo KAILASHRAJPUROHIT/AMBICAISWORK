@@ -973,10 +973,25 @@ class MainActivity : AppCompatActivity() {
         inAngleSequence = true
         setStatus("Moving to angle 1…", ready = false)
         Log.i(TAG, "moveOut angle1 pan=$PAN_LEFT_AXIS3")
+        showDirectionArrow(left = true)
         rsc2.moveOut(axis3 = PAN_LEFT_AXIS3, durationMs = PAN_STEP_MS) {
             Log.i(TAG, "moveOut angle1 arrived")
+            hideDirectionArrow()
             waitForStableFrame("Turn the ornament to show its LEFT side, then hold still") { captureAngle1() }
         }
+    }
+
+    /** Big on-screen cue for staff, shown only while the gimbal is
+     * physically panning toward that angle's shot -- not during the whole
+     * dwell/detect window, so it doesn't linger and get mistaken for a
+     * "keep the item there" indicator once the camera has already arrived. */
+    private fun showDirectionArrow(left: Boolean) {
+        binding.directionArrow.text = if (left) "◀" else "▶"
+        binding.directionArrow.visibility = View.VISIBLE
+    }
+
+    private fun hideDirectionArrow() {
+        binding.directionArrow.visibility = View.GONE
     }
 
     /** Gate for angle1/angle2 shots -- mirrors tickJewel()'s MAIN-capture
