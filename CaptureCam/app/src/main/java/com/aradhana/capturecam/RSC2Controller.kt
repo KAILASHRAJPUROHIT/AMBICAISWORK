@@ -28,10 +28,17 @@ import java.util.UUID
  * pipeline should use; anything that needs to move the gimbal goes through
  * here, not through ad-hoc BLE calls elsewhere.
  *
- * Axis mapping confirmed on real hardware (2026-08-17): axis1 = tilt
- * (up/down), axis2 = pan (left/right). axis3's effect is NOT confirmed --
- * avoid relying on it until it's characterized. All three center at
- * DumlProtocol.AXIS_CENTER (1024).
+ * Axis mapping confirmed on real hardware (2026-08-17, isolated one-axis-
+ * at-a-time tests via the ADB test-move broadcast -- see MainActivity's
+ * testMoveReceiver):
+ *   axis1 = TILT (pitch, up/down) -- deflection above center = look up
+ *   axis2 = ROLL (rotates the frame landscape <-> vertical) -- not used by
+ *           the production capture sequence, keep at center or framing rotates
+ *   axis3 = PAN (yaw, left/right) -- what the 3-angle sweep uses
+ * All three center at DumlProtocol.AXIS_CENTER (1024). This mapping held
+ * for this specific physical mount/orientation; if the gimbal is ever
+ * mounted differently, re-verify with the same one-axis-at-a-time method
+ * rather than assuming it still holds.
  */
 class RSC2Controller {
 
