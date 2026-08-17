@@ -743,12 +743,22 @@ class MainActivity : AppCompatActivity() {
         // through underneath what was supposed to be a frozen photo.
         binding.previewView.visibility = View.INVISIBLE
         binding.boundsOverlay.update(emptyList(), 0, 0, 0)
+        // Reset any pinch-zoom/pan left over from inspecting the LAST
+        // preview -- otherwise a new photo could open already zoomed in.
+        binding.previewImage.scaleX = 1f
+        binding.previewImage.scaleY = 1f
+        binding.previewImage.translationX = 0f
+        binding.previewImage.translationY = 0f
         binding.previewImage.setImageBitmap(bitmap)
         binding.previewOverlay.visibility = View.VISIBLE
 
         binding.previewRetakeButton.setOnClickListener {
             hideCapturePreview()
             onRetake()
+        }
+        binding.previewContinueButton.setOnClickListener {
+            hideCapturePreview()
+            onProceed()
         }
         binding.previewCancelButton.setOnClickListener {
             hideCapturePreview()
@@ -757,28 +767,79 @@ class MainActivity : AppCompatActivity() {
 
         previewCountdownRunnable?.let { handler.removeCallbacks(it) }
         if (requireManualConfirm) {
-            // Auto-retry already exhausted its attempts and the shot is
-            // still soft -- don't let a silent 5s countdown wave a blurred
-            // photo through. Force the operator to explicitly retake.
             binding.previewCountdown.text = "Still soft after retries — tap Retake"
             previewCountdownRunnable = null
-            return
-        }
-        var secondsLeft = 5
-        val tick = object : Runnable {
-            override fun run() {
-                if (secondsLeft <= 0) {
-                    hideCapturePreview()
-                    onProceed()
-                    return
+        } else {
+            var secondsLeft = 5
+            val tick = object : Runnable {
+                override fun run() {
+                    if (secondsLeft <= 0) {
+                        hideCapturePreview()
+                        onProceed()
+                        return
+                    }
+                    binding.previewCountdown.text = "Continuing in ${secondsLeft}s… (pinch photo to zoom)"
+                    secondsLeft -= 1
+                    handler.postDelayed(this, 1000)
                 }
-                binding.previewCountdown.text = "Continuing in ${secondsLeft}s…"
-                secondsLeft -= 1
-                handler.postDelayed(this, 1000)
             }
+            previewCountdownRunnable = tick
+            handler.post(tick)
         }
-        previewCountdownRunnable = tick
-        handler.post(tick)
+
+        setupPreviewZoomAndPan()
+    }
+
+    /**
+     * Pinch-to-zoom + one-finger pan on the just-captured photo so the
+     * operator can actually verify fine detail before accepting a shot,
+     * plus the fix for the countdown not "sticking": touching the image to
+     * zoom used to do nothing to the 5s auto-continue timer running
+     * underneath, so it could fire and dismiss the photo out from under an
+     * operator mid-inspection. Any touch here now cancels that timer for
+     * good -- Retake/Continue/Cancel become the only way forward, which is
+     * also why Continue exists as its own button now instead of relying on
+     * the countdown as the sole "yes, use this" action.
+     */
+    private fun setupPreviewZoomAndPan() {
+        val image = binding.previewImage
+        val scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: ScaleGestureDetector): Boolean {
+                val newScale = (image.scaleX * detector.scaleFactor).coerceIn(1f, 6f)
+                image.scaleX = newScale
+                image.scaleY = newScale
+                return true
+            }
+        })
+        var lastX = 0f
+        var lastY = 0f
+        image.setOnTouchListener { _, event ->
+            scaleDetector.onTouchEvent(event)
+            previewCountdownRunnable?.let { handler.removeCallbacks(it) }
+            previewCountdownRunnable = null
+            binding.previewCountdown.text = "Pinch to zoom · tap Continue when done"
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    lastX = event.rawX
+                    lastY = event.rawY
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (event.pointerCount == 1 && image.scaleX > 1.01f) {
+                        image.translationX += event.rawX - lastX
+                        image.translationY += event.rawY - lastY
+                    }
+                    lastX = event.rawX
+                    lastY = event.rawY
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (image.scaleX <= 1.01f) {
+                        image.translationX = 0f
+                        image.translationY = 0f
+                    }
+                }
+            }
+            true
+        }
     }
 
     private fun hideCapturePreview() {
