@@ -75,6 +75,51 @@ object MaterialDetector {
     private fun looksLikeMetal(r: Int, g: Int, b: Int): Boolean =
         looksLikeGold(r, g, b) || looksLikeSilver(r, g, b)
 
+    // Absolute RGB/luma thresholds alone are camera-specific: a wall or
+    // table that reads as gray on one phone's colour science can slide
+    // straight through looksLikeSilver's fairly wide "neutral, moderately
+    // bright" band on a different device's (confirmed on an actual tablet:
+    // a plain background read coverage=0.43, effectively "the wall IS the
+    // jewellery"). Real jewellery is inherently TEXTURED -- facets,
+    // engraving, polish, stone settings all produce sharp local luma
+    // variation pixel-to-pixel; a flat wall or table does not, regardless
+    // of what colour that wall happens to be on any given camera. This is
+    // required in ADDITION to the colour check, not instead of it, and is
+    // far more device-invariant than tuning the absolute thresholds again
+    // for every new camera's colour calibration.
+    private const val LOCAL_CONTRAST_RADIUS = 3
+    private const val MIN_LOCAL_VARIANCE = 45f
+
+    private fun hasLocalContrast(yBuffer: ByteBuffer, rowStride: Int, cx: Int, cy: Int, width: Int, height: Int): Boolean {
+        val r = LOCAL_CONTRAST_RADIUS
+        var sum = 0
+        var sumSq = 0
+        var count = 0
+        var yy = cy - r
+        while (yy <= cy + r) {
+            if (yy in 0 until height) {
+                var xx = cx - r
+                while (xx <= cx + r) {
+                    if (xx in 0 until width) {
+                        val idx = yy * rowStride + xx
+                        if (idx in 0 until yBuffer.capacity()) {
+                            val v = yBuffer.get(idx).toInt() and 0xFF
+                            sum += v
+                            sumSq += v * v
+                            count += 1
+                        }
+                    }
+                    xx += 2 // sub-sample the window, this runs per-candidate-pixel
+                }
+            }
+            yy += 2
+        }
+        if (count < 4) return false
+        val mean = sum.toFloat() / count
+        val variance = (sumSq.toFloat() / count) - (mean * mean)
+        return variance >= MIN_LOCAL_VARIANCE
+    }
+
     /** Diamonds/cut stones/studs read as bright, near-white specular
      * highlights -- the opposite signature deliberately excluded from
      * looksLikeSilver (which caps at yLuma<240 specifically to avoid
