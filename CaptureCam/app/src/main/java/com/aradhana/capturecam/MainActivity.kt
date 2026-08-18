@@ -1312,13 +1312,15 @@ class MainActivity : AppCompatActivity() {
     /** Active gimbal search for MAIN, used only once nothing has been
      * detected at all for HUNT_GRACE_MS -- rather than just waiting
      * indefinitely for the operator to reposition the item under a fixed
-     * camera. Deterministic sweep order, exactly per spec:
+     * camera. Deterministic sweep order -- always scans the bottom, never
+     * level or up: an ornament sits on the base, never in the air or on a
+     * wall, so once tilted down the sweep stays down through the entire
+     * pan search and only returns to level at the very end (GIVE_UP):
      *   1. SCAN_DOWN -- tilt down from level, budget-limited (TILT_MS_LIMIT)
-     *   2. RETURN_TILT -- back to level
-     *   3. SCAN_LEFT -- pan left from center, budget-limited (HUNT_PAN_SWEEP_MAX_MS)
-     *   4. RETURN_PAN -- back to center
-     *   5. SCAN_RIGHT -- pan right from center, same budget
-     *   6. GIVE_UP -- return home, let the operator reposition manually
+     *   2. SCAN_LEFT -- pan left from center, STILL TILTED DOWN, budget-limited (HUNT_PAN_SWEEP_MAX_MS)
+     *   3. RETURN_PAN -- back to center pan, still tilted down
+     *   4. SCAN_RIGHT -- pan right from center, still tilted down, same budget
+     *   5. GIVE_UP -- undo tilt AND pan, return home, let the operator reposition manually
      * Sequential single-axis steps only, same BLE-safety reasoning as
      * attemptCenteringCorrection() (each phase is broken into small steps,
      * not one giant burst, specifically so detection can be checked
