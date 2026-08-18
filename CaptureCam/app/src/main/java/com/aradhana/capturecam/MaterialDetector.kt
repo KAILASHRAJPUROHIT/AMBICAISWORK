@@ -246,6 +246,7 @@ object MaterialDetector {
                 val cell = row * cols + col
                 if (isMetal) {
                     mask[cell] = true
+                    if (looksLikeGold(rgb[0], rgb[1], rgb[2])) goldMask[cell] = true
                     warm += 1
                 } else if (looksLikeSparkle(rgb[0], rgb[1], rgb[2])) {
                     sparkleCandidate[cell] = true
