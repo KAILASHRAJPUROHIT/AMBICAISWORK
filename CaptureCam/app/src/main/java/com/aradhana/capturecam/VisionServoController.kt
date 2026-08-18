@@ -50,6 +50,11 @@ class VisionServoController(private val log: (String) -> Unit) {
     private var reacquiringSinceMs = 0L
     private var lastServoLogMs = 0L
     private var lockLoggedOnce = false
+    // The most recent DINO box that disagreed with a live MIL track but
+    // wasn't yet acted on -- cleared on agreement/reseed/state-reset, only
+    // ever compared against the NEXT disagreeing DINO result (see
+    // applyDinoResult's TRACKING branch doc comment).
+    private var pendingDisagreement: NormalizedBox? = null
 
     fun reset() {
         tracker.reset()
@@ -57,6 +62,7 @@ class VisionServoController(private val log: (String) -> Unit) {
         pendingDino = null
         trackedBox = null
         lockLoggedOnce = false
+        pendingDisagreement = null
         log("[STATE] -> SEARCHING (reset)")
     }
 
