@@ -89,6 +89,12 @@ class MainActivity : AppCompatActivity() {
     private var detectorClient: DetectorClient? = null
     private var lastDetectorSendAt = 0L
     private var cachedRotationDegrees = 0
+    // Rotation in effect for the most recent MaterialDetector result --
+    // needed by bestObjectBox() to convert its points into the same
+    // upright-normalized space ML Kit's boxes are already in (uprightPoint
+    // convention). Separate from cachedRotationDegrees since that field
+    // only updates while the new DINO+MIL pipeline is active.
+    private var lastMaterialRotationDegrees = 0
     private var lastServoAt = 0L
     private var lastServoAxisWasPan = true
     private var lastZoomServoAt = 0L
