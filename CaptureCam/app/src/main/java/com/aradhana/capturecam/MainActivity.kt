@@ -561,14 +561,18 @@ class MainActivity : AppCompatActivity() {
         // tool, not a production attack surface.
         val filter = IntentFilter("com.aradhana.capturecam.TEST_MOVE")
         val recenterFilter = IntentFilter("com.aradhana.capturecam.RECENTER")
+        val nudgeFilter = IntentFilter("com.aradhana.capturecam.NUDGE")
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(testMoveReceiver, filter, RECEIVER_EXPORTED)
             registerReceiver(recenterReceiver, recenterFilter, RECEIVER_EXPORTED)
+            registerReceiver(nudgeReceiver, nudgeFilter, RECEIVER_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(testMoveReceiver, filter)
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(recenterReceiver, recenterFilter)
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(nudgeReceiver, nudgeFilter)
         }
     }
 
