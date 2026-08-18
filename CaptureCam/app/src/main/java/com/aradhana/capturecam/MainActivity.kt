@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 import org.opencv.core.Mat
 import java.nio.ByteBuffer
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.min
 
 /**
@@ -230,6 +231,13 @@ class MainActivity : AppCompatActivity() {
     // triggered/judged; ZOOM_STEP_INTERVAL_MS after this is the earliest
     // another climb step may be taken. See tickJewel.
     private var lastZoomChangeAt = 0L
+    // Current auto-exposure bias, in whole EV stops -- persists across
+    // ticks so applyAutoExposure() can step it incrementally rather than
+    // recomputing from scratch every time. Reset per item (see
+    // resetForNewItem) so a piece that needed a heavy negative bias
+    // doesn't leave the NEXT item starting under-exposed.
+    private var autoExposureEv = 0f
+    private var lastExposureAdjustAt = 0L
     // Whether a decisive AF trigger has already been sent for the CURRENT
     // zoom level -- the single-shot discipline that stops AF being
     // re-triggered every tick while waiting for its result.
@@ -342,6 +350,23 @@ class MainActivity : AppCompatActivity() {
         // approach rather than a jumpy series of jerks.
         private const val ZOOM_STEP_RATIO = 1.10f
         private const val ZOOM_STEP_INTERVAL_MS = 350L
+        // Auto-exposure (2026-08-18): steps exposure compensation down
+        // when too much of the GOLD area is blown out (specular
+        // reflections eating engraving/facet detail), back up toward 0
+        // once it isn't. Rate-limited and small-stepped on purpose --
+        // this rides on top of the camera's own AE_MODE_ON metering, not
+        // a replacement for it, so it should nudge gently rather than
+        // hunt. Threshold picked conservatively (needs real calibration
+        // against labeled over/under-exposed examples, same caveat as
+        // every other uncalibrated threshold in this file): above 12% of
+        // gold samples clipped is treated as "losing detail," below 4%
+        // is treated as "clearly fine, safe to recover brightness."
+        // Between the two, hold steady rather than react to noise.
+        private const val EXPOSURE_ADJUST_INTERVAL_MS = 700L
+        private const val EXPOSURE_STEP_EV = 0.33f
+        private const val EXPOSURE_MIN_EV = -2.0f
+        private const val HIGHLIGHT_CLIP_HIGH = 0.12f
+        private const val HIGHLIGHT_CLIP_LOW = 0.04f
         // Quiet time required after ANY zoom change (a climb step or a
         // backoff step) before focus is triggered or judged at all. Camera2
         // AF triggered while the lens/sensor is still settling from a zoom
@@ -1322,6 +1347,7 @@ class MainActivity : AppCompatActivity() {
         // trying every tick, not exhaust a budget meant for a rare
         // one-shot check.
         if (rsc2.isReady) attemptCenteringCorrection(result, maxAttempts = Int.MAX_VALUE)
+        applyAutoExposure(result)
 
         val zoom = focusZoom.currentZoomRatio()
         val zoomRange = focusZoom.zoomRatioRange()
@@ -1607,6 +1633,33 @@ class MainActivity : AppCompatActivity() {
             cy = (bounds.y0 + bounds.y1) / 2f
         }
         focusZoom.updateTrackingRegion(cx, cy)
+    }
+
+    /** Automated exposure control (2026-08-18): steps exposure
+     * compensation down when reflections are blowing out gold detail,
+     * back up toward 0 when they aren't -- see the constants' doc
+     * comment for the actual thresholds/reasoning. Reads
+     * MaterialDetector.Result.highlightClipFraction (computed for free
+     * during the existing gold-detection YUV sampling pass, no extra
+     * image analysis added). Rate-limited via EXPOSURE_ADJUST_INTERVAL_MS
+     * so it doesn't fight the camera's own AE convergence tick to tick.
+     * No-ops entirely if the device didn't report a usable compensation
+     * range (exposureControlAvailable() false) -- fails open rather than
+     * guessing at unsupported values. */
+    private fun applyAutoExposure(result: MaterialDetector.Result) {
+        if (!focusZoom.exposureControlAvailable()) return
+        val now = System.currentTimeMillis()
+        if (now - lastExposureAdjustAt < EXPOSURE_ADJUST_INTERVAL_MS) return
+        lastExposureAdjustAt = now
+        val clip = result.highlightClipFraction
+        val range = focusZoom.exposureCompensationRangeEv()
+        val floor = max(range.start, EXPOSURE_MIN_EV)
+        when {
+            clip > HIGHLIGHT_CLIP_HIGH -> autoExposureEv = (autoExposureEv - EXPOSURE_STEP_EV).coerceAtLeast(floor)
+            clip < HIGHLIGHT_CLIP_LOW && autoExposureEv < 0f ->
+                autoExposureEv = (autoExposureEv + EXPOSURE_STEP_EV).coerceAtMost(0f)
+        }
+        focusZoom.setExposureCompensationEv(autoExposureEv)
     }
 
     /** The NON-NEGOTIABLE capture rules: the gimbal must not be mid-move
@@ -2902,6 +2955,11 @@ class MainActivity : AppCompatActivity() {
             tagJpeg = null
             tagCodeHistory = mutableListOf()
             stableTagCode = null
+            // Auto-exposure bias is per-item, not permanent -- a piece
+            // that needed heavy negative EV shouldn't leave the NEXT
+            // item starting under-exposed.
+            autoExposureEv = 0f
+            focusZoom.setExposureCompensationEv(0f)
             focusZoom.triggerAutoFocus()
         }
         if (next == Phase.JEWEL) {

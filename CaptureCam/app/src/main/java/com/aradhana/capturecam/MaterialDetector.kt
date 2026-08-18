@@ -44,7 +44,16 @@ object MaterialDetector {
         // focus-peaking overlay draws a dot at each one instead of a single
         // box, so studs/diamonds/facets across the piece all light up
         // individually rather than just the metal's own bounding box.
-        val points: List<Point> = emptyList()
+        val points: List<Point> = emptyList(),
+        // Fraction of GOLD-classified samples that are blown out (luma
+        // near max) -- see looksLikeGold's yLuma<245 ceiling, this counts
+        // slightly under that so it catches "about to clip" too. Feeds
+        // MainActivity's auto-exposure logic (2026-08-18): a real, if
+        // coarse, per-frame signal for "reflections are eating design
+        // detail right now" without any extra image analysis pass --
+        // reuses the same YUV sampling loop that already runs for gold
+        // detection.
+        val highlightClipFraction: Float = 0f
     )
 
     private fun looksLikeGold(r: Int, g: Int, b: Int): Boolean {
@@ -223,6 +232,8 @@ object MaterialDetector {
         val goldMask = BooleanArray(cols * rows)
         val sparkleCandidate = BooleanArray(cols * rows)
         var warm = 0
+        var goldSampleCount = 0
+        var goldClippedCount = 0
 
         // Pass 1: classify every sampled cell. Sparkle candidates are
         // recorded but not yet trusted -- see the proximity gate below.
@@ -246,13 +257,18 @@ object MaterialDetector {
                 val cell = row * cols + col
                 if (isMetal) {
                     mask[cell] = true
-                    if (looksLikeGold(rgb[0], rgb[1], rgb[2])) goldMask[cell] = true
+                    if (looksLikeGold(rgb[0], rgb[1], rgb[2])) {
+                        goldMask[cell] = true
+                        goldSampleCount += 1
+                        if (yVal >= 240) goldClippedCount += 1
+                    }
                     warm += 1
                 } else if (looksLikeSparkle(rgb[0], rgb[1], rgb[2])) {
                     sparkleCandidate[cell] = true
                 }
             }
         }
+        val highlightClipFraction = if (goldSampleCount > 0) goldClippedCount.toFloat() / goldSampleCount else 0f
 
         // Pass 2: build the dot cloud -- every metal cell, plus every
         // sparkle candidate that has an actual metal cell nearby (a stone
@@ -271,7 +287,7 @@ object MaterialDetector {
             }
         }
 
-        if (warm == 0) return Result(false, null, 0f, 0f, 0f, 0f, points)
+        if (warm == 0) return Result(false, null, 0f, 0f, 0f, 0f, points, highlightClipFraction)
 
         // Connected components (8-connectivity), same as goldBlobDominance
         // in the web worker -- but tracking EVERY component, not just the
@@ -321,7 +337,7 @@ object MaterialDetector {
             }
             components.add(Component(size, minCol, minRow, maxCol, maxRow))
         }
-        if (components.isEmpty()) return Result(false, null, 0f, 0f, 0f, 0f, points)
+        if (components.isEmpty()) return Result(false, null, 0f, 0f, 0f, 0f, points, highlightClipFraction)
 
         fun fillRatio(c: Component): Float {
             val bboxCells = (c.maxCol - c.minCol + 1) * (c.maxRow - c.minRow + 1)
@@ -393,7 +409,8 @@ object MaterialDetector {
             warmCoverage = warmCoverage,
             goldRatio = goldRatio,
             goldBoxArea = goldBoxArea,
-            points = points
+            points = points,
+            highlightClipFraction = highlightClipFraction
         )
     }
 }
