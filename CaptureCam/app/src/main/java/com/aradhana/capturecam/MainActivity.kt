@@ -470,11 +470,16 @@ class MainActivity : AppCompatActivity() {
         private const val DETECTOR_SEND_INTERVAL_MS = 120L
         private const val DETECTOR_FRAME_LONG_EDGE = 960
         private const val DETECTOR_JPEG_QUALITY = 75
-        private const val SERVO_INTERVAL_MS = 130L
-        private const val SERVO_MIN_MS = 90L
-        private const val SERVO_MAX_MS = 260L
-        private const val SERVO_MAX_DEFLECTION = 220
-        private const val ZOOM_SERVO_INTERVAL_MS = 250L
+        // Tuned up after live testing: the original values (90-260ms bursts,
+        // 130ms interval, deflection 220) converged too slowly and read as
+        // erratic/stuck on real hardware -- errors were shrinking but not
+        // fast enough to keep up with a moving target before the next DINO
+        // correction, compounding into visible drift.
+        private const val SERVO_INTERVAL_MS = 90L
+        private const val SERVO_MIN_MS = 120L
+        private const val SERVO_MAX_MS = 380L
+        private const val SERVO_MAX_DEFLECTION = 320
+        private const val ZOOM_SERVO_INTERVAL_MS = 200L
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
