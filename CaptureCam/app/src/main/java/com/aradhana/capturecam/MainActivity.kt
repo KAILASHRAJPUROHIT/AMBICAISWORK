@@ -250,6 +250,14 @@ class MainActivity : AppCompatActivity() {
     // forever if the piece genuinely never gets moved back.
     private var tooCloseWarned = false
     private var readyStreak = 0
+    // True right after tag capture, before MAIN's auto-detect/hunt loop is
+    // allowed to run -- per explicit request: placing the item under the
+    // camera takes real time, and starting the hunt/timer immediately on
+    // tag confirm meant the gimbal could start sweeping for nothing before
+    // staff had even walked over. tickJewel() no-ops entirely while this
+    // is true; cleared by the READY button tap, same pattern as
+    // promptForSideProfile()'s gate before angle1/angle2.
+    private var jewelReadyPending = false
     private var angleStableStreak = 0
     // Bounds how many zoom-in steps centerThenCapture() will take chasing
     // CAPTURE_MIN_OCCUPANCY for ONE angle shot -- reset per side (see
@@ -1054,6 +1062,7 @@ class MainActivity : AppCompatActivity() {
             captureFullRes { bytes ->
                 tagJpeg = bytes
                 resetForNewItem(Phase.JEWEL)
+                promptToPlaceMainItem()
             }
             return
         }
@@ -1087,7 +1096,9 @@ class MainActivity : AppCompatActivity() {
                     // uploading immediately. resetForNewItem(Phase.JEWEL)
                     // does not clear tagJpeg/stableTagCode, only jewel-side
                     // state, so the tag just captured survives into upload.
-                    onProceed = { resetForNewItem(Phase.JEWEL) },
+                    // promptToPlaceMainItem() gates the actual hunt/detect
+                    // loop behind a READY tap -- see its doc comment.
+                    onProceed = { resetForNewItem(Phase.JEWEL); promptToPlaceMainItem() },
                     onRetake = { retakeTag() },
                     onCancel = { cancelItem() }
                 )
@@ -1104,7 +1115,7 @@ class MainActivity : AppCompatActivity() {
      * here with a stronger focus signal.
      */
     private fun tickJewel() {
-        if (previewShowing || isZooming || inAngleSequence) return
+        if (previewShowing || isZooming || inAngleSequence || jewelReadyPending) return
         val now = System.currentTimeMillis()
         val result = latestMaterial
 
@@ -2085,6 +2096,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Gate before MAIN's auto-detect/hunt loop is allowed to run at all --
+     * called right after tag capture, before resetForNewItem(Phase.JEWEL)
+     * even flips the phase. Same READY-button pattern as
+     * promptForSideProfile(), for the same reason: placing the item takes
+     * real time, and the old behaviour (arm the JEWEL tick loop the
+     * instant the tag was confirmed) let the hunt sweep start searching
+     * for nothing before staff had physically placed anything. */
+    private fun promptToPlaceMainItem() {
+        jewelReadyPending = true
+        setStatus("Place the ornament under the camera, then tap READY", ready = false)
+        showReadyButton {
+            jewelReadyPending = false
+            setStatus("Center the ornament, front side up…", ready = false)
+        }
+    }
+
     /** Shows the instruction + big READY button and waits for the staff tap
      * before calling [onReady] -- no auto-timeout fire here, unlike the old
      * pan-sweep gate. The staff decides when the piece is actually
@@ -2364,6 +2391,7 @@ class MainActivity : AppCompatActivity() {
                         tagJpeg = bytes
                         stableTagCode = "TEST-${System.currentTimeMillis()}"
                         resetForNewItem(Phase.JEWEL)
+                        promptToPlaceMainItem()
                     }
                     return
                 }
@@ -2372,7 +2400,7 @@ class MainActivity : AppCompatActivity() {
                         tagJpeg = bytes
                         showCapturePreview(
                             bytes,
-                            onProceed = { resetForNewItem(Phase.JEWEL) },
+                            onProceed = { resetForNewItem(Phase.JEWEL); promptToPlaceMainItem() },
                             onRetake = { retakeTag() },
                             onCancel = { cancelItem() }
                         )
