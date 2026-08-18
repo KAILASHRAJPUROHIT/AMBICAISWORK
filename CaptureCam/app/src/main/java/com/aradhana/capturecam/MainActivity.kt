@@ -599,7 +599,17 @@ class MainActivity : AppCompatActivity() {
         setIntent(intent)
         launchedFromBrowser = intent.data?.scheme == "capturecam"
         if (::cameraProvider.isInitialized) {
-            resetForNewItem(Phase.JEWEL)
+            // undoCenteringThenAdvance FIRST, then reset -- resetForNewItem's
+            // own centeringPanMs/TiltMs=0 is a silent, non-physical zero
+            // (correct only when something upstream already undid the real
+            // drift, e.g. the normal angle2-completion path). Called here
+            // with no preceding undo, it was discarding real accumulated
+            // drift without ever moving the gimbal back -- the app's
+            // internal "center" record silently went out of sync with the
+            // physical position every time this fired.
+            undoCenteringThenAdvance {
+                resetForNewItem(Phase.JEWEL)
+            }
         }
         attemptGimbalConnect()
     }
