@@ -234,9 +234,19 @@ class VisionServoController(private val log: (String) -> Unit) {
 
         val pan = nonlinearCommand(ex)
         val tilt = nonlinearCommand(-ey)
+        // Zoom-IN only once roughly centered -- zoom races ahead of a slow
+        // pan/tilt correction otherwise, and confirmed live: a target still
+        // far off-center got zoomed to 3.4x while pan/tilt were still
+        // catching up, clipping it at the frame edge and getting the whole
+        // servo stuck (large ex/ey that never shrinks, because the object is
+        // partially out of frame, not because the direction is wrong).
+        // Zoom-OUT has no such risk -- backing off only ever helps
+        // reacquire a target that's about to be clipped, so it stays
+        // unconditional on centering.
+        val roughlyCentered = abs(ex) <= ZOOM_ALLOW_DEADBAND && abs(ey) <= ZOOM_ALLOW_DEADBAND
         val zoomStep = when {
-            occupancy < CAPTURE_MIN_OCCUPANCY - ZOOM_DEADBAND -> ZOOM_STEP
             occupancy > CAPTURE_MIN_OCCUPANCY + ZOOM_DEADBAND -> -ZOOM_STEP
+            occupancy < CAPTURE_MIN_OCCUPANCY - ZOOM_DEADBAND && roughlyCentered -> ZOOM_STEP
             else -> 0f
         }
 
