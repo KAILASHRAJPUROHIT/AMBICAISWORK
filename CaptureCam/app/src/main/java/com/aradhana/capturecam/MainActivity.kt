@@ -432,7 +432,20 @@ class MainActivity : AppCompatActivity() {
         // (250 x 900ms), nowhere near enough to close a large offset.
         private const val CENTERING_TICK_MS = 200L
         private const val CENTERING_TICK_MS_MAX = 900L
-        private const val CENTERING_MAX_ATTEMPTS = 4
+        // Was 4 -- tuned only for MAIN's original "fine pre-capture nudge"
+        // case, where the piece was already expected to be roughly
+        // centered by the time this runs. Too low for the newer recovery
+        // path (see the result.material==false branch in tickJewel) that
+        // also uses this same counter to walk an item back from a genuinely
+        // extreme starting position (e.g. pinned at the frame edge) --
+        // confirmed live: exhausted after 3-4 nudges with the item still
+        // nowhere near center, then fell back to doing nothing. Individual
+        // nudges are already small and self-correcting (revert-on-overshoot
+        // logic above), so the real stopping condition should be "centered"
+        // or "genuinely lost", not an arbitrary low attempt count -- raised
+        // to a generous budget matching "keep repeating until the occupancy
+        // target is met."
+        private const val CENTERING_MAX_ATTEMPTS = 20
         // Angle shots reuse the same centering primitive but need a bigger
         // budget: staff places the piece by hand after rotating it, which
         // can start much further off-center than MAIN's fine pre-capture
