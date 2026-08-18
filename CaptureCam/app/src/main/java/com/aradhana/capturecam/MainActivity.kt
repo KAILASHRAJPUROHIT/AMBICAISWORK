@@ -374,10 +374,8 @@ class MainActivity : AppCompatActivity() {
         // Conservative live-zoom cap per the "physical distance should do
         // most of the framing" principle -- pushing digital/hybrid zoom
         // much past this loses detail the catalogue pipeline later wants.
-        // TEMPORARILY raised (2026-08-18) per explicit request to test
-        // whether zooming past 3.4x helps focus converge -- revert to 3.4
-        // once that test is done.
-        private const val MAX_LIVE_ZOOM_RATIO = 7.0f
+        // Reverted to 3.4 (2026-08-18) after the >3.4x focus test.
+        private const val MAX_LIVE_ZOOM_RATIO = 3.4f
         // Auto-centering (runs before MAIN, using axis1=tilt/axis3=pan --
         // confirmed mapping, see RSC2Controller). Gentler deflection than
         // the angle sweep since this is fine correction, not a deliberate

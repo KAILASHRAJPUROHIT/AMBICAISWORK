@@ -265,6 +265,31 @@ class RSC2Controller {
         }
         Log.i(TAG, "streamDeflection($axis1,$axis2,$axis3) starting")
         val ticks = (durationMs / 200L).toInt().coerceAtLeast(1)
+        // Velocity ramp, not an instant on/off step -- per explicit request
+        // (2026-08-18): every frame before this held FULL deflection for
+        // every tick, then snapped straight back to AXIS_CENTER on the
+        // final tick. That's a true step function (0 -> full -> 0
+        // instantly), which is exactly what reads as a jerky start/stop
+        // jolt on a physical gimbal. The 200ms per-frame cadence itself is
+        // a real BLE constraint confirmed earlier this session (this
+        // protocol has no sub-200ms frame rate established as safe), so
+        // this doesn't change WHEN frames go out, only ramps each axis's
+        // MAGNITUDE up over the first tick and back down over the last
+        // tick (when there's room -- a single-tick burst has no ramp
+        // headroom and stays full magnitude, unavoidable with only one
+        // frame available). Full magnitude for the ticks in between keeps
+        // net displacement close to the original calibrated duration-to-
+        // motion mapping (centeringDurationFor()), so existing tuning
+        // isn't invalidated -- only the edges are softened.
+        val rampTicks = if (ticks >= 3) 1 else 0
+        fun rampFraction(index: Int): Float = when {
+            rampTicks == 0 -> 1f
+            index < rampTicks -> (index + 1).toFloat() / (rampTicks + 1)
+            index >= ticks - rampTicks -> (ticks - index).toFloat() / (rampTicks + 1)
+            else -> 1f
+        }
+        fun scaledAxis(target: Int, fraction: Float): Int =
+            (DumlProtocol.AXIS_CENTER + (target - DumlProtocol.AXIS_CENTER) * fraction).toInt()
         var sent = 0
         val runnable = object : Runnable {
             override fun run() {
@@ -275,7 +300,10 @@ class RSC2Controller {
                     handler.postDelayed(onDone, settleMs)
                     return
                 }
-                val frame = DumlProtocol.buildJoystickFrame(axis1, axis2, axis3, seq)
+                val fraction = rampFraction(sent)
+                val frame = DumlProtocol.buildJoystickFrame(
+                    scaledAxis(axis1, fraction), scaledAxis(axis2, fraction), scaledAxis(axis3, fraction), seq
+                )
                 seq += 1
                 writeFrame(frame)
                 sent += 1
