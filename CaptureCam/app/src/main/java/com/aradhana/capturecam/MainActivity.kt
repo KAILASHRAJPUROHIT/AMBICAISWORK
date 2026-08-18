@@ -1579,7 +1579,25 @@ class MainActivity : AppCompatActivity() {
             cx = (bounds.x0 + bounds.x1) / 2f
             cy = (bounds.y0 + bounds.y1) / 2f
         }
-        if (occupancy < CAPTURE_MIN_OCCUPANCY) return false
+        // Relax the occupancy floor once genuinely at the zoom ceiling --
+        // matches the zoom-climb's OWN documented intent ("at the ceiling,
+        // accept whatever coverage is on offer as the best framing
+        // available... every capture still goes through the same
+        // focusLocked + sharpEnough gate"), which this function was
+        // silently NOT honoring: it had no ceiling escape of its own, so
+        // coverageOk could read true via the ceiling while this still
+        // failed on real occupancy, forever. Confirmed live (2026-08-18):
+        // af=LOCKED, sharp=100, zoom pinned at maxUsableZoom=2.9 (a stale
+        // per-item cap from an earlier failed-focus backoff), real
+        // occupancy ~8-9% -- permanent "Adjusting framing" / "Holding
+        // steady" cycle with a shot that was never going to get any
+        // bigger at this position. Centering is NOT relaxed here --
+        // only occupancy.
+        val zoom = focusZoom.currentZoomRatio()
+        val zoomRange = focusZoom.zoomRatioRange()
+        val atZoomCeiling = zoom >= min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO) - 0.02f ||
+            zoom >= maxUsableZoom - 0.02f
+        if (occupancy < CAPTURE_MIN_OCCUPANCY && !atZoomCeiling) return false
         return abs(cx - 0.5f) <= CENTERING_DEADBAND && abs(cy - 0.5f) <= CENTERING_DEADBAND
     }
 
