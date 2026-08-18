@@ -1297,7 +1297,14 @@ class MainActivity : AppCompatActivity() {
     private fun bestGoldObjectBox(): RectF? {
         val boxes = latestObjectBoxesUpright
         if (boxes.isEmpty()) return null
-        val points = latestMaterial?.points
+        // Gold-hue points ONLY, never silver/sparkle -- per the standing
+        // "focus on gold only, always" rule. Silver's classifier is loose
+        // enough to catch ordinary specular highlights (a glossy display
+        // box's lit edge), which the raw "metal" point set doesn't
+        // distinguish from real jewellery. Confirmed live (2026-08-18):
+        // with literally no ornament in frame, points from the box's shiny
+        // top edge still armed the tracker until this filter was added.
+        val points = latestMaterial?.points?.filter { it.gold }
         if (points.isNullOrEmpty()) return null
         val rotation = lastMaterialRotationDegrees
         // Density (points / box area), NOT raw point count. A large object
