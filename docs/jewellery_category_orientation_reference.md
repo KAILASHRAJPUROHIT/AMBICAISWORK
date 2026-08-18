@@ -18,7 +18,7 @@ page is the reference shot, not necessarily a direct image file URL.
 | LADIES RING | Women's ring — daintier band, gemstone/floral setting | Lies flat, stone/setting face up | https://www.totaram.com/22k-gold-ring-for-women-48100.html |
 | LOCKET | Pendant that opens (photo/keepsake compartment) | Lies flat, closed front face up, bail at top | https://www.totaram.com/22k-gold-sai-baba-pendant-1-gp4534.html |
 | TOPS | Small stud earrings, no dangle | Lies flat, decorative front disc face up | https://rudradhan.us/collections/indian-tops-stud-earrings |
-| WATI | **Confirmed Maharashtrian dangle earring** (dome + floral cutout + chain), related to "Bugadi" style. NOTE: the same word also names the twin bowl-pendant on a Maharashtrian mangalsutra — an unrelated item. Treat the earring meaning as authoritative for this store's WATI folder. | Hangs/dangles vertically, top clip up, domes cascading down, floral-cutout face toward camera | https://aadyaa.com/products/dome-and-coin-bugadi-pierced (closest match; no vendor used the exact word "wati" for an earring) |
+| WATI | **CORRECTED by owner (2026-08-18): in this store, WATI is exclusively the twin bowl-shaped Maharashtrian mangalsutra pendant, nothing else.** (Research initially guessed the earring/"Bugadi"-style meaning based on a live capture found in the WATI folder, which turned out to be a miscategorized item, not evidence of what WATI actually means here — do not trust that guess.) | Lies flat like a pendant/mangalsutra: face up, bail/loop at top, both bowl halves visible | https://www.totaram.com/22k-gold-mangalsutra-nallapusalu-black-beads-chain-in-length-20-00-inches-235-bbc1952.html |
 
 ## Additional likely categories (researched proactively, not yet confirmed present)
 
