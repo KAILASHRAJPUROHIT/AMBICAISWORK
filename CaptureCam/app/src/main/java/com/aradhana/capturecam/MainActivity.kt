@@ -892,6 +892,7 @@ class MainActivity : AppCompatActivity() {
             this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis, imageCapture
         )
         camera?.let { focusZoom.bind(it, getSystemService(android.hardware.camera2.CameraManager::class.java)) }
+        configureExposureSlider()
 
         resetForNewItem(Phase.TAG)
         handler.post(tickRunnable)
@@ -2905,14 +2906,6 @@ class MainActivity : AppCompatActivity() {
      * control to staff and stands auto mode down -- see manualModeActive's
      * doc comment. */
     private fun setupManualControls() {
-        fun engageManual() {
-            if (!manualModeActive) {
-                manualModeActive = true
-                binding.manualModeText.text = getString(R.string.manual_mode)
-                binding.resumeAutoButton.visibility = View.VISIBLE
-            }
-        }
-
         binding.zoomInButton.setOnClickListener {
             engageManual()
             val range = focusZoom.zoomRatioRange()
@@ -2928,28 +2921,6 @@ class MainActivity : AppCompatActivity() {
             val next = (before / 1.15f).coerceIn(range.start, min(range.endInclusive, MAX_LIVE_ZOOM_RATIO))
             focusZoom.setZoomRatio(next)
             logManualAction("zoom_out", mapOf("from" to before, "to" to next))
-        }
-
-        if (focusZoom.exposureControlAvailable()) {
-            val evRange = focusZoom.exposureCompensationRangeEv()
-            val span = ((evRange.endInclusive - evRange.start) * 10).toInt().coerceAtLeast(1)
-            binding.exposureSeekBar.max = span
-            binding.exposureSeekBar.progress = ((autoExposureEv - evRange.start) * 10).toInt().coerceIn(0, span)
-            binding.exposureSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    if (!fromUser) return
-                    engageManual()
-                    val before = autoExposureEv
-                    val ev = evRange.start + progress / 10f
-                    autoExposureEv = ev
-                    focusZoom.setExposureCompensationEv(ev)
-                    logManualAction("exposure", mapOf("from" to before, "to" to ev))
-                }
-                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-            })
-        } else {
-            binding.exposureRow.visibility = View.GONE
         }
 
         binding.resumeAutoButton.setOnClickListener {
@@ -2992,6 +2963,49 @@ class MainActivity : AppCompatActivity() {
             gestureDetector.onTouchEvent(event)
             true
         }
+    }
+
+    /** Shared by every manual control -- see manualModeActive's doc
+     * comment. Idempotent (checks manualModeActive first) so it's cheap
+     * to call unconditionally from every listener. */
+    private fun engageManual() {
+        if (!manualModeActive) {
+            manualModeActive = true
+            binding.manualModeText.text = getString(R.string.manual_mode)
+            binding.resumeAutoButton.visibility = View.VISIBLE
+        }
+    }
+
+    /** Wires the exposure slider to the camera's REAL EV range/step --
+     * must run AFTER focusZoom.bind() has actually read
+     * CameraCharacteristics, not from onCreate. Confirmed live (2026-08-
+     * 18): calling this too early made exposureControlAvailable() read
+     * false (nothing bound yet) and permanently hid the slider row, even
+     * though the hardware genuinely supports EV compensation. Called once
+     * per camera bind from startCamera(), right after focusZoom.bind(). */
+    private fun configureExposureSlider() {
+        if (!focusZoom.exposureControlAvailable()) {
+            binding.exposureRow.visibility = View.GONE
+            return
+        }
+        binding.exposureRow.visibility = View.VISIBLE
+        val evRange = focusZoom.exposureCompensationRangeEv()
+        val span = ((evRange.endInclusive - evRange.start) * 10).toInt().coerceAtLeast(1)
+        binding.exposureSeekBar.max = span
+        binding.exposureSeekBar.progress = ((autoExposureEv - evRange.start) * 10).toInt().coerceIn(0, span)
+        binding.exposureSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                engageManual()
+                val before = autoExposureEv
+                val ev = evRange.start + progress / 10f
+                autoExposureEv = ev
+                focusZoom.setExposureCompensationEv(ev)
+                logManualAction("exposure", mapOf("from" to before, "to" to ev))
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
     }
 
     /**
