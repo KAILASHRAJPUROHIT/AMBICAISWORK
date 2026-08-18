@@ -2538,5 +2538,6 @@ class MainActivity : AppCompatActivity() {
         handler.removeCallbacks(tickRunnable)
         rsc2.disconnect()
         try { unregisterReceiver(testMoveReceiver) } catch (_: IllegalArgumentException) {}
+        try { unregisterReceiver(recenterReceiver) } catch (_: IllegalArgumentException) {}
     }
 }
