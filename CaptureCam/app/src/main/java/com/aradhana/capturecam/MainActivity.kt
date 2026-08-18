@@ -779,18 +779,31 @@ class MainActivity : AppCompatActivity() {
                 val rotation = imageProxy.imageInfo.rotationDegrees
                 lastMaterialRotationDegrees = rotation
                 val boxes = latestObjectBoxesUpright
+                // GOLD ONLY, never silver/sparkle -- per explicit request
+                // (2026-08-18): the overlay should never light up on
+                // anything but actual gold. Previously showed every
+                // metal-classified point (gold OR silver OR sparkle-near-
+                // metal), which is exactly why a display box's specular
+                // highlight or any other bright/desaturated surface could
+                // paint dots even though the gold-only tracking logic
+                // (bestGoldObjectBox()) was already ignoring it -- the
+                // overlay just wasn't telling the truth about what the
+                // pipeline actually treats as gold.
+                val goldPoints = result.points.filter { it.gold }
                 // Once ML Kit has found at least one real object, only trust
-                // MaterialDetector's color/contrast points that actually
-                // fall inside a genuine detected-object box -- kills stray
-                // dots on background/skin/props that happen to pass the
-                // color heuristic but were never a real object boundary.
-                // Fails open (shows all heuristic points) until ML Kit's
-                // first detection lands, so the overlay isn't blank on the
-                // very first frames.
+                // points that additionally fall inside a genuine detected-
+                // object box -- kills stray dots on background/props that
+                // happen to pass the colour heuristic but were never a real
+                // object boundary. Fails open (shows all gold points) until
+                // ML Kit's first detection lands, so the overlay isn't
+                // blank on the very first frames. With ML Kit disabled
+                // (ML_KIT_OBJECT_DETECTION_ENABLED = false), boxes is
+                // always empty, so this always falls open to goldPoints --
+                // gold-only filtering is what actually matters now.
                 val filteredPoints = if (boxes.isEmpty()) {
-                    result.points
+                    goldPoints
                 } else {
-                    result.points.filter { p ->
+                    goldPoints.filter { p ->
                         val up = uprightPoint(p, rotation)
                         boxes.any { it.contains(up[0], up[1]) }
                     }
@@ -1327,7 +1340,17 @@ class MainActivity : AppCompatActivity() {
             captureJewel()
             return
         }
-        readyStreak = 0
+        // Decrement, don't hard-reset to 0 -- confirmed live (2026-08-18)
+        // that coverage/bounds from the colour-only detector genuinely
+        // flickers tick to tick even on a stationary, well-lit, in-focus
+        // piece (af=LOCKED, sharp=100 the whole time, coverage bouncing a
+        // few percent either side of the threshold). A hard reset meant
+        // ANY single noisy tick among mostly-good ones wiped the whole
+        // streak, so REQUIRED_READY_TICKS consecutive good ticks in a row
+        // never accumulated -- "Holding steady…" forever with a genuinely
+        // good shot sitting right there. Decrementing tolerates the odd
+        // bad tick while still requiring sustained quality overall.
+        readyStreak = (readyStreak - 1).coerceAtLeast(0)
 
         if (!coverageOk) {
             // Too small to trust a focus verdict either way yet -- climb on
