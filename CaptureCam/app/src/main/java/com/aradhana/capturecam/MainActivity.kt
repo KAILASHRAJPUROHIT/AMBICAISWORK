@@ -460,13 +460,17 @@ class MainActivity : AppCompatActivity() {
         private const val HUNT_COOLDOWN_MS = 6000L
 
         // ---- DINO+MIL tracking pipeline (checkpoint build) ----
-        // Master switch for the whole pipeline. TRUE for the physical
-        // tracking checkpoint: VisionServoController drives pan/tilt/zoom
-        // once it has a target, subordinating the legacy gold hunt (see the
-        // visionServo.state == SEARCHING gate in huntStep()'s call site).
-        // shutterEnabled on VisionServoController stays false regardless --
-        // no capture call exists anywhere in this pipeline's code path yet.
-        private const val TRACKING_PIPELINE_ACTIVE = true
+        // Master switch for the whole pipeline. PARKED (false) for now --
+        // 2026-08-18 decision: production launches on the simpler,
+        // already-built staff-confirmed flow instead (QR scan -> staff
+        // places MAIN, confirms ready -> auto center/zoom/focus/capture ->
+        // same for left/right angles -- see tickJewel()'s legacy body and
+        // centerThenCapture(), both already implement this). The
+        // autonomous DINO+MIL gimbal-hunt pipeline stays in the codebase
+        // for a later revisit, not deleted -- just not on the critical
+        // path for today's production launch. Flip back to true to resume
+        // that work; nothing else needs to change to do so.
+        private const val TRACKING_PIPELINE_ACTIVE = false
         private const val DETECTOR_SEND_INTERVAL_MS = 120L
         private const val DETECTOR_FRAME_LONG_EDGE = 960
         private const val DETECTOR_JPEG_QUALITY = 75
