@@ -2575,5 +2575,6 @@ class MainActivity : AppCompatActivity() {
         rsc2.disconnect()
         try { unregisterReceiver(testMoveReceiver) } catch (_: IllegalArgumentException) {}
         try { unregisterReceiver(recenterReceiver) } catch (_: IllegalArgumentException) {}
+        try { unregisterReceiver(nudgeReceiver) } catch (_: IllegalArgumentException) {}
     }
 }
