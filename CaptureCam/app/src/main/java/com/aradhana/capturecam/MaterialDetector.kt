@@ -220,6 +220,7 @@ object MaterialDetector {
         val cols = max(1, (endX - startX) / step)
         val rows = max(1, (endY - startY) / step)
         val mask = BooleanArray(cols * rows)
+        val goldMask = BooleanArray(cols * rows)
         val sparkleCandidate = BooleanArray(cols * rows)
         var warm = 0
 
