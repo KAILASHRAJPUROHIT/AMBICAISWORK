@@ -267,7 +267,7 @@ object MaterialDetector {
                 if (!keep) continue
                 val x = min(width - 1, startX + col * step)
                 val yPix = min(height - 1, startY + row * step)
-                points.add(Point(x.toFloat() / width, yPix.toFloat() / height))
+                points.add(Point(x.toFloat() / width, yPix.toFloat() / height, gold = goldMask[cell]))
             }
         }
 
