@@ -1213,7 +1213,16 @@ class MainActivity : AppCompatActivity() {
         // limit budget, revert-on-overshoot) and is a safe no-op once
         // within CENTERING_DEADBAND, so this costs nothing once centered.
         if (!centered) {
-            if (rsc2.isReady && result != null) attemptCenteringCorrection(result)
+            // No attempt cap here: this is the continuous per-tick loop, not
+            // a bounded one-shot sequence (that's centerThenCapture(), which
+            // keeps its own ANGLE_CENTERING_MAX_ATTEMPTS). Passing the
+            // default CENTERING_MAX_ATTEMPTS (20) here meant centering
+            // permanently gave up after 20 ticks (a few seconds) with no
+            // further movement or log for the rest of the item -- confirmed
+            // live (2026-08-18): ring visibly off-center and unmoving across
+            // repeated screenshots, zero BLE writes, zero log lines. Keep
+            // retrying every tick until actually centered.
+            if (rsc2.isReady && result != null) attemptCenteringCorrection(result, maxAttempts = Int.MAX_VALUE)
             setStatus("Centering ornament…", ready = false)
             return
         }
