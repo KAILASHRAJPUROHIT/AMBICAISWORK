@@ -320,13 +320,10 @@ class MainActivity : AppCompatActivity() {
         // How many failed barcode-scan attempts between AF re-triggers in
         // tickTag() -- see its call site's doc comment.
         private const val TAG_AF_RETRIGGER_ATTEMPTS = 15
-        // TEMPORARY (2026-08-18), per explicit request: skip the barcode
-        // scan entirely while testing the JEWEL flow, so a real tag doesn't
-        // need to be in frame every single test cycle. Auto-fills a
-        // placeholder tag code + photo and jumps straight to JEWEL the
-        // instant TAG phase starts. Set back to false for real use --
-        // uploaded items would otherwise carry a fake "TEST-..." tag code.
-        private const val SKIP_BARCODE_FOR_TESTING = true
+        // Real barcode scanning re-enabled for production (2026-08-18) --
+        // was true only for JEWEL-flow testing, where a placeholder
+        // "TEST-<timestamp>" tag code stood in for a real scan.
+        private const val SKIP_BARCODE_FOR_TESTING = false
         // PROVISIONAL, not yet calibrated -- see looksUnrotated()'s doc
         // comment. Mean per-cell grayscale difference (0-255 scale) below
         // which two angle shots are considered near-duplicates (item
