@@ -933,9 +933,21 @@ class MainActivity : AppCompatActivity() {
         val nowMs = System.currentTimeMillis()
         if (nowMs - lastServoAt >= SERVO_INTERVAL_MS && (cmd.pan != 0f || cmd.tilt != 0f)) {
             lastServoAt = nowMs
+            // Attack whichever error is BIGGER, not a blind alternation --
+            // blind toggling wastes every other burst re-correcting an
+            // axis that's already close while the axis with real error
+            // sits idle, which reads as slow/erratic convergence. Only
+            // fall back to strict alternation when both errors are
+            // comparable, so neither axis gets starved.
             val choosePan = if (cmd.pan != 0f && cmd.tilt != 0f) {
-                lastServoAxisWasPan = !lastServoAxisWasPan
-                lastServoAxisWasPan
+                val panMag = abs(cmd.pan)
+                val tiltMag = abs(cmd.tilt)
+                if (abs(panMag - tiltMag) > 0.08f) {
+                    panMag > tiltMag
+                } else {
+                    lastServoAxisWasPan = !lastServoAxisWasPan
+                    lastServoAxisWasPan
+                }
             } else cmd.pan != 0f
             if (choosePan) {
                 val mag = abs(cmd.pan)
