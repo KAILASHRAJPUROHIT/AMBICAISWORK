@@ -926,6 +926,7 @@ class MainActivity : AppCompatActivity() {
     private val tickRunnable = object : Runnable {
         override fun run() {
             updateGimbalStatusBadge()
+            persistCenterDriftIfChanged()
             when (phase) {
                 Phase.JEWEL -> tickJewel()
                 Phase.TAG -> tickTag()
