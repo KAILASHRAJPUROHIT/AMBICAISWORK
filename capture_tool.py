@@ -575,6 +575,79 @@ def check_duplicate(tag_code: str) -> dict | None:
     return prior
 
 
+_RMBG_MODEL = "briaai/RMBG-2.0"
+_rmbg_lock = threading.Lock()
+_rmbg_seg = _rmbg_tf = _rmbg_dev = None
+
+
+def _load_rmbg():
+    """Lazy, once -- same reasoning as design_verify_local.py's _load():
+    loading is real GPU work (~10s) and must not happen at import time.
+    Separate model/lock from sam_locate's SAM2+DINO (different job: SAM2/
+    DINO finds and crops to the ornament, RMBG-2.0 removes what's left of
+    the background inside that crop) -- proven already in this codebase for
+    design-verification, reused here for the actual catalogue deliverable."""
+    global _rmbg_seg, _rmbg_tf, _rmbg_dev
+    if _rmbg_seg is not None:
+        return
+    with _rmbg_lock:
+        if _rmbg_seg is not None:
+            return
+        import torch
+        from torchvision import transforms
+        from transformers import AutoModelForImageSegmentation
+        _rmbg_dev = "cuda" if torch.cuda.is_available() else "cpu"
+        torch.set_float32_matmul_precision("high")
+        model = AutoModelForImageSegmentation.from_pretrained(
+            _RMBG_MODEL, trust_remote_code=True).to(_rmbg_dev).eval()
+        globals()["_rmbg_seg"] = model
+        globals()["_rmbg_tf"] = transforms.Compose([
+            transforms.Resize((1024, 1024)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ])
+
+
+def _remove_background(path: str) -> None:
+    """Replaces the saved photo in-place with itself composited onto a clean
+    white background, using RMBG-2.0. Runs AFTER sam_locate.tight_crop (see
+    _segment_and_stitch_async) -- the ornament is already isolated in-frame
+    by then, so this only has to clean up what's left of the capture-box
+    interior around it, not the whole original wide shot. Fail-open: on any
+    error the file is left as the (already-cropped) tight_crop result,
+    matching sam_locate's own fail-open convention -- background removal
+    failing must never lose the already-good crop.
+    """
+    log = logging.getLogger("capture_tool")
+    try:
+        import torch
+        from PIL import Image
+        _load_rmbg()
+        im = Image.open(path).convert("RGB")
+        x = _rmbg_tf(im).unsqueeze(0).to(_rmbg_dev)
+        with torch.no_grad():
+            pred = _rmbg_seg(x)[-1].sigmoid().cpu()[0].squeeze()
+        from torchvision import transforms as _t
+        mask = _t.ToPILImage()(pred).resize(im.size)
+        white = Image.new("RGB", im.size, (255, 255, 255))
+        out = Image.composite(im, white, mask)
+        out.save(path, quality=92)
+        log.info("_remove_background done for %s", path)
+    except Exception:
+        log.exception("_remove_background FAILED for %s -- leaving cropped result as-is", path)
+
+
+def _release_rmbg():
+    global _rmbg_seg
+    try:
+        import torch
+        _rmbg_seg = None
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:
+        pass
+
+
 def _segment_paths_async(paths: list) -> None:
     """Replace each of the given saved photos in-place with a SAM2/DINO
     segmentation crop, off the request thread.
