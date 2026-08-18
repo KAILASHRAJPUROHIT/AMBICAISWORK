@@ -118,6 +118,7 @@ class VisionServoController(private val log: (String) -> Unit) {
             VisionState.SEARCHING, VisionState.ACQUIRING -> {
                 tracker.seed(mat, dino.toRectF())
                 trackedBox = dino
+                pendingDisagreement = null
                 log("[STATE] SEARCHING -> ACQUIRING")
                 log("[MIL] seeded")
                 // MIL is live the instant init() returns -- there is no
