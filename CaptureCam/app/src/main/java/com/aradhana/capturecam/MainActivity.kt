@@ -816,6 +816,7 @@ class MainActivity : AppCompatActivity() {
                 } else 0f
 
                 val rotation = imageProxy.imageInfo.rotationDegrees
+                lastMaterialRotationDegrees = rotation
                 val boxes = latestObjectBoxesUpright
                 // Once ML Kit has found at least one real object, only trust
                 // MaterialDetector's color/contrast points that actually
