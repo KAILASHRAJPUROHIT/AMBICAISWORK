@@ -2598,7 +2598,19 @@ class MainActivity : AppCompatActivity() {
         val check = object : Runnable {
             override fun run() {
                 val result = latestMaterial
-                val present = result?.material == true
+                // result?.material was the STRICTER threshold flag, same
+                // class of bug already found and fixed in tickJewel() this
+                // session: it can flicker false tick-to-tick on a
+                // genuinely-present, well-detected piece (confirmed live
+                // 2026-08-18 on a heavily faceted/engraved ring -- gold
+                // dots clearly rendering on it, coverage genuinely low
+                // enough that goldDominant/the coverage-ratio thresholds
+                // never cleared, so `material` stayed false every single
+                // tick and this loop never once saw "present", cycling
+                // Focusing.../Adjusting framing... forever). Match
+                // tickJewel()'s own "truly lost" bar instead: any position
+                // estimate at all, not the stricter material flag.
+                val present = bestObjectBox() != null || result?.bounds != null
                 val focusLocked = focusZoom.isFocusLocked(focusZoom.afState.value)
                 val sharpEnough = latestSharpness >= SHARPNESS_THRESHOLD
                 val now = System.currentTimeMillis()
