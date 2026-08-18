@@ -69,28 +69,23 @@ MAX_BOX_FRACTION = 0.70
 # top-down/side capture angle -- the 22%x98% false positive above had an
 # aspect ratio of ~4.5:1, well past anything a ring/pendant/bangle produces.
 MAX_ASPECT_RATIO = 3.0
-# The capture box's interior is black leather -- the single strongest, cheapest
-# signal that the camera is actually looking into the box rather than at a
-# wall, paper, or the operator's surroundings. Confirmed live: the gimbal
-# drifted onto a bright white paper/tape edge outside the box and DINO still
-# "detected" something on it. Mean grayscale brightness of a real in-box frame
-# (dark leather, occasional gold glint) runs well under this; the false
-# positive frame was bright white paper, comfortably over it. Checked BEFORE
-# running DINO at all -- also skips a wasted ~350ms inference on frames that
-# can't possibly be useful.
-MAX_MEAN_BRIGHTNESS = 110
+# NOTE: a mean-brightness "must be inside the dark box" gate was tried here
+# and REMOVED -- it correctly rejected a false positive on bright paper
+# outside the box, but also blocked real detection of the actual ring
+# whenever it wasn't yet physically inside the box (e.g. during setup/
+# repositioning, or testing on a bright surface). Blocking genuine
+# detections is worse than the false positive it prevented. The size/aspect
+# filters below catch the same class of junk (tiny noise, huge background
+# regions, wrong-shaped boxes) without assuming anything about the scene's
+# lighting or location.
 
 
 def detect(bgr) -> dict:
     """Runs Grounding DINO on one frame, returns the single best jewellery
     box (already sorted by DINO's own confidence-adjacent ranking inside
     _dino_boxes -- see that function's doc comment) as a normalized dict,
-    or detected=False if the frame isn't inside the (dark) capture box, or
-    nothing crossed BOX_THRESHOLD or survives the size/aspect-ratio sanity
-    filters."""
-    mean_brightness = bgr.mean()
-    if mean_brightness > MAX_MEAN_BRIGHTNESS:
-        return {"detected": False}
+    or detected=False if nothing crossed BOX_THRESHOLD or survives the
+    size/aspect-ratio sanity filters."""
     h, w = bgr.shape[:2]
     boxes = sam_locate._dino_boxes(bgr, expect=1, box_threshold=BOX_THRESHOLD)
     if not boxes:
