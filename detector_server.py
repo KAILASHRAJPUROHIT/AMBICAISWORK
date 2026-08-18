@@ -69,14 +69,28 @@ MAX_BOX_FRACTION = 0.70
 # top-down/side capture angle -- the 22%x98% false positive above had an
 # aspect ratio of ~4.5:1, well past anything a ring/pendant/bangle produces.
 MAX_ASPECT_RATIO = 3.0
+# The capture box's interior is black leather -- the single strongest, cheapest
+# signal that the camera is actually looking into the box rather than at a
+# wall, paper, or the operator's surroundings. Confirmed live: the gimbal
+# drifted onto a bright white paper/tape edge outside the box and DINO still
+# "detected" something on it. Mean grayscale brightness of a real in-box frame
+# (dark leather, occasional gold glint) runs well under this; the false
+# positive frame was bright white paper, comfortably over it. Checked BEFORE
+# running DINO at all -- also skips a wasted ~350ms inference on frames that
+# can't possibly be useful.
+MAX_MEAN_BRIGHTNESS = 110
 
 
 def detect(bgr) -> dict:
     """Runs Grounding DINO on one frame, returns the single best jewellery
     box (already sorted by DINO's own confidence-adjacent ranking inside
     _dino_boxes -- see that function's doc comment) as a normalized dict,
-    or detected=False if nothing crossed BOX_THRESHOLD or survives the
-    size/aspect-ratio sanity filters."""
+    or detected=False if the frame isn't inside the (dark) capture box, or
+    nothing crossed BOX_THRESHOLD or survives the size/aspect-ratio sanity
+    filters."""
+    mean_brightness = bgr.mean()
+    if mean_brightness > MAX_MEAN_BRIGHTNESS:
+        return {"detected": False}
     h, w = bgr.shape[:2]
     boxes = sam_locate._dino_boxes(bgr, expect=1, box_threshold=BOX_THRESHOLD)
     if not boxes:
