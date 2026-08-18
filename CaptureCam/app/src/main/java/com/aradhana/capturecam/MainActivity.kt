@@ -374,7 +374,10 @@ class MainActivity : AppCompatActivity() {
         // Conservative live-zoom cap per the "physical distance should do
         // most of the framing" principle -- pushing digital/hybrid zoom
         // much past this loses detail the catalogue pipeline later wants.
-        private const val MAX_LIVE_ZOOM_RATIO = 3.4f
+        // TEMPORARILY raised (2026-08-18) per explicit request to test
+        // whether zooming past 3.4x helps focus converge -- revert to 3.4
+        // once that test is done.
+        private const val MAX_LIVE_ZOOM_RATIO = 7.0f
         // Auto-centering (runs before MAIN, using axis1=tilt/axis3=pan --
         // confirmed mapping, see RSC2Controller). Gentler deflection than
         // the angle sweep since this is fine correction, not a deliberate
@@ -1270,8 +1273,23 @@ class MainActivity : AppCompatActivity() {
         // first detection lands (something to climb toward, not nothing).
         val mlBoxForCoverage = bestObjectBox()
         val mlOccupancy = mlBoxForCoverage?.let { it.width() * it.height() }
+        // With ML Kit disabled, mlOccupancy is always null, so this used to
+        // permanently fall back to result.coverage >= MIN_LIVE_COVERAGE
+        // (0.24) -- exactly the gap this function's own doc comment
+        // predicted: that capped colour metric maxes out around 0.435 and
+        // was never meant to be the real climb target, CAPTURE_MIN_
+        // OCCUPANCY (0.75) was. Confirmed live (2026-08-18): af=LOCKED,
+        // sharp=100, a genuinely good shot, coverage=0.088 -- coverageOk
+        // read true only via atZoomCeiling, then meetsHardCaptureRules()
+        // (which correctly uses bounds.area(), uncapped) failed on real
+        // occupancy every single tick with no path back into the zoom
+        // climb, forever. Use the same bounds-based, full-frame-normalized
+        // occupancy meetsHardCaptureRules() checks, not the capped colour
+        // metric, so climb target and final gate agree on what "big
+        // enough" means.
+        val colourOccupancy = result.bounds?.area() ?: result.coverage
         val coverageOk = (if (mlOccupancy != null) mlOccupancy >= CAPTURE_MIN_OCCUPANCY
-                          else result.coverage >= MIN_LIVE_COVERAGE) || atZoomCeiling
+                          else colourOccupancy >= CAPTURE_MIN_OCCUPANCY) || atZoomCeiling
         Log.d(TAG, "tickJewel coverage=${result.coverage} mlOccupancy=$mlOccupancy zoom=$zoom coverageOk=$coverageOk")
         val zoomSettled = now - lastZoomChangeAt >= ZOOM_SETTLE_MS
         val afState = focusZoom.afState.value
