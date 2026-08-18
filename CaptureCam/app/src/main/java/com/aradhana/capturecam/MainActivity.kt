@@ -528,11 +528,15 @@ class MainActivity : AppCompatActivity() {
         // different UID than this app. Debug-only test hook on a LAN-only
         // tool, not a production attack surface.
         val filter = IntentFilter("com.aradhana.capturecam.TEST_MOVE")
+        val recenterFilter = IntentFilter("com.aradhana.capturecam.RECENTER")
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(testMoveReceiver, filter, RECEIVER_EXPORTED)
+            registerReceiver(recenterReceiver, recenterFilter, RECEIVER_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(testMoveReceiver, filter)
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(recenterReceiver, recenterFilter)
         }
     }
 
