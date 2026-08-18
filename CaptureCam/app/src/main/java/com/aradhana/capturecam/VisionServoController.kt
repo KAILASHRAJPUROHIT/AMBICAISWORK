@@ -130,18 +130,37 @@ class VisionServoController(private val log: (String) -> Unit) {
                 val iou = current.iou(dino)
                 val dist = current.centerDist(dino)
                 when {
-                    iou >= AGREEMENT_IOU_GOOD || dist <= AGREEMENT_DIST_GOOD ->
+                    iou >= AGREEMENT_IOU_GOOD || dist <= AGREEMENT_DIST_GOOD -> {
                         log("[DINO] agrees with MIL (iou=${"%.2f".format(iou)} dist=${"%.2f".format(dist)}) -- no reseed")
+                        pendingDisagreement = null
+                    }
                     iou >= AGREEMENT_IOU_MODERATE || dist <= AGREEMENT_DIST_MODERATE -> {
                         tracker.seed(mat, dino.toRectF())
                         log("[RESEED] moderate drift (iou=${"%.2f".format(iou)}) -- reseeding from DINO")
+                        pendingDisagreement = null
                     }
-                    else ->
+                    else -> {
                         // One bad DINO box must not violently redirect an
-                        // already-good MIL lock. Ignored unless MIL itself
-                        // is already failing -- REACQUIRING is handled in
-                        // its own branch below, never reaches here.
-                        log("[DINO] large disagreement (iou=${"%.2f".format(iou)} dist=${"%.2f".format(dist)}) with live MIL -- ignoring")
+                        // already-good MIL lock -- but MIL can also drift
+                        // onto the wrong (static) patch while still
+                        // reporting update()=true every frame, which never
+                        // trips consecutiveMisses/PREDICTING at all. Two
+                        // independent DINO results that disagree with MIL
+                        // but AGREE WITH EACH OTHER is the confirmation
+                        // signal that it's MIL that's wrong, not one noisy
+                        // DINO box -- accept the reseed in that case even
+                        // though MIL never technically "failed".
+                        val prior = pendingDisagreement
+                        if (prior != null && (prior.iou(dino) >= AGREEMENT_IOU_MODERATE || prior.centerDist(dino) <= AGREEMENT_DIST_MODERATE)) {
+                            tracker.seed(mat, dino.toRectF())
+                            log("[RESEED] two independent DINO detections agree (iou=${"%.2f".format(prior.iou(dino))}) " +
+                                "and disagree with MIL -- MIL likely drifted, reseeding")
+                            pendingDisagreement = null
+                        } else {
+                            log("[DINO] large disagreement (iou=${"%.2f".format(iou)} dist=${"%.2f".format(dist)}) with live MIL -- awaiting confirmation")
+                            pendingDisagreement = dino
+                        }
+                    }
                 }
             }
             VisionState.PREDICTING -> {
