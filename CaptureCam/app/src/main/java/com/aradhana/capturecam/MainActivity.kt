@@ -129,6 +129,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+    // Zeroes the drift counters WITHOUT any physical movement -- treats
+    // wherever the gimbal currently, physically is as the new center
+    // reference. Use this instead of RECENTER when the stored drift value
+    // is known-stale/untrustworthy (e.g. accumulated from since-abandoned
+    // testing) and an automatic undo would swing the gimbal by a large,
+    // wrong amount with no one watching to confirm it's safe.
+    // adb shell am broadcast -a com.aradhana.capturecam.ZERO_DRIFT
+    private val zeroDriftReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            Log.i(TAG, "zeroDriftReceiver: was pan=$centeringPanMs tilt=$centeringTiltMs -- zeroing without moving")
+            centeringPanMs = 0
+            centeringTiltMs = 0
+            persistCenterDriftIfChanged()
+        }
+    }
     // One-way manual nudge -- unlike testMoveReceiver, does NOT auto-return
     // home (that's for a temporary axis test; this is a real, lasting
     // reposition, e.g. "move it a little down" before a search). Updates
