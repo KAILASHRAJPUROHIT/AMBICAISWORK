@@ -2584,6 +2584,7 @@ class MainActivity : AppCompatActivity() {
             centeringAttempts = 0
             lastCenterAxis = CenterAxis.NONE
             centerAvoidAxis = CenterAxis.NONE
+            lockedBoxCenter = null
             huntPhase = HuntPhase.SCAN_DOWN
             huntPhaseMsSpent = 0
             huntStartedAt = 0L
