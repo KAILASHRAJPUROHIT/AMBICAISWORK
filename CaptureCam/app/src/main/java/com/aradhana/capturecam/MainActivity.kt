@@ -118,6 +118,23 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+    // Debug-only hook mirroring testMoveReceiver, for proving exposure
+    // compensation actually reaches the camera before trusting the AUTO
+    // algorithm's tuning: adb shell am broadcast -a
+    // com.aradhana.capturecam.TEST_EXPOSURE --ef ev -2.0
+    // Sets exposure compensation directly and leaves it there (no auto-
+    // revert) so a before/after screenshot shows the real effect. Also
+    // disarms auto-exposure's own EV bookkeeping (autoExposureEv) so the
+    // next applyAutoExposure() tick doesn't immediately overwrite this
+    // with its own (possibly 0) value.
+    private val testExposureReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val ev = intent.getFloatExtra("ev", 0f)
+            autoExposureEv = ev
+            focusZoom.setExposureCompensationEv(ev)
+            Log.i(TAG, "testExposureReceiver: set ev=$ev available=${focusZoom.exposureControlAvailable()} range=${focusZoom.exposureCompensationRangeEv()}")
+        }
+    }
     private var angle1Jpeg: ByteArray? = null
     private var angle2Jpeg: ByteArray? = null
     // Set for the whole MAIN-accepted -> angle1 -> angle2 sequence. tickJewel()
@@ -238,6 +255,46 @@ class MainActivity : AppCompatActivity() {
     // doesn't leave the NEXT item starting under-exposed.
     private var autoExposureEv = 0f
     private var lastExposureAdjustAt = 0L
+    // Smoothed centre estimate used ONLY by meetsHardCaptureRules()'s
+    // centering check -- raw bounds/mlBox centre jitters far more than the
+    // deadband itself for small/split objects (confirmed live 2026-08-18:
+    // a stud-earring pair's union bounds swung cx between ~0.43 and ~0.59
+    // tick to tick, a stationary piece that never actually moved). Without
+    // smoothing, a single lucky noisy frame can land inside
+    // CENTERING_DEADBAND purely by chance and the shutter fires on it --
+    // that's what "captures off-center every time" actually was, not a
+    // failure to ever attempt centering. EMA damps single-frame spikes
+    // while still tracking a real, sustained gimbal move within a few
+    // ticks. Reset per item in resetForNewItem so a stale estimate from
+    // the previous item/phase can't gate the next one.
+    private var centerEmaCx: Float? = null
+    private var centerEmaCy: Float? = null
+    // Explicit settle deadline for centering nudges. rsc2.isMoving alone
+    // isn't enough: RSC2Controller.streamDeflection() clears
+    // activeMoveRunnable (which isMoving reads) the INSTANT the stop frame
+    // is sent, then separately waits settleMs (400ms default) before
+    // calling its own onDone -- attemptCenteringCorrection() never used
+    // that callback (fired with an empty lambda, returned immediately), so
+    // isMoving alone would still let the next tick read a frame from
+    // during that 400ms physical settle window. This timestamp covers the
+    // full durationMs+settleMs window explicitly. Reset to 0 per item.
+    private var centeringSettledUntil = 0L
+    // Divergence circuit-breaker for attemptCenteringCorrection(). Confirmed
+    // live (2026-08-18): a coordinate-axis bug made pan nudges push dx
+    // MONOTONICALLY LARGER for 18 consecutive corrections (0.06 -> 0.13),
+    // then tilt did the same in the other direction and drove the gimbal
+    // into its physical tilt hard-stop. The axis bug itself got reverted,
+    // but nothing in this function was ever checking "is this actually
+    // helping" -- it just kept issuing same-direction nudges as long as the
+    // deadband test kept failing, with no floor on how bad "not helping"
+    // could get before stopping. This tracks the error magnitude from the
+    // last nudge on each axis; if the next nudge on the SAME axis doesn't
+    // measurably reduce it, that axis is treated as non-convergent for the
+    // rest of this item and centering gives up on it rather than continuing
+    // to push. Reset per item in resetForNewItem.
+    private var lastNudgeAxis = CenterAxis.NONE
+    private var lastNudgeErrorMagnitude: Float? = null
+    private var centerDivergeStreak = 0
     // Whether a decisive AF trigger has already been sent for the CURRENT
     // zoom level -- the single-shot discipline that stops AF being
     // re-triggered every tick while waiting for its result.
@@ -362,11 +419,25 @@ class MainActivity : AppCompatActivity() {
         // gold samples clipped is treated as "losing detail," below 4%
         // is treated as "clearly fine, safe to recover brightness."
         // Between the two, hold steady rather than react to noise.
-        private const val EXPOSURE_ADJUST_INTERVAL_MS = 700L
-        private const val EXPOSURE_STEP_EV = 0.33f
-        private const val EXPOSURE_MIN_EV = -2.0f
-        private const val HIGHLIGHT_CLIP_HIGH = 0.12f
-        private const val HIGHLIGHT_CLIP_LOW = 0.04f
+        // Tightened (2026-08-18): 700ms/0.33EV/12% never produced a
+        // visible change during a real capture -- confirmed the control
+        // itself works (direct EV override at -2.0 was dramatic and
+        // immediate), so the auto-trigger was simply too slow/conservative
+        // to matter within a normal few-second framing window. 400ms/0.5EV
+        // reaches a visible -1.0EV within ~1s of triggering instead of
+        // ~2s. HIGHLIGHT_CLIP_HIGH dropped from 12%->3%: sceneClipFraction
+        // is computed over the WHOLE sampled region (dark stand/jewellery
+        // included, not just the bright background), which dilutes the
+        // ratio a lot -- 12% of the ENTIRE frame reading near-white is a
+        // much higher bar than "the background looks washed out."
+        // More aggressive still (2026-08-18, explicit request): bigger
+        // steps, faster cadence, deeper floor -- gold clipping at all
+        // should pull exposure down hard and fast, not creep toward it.
+        private const val EXPOSURE_ADJUST_INTERVAL_MS = 250L
+        private const val EXPOSURE_STEP_EV = 1.0f
+        private const val EXPOSURE_MIN_EV = -4.0f
+        private const val HIGHLIGHT_CLIP_HIGH = 0.03f
+        private const val HIGHLIGHT_CLIP_LOW = 0.01f
         // Quiet time required after ANY zoom change (a climb step or a
         // backoff step) before focus is triggered or judged at all. Camera2
         // AF triggered while the lens/sensor is still settling from a zoom
@@ -613,11 +684,15 @@ class MainActivity : AppCompatActivity() {
         // different UID than this app. Debug-only test hook on a LAN-only
         // tool, not a production attack surface.
         val filter = IntentFilter("com.aradhana.capturecam.TEST_MOVE")
+        val exposureFilter = IntentFilter("com.aradhana.capturecam.TEST_EXPOSURE")
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(testMoveReceiver, filter, RECEIVER_EXPORTED)
+            registerReceiver(testExposureReceiver, exposureFilter, RECEIVER_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(testMoveReceiver, filter)
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(testExposureReceiver, exposureFilter)
         }
     }
 
@@ -1391,14 +1466,24 @@ class MainActivity : AppCompatActivity() {
         val colourOccupancy = result.bounds?.area() ?: result.coverage
         val coverageOk = (if (mlOccupancy != null) mlOccupancy >= CAPTURE_MIN_OCCUPANCY
                           else colourOccupancy >= CAPTURE_MIN_OCCUPANCY) || atZoomCeiling
-        Log.d(TAG, "tickJewel coverage=${result.coverage} mlOccupancy=$mlOccupancy zoom=$zoom coverageOk=$coverageOk")
+        val b = result.bounds
+        Log.d(TAG, "tickJewel coverage=${result.coverage} colourOccupancy=$colourOccupancy mlOccupancy=$mlOccupancy zoom=$zoom coverageOk=$coverageOk bounds=${b?.let { "[${it.x0},${it.y0},${it.x1},${it.y1}] cx=${(it.x0+it.x1)/2f} cy=${(it.y0+it.y1)/2f}" } ?: "null"}")
         val zoomSettled = now - lastZoomChangeAt >= ZOOM_SETTLE_MS
         val afState = focusZoom.afState.value
         val focusLocked = focusZoom.isFocusLocked(afState)
         val focusFailed = focusZoom.isFocusFailed(afState)
         val sharpEnough = latestSharpness >= SHARPNESS_THRESHOLD
 
-        if (coverageOk && zoomSettled && focusLocked && sharpEnough) {
+        // isCenteredNow() folded in here, not just checked once right before
+        // firing -- confirmed live (2026-08-18): bounds cx can drift steadily
+        // across several seconds with the gimbal completely idle (pair
+        // detection flickering between "both studs"/"just one"), so a
+        // single instant-of-capture check could catch it mid-drift,
+        // transiting through the deadband rather than genuinely settled
+        // there. Requiring REQUIRED_READY_TICKS consecutive centered ticks,
+        // same as coverage/focus/sharpness already get, means a transient
+        // pass-through no longer counts.
+        if (coverageOk && zoomSettled && focusLocked && sharpEnough && isCenteredNow()) {
             // Require this to hold for a few consecutive ticks, not just one
             // instant read -- a single tick can catch a momentarily-still
             // hand between small shakes, and the few hundred ms the shutter
@@ -1651,15 +1736,33 @@ class MainActivity : AppCompatActivity() {
         val now = System.currentTimeMillis()
         if (now - lastExposureAdjustAt < EXPOSURE_ADJUST_INTERVAL_MS) return
         lastExposureAdjustAt = now
-        val clip = result.highlightClipFraction
+        // highlightClipFraction alone wasn't enough -- confirmed live
+        // (2026-08-18): every capture came out overexposed while
+        // highlightClipFraction read 0.0 nearly every tick. That metric is
+        // GOLD-sample-only; with a small/under-framed piece there are only
+        // a handful of gold samples per frame at all, and even when the
+        // piece is well-framed, the gold itself not clipping says nothing
+        // about a bright washed-out BACKGROUND clipping, which is what was
+        // actually happening. sceneClipFraction (all sampled cells, any
+        // classification) catches that; react to whichever signal is worse.
+        // GOLD clipping at all (2026-08-18, explicit request): any part of
+        // the gold reading blown-out white means real design detail is
+        // already being lost there -- no percentage floor makes sense for
+        // that judgment, unlike the general scene-brightness signal below.
+        // Silver's own trigger will need separate tuning later (different
+        // reflectance behaviour) -- this is gold-specific for now.
+        val goldOverexposed = result.highlightClipFraction > 0f
         val range = focusZoom.exposureCompensationRangeEv()
         val floor = max(range.start, EXPOSURE_MIN_EV)
+        val before = autoExposureEv
         when {
-            clip > HIGHLIGHT_CLIP_HIGH -> autoExposureEv = (autoExposureEv - EXPOSURE_STEP_EV).coerceAtLeast(floor)
-            clip < HIGHLIGHT_CLIP_LOW && autoExposureEv < 0f ->
+            goldOverexposed || result.sceneClipFraction > HIGHLIGHT_CLIP_HIGH ->
+                autoExposureEv = (autoExposureEv - EXPOSURE_STEP_EV).coerceAtLeast(floor)
+            !goldOverexposed && result.sceneClipFraction < HIGHLIGHT_CLIP_LOW && autoExposureEv < 0f ->
                 autoExposureEv = (autoExposureEv + EXPOSURE_STEP_EV).coerceAtMost(0f)
         }
         focusZoom.setExposureCompensationEv(autoExposureEv)
+        Log.d(TAG, "applyAutoExposure goldClip=${result.highlightClipFraction} sceneClip=${result.sceneClipFraction} before=$before after=$autoExposureEv floor=$floor")
     }
 
     /** The NON-NEGOTIABLE capture rules: the gimbal must not be mid-move
@@ -1678,21 +1781,90 @@ class MainActivity : AppCompatActivity() {
      * hasn't found a box yet -- fails closed (returns false) only when
      * NEITHER source has anything, since occupancy can't be verified with
      * no box at all. */
-    private fun meetsHardCaptureRules(): Boolean {
-        if (rsc2.isReady && rsc2.isMoving) return false
+    /** Smoothed centering test shared by meetsHardCaptureRules() and
+     * tickJewel()'s readyStreak gate -- see centerEmaCx/Cy's doc comment
+     * for why raw per-tick bounds can't be trusted alone. Confirmed live
+     * (2026-08-18): even the EMA wasn't enough on its own -- bounds cx
+     * drifted steadily across ~8 consecutive ticks (~1.2s) with the gimbal
+     * completely idle and zoom pinned (the pair-detection flickering
+     * between "both studs" and "just one" as one component's size dipped
+     * below the pair-union threshold tick to tick), so a single
+     * instant-of-capture centering check could still catch it mid-drift,
+     * transiting through the deadband rather than actually settled there.
+     * Folding this into readyStreak (same REQUIRED_READY_TICKS consecutive
+     * ticks already required for coverage/focus/sharpness) means a capture
+     * only fires once centering has genuinely HELD, not just touched,
+     * the deadband. */
+    /** Updates and returns the smoothed centre estimate from whatever raw
+     * box is available this tick (mlBox, else result?.bounds, else
+     * latestMaterial's). Returns null only when NEITHER source has
+     * anything -- same "truly lost" bar as everywhere else in this file.
+     * Single source of truth for centerEmaCx/Cy so every caller (the
+     * capture gate AND the gimbal nudge logic) reacts to the same damped
+     * signal. Confirmed live (2026-08-18): smoothing only the CAPTURE gate
+     * wasn't enough -- attemptCenteringCorrection() was still reading raw,
+     * unsmoothed bounds every tick, so a single noisy "just one stud
+     * detected, not the pair" tick could still trigger a full, physically
+     * large gimbal nudge (duration scales with the raw offset) chasing
+     * that one bad reading. That's what "aggressively drifts in the last
+     * few seconds" actually was: the gimbal being yanked back and forth by
+     * detection noise, not just a reading that occasionally misjudged
+     * "centered enough". Smoothing before the nudge decision as well means
+     * a one-tick flicker only nudges the EMA a little, not the camera a lot. */
+    private fun smoothedCenter(result: MaterialDetector.Result? = null): Pair<Float, Float>? {
         val mlBox = bestObjectBox()
         val cx: Float
         val cy: Float
-        val occupancy: Float
         if (mlBox != null) {
-            occupancy = mlBox.width() * mlBox.height()
+            // latestObjectBoxesUpright is already upright (name says so,
+            // and that's the whole reason uprightPoint() exists -- to bring
+            // raw `points` into this SAME space for containment tests
+            // elsewhere). No further correction needed here.
             cx = (mlBox.left + mlBox.right) / 2f
             cy = (mlBox.top + mlBox.bottom) / 2f
         } else {
-            val bounds = latestMaterial?.bounds ?: return false
-            occupancy = bounds.area()
+            // REVERTED (2026-08-18): tried applying uprightPoint()'s
+            // rotation correction here on the theory that result.bounds is
+            // raw-sensor-frame while pan/tilt sign conventions assume
+            // upright. Live test result: pan nudges made dx monotonically
+            // WORSE every single time (0.06 -> 0.13 across 18 straight
+            // nudges, never once correcting), then tilt did the same in the
+            // other direction and drove the gimbal into its hard tilt
+            // limit. That means either result.bounds is NOT actually raw
+            // (something upstream already normalizes it -- the
+            // updateTrackingRegion() doc comment claims bounds are already
+            // upright, which may in fact be correct), or the empirically-
+            // tuned pan/tilt sign conventions in attemptCenteringCorrection()
+            // implicitly assume the OLD uncorrected axis and would need
+            // their own resign, not just the input coordinates. Don't
+            // reapply this without confirming lastMaterialRotationDegrees'
+            // actual runtime value AND re-deriving the pan/tilt sign
+            // convention from scratch against it -- guessing again risks
+            // another hard-stop drive.
+            val bounds = (result?.bounds ?: latestMaterial?.bounds) ?: return null
             cx = (bounds.x0 + bounds.x1) / 2f
             cy = (bounds.y0 + bounds.y1) / 2f
+        }
+        val EMA_ALPHA = 0.3f
+        centerEmaCx = centerEmaCx?.let { it + (cx - it) * EMA_ALPHA } ?: cx
+        centerEmaCy = centerEmaCy?.let { it + (cy - it) * EMA_ALPHA } ?: cy
+        return centerEmaCx!! to centerEmaCy!!
+    }
+
+    private fun isCenteredNow(): Boolean {
+        val (ecx, ecy) = smoothedCenter() ?: return false
+        return abs(ecx - 0.5f) <= CENTERING_DEADBAND && abs(ecy - 0.5f) <= CENTERING_DEADBAND
+    }
+
+    private fun meetsHardCaptureRules(): Boolean {
+        if (rsc2.isReady && rsc2.isMoving) return false
+        val mlBox = bestObjectBox()
+        val occupancy: Float
+        if (mlBox != null) {
+            occupancy = mlBox.width() * mlBox.height()
+        } else {
+            val bounds = latestMaterial?.bounds ?: return false
+            occupancy = bounds.area()
         }
         // Relax the occupancy floor once genuinely at the zoom ceiling --
         // matches the zoom-climb's OWN documented intent ("at the ceiling,
@@ -1713,7 +1885,7 @@ class MainActivity : AppCompatActivity() {
         val atZoomCeiling = zoom >= min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO) - 0.02f ||
             zoom >= maxUsableZoom - 0.02f
         if (occupancy < CAPTURE_MIN_OCCUPANCY && !atZoomCeiling) return false
-        return abs(cx - 0.5f) <= CENTERING_DEADBAND && abs(cy - 0.5f) <= CENTERING_DEADBAND
+        return isCenteredNow()
     }
 
     /** Hybrid detection check: true if EITHER signal sees something --
@@ -1890,6 +2062,24 @@ class MainActivity : AppCompatActivity() {
         maxAttempts: Int = CENTERING_MAX_ATTEMPTS
     ): Boolean {
         if (centeringAttempts >= maxAttempts) return false
+        // Confirmed live (2026-08-18): this had NO guard against issuing a
+        // new nudge while the gimbal was still physically executing the
+        // PREVIOUS one -- nudge durations run 300-500ms+, well past one
+        // ~150-200ms tick, so the tick loop kept computing dx/dy from
+        // mid-motion (sometimes motion-blurred) frames and firing another
+        // command on top of one still in flight. rsc2.isMoving already
+        // existed and was used to gate the final CAPTURE (meetsHardCapture-
+        // Rules), just never here, where it actually matters most: this is
+        // very likely the real cause of the oscillating, non-converging
+        // corrections seen all session, independent of sign or duration
+        // scaling -- confirmed correct via an isolated single-nudge BLE
+        // test (axis3=1144 physically turned the gimbal right, which is
+        // the correct direction to bring a right-of-center object toward
+        // center). Returning false here (not incrementing any counters)
+        // just means "wait, nothing to decide yet" -- the next tick tries
+        // again once the gimbal reports settled.
+        if (rsc2.isReady && rsc2.isMoving) return false
+        if (System.currentTimeMillis() < centeringSettledUntil) return false
 
         // Safety check FIRST: if the last nudge this function issued was
         // followed by the ornament vanishing entirely (visible right
@@ -1907,6 +2097,7 @@ class MainActivity : AppCompatActivity() {
             centerAvoidAxis = axis
             lastCenterAxis = CenterAxis.NONE
             setStatus("Centering ornament…", ready = false)
+            centeringSettledUntil = System.currentTimeMillis() + durMs + 400L
             if (axis == CenterAxis.PAN) {
                 centeringPanMs -= sign * durMs
                 val undoPan = if (sign > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
@@ -1919,17 +2110,11 @@ class MainActivity : AppCompatActivity() {
             return true
         }
 
-        val mlBox = bestObjectBox()
-        val cx: Float
-        val cy: Float
-        if (mlBox != null) {
-            cx = (mlBox.left + mlBox.right) / 2f
-            cy = (mlBox.top + mlBox.bottom) / 2f
-        } else {
-            val bounds = result.bounds ?: return false
-            cx = (bounds.x0 + bounds.x1) / 2f
-            cy = (bounds.y0 + bounds.y1) / 2f
-        }
+        // Smoothed, not raw -- see smoothedCenter()'s doc comment. A nudge's
+        // physical duration scales with abs(dx)/abs(dy), so feeding it a raw
+        // single-tick reading let one noisy "detected only one stud, not
+        // the pair" frame trigger a real, large gimbal move chasing it.
+        val (cx, cy) = smoothedCenter(result) ?: return false
         val dx = cx - 0.5f
         val dy = cy - 0.5f
         val needsPan = abs(dx) > CENTERING_DEADBAND
@@ -1985,31 +2170,83 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        // Divergence circuit-breaker -- see the field doc comment. Checked
+        // against whichever axis is about to be nudged; DIVERGE_LIMIT
+        // consecutive same-axis nudges that don't measurably shrink the
+        // error (a small tolerance, not a strict decrease, so genuine
+        // slow-but-real convergence isn't mistaken for divergence) stops
+        // that axis for the rest of this item rather than continuing to
+        // push it further wrong.
+        val axisAboutToNudge = if (choosePan) CenterAxis.PAN else CenterAxis.TILT
+        val errorMagnitude = if (choosePan) abs(dx) else abs(dy)
+        if (lastNudgeAxis == axisAboutToNudge) {
+            val prior = lastNudgeErrorMagnitude
+            if (prior != null && errorMagnitude >= prior - 0.005f) {
+                centerDivergeStreak += 1
+            } else {
+                centerDivergeStreak = 0
+            }
+        } else {
+            centerDivergeStreak = 0
+        }
+        val DIVERGE_LIMIT = 3
+        if (centerDivergeStreak >= DIVERGE_LIMIT) {
+            Log.w(TAG, "centering: $axisAboutToNudge not converging after $DIVERGE_LIMIT nudges (error stuck/growing at $errorMagnitude) -- giving up on this axis for this item")
+            lastCenterAxis = CenterAxis.NONE
+            lastNudgeAxis = CenterAxis.NONE
+            lastNudgeErrorMagnitude = null
+            centerDivergeStreak = 0
+            return false
+        }
+        lastNudgeAxis = axisAboutToNudge
+        lastNudgeErrorMagnitude = errorMagnitude
+
         centeringAttempts += 1
         setStatus("Centering ornament…", ready = false)
         if (choosePan) {
-            // Object right-of-center (dx>0) -> pan camera right to bring it in.
-            // axis3 ABOVE center = the "right" direction. Duration scales
-            // with how far off it is -- see centeringDurationFor().
+            // REVERTED (2026-08-18): flipping this made it categorically
+            // worse -- dx got pinned at ~0.30 (object stuck near the frame
+            // edge) and pan's budget blew straight through its cap
+            // (centeringPanMs hit -10101 against a +-9000 limit) trying to
+            // correct in the new direction. Back to the original sign.
+            // Neither sign has actually been confirmed live yet -- the
+            // "stuck/growing dx" the divergence breaker keeps catching is
+            // real, but which direction is actually correct needs a
+            // controlled single-nudge test (fire exactly one known-duration
+            // pan command, screenshot before/after, confirm which way the
+            // frame shifts) rather than inferring it from noisy multi-nudge
+            // centering data, which is what led to the wrong call above.
+            // Object right-of-center (dx>0) -> pan camera right to bring it
+            // in. axis3 ABOVE center = the "right" direction.
             val sign = if (dx > 0) 1 else -1
             val durMs = centeringDurationFor(abs(dx))
-            centeringPanMs += sign * durMs.toInt()
+            // Hard clamp regardless of the pre-check above -- confirmed live
+            // (2026-08-18) centeringPanMs reached -10101 against a +-9000
+            // limit by some path this session hasn't fully traced yet; this
+            // guarantees it can never happen again even if that path
+            // recurs, rather than relying solely on the pre-increment check.
+            centeringPanMs = (centeringPanMs + sign * durMs.toInt()).coerceIn(-PAN_MS_LIMIT, PAN_MS_LIMIT)
             lastCenterAxis = CenterAxis.PAN
             lastCenterSign = sign
             lastCenterDurationMs = durMs.toInt()
             val panAxis = DumlProtocol.AXIS_CENTER + sign * CENTERING_DEFLECTION
             Log.i(TAG, "centering nudge #$centeringAttempts (pan) dx=$dx dy=$dy pan=$panAxis durMs=$durMs")
+            // +400 matches moveOut()'s default settleMs -- see
+            // centeringSettledUntil's doc comment.
+            centeringSettledUntil = System.currentTimeMillis() + durMs + 400L
             rsc2.moveOut(axis3 = panAxis, durationMs = durMs) {}
         } else {
             // Object low-in-frame (dy>0, y grows downward) -> tilt camera
             // down. axis1 ABOVE center = look up (confirmed live).
             val sign = if (dy > 0) -1 else 1
-            centeringTiltMs += sign * tiltDurMs.toInt()
+            // Same defensive clamp as pan, see its comment above.
+            centeringTiltMs = (centeringTiltMs + sign * tiltDurMs.toInt()).coerceIn(-TILT_MS_LIMIT, TILT_MS_LIMIT)
             lastCenterAxis = CenterAxis.TILT
             lastCenterSign = sign
             lastCenterDurationMs = tiltDurMs.toInt()
             val tiltAxis = DumlProtocol.AXIS_CENTER + sign * CENTERING_DEFLECTION
             Log.i(TAG, "centering nudge #$centeringAttempts (tilt) dx=$dx dy=$dy tilt=$tiltAxis durMs=$tiltDurMs")
+            centeringSettledUntil = System.currentTimeMillis() + tiltDurMs + 400L
             rsc2.moveOut(axis1 = tiltAxis, durationMs = tiltDurMs) {}
         }
         return true
@@ -2931,6 +3168,12 @@ class MainActivity : AppCompatActivity() {
         materialLossStreak = 0
         readyStreak = 0
         jewelCaptureRetries = 0
+        centerEmaCx = null
+        centerEmaCy = null
+        lastNudgeAxis = CenterAxis.NONE
+        lastNudgeErrorMagnitude = null
+        centerDivergeStreak = 0
+        centeringSettledUntil = 0L
         if (next == Phase.JEWEL) {
             // Normal completion already undid these via
             // undoCenteringThenAdvance() before calling here -- this is
@@ -2983,12 +3226,15 @@ class MainActivity : AppCompatActivity() {
         val material = latestMaterial
         binding.debugText.text = if (phase == Phase.JEWEL) {
             val range = focusZoom.zoomRatioRange()
-            "zoom=%.1fx range=[%.1f,%.1f] max=%.1f  coverage=%.3f  sharp=%.0f  af=%s".format(
+            "zoom=%.1fx range=[%.1f,%.1f] max=%.1f  coverage=%.3f  sharp=%.0f  af=%s\nev=%.2f  goldClip=%.3f  sceneClip=%.3f".format(
                 focusZoom.currentZoomRatio(),
                 range.start, range.endInclusive, maxUsableZoom,
                 material?.coverage ?: 0f,
                 latestSharpness,
-                afStateLabel(focusZoom.afState.value)
+                afStateLabel(focusZoom.afState.value),
+                autoExposureEv,
+                material?.highlightClipFraction ?: 0f,
+                material?.sceneClipFraction ?: 0f
             )
         } else ""
         updateStepIndicator()
@@ -3068,5 +3314,6 @@ class MainActivity : AppCompatActivity() {
         handler.removeCallbacks(tickRunnable)
         rsc2.disconnect()
         try { unregisterReceiver(testMoveReceiver) } catch (_: IllegalArgumentException) {}
+        try { unregisterReceiver(testExposureReceiver) } catch (_: IllegalArgumentException) {}
     }
 }

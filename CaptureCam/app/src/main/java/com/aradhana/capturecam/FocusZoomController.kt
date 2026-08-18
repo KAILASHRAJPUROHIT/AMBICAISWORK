@@ -134,6 +134,7 @@ class FocusZoomController {
             exposureCompensationRange = characteristics.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE)
             exposureCompensationStepEv = characteristics.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)
                 ?.let { it.numerator.toFloat() / it.denominator } ?: 0f
+            Log.d("CameraDiag", "exposure compensation range=$exposureCompensationRange stepEv=$exposureCompensationStepEv")
         } catch (e: Exception) {
             Log.w("CameraDiag", "Could not read sensor array size -- tracking region updates will no-op", e)
             sensorArraySize = null

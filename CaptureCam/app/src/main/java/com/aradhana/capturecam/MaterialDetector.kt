@@ -53,7 +53,16 @@ object MaterialDetector {
         // detail right now" without any extra image analysis pass --
         // reuses the same YUV sampling loop that already runs for gold
         // detection.
-        val highlightClipFraction: Float = 0f
+        val highlightClipFraction: Float = 0f,
+        // Fraction of ALL sampled cells (any classification, not just gold)
+        // that are blown out. Confirmed live (2026-08-18): the owner
+        // reported every capture coming out overexposed while
+        // highlightClipFraction kept reading 0.0 nearly every tick -- the
+        // gold studs themselves weren't clipping, but the surrounding
+        // scene/background was, and gold-only clipping has zero visibility
+        // into that. This is the scene-wide signal applyAutoExposure()
+        // needed but didn't have.
+        val sceneClipFraction: Float = 0f
     )
 
     private fun looksLikeGold(r: Int, g: Int, b: Int): Boolean {
@@ -234,6 +243,8 @@ object MaterialDetector {
         var warm = 0
         var goldSampleCount = 0
         var goldClippedCount = 0
+        var sampleCount = 0
+        var sceneClippedCount = 0
 
         // Pass 1: classify every sampled cell. Sparkle candidates are
         // recorded but not yet trusted -- see the proximity gate below.
@@ -252,6 +263,16 @@ object MaterialDetector {
                 val uVal = uBuffer.get(uIndex).toInt() and 0xFF
                 val vVal = vBuffer.get(vIndex).toInt() and 0xFF
                 val rgb = yuvToRgb(yVal, uVal, vVal)
+                sampleCount += 1
+                // 240 (near-pure white) was too strict -- confirmed live
+                // (2026-08-18) with a demonstrably working exposure control
+                // (verified via a direct EV override) that never engaged
+                // automatically, because a washed-out grey studio background
+                // reads more like a flat, moderately bright grey (never
+                // actually hitting true sensor saturation) than it does
+                // pure white. 200 catches "this looks overexposed to a
+                // human" rather than only literal clipping.
+                if (yVal >= 200) sceneClippedCount += 1
                 val isMetal = looksLikeMetal(rgb[0], rgb[1], rgb[2]) &&
                     hasLocalContrast(yBuffer, yRowStride, x, yPix, width, height)
                 val cell = row * cols + col
@@ -269,6 +290,7 @@ object MaterialDetector {
             }
         }
         val highlightClipFraction = if (goldSampleCount > 0) goldClippedCount.toFloat() / goldSampleCount else 0f
+        val sceneClipFraction = if (sampleCount > 0) sceneClippedCount.toFloat() / sampleCount else 0f
 
         // Pass 2: build the dot cloud -- every metal cell, plus every
         // sparkle candidate that has an actual metal cell nearby (a stone
@@ -287,7 +309,7 @@ object MaterialDetector {
             }
         }
 
-        if (warm == 0) return Result(false, null, 0f, 0f, 0f, 0f, points, highlightClipFraction)
+        if (warm == 0) return Result(false, null, 0f, 0f, 0f, 0f, points, highlightClipFraction, sceneClipFraction)
 
         // Connected components (8-connectivity), same as goldBlobDominance
         // in the web worker -- but tracking EVERY component, not just the
@@ -304,11 +326,29 @@ object MaterialDetector {
         // back to the largest-by-size if nothing meets that bar.
         data class Component(val size: Int, val minCol: Int, val minRow: Int, val maxCol: Int, val maxRow: Int)
 
-        val visited = BooleanArray(mask.size)
+        // Gold-only connectivity: this blob selection is what becomes
+        // result.bounds, which drives tracking/centering/zoom-climb whenever
+        // ML Kit's box isn't available (ML_KIT_OBJECT_DETECTION_ENABLED is
+        // currently false, so this is the ONLY box in play right now).
+        // Walking `mask` (gold OR silver, via looksLikeMetal) let a large,
+        // well-filled SILVER-classified blob -- e.g. a wet/dimpled steel
+        // stand, whose dimples give it plenty of real local contrast so
+        // hasLocalContrast's flat-surface guard doesn't catch it -- win the
+        // largest-reasonably-filled-component pick outright and pull bounds
+        // (and therefore the gimbal/zoom) onto it instead of the actual gold
+        // piece. Confirmed live (2026-08-18): tracker zoomed in on a
+        // stainless surface next to a pair of gold tops. bestGoldObjectBox()
+        // already restricts to gold-only points + a spatial-continuity
+        // anchor for the ML-Kit path per the standing "focus on gold only,
+        // always" rule -- this walk over goldMask brings the colour-only
+        // fallback path (the one actually active right now) in line with
+        // that same rule, so a silver/steel blob can never be selected here
+        // at all, regardless of size or fill ratio.
+        val visited = BooleanArray(goldMask.size)
         val components = mutableListOf<Component>()
         val stack = ArrayDeque<Int>()
-        for (start in mask.indices) {
-            if (!mask[start] || visited[start]) continue
+        for (start in goldMask.indices) {
+            if (!goldMask[start] || visited[start]) continue
             var size = 0
             var minCol = cols; var minRow = rows; var maxCol = -1; var maxRow = -1
             stack.clear()
@@ -329,7 +369,7 @@ object MaterialDetector {
                     val nc = col + dx
                     if (nr < 0 || nc < 0 || nr >= rows || nc >= cols) continue
                     val next = nr * cols + nc
-                    if (mask[next] && !visited[next]) {
+                    if (goldMask[next] && !visited[next]) {
                         visited[next] = true
                         stack.addLast(next)
                     }
@@ -337,7 +377,7 @@ object MaterialDetector {
             }
             components.add(Component(size, minCol, minRow, maxCol, maxRow))
         }
-        if (components.isEmpty()) return Result(false, null, 0f, 0f, 0f, 0f, points, highlightClipFraction)
+        if (components.isEmpty()) return Result(false, null, 0f, 0f, 0f, 0f, points, highlightClipFraction, sceneClipFraction)
 
         fun fillRatio(c: Component): Float {
             val bboxCells = (c.maxCol - c.minCol + 1) * (c.maxRow - c.minRow + 1)
@@ -364,12 +404,30 @@ object MaterialDetector {
             return count
         }
         val MIN_FILL_RATIO = 0.28f
-        val chosen = components.filter { fillRatio(it) >= MIN_FILL_RATIO || edgesTouched(it) < 2 }
-            .maxByOrNull { it.size }
-            ?: components.maxByOrNull { it.size }!!
-        val bestSize = chosen.size
-        val bestMinCol = chosen.minCol; val bestMinRow = chosen.minRow
-        val bestMaxCol = chosen.maxCol; val bestMaxRow = chosen.maxRow
+        val real = components.filter { fillRatio(it) >= MIN_FILL_RATIO || edgesTouched(it) < 2 }
+        val primary = real.maxByOrNull { it.size } ?: components.maxByOrNull { it.size }!!
+        // Pair jewellery (two stud earrings on one stand, a pair of bangles,
+        // etc.) is two physically separate gold blobs -- picking only the
+        // single largest one made zoom climb to fill 75% of frame with ONE
+        // earring, cropping its twin out entirely. Confirmed live
+        // (2026-08-18): both tops correctly detected (gold-only dots on
+        // each), but bounds locked onto one and zoomed straight past the
+        // other. Union in any OTHER real component that's a comparably
+        // sized piece (not a stray noise speck) so the pair frames
+        // together -- 25% of the primary's size is generous enough for two
+        // genuinely different-sized real pieces (e.g. a pendant + a smaller
+        // chain clasp) but excludes a tiny few-pixel false positive.
+        val PAIR_SIZE_RATIO = 0.25f
+        var bestMinCol = primary.minCol; var bestMinRow = primary.minRow
+        var bestMaxCol = primary.maxCol; var bestMaxRow = primary.maxRow
+        var bestSize = primary.size
+        for (c in real) {
+            if (c === primary) continue
+            if (c.size < primary.size * PAIR_SIZE_RATIO) continue
+            bestMinCol = min(bestMinCol, c.minCol); bestMinRow = min(bestMinRow, c.minRow)
+            bestMaxCol = max(bestMaxCol, c.maxCol); bestMaxRow = max(bestMaxRow, c.maxRow)
+            bestSize += c.size
+        }
 
         val bounds = Bounds(
             x0 = (startX + bestMinCol * step).toFloat() / width,
@@ -410,7 +468,8 @@ object MaterialDetector {
             goldRatio = goldRatio,
             goldBoxArea = goldBoxArea,
             points = points,
-            highlightClipFraction = highlightClipFraction
+            highlightClipFraction = highlightClipFraction,
+            sceneClipFraction = sceneClipFraction
         )
     }
 }
