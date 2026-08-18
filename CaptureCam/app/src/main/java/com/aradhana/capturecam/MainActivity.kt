@@ -507,6 +507,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
+        loadCenterDrift()
         attemptGimbalConnect()
         connectDetector()
         // EXPORTED (not NOT_EXPORTED) deliberately -- this needs to be
