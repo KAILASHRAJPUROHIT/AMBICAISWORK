@@ -776,10 +776,12 @@ def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: 
 
 def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str, stitched_path: str) -> None:
     """save_multi's version of _segment_paths_async: crops all three poses
-    first (same as the generic helper), THEN stitches the composite from the
-    already-cropped results -- stitching before cropping would bake the raw,
-    uncropped gimbal framing into the permanent composite instead of the
-    clean ornament-only shot."""
+    (SAM2/DINO), removes what's left of the background inside each crop
+    (RMBG-2.0), THEN stitches the composite from the cleaned results.
+    Order matters: stitching before cropping would bake the raw, uncropped
+    gimbal framing into the permanent composite; removing background before
+    cropping would waste RMBG-2.0 on the whole wide shot instead of just the
+    already-isolated ornament crop."""
     if not sam_locate.available():
         logging.getLogger("capture_tool").warning(
             "sam_locate.available() is False -- skipping segmentation+stitch for %s", stitched_path
@@ -797,6 +799,11 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
                     log.exception("sam_locate.tight_crop FAILED for %s", path)
         finally:
             sam_locate.release()
+        try:
+            for path in (main_path, angle1_path, angle2_path):
+                _remove_background(path)
+        finally:
+            _release_rmbg()
         stitch_angles(main_path, angle1_path, angle2_path, stitched_path)
 
     threading.Thread(target=_run, daemon=True).start()
