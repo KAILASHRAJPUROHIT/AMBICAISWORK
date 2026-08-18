@@ -1300,17 +1300,32 @@ class MainActivity : AppCompatActivity() {
         val points = latestMaterial?.points
         if (points.isNullOrEmpty()) return null
         val rotation = lastMaterialRotationDegrees
-        val best = boxes.maxByOrNull { box ->
-            points.count { p ->
+        // Density (points / box area), NOT raw point count. A large object
+        // (e.g. the display box) accumulates more stray metal-look points
+        // than a small ring purely from having more surface area -- even a
+        // handful of specular-highlight false positives on its glossy edges
+        // can outscore a ring's real points on a raw-count basis. Confirmed
+        // live (2026-08-18): the tracker locked onto the display box's
+        // reflective edge instead of the (absent) ring, because the box had
+        // more total warm/silver points than any small candidate box did.
+        // Density fixes this: a small box that's mostly real metal wins
+        // over a large box that's mostly not, regardless of point totals.
+        var bestBox: RectF? = null
+        var bestDensity = 0f
+        for (box in boxes) {
+            val count = points.count { p ->
                 val up = uprightPoint(p, rotation)
                 box.contains(up[0], up[1])
             }
-        } ?: return null
-        val goldCount = points.count { p ->
-            val up = uprightPoint(p, rotation)
-            best.contains(up[0], up[1])
+            if (count == 0) continue
+            val area = max(box.width() * box.height(), 1e-4f)
+            val density = count / area
+            if (density > bestDensity) {
+                bestDensity = density
+                bestBox = box
+            }
         }
-        return if (goldCount > 0) best else null
+        return bestBox
     }
 
     /** Continuously steers the AF/AE tracking region at wherever the GOLD
