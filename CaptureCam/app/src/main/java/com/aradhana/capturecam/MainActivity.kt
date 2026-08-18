@@ -309,6 +309,13 @@ class MainActivity : AppCompatActivity() {
         private const val CAPTURE_MIN_OCCUPANCY = 0.75f
         private const val MAX_FOCUS_RETRIES = 2
         private const val ZOOM_BACKOFF_RATIO = 0.8f
+        // Below this zoom, a "lost the piece" reading only pauses the climb
+        // (holds current zoom, waits) instead of backing off -- at low zoom
+        // the frame is wide enough that a stationary, gimbal-centered piece
+        // physically can't have "walked out of frame," so a loss reading
+        // there is far more likely a detection glitch than a real framing
+        // problem. See its use in tickJewel's material-loss branch.
+        private const val ZOOM_BACKOFF_MIN_ZOOM = 1.5f
         // Gentler per-step ratio (was 1.15x) and a real pause between steps
         // (ZOOM_STEP_INTERVAL_MS) so the climb reads as a smooth, deliberate
         // approach rather than a jumpy series of jerks.
@@ -1111,13 +1118,25 @@ class MainActivity : AppCompatActivity() {
             // real climb to cross that threshold -- the pipeline looked
             // "stuck" even with the gimbal correctly centered on the piece,
             // because it kept discarding its own progress.
+            //
+            // The grace-tick count alone wasn't enough: confirmed live
+            // (2026-08-18, second pass) coverage swings 0.006-0.15 tick to
+            // tick on a genuinely stationary piece -- readings BELOW the
+            // detector's own 0.012 material floor happen for real, several
+            // ticks in a row, not just single-frame noise. So on top of the
+            // grace period, only actually BACK OFF zoom once it's high
+            // enough that "walked out of frame" is physically plausible
+            // (ZOOM_BACKOFF_MIN_ZOOM) -- below that, a loss reading is far
+            // more likely a lighting/reflection glitch than the object
+            // actually leaving a still-wide frame, so just hold the current
+            // zoom and wait rather than erasing the climb.
             materialLossStreak += 1
             if (materialLossStreak < MATERIAL_LOSS_GRACE_TICKS) {
                 setStatus("Re-centre the item…", ready = false)
                 return
             }
             val zoom = focusZoom.currentZoomRatio()
-            if (zoom > 1.05f) {
+            if (zoom > ZOOM_BACKOFF_MIN_ZOOM) {
                 smoothZoomTo((zoom * ZOOM_BACKOFF_RATIO).coerceAtLeast(1f))
                 stepFocusAttempts = 0
                 focusTriggeredThisLevel = false
