@@ -143,8 +143,20 @@ class MainActivity : AppCompatActivity() {
     // proportional to how far off-center the object is (see
     // centeringDurationFor()), so a plain nudge COUNT can no longer tell
     // the undo how long to run; total accumulated time can.
+    // Persisted (SharedPreferences, survives app kill/relaunch -- this is
+    // the "remember center permanently" reference) net drift from the
+    // operator's last confirmed physical center. Updated by BOTH the legacy
+    // hunt/centering code (below) AND VisionServoController's servo bursts
+    // (applyServoCommand) -- previously only the legacy path updated these,
+    // so the new tracking pipeline's motion was invisible to any recenter
+    // attempt. Flushed to prefs periodically from tickRunnable rather than
+    // at every single mutation site (there are many); losing at most one
+    // tick's worth (~150ms) of drift on an app kill is an acceptable trade
+    // for not having to touch every call site.
     private var centeringPanMs = 0
     private var centeringTiltMs = 0
+    private var lastPersistedPanMs = 0
+    private var lastPersistedTiltMs = 0
     private var centeringAttempts = 0
 
     private enum class CenterAxis { NONE, PAN, TILT }
