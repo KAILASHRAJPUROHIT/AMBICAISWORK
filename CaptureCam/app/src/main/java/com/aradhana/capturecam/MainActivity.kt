@@ -1350,6 +1350,28 @@ class MainActivity : AppCompatActivity() {
                 setStatus("Centering ornament…", ready = false)
                 return
             }
+            // attemptCenteringCorrection() returning false is ambiguous by
+            // itself -- it means EITHER "already centered" (safe to zoom)
+            // OR "still off-center but gave up" (e.g. TILT_MS_LIMIT hit,
+            // see its own doc comment noting that budget is an uncalibrated
+            // placeholder, not a real measured hardware limit). Confirmed
+            // live: the exhausted-budget case fell through to zoom exactly
+            // like the centered case, climbing all the way to 3.4x with the
+            // item still off-center and no further gimbal movement at all.
+            // Check the ACTUAL centering state directly rather than trust
+            // the ambiguous boolean -- only proceed to zoom if truly within
+            // the deadband.
+            run {
+                val mlBox = bestObjectBox()
+                if (mlBox != null) {
+                    val dx = (mlBox.left + mlBox.right) / 2f - 0.5f
+                    val dy = (mlBox.top + mlBox.bottom) / 2f - 0.5f
+                    if (abs(dx) > CENTERING_DEADBAND || abs(dy) > CENTERING_DEADBAND) {
+                        setStatus("Centering ornament…", ready = false)
+                        return
+                    }
+                }
+            }
             // Too small to trust a focus verdict either way yet -- climb on
             // coverage alone, same reasoning as the web version's identical
             // branch (a crop this small would be judged on an upscaled,
