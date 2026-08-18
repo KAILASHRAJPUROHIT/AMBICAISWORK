@@ -1340,7 +1340,12 @@ class MainActivity : AppCompatActivity() {
         when (huntPhase) {
             HuntPhase.SCAN_DOWN -> {
                 if (huntPhaseMsSpent >= TILT_MS_LIMIT) {
-                    huntPhase = HuntPhase.RETURN_TILT
+                    // Stays tilted down -- deliberately no return-to-level
+                    // here, the ornament is always on the base, never in
+                    // the air or on a wall, so the pan sweep below scans
+                    // the bottom the whole way through, not the middle.
+                    huntPhase = HuntPhase.SCAN_LEFT
+                    huntPhaseMsSpent = 0
                     huntBusy = false
                     huntStep()
                     return
@@ -1350,22 +1355,6 @@ class MainActivity : AppCompatActivity() {
                 huntPhaseMsSpent += step.toInt()
                 val axis = DumlProtocol.AXIS_CENTER - HUNT_STEP_DEFLECTION
                 rsc2.moveOut(axis1 = axis, durationMs = step) { huntBusy = false }
-            }
-            HuntPhase.RETURN_TILT -> {
-                if (centeringTiltMs == 0) {
-                    huntPhase = HuntPhase.SCAN_LEFT
-                    huntPhaseMsSpent = 0
-                    huntBusy = false
-                    huntStep()
-                    return
-                }
-                val undoTilt = if (centeringTiltMs > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
-                val durMs = abs(centeringTiltMs)
-                centeringTiltMs = 0
-                rsc2.moveOut(axis1 = undoTilt, durationMs = durMs.toLong()) {
-                    huntBusy = false
-                    huntStep()
-                }
             }
             HuntPhase.SCAN_LEFT -> {
                 if (huntPhaseMsSpent >= HUNT_PAN_SWEEP_MAX_MS) {
