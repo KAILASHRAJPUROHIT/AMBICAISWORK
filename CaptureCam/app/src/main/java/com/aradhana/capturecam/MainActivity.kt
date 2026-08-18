@@ -1373,12 +1373,47 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Largest ML Kit detected-object box (upright-normalized, same space
-     * the on-screen overlay already trusts) -- picks the biggest on the
-     * assumption a small piece on a stand is the dominant object in frame,
-     * same heuristic already implicit in how these boxes filter the dot
-     * overlay above. */
-    private fun bestObjectBox(): RectF? = latestObjectBoxesUpright.maxByOrNull { it.width() * it.height() }
+    /** ML Kit detected-object box (upright-normalized, same space the
+     * on-screen overlay already trusts) that actually contains gold/warm
+     * MaterialDetector points -- NOT just the largest box.
+     *
+     * Real bug found live (2026-08-18): a small gold ring placed on/beside
+     * a large blue display box -- ML Kit's generic (color-blind) object
+     * detector reported the BOX as a detected object too, and being much
+     * larger than the ring, the old "just pick the biggest box" heuristic
+     * always won with the box. Every downstream consumer (centering, zoom-
+     * climb, the 75%-occupancy hard gate) then chased the wrong object:
+     * coverage stayed near zero, centering never converged, capture never
+     * fired -- exactly the observed "stuck re-centering forever" symptom.
+     * Preferring the box with the most gold-point overlap fixes this
+     * directly: ML Kit may find multiple candidate "objects", but only one
+     * of them is actually gold-colored.
+     * Falls back to the old largest-box heuristic only when there's no
+     * material evidence to disambiguate with (e.g. the very first tick
+     * before MaterialDetector has run) -- fails open rather than losing
+     * the box entirely. */
+    private fun bestObjectBox(): RectF? {
+        val boxes = latestObjectBoxesUpright
+        if (boxes.isEmpty()) return null
+        val points = latestMaterial?.points
+        if (!points.isNullOrEmpty()) {
+            val rotation = lastMaterialRotationDegrees
+            val best = boxes.maxByOrNull { box ->
+                points.count { p ->
+                    val up = uprightPoint(p, rotation)
+                    box.contains(up[0], up[1])
+                }
+            }
+            if (best != null) {
+                val goldCount = points.count { p ->
+                    val up = uprightPoint(p, rotation)
+                    best.contains(up[0], up[1])
+                }
+                if (goldCount > 0) return best
+            }
+        }
+        return boxes.maxByOrNull { it.width() * it.height() }
+    }
 
     /** Continuously steers the AF/AE tracking region at wherever the
      * ornament currently is -- called every tick once armed, including
