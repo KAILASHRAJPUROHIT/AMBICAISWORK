@@ -129,6 +129,38 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+    // One-way manual nudge -- unlike testMoveReceiver, does NOT auto-return
+    // home (that's for a temporary axis test; this is a real, lasting
+    // reposition, e.g. "move it a little down" before a search). Updates
+    // centeringTiltMs/PanMs so the persisted center-drift reference and
+    // RECENTER/job-done-return-to-center all correctly account for it.
+    // adb shell am broadcast -a com.aradhana.capturecam.NUDGE --es dir down --el durationMs 250
+    // dir: up|down|left|right
+    private val nudgeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val dir = intent.getStringExtra("dir") ?: return
+            val durMs = intent.getLongExtra("durationMs", 250L)
+            Log.i(TAG, "nudgeReceiver: dir=$dir durationMs=$durMs")
+            when (dir) {
+                "down" -> {
+                    centeringTiltMs -= durMs.toInt()
+                    rsc2.moveOut(axis1 = DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION, durationMs = durMs) {}
+                }
+                "up" -> {
+                    centeringTiltMs += durMs.toInt()
+                    rsc2.moveOut(axis1 = DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION, durationMs = durMs) {}
+                }
+                "left" -> {
+                    centeringPanMs -= durMs.toInt()
+                    rsc2.moveOut(axis3 = DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION, durationMs = durMs) {}
+                }
+                "right" -> {
+                    centeringPanMs += durMs.toInt()
+                    rsc2.moveOut(axis3 = DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION, durationMs = durMs) {}
+                }
+            }
+        }
+    }
     private var angle1Jpeg: ByteArray? = null
     private var angle2Jpeg: ByteArray? = null
     // Set for the whole MAIN-accepted -> angle1 -> angle2 sequence. tickJewel()
