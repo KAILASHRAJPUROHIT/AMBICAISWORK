@@ -492,6 +492,11 @@ class MainActivity : AppCompatActivity() {
         // gimbal correction. Still a placeholder, still well under the
         // ~326° full range, just less prematurely restrictive.
         private const val TILT_MS_LIMIT = 5000
+        // Pan has no mechanical hard-stop the way tilt does (full 360°
+        // rotation), but still needs a budget cap -- see the doc comment at
+        // its call site in attemptCenteringCorrection() for why (target-jump
+        // runaway, 2026-08-18). Same order of magnitude as TILT_MS_LIMIT.
+        private const val PAN_MS_LIMIT = 5000
         // Blind search (huntStep()) -- only runs before anything has ever
         // been detected for this item. Bigger, longer steps than fine
         // centering (CENTERING_*) since this is covering ground, not
