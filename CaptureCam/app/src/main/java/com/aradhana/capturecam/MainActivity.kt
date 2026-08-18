@@ -290,6 +290,10 @@ class MainActivity : AppCompatActivity() {
         // shiny pieces under reflective lighting) must not discard a real
         // zoom climb in progress.
         private const val MATERIAL_LOSS_GRACE_TICKS = 4
+        // Set FALSE (2026-08-18) per explicit request: gold colour
+        // detection alone, no ML Kit object box. See its call site in
+        // onFrame and bestObjectBox()'s short-circuit below.
+        private const val ML_KIT_OBJECT_DETECTION_ENABLED = false
         // Non-negotiable hard capture gate (user requirement): the ornament
         // must occupy at least this fraction of the FULL frame, and be
         // centered, or nothing fires -- not even the stall-safety-valve.
@@ -776,27 +780,38 @@ class MainActivity : AppCompatActivity() {
                 // never leak into the actual captured photo.
                 binding.boundsOverlay.update(filteredPoints, imageProxy.width, imageProxy.height, rotation)
 
-                val mediaImage = imageProxy.image
-                if (!objectDetectBusy && mediaImage != null) {
-                    objectDetectBusy = true
-                    val inputImage = InputImage.fromMediaImage(mediaImage, rotation)
-                    val uprightW = if (rotation == 90 || rotation == 270) imageProxy.height else imageProxy.width
-                    val uprightH = if (rotation == 90 || rotation == 270) imageProxy.width else imageProxy.height
-                    objectDetector.process(inputImage)
-                        .addOnSuccessListener { objects ->
-                            latestObjectBoxesUpright = objects.map { obj ->
-                                val r = obj.boundingBox
-                                RectF(
-                                    r.left / uprightW.toFloat(), r.top / uprightH.toFloat(),
-                                    r.right / uprightW.toFloat(), r.bottom / uprightH.toFloat()
-                                )
+                // ML Kit object detection disabled (2026-08-18) per explicit
+                // request: gold colour detection alone, no ML Kit box. It
+                // was also the source of the mlOccupancy=null flakiness at
+                // small/low zoom sizes -- MaterialDetector's colour/coverage
+                // path is now the ONLY source of truth (see
+                // bestObjectBox()'s short-circuit and
+                // meetsHardCaptureRules()'s colour-based fallback below).
+                if (ML_KIT_OBJECT_DETECTION_ENABLED) {
+                    val mediaImage = imageProxy.image
+                    if (!objectDetectBusy && mediaImage != null) {
+                        objectDetectBusy = true
+                        val inputImage = InputImage.fromMediaImage(mediaImage, rotation)
+                        val uprightW = if (rotation == 90 || rotation == 270) imageProxy.height else imageProxy.width
+                        val uprightH = if (rotation == 90 || rotation == 270) imageProxy.width else imageProxy.height
+                        objectDetector.process(inputImage)
+                            .addOnSuccessListener { objects ->
+                                latestObjectBoxesUpright = objects.map { obj ->
+                                    val r = obj.boundingBox
+                                    RectF(
+                                        r.left / uprightW.toFloat(), r.top / uprightH.toFloat(),
+                                        r.right / uprightW.toFloat(), r.bottom / uprightH.toFloat()
+                                    )
+                                }
                             }
-                        }
-                        .addOnFailureListener { e -> Log.e(TAG, "Object detection failed", e) }
-                        .addOnCompleteListener {
-                            objectDetectBusy = false
-                            imageProxy.close()
-                        }
+                            .addOnFailureListener { e -> Log.e(TAG, "Object detection failed", e) }
+                            .addOnCompleteListener {
+                                objectDetectBusy = false
+                                imageProxy.close()
+                            }
+                    } else {
+                        imageProxy.close()
+                    }
                 } else {
                     imageProxy.close()
                 }
@@ -1333,7 +1348,7 @@ class MainActivity : AppCompatActivity() {
      * there's no real gold evidence. Every caller already fails closed on
      * null -- that's exactly correct here: better to stall/re-search than
      * to center/zoom/capture against the wrong object. */
-    private fun bestObjectBox(): RectF? = bestGoldObjectBox()
+    private fun bestObjectBox(): RectF? = if (ML_KIT_OBJECT_DETECTION_ENABLED) bestGoldObjectBox() else null
 
     /** Same ML Kit box selection as bestObjectBox(), but returns null
      * (never a fallback) when no candidate box actually contains gold/warm
@@ -1439,15 +1454,29 @@ class MainActivity : AppCompatActivity() {
      * box's center sits at true frame-center, its margins on all 4 edges
      * are equal by construction). No caller may bypass this for an
      * automatic capture -- only the manual-shutter override (an explicit
-     * staff decision) skips it. Fails closed (returns false) whenever ML
-     * Kit hasn't found a box, since occupancy can't be verified without one. */
+     * staff decision) skips it. Falls back to MaterialDetector's own
+     * colour/contrast bounds (result.bounds) when ML Kit is disabled
+     * (ML_KIT_OBJECT_DETECTION_ENABLED = false, 2026-08-18) or simply
+     * hasn't found a box yet -- fails closed (returns false) only when
+     * NEITHER source has anything, since occupancy can't be verified with
+     * no box at all. */
     private fun meetsHardCaptureRules(): Boolean {
         if (rsc2.isReady && rsc2.isMoving) return false
-        val box = bestObjectBox() ?: return false
-        val occupancy = box.width() * box.height()
+        val mlBox = bestObjectBox()
+        val cx: Float
+        val cy: Float
+        val occupancy: Float
+        if (mlBox != null) {
+            occupancy = mlBox.width() * mlBox.height()
+            cx = (mlBox.left + mlBox.right) / 2f
+            cy = (mlBox.top + mlBox.bottom) / 2f
+        } else {
+            val bounds = latestMaterial?.bounds ?: return false
+            occupancy = bounds.area()
+            cx = (bounds.x0 + bounds.x1) / 2f
+            cy = (bounds.y0 + bounds.y1) / 2f
+        }
         if (occupancy < CAPTURE_MIN_OCCUPANCY) return false
-        val cx = (box.left + box.right) / 2f
-        val cy = (box.top + box.bottom) / 2f
         return abs(cx - 0.5f) <= CENTERING_DEADBAND && abs(cy - 0.5f) <= CENTERING_DEADBAND
     }
 
