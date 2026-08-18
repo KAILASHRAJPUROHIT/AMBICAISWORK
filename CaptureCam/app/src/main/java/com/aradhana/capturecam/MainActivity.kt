@@ -429,6 +429,12 @@ class MainActivity : AppCompatActivity() {
         // opposite total can be undone in one shot at the end of the item.
         private const val CENTERING_DEFLECTION = 120
         private const val CENTERING_DEADBAND = 0.06f
+        // Max upright-normalized distance a newly-selected gold box may be
+        // from the previously locked one and still be accepted as "the same
+        // object" -- generous enough for real tick-to-tick movement/zoom,
+        // tight enough to reject a jump onto an unrelated gold cluster
+        // (e.g. a display case) elsewhere in frame. See bestGoldObjectBox().
+        private const val MAX_TARGET_JUMP = 0.35f
         // Nudge duration scales with how far off-center the object is
         // (centeringDurationFor()): CENTERING_TICK_MS at a small offset,
         // climbing linearly to CENTERING_TICK_MS_MAX at a half-frame
