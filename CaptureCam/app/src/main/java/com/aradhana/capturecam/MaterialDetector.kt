@@ -22,8 +22,16 @@ object MaterialDetector {
         fun area(): Float = max(0f, x1 - x0) * max(0f, y1 - y0)
     }
 
-    /** Normalized (0..1, against the raw analysis frame) point. */
-    data class Point(val x: Float, val y: Float)
+    /** Normalized (0..1, against the raw analysis frame) point. [gold] is
+     * true only for actual gold-hue metal (looksLikeGold), false for
+     * silver/sparkle points -- lets gold-exclusive consumers (see
+     * MainActivity.bestGoldObjectBox()) filter out silver-classified false
+     * positives, e.g. a bright specular highlight on a glossy display box
+     * passing looksLikeSilver's loose low-saturation/high-luma check.
+     * Confirmed live (2026-08-18): with no ornament in frame at all, the
+     * tracker still armed on a display box's shiny top edge because those
+     * highlight pixels passed the silver classifier. */
+    data class Point(val x: Float, val y: Float, val gold: Boolean = false)
 
     data class Result(
         val material: Boolean,
