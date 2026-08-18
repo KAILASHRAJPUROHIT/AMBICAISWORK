@@ -495,6 +495,23 @@ class MainActivity : AppCompatActivity() {
         // opposite total can be undone in one shot at the end of the item.
         private const val CENTERING_DEFLECTION = 120
         private const val CENTERING_DEADBAND = 0.06f
+        // Ported from the DINO/MIL branch's VisionServoController
+        // (2026-08-18): "zoom-IN only once roughly centered" -- looser than
+        // CENTERING_DEADBAND deliberately, this only gates whether the
+        // climb may take its NEXT step at all, not full capture-readiness.
+        // That branch's own doc comment: "confirmed live: a target still
+        // far off-center got zoomed to 3.4x while pan/tilt were still
+        // catching up, clipping it at the frame edge and getting the whole
+        // servo stuck (large error that never shrinks, because the object
+        // is partially out of frame, not because the direction is wrong)."
+        // This is the same failure shape observed repeatedly tonight in
+        // this file's own zoom-climb logs (drift getting WORSE as zoom
+        // climbed, magnifying an already-uncorrected off-center error) --
+        // that branch had already designed around it; this just adopts the
+        // same guard here. Requiring full centering before any zoom step
+        // would stall framing progress on a target that's close-but-not-
+        // perfect, hence looser than the capture deadband.
+        private const val ZOOM_ALLOW_DEADBAND = 0.15f
         // Max upright-normalized distance a newly-selected gold box may be
         // from the previously locked one and still be accepted as "the same
         // object" -- generous enough for real tick-to-tick movement/zoom,
@@ -1467,12 +1484,26 @@ class MainActivity : AppCompatActivity() {
         val coverageOk = (if (mlOccupancy != null) mlOccupancy >= CAPTURE_MIN_OCCUPANCY
                           else colourOccupancy >= CAPTURE_MIN_OCCUPANCY) || atZoomCeiling
         val b = result.bounds
-        Log.d(TAG, "tickJewel coverage=${result.coverage} colourOccupancy=$colourOccupancy mlOccupancy=$mlOccupancy zoom=$zoom coverageOk=$coverageOk bounds=${b?.let { "[${it.x0},${it.y0},${it.x1},${it.y1}] cx=${(it.x0+it.x1)/2f} cy=${(it.y0+it.y1)/2f}" } ?: "null"}")
         val zoomSettled = now - lastZoomChangeAt >= ZOOM_SETTLE_MS
         val afState = focusZoom.afState.value
         val focusLocked = focusZoom.isFocusLocked(afState)
         val focusFailed = focusZoom.isFocusFailed(afState)
         val sharpEnough = latestSharpness >= SHARPNESS_THRESHOLD
+        // Explicit phase label for diagnostics, in the spirit of the DINO/
+        // MIL branch's VisionState enum (2026-08-18 port) -- derived
+        // read-only from signals already computed above, no new EMA-
+        // mutating calls, so it can't change any actual behaviour. Turns a
+        // logcat dump from five separate booleans someone has to mentally
+        // combine into one glance-able progression.
+        val trackPhase = when {
+            !coverageOk -> "APPROACHING"
+            !zoomSettled -> "SETTLING"
+            !focusLocked -> "FOCUSING"
+            !sharpEnough -> "SHARPENING"
+            readyStreak > 0 -> "HOLDING(${readyStreak}/${REQUIRED_READY_TICKS})"
+            else -> "FRAMING"
+        }
+        Log.d(TAG, "tickJewel phase=$trackPhase coverage=${result.coverage} colourOccupancy=$colourOccupancy mlOccupancy=$mlOccupancy zoom=$zoom coverageOk=$coverageOk bounds=${b?.let { "[${it.x0},${it.y0},${it.x1},${it.y1}] cx=${(it.x0+it.x1)/2f} cy=${(it.y0+it.y1)/2f}" } ?: "null"}")
 
         // isCenteredNow() folded in here, not just checked once right before
         // firing -- confirmed live (2026-08-18): bounds cx can drift steadily
@@ -1538,6 +1569,16 @@ class MainActivity : AppCompatActivity() {
             // zoom has been sitting still for ZOOM_SETTLE_MS, see below.
             if (now - lastZoomChangeAt < ZOOM_STEP_INTERVAL_MS) {
                 setStatus("Zooming in…", ready = false)
+                return
+            }
+            // Ported from the DINO/MIL branch's VisionServoController
+            // (2026-08-18) -- see ZOOM_ALLOW_DEADBAND's doc comment. Holds
+            // the zoom step (not the whole tick -- centering above already
+            // ran concurrently this tick regardless) while the object is
+            // still far off-center, so zoom can't race ahead of a slow
+            // pan/tilt correction and clip the target at the frame edge.
+            if (!isRoughlyCenteredForZoom()) {
+                setStatus("Centering before zooming…", ready = false)
                 return
             }
             // Must also respect maxUsableZoom -- a level a previous backoff
@@ -1854,6 +1895,18 @@ class MainActivity : AppCompatActivity() {
     private fun isCenteredNow(): Boolean {
         val (ecx, ecy) = smoothedCenter() ?: return false
         return abs(ecx - 0.5f) <= CENTERING_DEADBAND && abs(ecy - 0.5f) <= CENTERING_DEADBAND
+    }
+
+    /** Looser than isCenteredNow() -- see ZOOM_ALLOW_DEADBAND's doc comment.
+     * Gates whether the zoom-climb may take its next step at all, not
+     * capture readiness. Defaults to true (permissive) when there's no
+     * position estimate at all, matching the zoom-climb's existing
+     * behaviour of climbing on coverage alone before a box is trustworthy
+     * -- this only needs to STOP the climb once a real, uncorrected offset
+     * is known, not invent a reason to stall with nothing to go on. */
+    private fun isRoughlyCenteredForZoom(): Boolean {
+        val (ecx, ecy) = smoothedCenter() ?: return true
+        return abs(ecx - 0.5f) <= ZOOM_ALLOW_DEADBAND && abs(ecy - 0.5f) <= ZOOM_ALLOW_DEADBAND
     }
 
     private fun meetsHardCaptureRules(): Boolean {
