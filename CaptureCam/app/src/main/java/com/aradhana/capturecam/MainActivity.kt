@@ -2133,11 +2133,17 @@ class MainActivity : AppCompatActivity() {
     private fun cancelItem() {
         inAngleSequence = false
         hideReadyButton()
+        // stopAndReturnToCenter() only halts in-flight motion (a neutral
+        // frame) -- it does NOT undo accumulated pan/tilt drift, unlike the
+        // normal angle2-completion path. "Job done = return to center"
+        // applies here too: undo the real drift, THEN stop/reset.
         rsc2.stopAndReturnToCenter()
-        if (launchedFromBrowser) {
-            finish()
-        } else {
-            resetForNewItem(Phase.JEWEL)
+        undoCenteringThenAdvance {
+            if (launchedFromBrowser) {
+                finish()
+            } else {
+                resetForNewItem(Phase.JEWEL)
+            }
         }
     }
 
