@@ -225,6 +225,13 @@ class MainActivity : AppCompatActivity() {
     private var lastPersistedTiltMs = 0
     private var centeringAttempts = 0
 
+    // Last-known upright-normalized center of the locked gold object, used
+    // by bestGoldObjectBox() to reject a same-tick jump onto an unrelated
+    // gold cluster elsewhere in frame (see MAX_TARGET_JUMP). Reset whenever
+    // tracking restarts for a new item/angle so a fresh search isn't
+    // artificially constrained to the previous item's position.
+    private var lockedBoxCenter: android.graphics.PointF? = null
+
     private enum class CenterAxis { NONE, PAN, TILT }
     // Which axis the LAST centering nudge moved, its sign, and its actual
     // duration -- lets the next call detect "that nudge just lost the
