@@ -1434,30 +1434,34 @@ class MainActivity : AppCompatActivity() {
 
     /** ML Kit detected-object box (upright-normalized, same space the
      * on-screen overlay already trusts) that actually contains gold/warm
-     * MaterialDetector points -- NOT just the largest box.
+     * MaterialDetector points -- NOT just the largest box, and NEVER a
+     * non-gold fallback. Every consumer of this function (the arm gate via
+     * detectedNow(), zoom-climb occupancy, the 75%-occupancy hard capture
+     * gate, centering) is gold-exclusive by construction: they all read
+     * this one function.
      *
-     * Real bug found live (2026-08-18): a small gold ring placed on/beside
-     * a large blue display box -- ML Kit's generic (color-blind) object
-     * detector reported the BOX as a detected object too, and being much
-     * larger than the ring, the old "just pick the biggest box" heuristic
-     * always won with the box. Every downstream consumer (centering, zoom-
-     * climb, the 75%-occupancy hard gate) then chased the wrong object:
-     * coverage stayed near zero, centering never converged, capture never
-     * fired -- exactly the observed "stuck re-centering forever" symptom.
-     * Preferring the box with the most gold-point overlap fixes this
-     * directly: ML Kit may find multiple candidate "objects", but only one
-     * of them is actually gold-colored.
-     * Falls back to the old largest-box heuristic only when there's no
-     * material evidence to disambiguate with (e.g. the very first tick
-     * before MaterialDetector has run) -- fails open rather than losing
-     * the box entirely. */
-    private fun bestObjectBox(): RectF? {
-        val boxes = latestObjectBoxesUpright
-        if (boxes.isEmpty()) return null
-        val gold = bestGoldObjectBox()
-        if (gold != null) return gold
-        return boxes.maxByOrNull { it.width() * it.height() }
-    }
+     * Real bug found live (2026-08-18), in two parts:
+     * 1. A small gold ring placed on/beside a large blue display box -- ML
+     *    Kit's generic (color-blind) object detector reported the BOX as a
+     *    detected object too, and being much larger than the ring, the old
+     *    "just pick the biggest box" heuristic always won with the box.
+     *    Every downstream consumer then chased the wrong object: coverage
+     *    stayed near zero, centering never converged, capture never fired.
+     * 2. The FIRST fix only made this function PREFER a gold box, still
+     *    falling back to the largest non-gold box when no gold overlap
+     *    existed that tick. That fallback is exactly how the pipeline could
+     *    still arm/climb-zoom/report high occupancy against the box (or any
+     *    other ML Kit object) whenever gold momentarily had no overlap --
+     *    confirmed live: occupancy read 47-55% and coverageOk=true while
+     *    the actual ring had already walked out of frame entirely. Per
+     *    explicit correction ("gold is not the priority... investigate"),
+     *    removed the fallback: this now returns null, not a substitute
+     *    object, whenever there's no real gold evidence. Every caller
+     *    already fails closed on null (meetsHardCaptureRules, the centering
+     *    "lost the ornament" branch, etc.) -- that fail-closed behavior is
+     *    exactly correct here: better to stall/re-search than to
+     *    center/zoom/capture against the wrong object. */
+    private fun bestObjectBox(): RectF? = bestGoldObjectBox()
 
     /** Same ML Kit box selection as bestObjectBox(), but returns null
      * (never a fallback) when no candidate box actually contains gold/warm
