@@ -613,6 +613,122 @@ def _segment_paths_async(paths: list) -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
+# Composite layout constants (matches the approved reference layout: full-
+# width MAIN VIEW on top, LEFT ANGLE / RIGHT ANGLE side-by-side below, bold
+# uppercase caption under each panel, thin light-grey dividers, white
+# background). Sized for catalogue/web use, not print.
+_STITCH_PANEL_W = 900
+_STITCH_MAIN_H = 900
+_STITCH_SIDE_H = 620
+_STITCH_PAD = 24
+_STITCH_LABEL_H = 60
+_STITCH_BG = (255, 255, 255)
+_STITCH_DIVIDER = (225, 225, 225)
+_STITCH_TEXT = (30, 30, 30)
+
+
+def _stitch_font(size):
+    from PIL import ImageFont
+    for candidate in ("arialbd.ttf", "Arial Bold.ttf", "DejaVuSans-Bold.ttf"):
+        try:
+            return ImageFont.truetype(candidate, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _stitch_fit(img, box_w, box_h):
+    """Letterbox-fit (preserve aspect, center on white) into box_w x box_h --
+    matches the reference example's clean, uncropped product-shot panels
+    rather than a center-crop that could clip part of the ornament."""
+    from PIL import Image
+    scale = min(box_w / img.width, box_h / img.height)
+    new_w, new_h = max(1, int(img.width * scale)), max(1, int(img.height * scale))
+    resized = img.resize((new_w, new_h), Image.LANCZOS)
+    panel = Image.new("RGB", (box_w, box_h), _STITCH_BG)
+    panel.paste(resized, ((box_w - new_w) // 2, (box_h - new_h) // 2))
+    return panel
+
+
+def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: str) -> None:
+    """Composes MAIN/ANGLE_1/ANGLE_2 into one labeled reference-style image:
+    full-width MAIN VIEW on top, LEFT ANGLE + RIGHT ANGLE side-by-side below.
+    angle1 -> LEFT ANGLE, angle2 -> RIGHT ANGLE, matching this tool's own
+    capture sequence naming (no independent left/right signal exists to
+    verify against; this is the documented convention going forward).
+    Fail-open by design (same convention as sam_locate.tight_crop): any
+    error here must never block or corrupt the underlying save_multi()
+    result, which has already succeeded by the time this runs.
+    """
+    from PIL import Image, ImageDraw
+    log = logging.getLogger("capture_tool")
+    try:
+        main_img = Image.open(main_path).convert("RGB")
+        angle1_img = Image.open(angle1_path).convert("RGB")
+        angle2_img = Image.open(angle2_path).convert("RGB")
+
+        canvas_w = _STITCH_PAD * 3 + _STITCH_PANEL_W
+        side_w = (_STITCH_PANEL_W - _STITCH_PAD) // 2
+        canvas_h = (_STITCH_PAD * 3 + _STITCH_MAIN_H + _STITCH_LABEL_H
+                    + _STITCH_SIDE_H + _STITCH_LABEL_H)
+        canvas = Image.new("RGB", (canvas_w, canvas_h), _STITCH_BG)
+        draw = ImageDraw.Draw(canvas)
+        label_font = _stitch_font(28)
+
+        def _panel_with_label(img, box_w, box_h, x, y, label):
+            canvas.paste(_stitch_fit(img, box_w, box_h), (x, y))
+            bbox = draw.textbbox((0, 0), label, font=label_font)
+            tw = bbox[2] - bbox[0]
+            draw.text((x + (box_w - tw) // 2, y + box_h + 16), label,
+                       font=label_font, fill=_STITCH_TEXT)
+
+        x0 = _STITCH_PAD
+        y0 = _STITCH_PAD
+        _panel_with_label(main_img, _STITCH_PANEL_W, _STITCH_MAIN_H, x0, y0, "MAIN VIEW")
+
+        divider_y = y0 + _STITCH_MAIN_H + _STITCH_LABEL_H
+        draw.line([(x0, divider_y), (x0 + _STITCH_PANEL_W, divider_y)], fill=_STITCH_DIVIDER, width=2)
+
+        y1 = divider_y + _STITCH_PAD
+        _panel_with_label(angle1_img, side_w, _STITCH_SIDE_H, x0, y1, "LEFT ANGLE")
+        x1 = x0 + side_w + _STITCH_PAD
+        _panel_with_label(angle2_img, side_w, _STITCH_SIDE_H, x1, y1, "RIGHT ANGLE")
+
+        canvas.save(out_path, quality=92)
+        log.info("stitch_angles wrote %s", out_path)
+    except Exception:
+        log.exception("stitch_angles FAILED for %s/%s/%s -> %s",
+                       main_path, angle1_path, angle2_path, out_path)
+
+
+def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str, stitched_path: str) -> None:
+    """save_multi's version of _segment_paths_async: crops all three poses
+    first (same as the generic helper), THEN stitches the composite from the
+    already-cropped results -- stitching before cropping would bake the raw,
+    uncropped gimbal framing into the permanent composite instead of the
+    clean ornament-only shot."""
+    if not sam_locate.available():
+        logging.getLogger("capture_tool").warning(
+            "sam_locate.available() is False -- skipping segmentation+stitch for %s", stitched_path
+        )
+        return
+
+    def _run():
+        log = logging.getLogger("capture_tool")
+        try:
+            for path in (main_path, angle1_path, angle2_path):
+                try:
+                    result_path, angle = sam_locate.tight_crop(path, path, expect=1, straighten=True)
+                    log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
+                except Exception:
+                    log.exception("sam_locate.tight_crop FAILED for %s", path)
+        finally:
+            sam_locate.release()
+        stitch_angles(main_path, angle1_path, angle2_path, stitched_path)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 @_stock_write_guard
 def save_pair(category: str, jewel_bytes: bytes, tag_bytes: bytes, tag_code: str,
              staff_name: str = "", override_duplicate: bool = False,
