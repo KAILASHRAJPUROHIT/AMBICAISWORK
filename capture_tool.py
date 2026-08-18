@@ -676,7 +676,7 @@ def _segment_paths_async(paths: list) -> None:
         try:
             for path in paths:
                 try:
-                    result_path, angle = sam_locate.tight_crop(path, path, expect=1, straighten=True)
+                    result_path, angle = sam_locate.tight_crop(path, path, expect=1, straighten=False)
                     log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
                 except Exception:
                     log.exception("sam_locate.tight_crop FAILED for %s", path)
@@ -793,7 +793,7 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
         try:
             for path in (main_path, angle1_path, angle2_path):
                 try:
-                    result_path, angle = sam_locate.tight_crop(path, path, expect=1, straighten=True)
+                    result_path, angle = sam_locate.tight_crop(path, path, expect=1, straighten=False)
                     log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
                 except Exception:
                     log.exception("sam_locate.tight_crop FAILED for %s", path)
