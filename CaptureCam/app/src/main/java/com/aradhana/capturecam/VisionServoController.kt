@@ -248,7 +248,15 @@ class VisionServoController(private val log: (String) -> Unit) {
         "${"%.2f".format(b.cx)},${"%.2f".format(b.cy)},${"%.2f".format(b.w)},${"%.2f".format(b.h)}"
 
     companion object {
-        const val STALE_DISCARD_MS = 300L
+        // Measured against the real pipeline (RTX 5070, warm Grounding
+        // DINO): server_latency alone runs ~350-400ms, plus JPEG encode +
+        // network -- observed round-trip age 440-550ms. 300ms was an
+        // unmeasured design-discussion number and discarded EVERY real
+        // detection outright. 900ms gives margin above the observed ceiling
+        // while still rejecting a truly hung/backed-up response -- DINO is
+        // the periodic corrector here, not the per-frame loop (MIL owns
+        // that), so this budget is intentionally generous.
+        const val STALE_DISCARD_MS = 900L
         const val CENTER_DEADBAND = 0.04f
         const val ZOOM_DEADBAND = 0.05f
         const val CAPTURE_MIN_OCCUPANCY = 0.75f
