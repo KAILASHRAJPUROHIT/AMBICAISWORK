@@ -116,6 +116,19 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+    // Explicit, on-demand recenter -- undoes the persisted net pan/tilt
+    // drift (loadCenterDrift()'s reference) and physically returns the
+    // gimbal to the last confirmed center, regardless of which pipeline
+    // (legacy hunt/centering or VisionServoController) produced the drift.
+    // adb shell am broadcast -a com.aradhana.capturecam.RECENTER
+    private val recenterReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            Log.i(TAG, "recenterReceiver: pan=$centeringPanMs tilt=$centeringTiltMs")
+            undoCenteringThenAdvance {
+                Log.i(TAG, "recenterReceiver: done")
+            }
+        }
+    }
     private var angle1Jpeg: ByteArray? = null
     private var angle2Jpeg: ByteArray? = null
     // Set for the whole MAIN-accepted -> angle1 -> angle2 sequence. tickJewel()
