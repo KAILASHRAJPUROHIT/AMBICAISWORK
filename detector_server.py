@@ -51,22 +51,36 @@ def decode_jpeg_b64(jpeg_b64: str):
     return cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
 
+# Real jewellery, even held far from the camera, was specced at "as small
+# as 5%" (project rule) -- a box below this on either axis is far more
+# likely a single-pixel-scale texture/reflection false positive than an
+# actual piece. Confirmed live: DINO returned a 1%x1% box on a bare, empty
+# capture surface (a scratch/crease line), which the gimbal chased to 3.4x
+# zoom before this filter existed. Comfortably below the 5% spec floor so
+# it never clips a real distant piece, well above the observed noise size.
+MIN_BOX_FRACTION = 0.02
+
+
 def detect(bgr) -> dict:
     """Runs Grounding DINO on one frame, returns the single best jewellery
     box (already sorted by DINO's own confidence-adjacent ranking inside
     _dino_boxes -- see that function's doc comment) as a normalized dict,
-    or detected=False if nothing crossed BOX_THRESHOLD."""
+    or detected=False if nothing crossed BOX_THRESHOLD or survives the
+    minimum-size sanity filter."""
     h, w = bgr.shape[:2]
     boxes = sam_locate._dino_boxes(bgr, expect=1, box_threshold=BOX_THRESHOLD)
     if not boxes:
         return {"detected": False}
     x0, y0, x1, y1 = boxes[0]
+    bw, bh = (x1 - x0) / w, (y1 - y0) / h
+    if bw < MIN_BOX_FRACTION or bh < MIN_BOX_FRACTION:
+        return {"detected": False}
     return {
         "detected": True,
         "x": x0 / w,
         "y": y0 / h,
-        "w": (x1 - x0) / w,
-        "h": (y1 - y0) / h,
+        "w": bw,
+        "h": bh,
     }
 
 
