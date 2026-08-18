@@ -1,6 +1,8 @@
 package com.aradhana.capturecam
 
 import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
@@ -150,6 +152,31 @@ class FocusZoomController {
             .setCaptureRequestOption(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START)
             .build()
         control.setCaptureRequestOptions(options)
+        // CRITICAL: Camera2CameraControl.setCaptureRequestOptions() is a
+        // PERSISTENT modifier applied to every REPEATING capture request
+        // from here on, not a single one-shot frame -- unlike a raw
+        // CameraCaptureSession where you'd send one capture() with the
+        // trigger then let the repeating request resume untouched.
+        // CONTROL_AF_TRIGGER_START is supposed to be an edge (one request
+        // only); leaving it set on every repeating request instead keeps
+        // re-triggering a fresh AF sweep every single frame, so Camera2
+        // never gets a chance to settle into FOCUSED_LOCKED -- it just
+        // restarts forever. Root-caused live (2026-08-18): af state sat on
+        // "active-scan" for 60+ seconds straight on an already-sharp,
+        // stationary, well-lit subject, which is not a real AF search
+        // duration for that scenario. Clearing the trigger back to IDLE
+        // shortly after (AF_MODE stays AUTO so the search that's already
+        // in flight isn't cancelled) lets the one sweep actually complete
+        // and report a definitive LOCKED/NOT_FOCUSED_LOCKED result instead
+        // of being restarted every ~150ms tick.
+        Handler(Looper.getMainLooper()).postDelayed({
+            val stillBound = camera2Control ?: return@postDelayed
+            val idleOptions = CaptureRequestOptions.Builder()
+                .setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO)
+                .setCaptureRequestOption(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_IDLE)
+                .build()
+            stillBound.setCaptureRequestOptions(idleOptions)
+        }, 200L)
     }
 
     /** Definitive post-trigger lock state -- only meaningful right after
