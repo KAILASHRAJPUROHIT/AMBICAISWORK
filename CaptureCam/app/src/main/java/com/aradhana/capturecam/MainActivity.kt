@@ -1326,6 +1326,23 @@ class MainActivity : AppCompatActivity() {
         // more total warm/silver points than any small candidate box did.
         // Density fixes this: a small box that's mostly real metal wins
         // over a large box that's mostly not, regardless of point totals.
+        // Spatial continuity: once locked onto an object, only candidates
+        // near its last-known position are eligible -- a real showroom has
+        // OTHER real gold jewellery in it (display cases, other pieces),
+        // and pure density can legitimately favor one of those over the
+        // item actually in the capture box the instant the gimbal drifts
+        // even slightly. Confirmed live (2026-08-18): with the attempt cap
+        // removed, centering kept "succeeding" against whatever gold
+        // cluster scored highest each tick, walked the gimbal off the ring
+        // in the capture box and onto full display cases across the room,
+        // several tilt-steps away, with the RSC2 too dumb to know the
+        // difference -- it was still "centering," just on the wrong thing.
+        // MAX_TARGET_JUMP is generous (half the frame) so real tracking of
+        // an object moving/zooming tick-to-tick is never blocked, but a
+        // jump across the whole room is rejected -- return null (lost) so
+        // the caller's existing lost-target recovery handles it, rather
+        // than silently re-seeding onto something else.
+        val anchor = lockedBoxCenter
         var bestBox: RectF? = null
         var bestDensity = 0f
         for (box in boxes) {
@@ -1334,6 +1351,12 @@ class MainActivity : AppCompatActivity() {
                 box.contains(up[0], up[1])
             }
             if (count == 0) continue
+            if (anchor != null) {
+                val bcx = (box.left + box.right) / 2f
+                val bcy = (box.top + box.bottom) / 2f
+                val jump = kotlin.math.hypot((bcx - anchor.x).toDouble(), (bcy - anchor.y).toDouble()).toFloat()
+                if (jump > MAX_TARGET_JUMP) continue
+            }
             val rawArea = box.width() * box.height()
             val area = if (rawArea > 1e-4f) rawArea else 1e-4f
             val density = count / area
@@ -1341,6 +1364,11 @@ class MainActivity : AppCompatActivity() {
                 bestDensity = density
                 bestBox = box
             }
+        }
+        if (bestBox != null) {
+            val cx = (bestBox.left + bestBox.right) / 2f
+            val cy = (bestBox.top + bestBox.bottom) / 2f
+            lockedBoxCenter = android.graphics.PointF(cx, cy)
         }
         return bestBox
     }
