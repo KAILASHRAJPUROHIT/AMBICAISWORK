@@ -356,9 +356,32 @@ def _rotate_keep(bgr: np.ndarray, mask: np.ndarray, ang: float):
     return bgr, mask
 
 
+def _composite_on_white(bgr_crop: np.ndarray, mask_crop: np.ndarray, feather: int = 3) -> np.ndarray:
+    """Cuts bgr_crop out against a white background using mask_crop (SAM2's
+    own segmentation, already proven correct by being what picked this exact
+    crop region) instead of asking a SEPARATE, general-purpose background-
+    removal model to re-guess the foreground/background split from scratch.
+    Confirmed live (2026-08-18): RMBG-2.0 completely failed to remove a dark,
+    textured, branded display box even at ~45% object occupancy in the
+    frame -- not a framing/crop-tightness problem, the model just doesn't
+    handle that class of background. SAM2's mask is already known-good here
+    because it's the same mask that produced the (visually correct) crop
+    boundary. A small Gaussian blur of the mask before compositing avoids a
+    hard-edged cutout look (jagged pixel-level aliasing) in favour of a soft
+    antialiased edge, same effect RMBG's own alpha matte was providing when
+    it worked at all."""
+    mask_f = mask_crop.astype(np.float32)
+    if feather > 0:
+        k = feather * 2 + 1
+        mask_f = cv2.GaussianBlur(mask_f, (k, k), 0)
+    alpha = np.clip(mask_f, 0.0, 1.0)[:, :, None]
+    white = np.full_like(bgr_crop, 255)
+    return (bgr_crop.astype(np.float32) * alpha + white.astype(np.float32) * (1.0 - alpha)).astype(np.uint8)
+
+
 def tight_crop(src_path: str, out_path: str, expect: int = 1,
                margin: float = 0.10, straighten: bool = True,
-               max_tilt: float = 30.0):
+               max_tilt: float = 30.0, remove_background: bool = True):
     """Crop a plate down to just the ornament(s). Returns (path, info).
 
     When ``straighten`` is on, the crop is levelled first so the piece sits
@@ -367,6 +390,14 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
     reference yields a tilted catalogue image that then has to be rotated
     after generation — resampling an already-generated image and cutting into
     its edges. Straightening the input costs nothing.
+
+    When ``remove_background`` is on (single-piece crops only -- the
+    side-by-side multi-piece path has no single aligned mask to reuse), the
+    SAME SAM2 mask that determined the crop boundary is reused to composite
+    the ornament onto white, replacing a separate background-removal pass
+    -- see _composite_on_white()'s doc comment for why this replaced RMBG-2.0
+    entirely for this path (2026-08-18). Fails open to the plain crop (no
+    background removal) if no usable mask survived to this point.
     """
     bgr = cv2.imread(src_path)
     if bgr is None or not available():
@@ -378,6 +409,7 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
     if not boxes:
         return src_path, None
 
+    aligned_mask = _last_mask
     tilt = None
     if straighten and expect == 1:
         try:
@@ -386,6 +418,7 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
                 tilt = _upright_angle(m)
                 if 0.5 < abs(tilt) <= max_tilt:
                     bgr, m2 = _rotate_keep(bgr, m, tilt)
+                    aligned_mask = m2
                     ys, xs = np.nonzero(m2)
                     if len(xs) > 50:
                         H2, W2 = bgr.shape[:2]
