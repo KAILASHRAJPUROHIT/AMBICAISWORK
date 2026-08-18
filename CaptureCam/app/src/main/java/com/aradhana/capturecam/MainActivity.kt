@@ -357,7 +357,8 @@ class MainActivity : AppCompatActivity() {
         // If ML Kit hasn't found a box at all, this rule fails closed
         // (can't verify compliance -> don't capture) rather than falling
         // back to a metric that can't represent the requirement.
-        private const val CAPTURE_MIN_OCCUPANCY = 0.75f
+        // Was 0.75 -- explicit revised spec (2026-08-18): fill frame > 60%.
+        private const val CAPTURE_MIN_OCCUPANCY = 0.60f
         private const val MAX_FOCUS_RETRIES = 2
         private const val ZOOM_BACKOFF_RATIO = 0.8f
         // Gentler per-step ratio (was 1.15x) and a real pause between steps
