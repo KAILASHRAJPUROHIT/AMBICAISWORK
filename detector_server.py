@@ -59,6 +59,16 @@ def decode_jpeg_b64(jpeg_b64: str):
 # zoom before this filter existed. Comfortably below the 5% spec floor so
 # it never clips a real distant piece, well above the observed noise size.
 MIN_BOX_FRACTION = 0.02
+# 75% occupancy is the CAPTURE target reached only after zooming in close;
+# an initial wide-shot detection already this dominant is far more likely
+# a false-positive match on a large background/prop/hand region than the
+# actual piece. Confirmed live: DINO returned a 22%x98% box (near full
+# frame height) on the same session, dragging the gimbal off target.
+MAX_BOX_FRACTION = 0.70
+# A real jewellery piece's 2D bounding box is rarely this elongated from a
+# top-down/side capture angle -- the 22%x98% false positive above had an
+# aspect ratio of ~4.5:1, well past anything a ring/pendant/bangle produces.
+MAX_ASPECT_RATIO = 3.0
 
 
 def detect(bgr) -> dict:
@@ -66,7 +76,7 @@ def detect(bgr) -> dict:
     box (already sorted by DINO's own confidence-adjacent ranking inside
     _dino_boxes -- see that function's doc comment) as a normalized dict,
     or detected=False if nothing crossed BOX_THRESHOLD or survives the
-    minimum-size sanity filter."""
+    size/aspect-ratio sanity filters."""
     h, w = bgr.shape[:2]
     boxes = sam_locate._dino_boxes(bgr, expect=1, box_threshold=BOX_THRESHOLD)
     if not boxes:
@@ -74,6 +84,11 @@ def detect(bgr) -> dict:
     x0, y0, x1, y1 = boxes[0]
     bw, bh = (x1 - x0) / w, (y1 - y0) / h
     if bw < MIN_BOX_FRACTION or bh < MIN_BOX_FRACTION:
+        return {"detected": False}
+    if bw > MAX_BOX_FRACTION or bh > MAX_BOX_FRACTION:
+        return {"detected": False}
+    aspect = max(bw, bh) / max(min(bw, bh), 1e-6)
+    if aspect > MAX_ASPECT_RATIO:
         return {"detected": False}
     return {
         "detected": True,
