@@ -297,6 +297,11 @@ class VisionServoController(private val log: (String) -> Unit) {
         const val STALE_DISCARD_MS = 900L
         const val CENTER_DEADBAND = 0.04f
         const val ZOOM_DEADBAND = 0.05f
+        // Looser than CENTER_DEADBAND (0.04) deliberately -- this only
+        // gates whether zoom-IN may run at all, not full lock criteria.
+        // Requiring full centering before any zoom would stall framing
+        // progress on a target that's close-but-not-perfectly centered.
+        const val ZOOM_ALLOW_DEADBAND = 0.15f
         const val CAPTURE_MIN_OCCUPANCY = 0.75f
         const val ZOOM_STEP = 0.05f
         const val REACQUIRE_TIMEOUT_MS = 4000L
