@@ -731,6 +731,7 @@ def _stitch_straighten_and_enlarge(img):
     whole frame reads as "content", a prop-heavy shot, etc.), since a bad
     guess here is worse than leaving the framing as-is.
     """
+    from PIL import Image
     arr = np.array(img.convert("RGB"))
     gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
     # Background (removed -> white, or not-yet-removed -> often still
