@@ -1318,7 +1318,8 @@ class MainActivity : AppCompatActivity() {
                 box.contains(up[0], up[1])
             }
             if (count == 0) continue
-            val area = max(box.width() * box.height(), 1e-4f)
+            val rawArea = box.width() * box.height()
+            val area = if (rawArea > 1e-4f) rawArea else 1e-4f
             val density = count / area
             if (density > bestDensity) {
                 bestDensity = density
