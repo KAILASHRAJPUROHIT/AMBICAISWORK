@@ -1161,10 +1161,29 @@ class MainActivity : AppCompatActivity() {
         updateTrackingRegionFor(result)
 
         if (result == null || !result.material) {
-            // Lost the piece -- likely walked out of frame on a zoom step
-            // (digital/hybrid zoom on this class of lens is still centre-
-            // anchored). Ease back to re-acquire rather than climbing
-            // further on an empty frame.
+            // Real bug found live (2026-08-18): once armed, MaterialDetector
+            // scans only the central guide-box region (by design -- ignores
+            // background clutter at the margins once something's actually
+            // being tracked). If the item sits OFF to one side (e.g. still
+            // being centered, or the operator placed it near frame edge),
+            // MaterialDetector's restricted scan genuinely cannot see it, so
+            // result.material stays false FOREVER even with the real piece
+            // clearly visible in the wider frame. This branch used to only
+            // ease zoom back and idle -- with zoom already at 1.0x there was
+            // nothing left to ease, so it just displayed "Re-centre the
+            // item..." and did nothing, stalling indefinitely. ML Kit's
+            // object detector scans the FULL frame regardless of guide-box
+            // restriction, so if it has a box, use it to actively nudge
+            // toward center instead of passively waiting for the operator.
+            val mlBox = bestObjectBox()
+            if (mlBox != null && result != null && attemptCenteringCorrection(result)) {
+                setStatus("Re-centre the item…", ready = false)
+                return
+            }
+            // Lost the piece entirely (no ML Kit box either) -- likely
+            // walked out of frame on a zoom step (digital/hybrid zoom on
+            // this class of lens is still centre-anchored). Ease back to
+            // re-acquire rather than climbing further on an empty frame.
             val zoom = focusZoom.currentZoomRatio()
             if (zoom > 1.05f) {
                 smoothZoomTo((zoom * ZOOM_BACKOFF_RATIO).coerceAtLeast(1f))
