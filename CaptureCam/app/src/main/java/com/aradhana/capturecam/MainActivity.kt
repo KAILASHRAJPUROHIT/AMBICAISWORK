@@ -1414,10 +1414,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun huntStatusText(): String = when (huntPhase) {
         HuntPhase.SCAN_DOWN -> "Searching below…"
-        HuntPhase.RETURN_TILT -> "Returning to level…"
-        HuntPhase.SCAN_LEFT -> "Searching left…"
-        HuntPhase.RETURN_PAN -> "Returning to center…"
-        HuntPhase.SCAN_RIGHT -> "Searching right…"
+        HuntPhase.SCAN_LEFT -> "Searching below-left…"
+        HuntPhase.RETURN_PAN -> "Returning to center (still below)…"
+        HuntPhase.SCAN_RIGHT -> "Searching below-right…"
         HuntPhase.GIVE_UP -> "Returning home…"
     }
 
