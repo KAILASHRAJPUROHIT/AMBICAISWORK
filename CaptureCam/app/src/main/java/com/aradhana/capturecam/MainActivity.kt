@@ -471,7 +471,13 @@ class MainActivity : AppCompatActivity() {
         // derived from real testing. Needs a live one-axis sweep-to-
         // hard-stop test (same technique used to confirm axis mapping) to
         // replace this with an actual degree-based limit.
-        private const val TILT_MS_LIMIT = 2400
+        // Raised from 2400 (2026-08-18): confirmed live this was too
+        // conservative for a real starting position -- centering hit this
+        // ceiling while the item was still well off-center, gave up, and
+        // (before a separate fix) let zoom climb anyway with no further
+        // gimbal correction. Still a placeholder, still well under the
+        // ~326° full range, just less prematurely restrictive.
+        private const val TILT_MS_LIMIT = 5000
         // Blind search (huntStep()) -- only runs before anything has ever
         // been detected for this item. Bigger, longer steps than fine
         // centering (CENTERING_*) since this is covering ground, not
