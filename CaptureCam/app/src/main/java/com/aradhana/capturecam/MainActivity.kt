@@ -889,6 +889,10 @@ class MainActivity : AppCompatActivity() {
                 val durMs = (SERVO_MIN_MS + mag * (SERVO_MAX_MS - SERVO_MIN_MS)).toLong()
                 val deflection = (mag * SERVO_MAX_DEFLECTION).toInt()
                 val axis = DumlProtocol.AXIS_CENTER + (if (cmd.pan > 0) deflection else -deflection)
+                // Same sign convention as the legacy centering code's
+                // centeringPanMs (axis3 above center/pan-right = positive) --
+                // shared drift tracker, see loadCenterDrift()'s doc comment.
+                centeringPanMs += (if (cmd.pan > 0) durMs else -durMs).toInt()
                 rsc2.moveOut(axis3 = axis, durationMs = durMs, settleMs = 0L) {}
             } else {
                 val mag = abs(cmd.tilt)
@@ -897,6 +901,7 @@ class MainActivity : AppCompatActivity() {
                 // Positive tilt error (ey<0 handled inside VisionServoController)
                 // maps the same direction sense as the existing centering code.
                 val axis = DumlProtocol.AXIS_CENTER + (if (cmd.tilt > 0) deflection else -deflection)
+                centeringTiltMs += (if (cmd.tilt > 0) durMs else -durMs).toInt()
                 rsc2.moveOut(axis1 = axis, durationMs = durMs, settleMs = 0L) {}
             }
         }
