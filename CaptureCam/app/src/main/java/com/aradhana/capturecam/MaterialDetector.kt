@@ -22,8 +22,16 @@ object MaterialDetector {
         fun area(): Float = max(0f, x1 - x0) * max(0f, y1 - y0)
     }
 
-    /** Normalized (0..1, against the raw analysis frame) point. */
-    data class Point(val x: Float, val y: Float)
+    /** Normalized (0..1, against the raw analysis frame) point. [gold] is
+     * true only for actual gold-hue metal (looksLikeGold), false for
+     * silver/sparkle points -- lets gold-exclusive consumers (see
+     * MainActivity.bestGoldObjectBox()) filter out silver-classified false
+     * positives, e.g. a bright specular highlight on a glossy display box
+     * passing looksLikeSilver's loose low-saturation/high-luma check.
+     * Confirmed live (2026-08-18): with no ornament in frame at all, the
+     * tracker still armed on a display box's shiny top edge because those
+     * highlight pixels passed the silver classifier. */
+    data class Point(val x: Float, val y: Float, val gold: Boolean = false)
 
     data class Result(
         val material: Boolean,
@@ -212,6 +220,7 @@ object MaterialDetector {
         val cols = max(1, (endX - startX) / step)
         val rows = max(1, (endY - startY) / step)
         val mask = BooleanArray(cols * rows)
+        val goldMask = BooleanArray(cols * rows)
         val sparkleCandidate = BooleanArray(cols * rows)
         var warm = 0
 
@@ -237,6 +246,7 @@ object MaterialDetector {
                 val cell = row * cols + col
                 if (isMetal) {
                     mask[cell] = true
+                    if (looksLikeGold(rgb[0], rgb[1], rgb[2])) goldMask[cell] = true
                     warm += 1
                 } else if (looksLikeSparkle(rgb[0], rgb[1], rgb[2])) {
                     sparkleCandidate[cell] = true
@@ -257,7 +267,7 @@ object MaterialDetector {
                 if (!keep) continue
                 val x = min(width - 1, startX + col * step)
                 val yPix = min(height - 1, startY + row * step)
-                points.add(Point(x.toFloat() / width, yPix.toFloat() / height))
+                points.add(Point(x.toFloat() / width, yPix.toFloat() / height, gold = goldMask[cell]))
             }
         }
 

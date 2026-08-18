@@ -147,6 +147,17 @@ class MainActivity : AppCompatActivity() {
     private var centeringTiltMs = 0
     private var centeringAttempts = 0
 
+    // Last-known upright-normalized center of the locked gold object, used
+    // by bestGoldObjectBox() to reject a same-tick jump onto an unrelated
+    // gold cluster elsewhere in frame (see MAX_TARGET_JUMP). Reset whenever
+    // tracking restarts for a new item/angle so a fresh search isn't
+    // artificially constrained to the previous item's position.
+    private var lockedBoxCenter: android.graphics.PointF? = null
+    // Rotation MaterialDetector's points were sampled in for THIS tick --
+    // needed by bestObjectBox() to convert its points into the same
+    // upright-normalized space latestObjectBoxesUpright already uses.
+    @Volatile private var lastMaterialRotationDegrees = 0
+
     private enum class CenterAxis { NONE, PAN, TILT }
     // Which axis the LAST centering nudge moved, its sign, and its actual
     // duration -- lets the next call detect "that nudge just lost the
@@ -205,7 +216,10 @@ class MainActivity : AppCompatActivity() {
 
     // ---- Pipeline state (mirrors capture.html's module-level _quality* vars) ----
     private enum class Phase { JEWEL, TAG, UPLOADING }
-    private var phase = Phase.JEWEL
+    // TAG now runs FIRST (2026-08-18, task #76: scan the tag before the
+    // jewel photos, not after) -- default phase and every fresh-item entry
+    // point below changed from JEWEL to TAG to match.
+    private var phase = Phase.TAG
     private var armed = false
     private var armedAt = 0L
     private var stepFocusAttempts = 0
@@ -343,6 +357,12 @@ class MainActivity : AppCompatActivity() {
         // opposite total can be undone in one shot at the end of the item.
         private const val CENTERING_DEFLECTION = 120
         private const val CENTERING_DEADBAND = 0.06f
+        // Max upright-normalized distance a newly-selected gold box may be
+        // from the previously locked one and still be accepted as "the same
+        // object" -- generous enough for real tick-to-tick movement/zoom,
+        // tight enough to reject a jump onto an unrelated gold cluster
+        // (e.g. a display case) elsewhere in frame. See bestGoldObjectBox().
+        private const val MAX_TARGET_JUMP = 0.35f
         // Nudge duration scales with how far off-center the object is
         // (centeringDurationFor()): CENTERING_TICK_MS at a small offset,
         // climbing linearly to CENTERING_TICK_MS_MAX at a half-frame
@@ -380,7 +400,18 @@ class MainActivity : AppCompatActivity() {
         // derived from real testing. Needs a live one-axis sweep-to-
         // hard-stop test (same technique used to confirm axis mapping) to
         // replace this with an actual degree-based limit.
-        private const val TILT_MS_LIMIT = 2400
+        // Raised from 2400 (2026-08-18): confirmed live this was too
+        // conservative for a real starting position -- centering hit this
+        // ceiling while the item was still well off-center, gave up, and
+        // let zoom climb anyway with no further gimbal correction. Still a
+        // placeholder, still well under the ~326° full range, just less
+        // prematurely restrictive.
+        private const val TILT_MS_LIMIT = 5000
+        // Pan has no mechanical hard-stop the way tilt does (full 360°
+        // rotation), but still needs a budget cap -- see the doc comment at
+        // its call site in attemptCenteringCorrection() for why (target-jump
+        // runaway, 2026-08-18). Same order of magnitude as TILT_MS_LIMIT.
+        private const val PAN_MS_LIMIT = 5000
         // Blind search (huntStep()) -- only runs before anything has ever
         // been detected for this item. Bigger, longer steps than fine
         // centering (CENTERING_*) since this is covering ground, not
@@ -403,13 +434,14 @@ class MainActivity : AppCompatActivity() {
         private const val HUNT_COOLDOWN_MS = 6000L
 
         // ---- DINO+MIL tracking pipeline (checkpoint build) ----
-        // Master switch for the whole pipeline. TRUE for the physical
-        // tracking checkpoint: VisionServoController drives pan/tilt/zoom
-        // once it has a target, subordinating the legacy gold hunt (see the
-        // visionServo.state == SEARCHING gate in huntStep()'s call site).
-        // shutterEnabled on VisionServoController stays false regardless --
-        // no capture call exists anywhere in this pipeline's code path yet.
-        private const val TRACKING_PIPELINE_ACTIVE = true
+        // Master switch for the whole pipeline. Set FALSE (2026-08-18) per
+        // explicit request: go back to the legacy colour+ML-Kit detection
+        // path for production instead of the DINO/MIL vision servo, which
+        // is still unfinished/unreliable (capture stays hard-disabled
+        // whenever this is true regardless). The DINO+MIL work itself is
+        // untouched and left in place on the checkpoint-dino-mil-rsc2-
+        // 2026-08-17 branch for whenever it's picked back up.
+        private const val TRACKING_PIPELINE_ACTIVE = false
         private const val DETECTOR_SEND_INTERVAL_MS = 120L
         private const val DETECTOR_FRAME_LONG_EDGE = 960
         private const val DETECTOR_JPEG_QUALITY = 75
@@ -528,7 +560,7 @@ class MainActivity : AppCompatActivity() {
         setIntent(intent)
         launchedFromBrowser = intent.data?.scheme == "capturecam"
         if (::cameraProvider.isInitialized) {
-            resetForNewItem(Phase.JEWEL)
+            resetForNewItem(Phase.TAG)
         }
         attemptGimbalConnect()
     }
@@ -668,7 +700,7 @@ class MainActivity : AppCompatActivity() {
         )
         camera?.let { focusZoom.bind(it, getSystemService(android.hardware.camera2.CameraManager::class.java)) }
 
-        resetForNewItem(Phase.JEWEL)
+        resetForNewItem(Phase.TAG)
         handler.post(tickRunnable)
     }
 
@@ -712,6 +744,7 @@ class MainActivity : AppCompatActivity() {
                 } else 0f
 
                 val rotation = imageProxy.imageInfo.rotationDegrees
+                lastMaterialRotationDegrees = rotation
                 val boxes = latestObjectBoxesUpright
                 // Once ML Kit has found at least one real object, only trust
                 // MaterialDetector's color/contrast points that actually
@@ -955,7 +988,12 @@ class MainActivity : AppCompatActivity() {
                 tagJpeg = bytes
                 showCapturePreview(
                     bytes,
-                    onProceed = { uploadCapturedSet() },
+                    // Tag is FIRST under the #76 flip -- move on to the
+                    // jewel photos (MAIN/angle1/angle2) instead of
+                    // uploading immediately. resetForNewItem(Phase.JEWEL)
+                    // does not clear tagJpeg/stableTagCode, only jewel-side
+                    // state, so the tag just captured survives into upload.
+                    onProceed = { resetForNewItem(Phase.JEWEL) },
                     onRetake = { retakeTag() },
                     onCancel = { cancelItem() }
                 )
@@ -1251,12 +1289,95 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Largest ML Kit detected-object box (upright-normalized, same space
-     * the on-screen overlay already trusts) -- picks the biggest on the
-     * assumption a small piece on a stand is the dominant object in frame,
-     * same heuristic already implicit in how these boxes filter the dot
-     * overlay above. */
-    private fun bestObjectBox(): RectF? = latestObjectBoxesUpright.maxByOrNull { it.width() * it.height() }
+    /** ML Kit detected-object box (upright-normalized, same space the
+     * on-screen overlay already trusts) that actually contains gold/warm
+     * MaterialDetector points -- NOT just the largest box, and NEVER a
+     * non-gold fallback. Every consumer of this function (arm gate,
+     * zoom-climb occupancy, the occupancy hard capture gate, centering) is
+     * gold-exclusive by construction: they all read this one function.
+     *
+     * Real bug found live (2026-08-18): with the original "just pick the
+     * biggest box" heuristic, ML Kit's generic (colour-blind) object
+     * detector reporting a large prop/display box as a detected object
+     * always won over a small actual ring -- coverage stayed near zero,
+     * centering never converged, capture never fired. Fixed to gold-
+     * exclusive: this returns null, not a substitute object, whenever
+     * there's no real gold evidence. Every caller already fails closed on
+     * null -- that's exactly correct here: better to stall/re-search than
+     * to center/zoom/capture against the wrong object. */
+    private fun bestObjectBox(): RectF? = bestGoldObjectBox()
+
+    /** Same ML Kit box selection as bestObjectBox(), but returns null
+     * (never a fallback) when no candidate box actually contains gold/warm
+     * MaterialDetector points this tick. */
+    private fun bestGoldObjectBox(): RectF? {
+        val boxes = latestObjectBoxesUpright
+        if (boxes.isEmpty()) return null
+        // Gold-hue points ONLY, never silver/sparkle -- per the standing
+        // "focus on gold only, always" rule. Silver's classifier is loose
+        // enough to catch ordinary specular highlights (a glossy display
+        // box's lit edge), which the raw "metal" point set doesn't
+        // distinguish from real jewellery. Confirmed live (2026-08-18):
+        // with literally no ornament in frame, points from the box's shiny
+        // top edge still armed the tracker until this filter was added.
+        val points = latestMaterial?.points?.filter { it.gold }
+        if (points.isNullOrEmpty()) return null
+        val rotation = lastMaterialRotationDegrees
+        // Density (points / box area), NOT raw point count. A large object
+        // (e.g. the display box) accumulates more stray metal-look points
+        // than a small ring purely from having more surface area -- even a
+        // handful of specular-highlight false positives on its glossy edges
+        // can outscore a ring's real points on a raw-count basis. Confirmed
+        // live (2026-08-18): the tracker locked onto the display box's
+        // reflective edge instead of the (absent) ring, because the box had
+        // more total warm/silver points than any small candidate box did.
+        // Density fixes this: a small box that's mostly real metal wins
+        // over a large box that's mostly not, regardless of point totals.
+        //
+        // Spatial continuity: once locked onto an object, only candidates
+        // near its last-known position are eligible -- a real showroom has
+        // OTHER real gold jewellery in it (display cases, other pieces),
+        // and pure density can legitimately favor one of those over the
+        // item actually in the capture box the instant the gimbal drifts
+        // even slightly. Confirmed live (2026-08-18): centering kept
+        // "succeeding" against whatever gold cluster scored highest each
+        // tick, walked the gimbal off the ring in the capture box and onto
+        // full display cases across the room. MAX_TARGET_JUMP is generous
+        // (a third of the frame) so real tracking of an object moving/
+        // zooming tick-to-tick is never blocked, but a jump across the
+        // whole room is rejected -- return null (lost) so the caller's
+        // existing lost-target recovery handles it, rather than silently
+        // re-seeding onto something else.
+        val anchor = lockedBoxCenter
+        var bestBox: RectF? = null
+        var bestDensity = 0f
+        for (box in boxes) {
+            val count = points.count { p ->
+                val up = uprightPoint(p, rotation)
+                box.contains(up[0], up[1])
+            }
+            if (count == 0) continue
+            if (anchor != null) {
+                val bcx = (box.left + box.right) / 2f
+                val bcy = (box.top + box.bottom) / 2f
+                val jump = kotlin.math.hypot((bcx - anchor.x).toDouble(), (bcy - anchor.y).toDouble()).toFloat()
+                if (jump > MAX_TARGET_JUMP) continue
+            }
+            val rawArea = box.width() * box.height()
+            val area = if (rawArea > 1e-4f) rawArea else 1e-4f
+            val density = count / area
+            if (density > bestDensity) {
+                bestDensity = density
+                bestBox = box
+            }
+        }
+        if (bestBox != null) {
+            val cx = (bestBox.left + bestBox.right) / 2f
+            val cy = (bestBox.top + bestBox.bottom) / 2f
+            lockedBoxCenter = android.graphics.PointF(cx, cy)
+        }
+        return bestBox
+    }
 
     /** Continuously steers the AF/AE tracking region at wherever the
      * ornament currently is -- called every tick once armed, including
@@ -1554,6 +1675,23 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        // Pan had no equivalent budget cap at all until now. Same pattern
+        // as tilt: exhausted budget falls back to the other axis if it
+        // still needs correcting, else gives up this round rather than
+        // pushing further. See PAN_MS_LIMIT's doc comment.
+        if (choosePan) {
+            val panDurMs = centeringDurationFor(abs(dx))
+            val panSign = if (dx > 0) 1 else -1
+            if (abs(centeringPanMs + panSign * panDurMs) > PAN_MS_LIMIT) {
+                if (needsTilt) {
+                    choosePan = false
+                } else {
+                    Log.w(TAG, "centering: pan budget exhausted (ms=$centeringPanMs) and tilt not needed -- giving up this round")
+                    lastCenterAxis = CenterAxis.NONE
+                    return false
+                }
+            }
+        }
         centeringAttempts += 1
         setStatus("Centering ornament…", ready = false)
         if (choosePan) {
@@ -1716,8 +1854,11 @@ class MainActivity : AppCompatActivity() {
     private fun onMainCaptureAccepted() {
         Log.i(TAG, "onMainCaptureAccepted: rsc2.isReady=${rsc2.isReady}")
         if (!rsc2.isReady) {
+            // No gimbal -- no angle shots possible, and the tag was already
+            // scanned FIRST under the #76 flip, so this MAIN shot is the
+            // last jewel photo needed. Upload now instead of restarting.
             inAngleSequence = false
-            resetForNewItem(Phase.TAG)
+            uploadCapturedSet()
             return
         }
         inAngleSequence = true
@@ -1906,9 +2047,11 @@ class MainActivity : AppCompatActivity() {
                 // MAIN + angle1 + angle2's centering nudges in one shot, so
                 // the gimbal starts the next item from true center rather
                 // than wherever the last item's corrections left it.
+                // Tag was already scanned first under the #76 flip -- all
+                // 3 jewel shots are now done, upload instead of restarting.
                 undoCenteringThenAdvance {
                     inAngleSequence = false
-                    resetForNewItem(Phase.TAG)
+                    uploadCapturedSet()
                 }
             },
             onRetake = { captureAngle2() },
@@ -1924,7 +2067,7 @@ class MainActivity : AppCompatActivity() {
                     tagJpeg = bytes
                     showCapturePreview(
                         bytes,
-                        onProceed = { uploadCapturedSet() },
+                        onProceed = { resetForNewItem(Phase.JEWEL) },
                         onRetake = { retakeTag() },
                         onCancel = { cancelItem() }
                     )
@@ -2101,6 +2244,7 @@ class MainActivity : AppCompatActivity() {
         angleZoomRounds = 0
         lastCenterAxis = CenterAxis.NONE
         centerAvoidAxis = CenterAxis.NONE
+        lockedBoxCenter = null
         huntPhase = HuntPhase.SCAN_DOWN
         huntPhaseMsSpent = 0
         huntStartedAt = 0L
@@ -2133,7 +2277,9 @@ class MainActivity : AppCompatActivity() {
         if (launchedFromBrowser) {
             finish()
         } else {
-            resetForNewItem(Phase.JEWEL)
+            // Abandoning the item entirely -- next cycle starts from a
+            // fresh tag scan, not jewel capture (see #76 flip).
+            resetForNewItem(Phase.TAG)
         }
     }
 
@@ -2192,7 +2338,7 @@ class MainActivity : AppCompatActivity() {
         val tagCode = stableTagCode
         if (main == null || angle1 == null || angle2 == null || tagCode == null) {
             setStatus("Missing photo — retake", ready = false)
-            resetForNewItem(Phase.JEWEL)
+            resetForNewItem(Phase.TAG)
             return
         }
         phase = Phase.UPLOADING
@@ -2202,7 +2348,7 @@ class MainActivity : AppCompatActivity() {
         if (serverUrl.isBlank()) {
             Toast.makeText(this, "Set the capture server URL in Settings first", Toast.LENGTH_LONG).show()
             showSettingsDialog()
-            resetForNewItem(Phase.JEWEL)
+            resetForNewItem(Phase.TAG)
             return
         }
         lifecycleScope.launch {
@@ -2214,7 +2360,7 @@ class MainActivity : AppCompatActivity() {
             }
             if (result == null) {
                 Toast.makeText(this@MainActivity, "Upload failed — check server URL/network", Toast.LENGTH_LONG).show()
-                resetForNewItem(Phase.JEWEL)
+                resetForNewItem(Phase.TAG)
                 return@launch
             }
             when {
@@ -2230,7 +2376,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 else -> {
                     Toast.makeText(this@MainActivity, "Save failed: ${result.error}", Toast.LENGTH_LONG).show()
-                    resetForNewItem(Phase.JEWEL)
+                    resetForNewItem(Phase.TAG)
                 }
             }
         }
@@ -2253,7 +2399,7 @@ class MainActivity : AppCompatActivity() {
                 showItemSavedPopup(tagCode)
             } else {
                 Toast.makeText(this@MainActivity, "Save failed: ${result?.error}", Toast.LENGTH_LONG).show()
-                resetForNewItem(Phase.JEWEL)
+                resetForNewItem(Phase.TAG)
             }
         }
     }
@@ -2264,7 +2410,7 @@ class MainActivity : AppCompatActivity() {
         val tagCode = stableTagCode
         if (jewel == null || tag == null || tagCode == null) {
             setStatus("Missing photo — retake", ready = false)
-            resetForNewItem(Phase.JEWEL)
+            resetForNewItem(Phase.TAG)
             return
         }
         phase = Phase.UPLOADING
@@ -2274,7 +2420,7 @@ class MainActivity : AppCompatActivity() {
         if (serverUrl.isBlank()) {
             Toast.makeText(this, "Set the capture server URL in Settings first", Toast.LENGTH_LONG).show()
             showSettingsDialog()
-            resetForNewItem(Phase.JEWEL)
+            resetForNewItem(Phase.TAG)
             return
         }
         lifecycleScope.launch {
@@ -2286,7 +2432,7 @@ class MainActivity : AppCompatActivity() {
             }
             if (result == null) {
                 Toast.makeText(this@MainActivity, "Upload failed — check server URL/network", Toast.LENGTH_LONG).show()
-                resetForNewItem(Phase.JEWEL)
+                resetForNewItem(Phase.TAG)
                 return@launch
             }
             when {
@@ -2305,7 +2451,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 else -> {
                     Toast.makeText(this@MainActivity, "Save failed: ${result.error}", Toast.LENGTH_LONG).show()
-                    resetForNewItem(Phase.JEWEL)
+                    resetForNewItem(Phase.TAG)
                 }
             }
         }
@@ -2329,7 +2475,7 @@ class MainActivity : AppCompatActivity() {
                 finishOrResetForNewItem()
             } else {
                 Toast.makeText(this@MainActivity, "Save failed: ${result?.error}", Toast.LENGTH_LONG).show()
-                resetForNewItem(Phase.JEWEL)
+                resetForNewItem(Phase.TAG)
             }
         }
     }
@@ -2344,7 +2490,7 @@ class MainActivity : AppCompatActivity() {
         if (launchedFromBrowser) {
             handler.postDelayed({ finish() }, 600)
         } else {
-            resetForNewItem(Phase.JEWEL)
+            resetForNewItem(Phase.TAG)
         }
     }
 
@@ -2365,7 +2511,7 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setMessage(message)
             .setPositiveButton("Save anyway") { _, _ -> onChoice(true) }
-            .setNegativeButton("Retake") { _, _ -> onChoice(false); resetForNewItem(Phase.JEWEL) }
+            .setNegativeButton("Retake") { _, _ -> onChoice(false); resetForNewItem(Phase.TAG) }
             .setCancelable(false)
             .show()
     }
@@ -2395,22 +2541,32 @@ class MainActivity : AppCompatActivity() {
             centeringAttempts = 0
             lastCenterAxis = CenterAxis.NONE
             centerAvoidAxis = CenterAxis.NONE
+            lockedBoxCenter = null
             huntPhase = HuntPhase.SCAN_DOWN
             huntPhaseMsSpent = 0
             huntStartedAt = 0L
         }
         if (next == Phase.TAG) {
+            // TAG is the fresh-item entry point under the #76 flip (tag
+            // scans FIRST) -- this is where a genuinely NEW item starts,
+            // so the tag fields get cleared here now, not on JEWEL entry.
             barcodeAttempts = 0
             lastBarcodeCount = -1
             lastBarcodeError = null
-        }
-        if (next == Phase.JEWEL) {
-            jewelJpeg = null
-            angle1Jpeg = null
-            angle2Jpeg = null
             tagJpeg = null
             tagCodeHistory = mutableListOf()
             stableTagCode = null
+        }
+        if (next == Phase.JEWEL) {
+            // Deliberately does NOT touch tagJpeg/stableTagCode/
+            // tagCodeHistory -- entering JEWEL now means "tag already
+            // scanned, go shoot the jewel photos for THIS item," not a new
+            // item. Clearing them here would silently discard the tag just
+            // captured (confirmed as the failure mode this would produce
+            // during the #76 flip work, 2026-08-18).
+            jewelJpeg = null
+            angle1Jpeg = null
+            angle2Jpeg = null
             focusZoom.setZoomRatio(1f)
         }
         setStatus(if (next == Phase.JEWEL) "Center the ornament, front side up…" else "Show the tag QR/barcode…", ready = false)
