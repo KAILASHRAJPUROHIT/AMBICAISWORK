@@ -1269,11 +1269,22 @@ class MainActivity : AppCompatActivity() {
         // gimbal moving" behaviour reported live. Gimbal BLE commands and
         // digital zoom are independent hardware paths with no reason to
         // serialize; firing a centering correction every tick regardless
-        // of zoom-climb phase lets both run concurrently. Safe to call
-        // unconditionally -- attemptCenteringCorrection() is already a
-        // no-op once within CENTERING_DEADBAND, and the final ready-branch
-        // call below still does its own last-check pass before capture.
-        if (rsc2.isReady) attemptCenteringCorrection(result)
+        // of zoom-climb phase lets both run concurrently.
+        //
+        // maxAttempts = Int.MAX_VALUE here, NOT the default
+        // CENTERING_MAX_ATTEMPTS(4) -- that budget was tuned for the OLD
+        // design where this only ran occasionally (once readyStreak hit
+        // 3). Calling it every tick now burns through 4 attempts in well
+        // under a second, after which it silently gives up for the rest
+        // of the item since nothing else resets centeringAttempts.
+        // Confirmed live (2026-08-18): ring visibly off-center near the
+        // frame edge, af=LOCKED, gimbal completely idle, stuck cycling
+        // "Adjusting framing" forever -- centering had given up almost
+        // immediately and never got to retry. Per the standing "keep gold
+        // centered by all means necessary" rule, this loop should keep
+        // trying every tick, not exhaust a budget meant for a rare
+        // one-shot check.
+        if (rsc2.isReady) attemptCenteringCorrection(result, maxAttempts = Int.MAX_VALUE)
 
         val zoom = focusZoom.currentZoomRatio()
         val zoomRange = focusZoom.zoomRatioRange()
