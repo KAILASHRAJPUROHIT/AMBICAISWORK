@@ -319,6 +319,13 @@ class MainActivity : AppCompatActivity() {
         // How many failed barcode-scan attempts between AF re-triggers in
         // tickTag() -- see its call site's doc comment.
         private const val TAG_AF_RETRIGGER_ATTEMPTS = 15
+        // TEMPORARY (2026-08-18), per explicit request: skip the barcode
+        // scan entirely while testing the JEWEL flow, so a real tag doesn't
+        // need to be in frame every single test cycle. Auto-fills a
+        // placeholder tag code + photo and jumps straight to JEWEL the
+        // instant TAG phase starts. Set back to false for real use --
+        // uploaded items would otherwise carry a fake "TEST-..." tag code.
+        private const val SKIP_BARCODE_FOR_TESTING = true
         // Gentler per-step ratio (was 1.15x) and a real pause between steps
         // (ZOOM_STEP_INTERVAL_MS) so the climb reads as a smooth, deliberate
         // approach rather than a jumpy series of jerks.
@@ -1007,6 +1014,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun tickTag() {
         if (previewShowing) return
+        if (SKIP_BARCODE_FOR_TESTING && !autoFired) {
+            // Skip the barcode scan entirely while testing the JEWEL flow
+            // -- no tag needed in frame at all. Still captures a real
+            // (placeholder) tagJpeg since uploadPair()/uploadMulti() both
+            // fail closed ("Missing photo") on a null tag photo. Set
+            // SKIP_BARCODE_FOR_TESTING back to false for real use.
+            autoFired = true
+            stableTagCode = "TEST-${System.currentTimeMillis()}"
+            captureFullRes { bytes ->
+                tagJpeg = bytes
+                resetForNewItem(Phase.JEWEL)
+            }
+            return
+        }
         binding.tagCodeText.text = stableTagCode?.let { "Tag: $it · ready" } ?: "Show the tag QR/barcode…"
         setStatus(stableTagCode?.let { "Tag locked. Capturing…" } ?: "Scanning tag…", ready = stableTagCode != null)
         binding.debugText.text = "attempts=$barcodeAttempts  lastSeen=$lastBarcodeCount" +
@@ -2160,15 +2181,31 @@ class MainActivity : AppCompatActivity() {
     private fun forceCaptureCurrentPhase() {
         when (phase) {
             Phase.JEWEL -> captureJewel()
-            Phase.TAG -> captureFullRes { bytes ->
-                if (bytes != null) {
-                    tagJpeg = bytes
-                    showCapturePreview(
-                        bytes,
-                        onProceed = { resetForNewItem(Phase.JEWEL) },
-                        onRetake = { retakeTag() },
-                        onCancel = { cancelItem() }
-                    )
+            Phase.TAG -> {
+                if (SKIP_BARCODE_FOR_TESTING) {
+                    // Temporary, per explicit request while testing the
+                    // JEWEL flow -- bypasses the barcode scan entirely
+                    // (which needs a real tag in frame every cycle) with a
+                    // placeholder code + whatever's currently in frame as
+                    // the "tag photo", then jumps straight to JEWEL. Set
+                    // SKIP_BARCODE_FOR_TESTING back to false for real use.
+                    captureFullRes { bytes ->
+                        tagJpeg = bytes
+                        stableTagCode = "TEST-${System.currentTimeMillis()}"
+                        resetForNewItem(Phase.JEWEL)
+                    }
+                    return
+                }
+                captureFullRes { bytes ->
+                    if (bytes != null) {
+                        tagJpeg = bytes
+                        showCapturePreview(
+                            bytes,
+                            onProceed = { resetForNewItem(Phase.JEWEL) },
+                            onRetake = { retakeTag() },
+                            onCancel = { cancelItem() }
+                        )
+                    }
                 }
             }
             Phase.UPLOADING -> {}
