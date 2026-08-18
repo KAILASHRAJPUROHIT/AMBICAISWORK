@@ -1180,285 +1180,80 @@ class MainActivity : AppCompatActivity() {
 
         updateTrackingRegionFor(result)
 
-        if (result == null || !result.material) {
-            // Real bug found live (2026-08-18): once armed, MaterialDetector
-            // scans only the central guide-box region (by design -- ignores
-            // background clutter at the margins once something's actually
-            // being tracked). If the item sits OFF to one side (e.g. still
-            // being centered, or the operator placed it near frame edge),
-            // MaterialDetector's restricted scan genuinely cannot see it, so
-            // result.material stays false FOREVER even with the real piece
-            // clearly visible in the wider frame. This branch used to only
-            // ease zoom back and idle -- with zoom already at 1.0x there was
-            // nothing left to ease, so it just displayed "Re-centre the
-            // item..." and did nothing, stalling indefinitely. ML Kit's
-            // object detector scans the FULL frame regardless of guide-box
-            // restriction, so if it has a box, use it to actively nudge
-            // toward center instead of passively waiting for the operator.
-            val mlBox = bestObjectBox()
-            if (mlBox != null && result != null && attemptCenteringCorrection(result)) {
-                setStatus("Re-centre the item…", ready = false)
-                return
-            }
-            // Lost the piece entirely (no ML Kit box either) -- likely
-            // walked out of frame on a zoom step (digital/hybrid zoom on
-            // this class of lens is still centre-anchored). Ease back to
-            // re-acquire rather than climbing further on an empty frame.
-            val zoom = focusZoom.currentZoomRatio()
-            if (zoom > 1.05f) {
-                smoothZoomTo((zoom * ZOOM_BACKOFF_RATIO).coerceAtLeast(1f))
-                stepFocusAttempts = 0
+        // Simplified core loop (rewritten 2026-08-18, per explicit request
+        // to cut this down to the actual rule): CENTER -> ZOOM -> FOCUS ->
+        // repeat until the frame is filled with the gold ornament, then
+        // capture. bestObjectBox() is the single, gold-exclusive source of
+        // truth for "where is it and how big is it" -- no separate
+        // MaterialDetector-coverage fallback path, no dual metrics to
+        // reconcile.
+        //
+        // Two things below are NOT arbitrary complexity, they're real
+        // hardware constraints that would misbehave if skipped:
+        //   - one zoom step per ZOOM_STEP_INTERVAL_MS, then a
+        //     ZOOM_SETTLE_MS pause before trusting focus -- judging focus
+        //     against a still-moving lens reads as hunting.
+        //   - one AF trigger per zoom level, not re-fired every tick while
+        //     waiting for Camera2's own result.
+        val mlBox = bestObjectBox()
+        if (mlBox == null) {
+            setStatus("Place the ornament in view…", ready = false)
+            return
+        }
+
+        val dx = (mlBox.left + mlBox.right) / 2f - 0.5f
+        val dy = (mlBox.top + mlBox.bottom) / 2f - 0.5f
+        val centered = abs(dx) <= CENTERING_DEADBAND && abs(dy) <= CENTERING_DEADBAND
+        val occupancy = mlBox.width() * mlBox.height()
+        val filled = occupancy >= CAPTURE_MIN_OCCUPANCY
+
+        // 1. CENTER -- checked first, every tick, before anything else.
+        // attemptCenteringCorrection() already owns the real hardware
+        // safety rules (single-axis-only BLE commands, tilt mechanical-
+        // limit budget, revert-on-overshoot) and is a safe no-op once
+        // within CENTERING_DEADBAND, so this costs nothing once centered.
+        if (!centered) {
+            if (rsc2.isReady && result != null) attemptCenteringCorrection(result)
+            setStatus("Centering ornament…", ready = false)
+            return
+        }
+
+        // 2. ZOOM -- only once centered, one step at a time.
+        if (!filled) {
+            if (now - lastZoomChangeAt >= ZOOM_STEP_INTERVAL_MS) {
+                val zoom = focusZoom.currentZoomRatio()
+                val zoomRange = focusZoom.zoomRatioRange()
+                val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO))
+                smoothZoomTo(next)
                 focusTriggeredThisLevel = false
             }
-            setStatus("Re-centre the item…", ready = false)
-            return
-        }
-
-        if (result.material && now - armedAt > MAX_STALL_MS) {
-            // Absolute safety valve -- accept the best frame on offer rather
-            // than cycling forever. This used to call captureJewel() with
-            // zero regard for focus/sharpness at all, which is exactly how
-            // a shot could come out blurred: if AF genuinely never
-            // converges (low-texture surface, awkward angle), stall expiry
-            // fired mid-scan and shuttered on whatever was live that
-            // instant. Now it still gives up eventually, but only after one
-            // last forced re-focus, and only accepts a plainly-soft frame
-            // if that final attempt also failed.
-            val relaxedSharp = latestSharpness >= SHARPNESS_THRESHOLD * 0.6f
-            if (relaxedSharp) {
-                if (meetsHardCaptureRules()) {
-                    captureJewel()
-                    return
-                }
-                // Focus is fine but the non-negotiable occupancy/centering
-                // rules aren't met -- fall through to the normal zoom-climb
-                // /centering logic below instead of returning, so the
-                // pipeline keeps actively working toward compliance rather
-                // than getting stuck re-entering this stall branch forever.
-            } else {
-                if (stallGraceAt == 0L) {
-                    stallGraceAt = now
-                    focusZoom.triggerAutoFocus()
-                    setStatus("Focusing…", ready = false)
-                    return
-                }
-                if (now - stallGraceAt < 800L) {
-                    setStatus("Focusing…", ready = false)
-                    return
-                }
-                // Final forced re-focus also failed. A CATASTROPHICALLY low
-                // reading here (not just "a bit soft") means autofocus
-                // never converged at all in 12+ seconds of trying -- the
-                // signature of a subject closer than this lens can
-                // physically focus (this phone's main lens floor is ~10cm,
-                // confirmed via Camera2 characteristics; see CameraDiag
-                // logs). Capturing anyway would silently save an unusable
-                // photo with no way for staff to know why.
-                if (latestSharpness < TOO_CLOSE_SHARPNESS_FLOOR && !tooCloseWarned) {
-                    tooCloseWarned = true
-                    armedAt = now
-                    stallGraceAt = 0L
-                    setStatus("Too close to focus — move the ornament back a little", ready = false)
-                    return
-                }
-                if (meetsHardCaptureRules()) {
-                    captureJewel()
-                    return
-                }
-                // Focus forced through but occupancy/centering still not
-                // met -- same fall-through as above, non-negotiable either way.
-            }
-        }
-
-        val zoom = focusZoom.currentZoomRatio()
-        val zoomRange = focusZoom.zoomRatioRange()
-        val atZoomCeiling = zoom >= min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO) - 0.02f ||
-            zoom >= maxUsableZoom - 0.02f
-        // At the ceiling, accept whatever coverage is on offer as "the best
-        // framing available" -- but this must NOT mean skipping focus
-        // verification. It previously called captureJewel() directly here,
-        // which is exactly how a shot could come out both too-far-away AND
-        // blurry at once: an item too small to ever cross MIN_LIVE_COVERAGE
-        // within the zoom cap got captured with focus never even checked.
-        // Folding the ceiling into coverageOk instead just changes what
-        // "enough of the frame" means for THIS item; every capture still
-        // goes through the same focusLocked + sharpEnough gate below.
-        // The climb target IS the non-negotiable occupancy rule now, not
-        // MaterialDetector's capped colour coverage -- that metric is
-        // measured within a 64%x68% guide region and mathematically caps
-        // out around 0.435, so climbing only to MIN_LIVE_COVERAGE(0.24)
-        // stopped WAY short of the real CAPTURE_MIN_OCCUPANCY(0.75)
-        // requirement, and meetsHardCaptureRules() would then refuse to
-        // capture forever. ML Kit's box is full-frame-normalized with no
-        // such cap, so it's what the climb targets once it's available;
-        // falls back to the softer colour metric only before ML Kit's
-        // first detection lands (something to climb toward, not nothing).
-        val mlBoxForCoverage = bestObjectBox()
-        val mlOccupancy = mlBoxForCoverage?.let { it.width() * it.height() }
-        val coverageOk = (if (mlOccupancy != null) mlOccupancy >= CAPTURE_MIN_OCCUPANCY
-                          else result.coverage >= MIN_LIVE_COVERAGE) || atZoomCeiling
-        Log.d(TAG, "tickJewel coverage=${result.coverage} mlOccupancy=$mlOccupancy zoom=$zoom coverageOk=$coverageOk")
-        val zoomSettled = now - lastZoomChangeAt >= ZOOM_SETTLE_MS
-        val afState = focusZoom.afState.value
-        val focusLocked = focusZoom.isFocusLocked(afState)
-        val focusFailed = focusZoom.isFocusFailed(afState)
-        val sharpEnough = latestSharpness >= SHARPNESS_THRESHOLD
-
-        if (coverageOk && zoomSettled && focusLocked && sharpEnough) {
-            // Require this to hold for a few consecutive ticks, not just one
-            // instant read -- a single tick can catch a momentarily-still
-            // hand between small shakes, and the few hundred ms the shutter
-            // then takes internally (CAPTURE_MODE_MAXIMIZE_QUALITY has real
-            // pipeline latency) is enough time to drift back into blur
-            // before the sensor actually exposes.
-            readyStreak += 1
-            if (readyStreak < REQUIRED_READY_TICKS) {
-                setStatus("Holding steady…", ready = false)
-                return
-            }
-            if (rsc2.isReady && attemptCenteringCorrection(result)) {
-                readyStreak = 0
-                return
-            }
-            readyStreak = 0
-            centeringAttempts = 0
-            if (!meetsHardCaptureRules()) {
-                // Non-negotiable: centering conceded (deadband reached or
-                // attempts exhausted) but the object still isn't ≥75% of
-                // frame AND centered together -- don't capture. Next tick
-                // re-enters this branch with a fresh centering budget.
-                setStatus("Adjusting framing…", ready = false)
-                return
-            }
-            setStatus("Ready. Capturing…", ready = true)
-            captureJewel()
-            return
-        }
-        readyStreak = 0
-
-        if (!coverageOk) {
-            // Real bug found live (2026-08-18): this branch used to climb
-            // zoom repeatedly, tick after tick, with NO centering check in
-            // between -- centering only ever ran once material was
-            // completely lost (see the result.material==false branch
-            // above) or once coverage was already trustworthy (the ready-
-            // branch further up). A small drift during each zoom step (this
-            // class of digital/hybrid zoom is center-anchored but not
-            // perfectly so) went unchecked across MANY consecutive climb
-            // ticks, compounding until the item walked out of frame
-            // entirely with zoom already maxed out. Non-negotiable rule per
-            // explicit correction: zoom -> focus -> gimbal-center -> repeat,
-            // as one interleaved cycle at every micro-step, not zoom climbed
-            // in a long uninterrupted burst. Center FIRST, every single
-            // tick, before ever taking a zoom step -- attemptCenteringCorrection
-            // is already a safe no-op (returns false) once within
-            // CENTERING_DEADBAND, so this costs nothing once genuinely centered.
-            if (rsc2.isReady && attemptCenteringCorrection(result)) {
-                setStatus("Centering ornament…", ready = false)
-                return
-            }
-            // attemptCenteringCorrection() returning false is ambiguous by
-            // itself -- it means EITHER "already centered" (safe to zoom)
-            // OR "still off-center but gave up" (e.g. TILT_MS_LIMIT hit,
-            // see its own doc comment noting that budget is an uncalibrated
-            // placeholder, not a real measured hardware limit). Confirmed
-            // live: the exhausted-budget case fell through to zoom exactly
-            // like the centered case, climbing all the way to 3.4x with the
-            // item still off-center and no further gimbal movement at all.
-            // Check the ACTUAL centering state directly rather than trust
-            // the ambiguous boolean -- only proceed to zoom if truly within
-            // the deadband.
-            run {
-                val mlBox = bestObjectBox()
-                if (mlBox != null) {
-                    val dx = (mlBox.left + mlBox.right) / 2f - 0.5f
-                    val dy = (mlBox.top + mlBox.bottom) / 2f - 0.5f
-                    if (abs(dx) > CENTERING_DEADBAND || abs(dy) > CENTERING_DEADBAND) {
-                        setStatus("Centering ornament…", ready = false)
-                        return
-                    }
-                }
-            }
-            // Too small to trust a focus verdict either way yet -- climb on
-            // coverage alone, same reasoning as the web version's identical
-            // branch (a crop this small would be judged on an upscaled,
-            // artificially-softened analysis region). Deliberately does NOT
-            // touch focus here at all -- that used to fire on every single
-            // climb step (a new AF trigger roughly every tick, each one
-            // interrupting whatever partial scan the last step started),
-            // which is what "focus hunting too rapid" actually was. Focus
-            // is only ever triggered once coverage is trustworthy AND the
-            // zoom has been sitting still for ZOOM_SETTLE_MS, see below.
-            if (now - lastZoomChangeAt < ZOOM_STEP_INTERVAL_MS) {
-                setStatus("Zooming in…", ready = false)
-                return
-            }
-            // Must also respect maxUsableZoom -- a level a previous backoff
-            // already proved unfocusable. Without this the climb ignored
-            // that ceiling entirely and marched straight back up to the
-            // exact same problem zoom every time, failed focus again,
-            // backed off again, forever: the "zooms in, zooms back out,
-            // keeps cycling" loop.
-            val climbCeiling = min(min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO), maxUsableZoom)
-            val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(climbCeiling)
-            smoothZoomTo(next)
-            stepFocusAttempts = 0
-            focusTriggeredThisLevel = false
             setStatus("Zooming in…", ready = false)
             return
         }
 
-        // Coverage is trustworthy now. Still give the lens/sensor a moment
-        // to settle from the last zoom change before touching focus at all
-        // -- triggering AF against a target that's still moving is judged
-        // on a moving target and reads as more hunting.
-        if (!zoomSettled) {
+        // 3. Let the lens settle after the last zoom step before trusting
+        // any focus verdict against it.
+        if (now - lastZoomChangeAt < ZOOM_SETTLE_MS) {
             setStatus("Zooming in…", ready = false)
             return
         }
 
+        // 4. FOCUS -- one decisive trigger per zoom level.
         if (!focusTriggeredThisLevel) {
-            // One decisive trigger per zoom level -- not re-fired every
-            // tick while waiting for its result, that restart-storm was
-            // the other half of the hunting complaint.
             focusTriggeredThisLevel = true
             focusZoom.triggerAutoFocus()
             setStatus("Focusing…", ready = false)
             return
         }
+        val afState = focusZoom.afState.value
+        if (!focusZoom.isFocusLocked(afState) || latestSharpness < SHARPNESS_THRESHOLD) {
+            setStatus("Focusing…", ready = false)
+            return
+        }
 
-        if (afState == null) {
-            // Trigger already sent -- waiting for Camera2's own result,
-            // not re-triggering.
-            setStatus("Focusing…", ready = false)
-            return
-        }
-        if (!focusLocked || !sharpEnough) {
-            if (focusFailed || !sharpEnough) {
-                stepFocusAttempts += 1
-                if (stepFocusAttempts <= MAX_FOCUS_RETRIES) {
-                    // One more genuine, decisive attempt at this SAME zoom
-                    // level (falls through to the focusTriggeredThisLevel
-                    // branch above on the next tick).
-                    focusTriggeredThisLevel = false
-                    setStatus("Focusing…", ready = false)
-                    return
-                }
-                // Retries exhausted -- step BACK, never forward into a level
-                // even less likely to resolve.
-                stepFocusAttempts = 0
-                val backedOff = (zoom * ZOOM_BACKOFF_RATIO).coerceAtLeast(zoomRange.start)
-                if (backedOff < zoom - 0.05f) {
-                    maxUsableZoom = backedOff
-                    smoothZoomTo(backedOff)
-                }
-                focusTriggeredThisLevel = false
-                setStatus("Focusing…", ready = false)
-                return
-            }
-            setStatus("Focusing…", ready = false)
-            return
-        }
+        // 5. Everything green together -- click.
+        setStatus("Ready. Capturing…", ready = true)
+        captureJewel()
     }
 
     /** ML Kit detected-object box (upright-normalized, same space the
