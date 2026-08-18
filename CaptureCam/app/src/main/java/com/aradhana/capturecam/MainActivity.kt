@@ -440,12 +440,24 @@ class MainActivity : AppCompatActivity() {
         // let zoom climb anyway with no further gimbal correction. Still a
         // placeholder, still well under the ~326° full range, just less
         // prematurely restrictive.
-        private const val TILT_MS_LIMIT = 5000
+        // Raised again 5000 -> 9000 (2026-08-18): both budgets are
+        // CUMULATIVE across MAIN + angle1 + angle2 for one item (by
+        // design -- undoCenteringThenAdvance() needs the running total to
+        // undo it in one shot at item end), but angle1/angle2 each
+        // involve the operator physically turning the piece to a very
+        // different pose, which can legitimately need a large fresh
+        // correction on top of whatever MAIN already used. Confirmed live:
+        // stuck on angle2 with "pan budget exhausted (ms=4704)" and no way
+        // to finish centering, even though the axis genuinely still
+        // needed correcting (not a runaway -- MAX_TARGET_JUMP and the
+        // gold-only target selection are the actual runaway guards, this
+        // budget is just a BLE-churn/pathological-case backstop).
+        private const val TILT_MS_LIMIT = 9000
         // Pan has no mechanical hard-stop the way tilt does (full 360°
         // rotation), but still needs a budget cap -- see the doc comment at
         // its call site in attemptCenteringCorrection() for why (target-jump
         // runaway, 2026-08-18). Same order of magnitude as TILT_MS_LIMIT.
-        private const val PAN_MS_LIMIT = 5000
+        private const val PAN_MS_LIMIT = 9000
         // Blind search (huntStep()) -- only runs before anything has ever
         // been detected for this item. Bigger, longer steps than fine
         // centering (CENTERING_*) since this is covering ground, not
