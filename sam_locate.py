@@ -463,9 +463,20 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
     x1 = max(b[2] for b in boxes); y1 = max(b[3] for b in boxes)
     if (x1 - x0) < 64 or (y1 - y0) < 64:
         return src_path, None
-    cv2.imwrite(out_path, bgr[y0:y1, x0:x1])
+    crop = bgr[y0:y1, x0:x1]
+    bg_removed = False
+    if remove_background and expect == 1 and aligned_mask is not None:
+        try:
+            mask_crop = aligned_mask[y0:y1, x0:x1]
+            if mask_crop.shape[:2] == crop.shape[:2] and mask_crop.any():
+                crop = _composite_on_white(crop, mask_crop)
+                bg_removed = True
+        except Exception:
+            bg_removed = False
+    cv2.imwrite(out_path, crop)
     return out_path, {"box": [x0, y0, x1, y1], "pieces": len(boxes),
-                      "occupancy": round((x1 - x0) * (y1 - y0) / float(W * H), 4)}
+                      "occupancy": round((x1 - x0) * (y1 - y0) / float(W * H), 4),
+                      "background_removed": bg_removed}
 
 
 def best_single_crop(src_path: str, out_path: str, margin: float = 0.12):
