@@ -1259,6 +1259,22 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // Concurrent centering, not deferred to the end -- per explicit
+        // request (2026-08-18): before this, attemptCenteringCorrection()
+        // was only ever called inside the final "ready" branch below, once
+        // coverage/focus/zoom were ALL already satisfied. That made
+        // centering and zooming two sequential PHASES (climb zoom fully
+        // first, only then start correcting position) instead of
+        // happening together -- exactly the "I see zoom happening then
+        // gimbal moving" behaviour reported live. Gimbal BLE commands and
+        // digital zoom are independent hardware paths with no reason to
+        // serialize; firing a centering correction every tick regardless
+        // of zoom-climb phase lets both run concurrently. Safe to call
+        // unconditionally -- attemptCenteringCorrection() is already a
+        // no-op once within CENTERING_DEADBAND, and the final ready-branch
+        // call below still does its own last-check pass before capture.
+        if (rsc2.isReady) attemptCenteringCorrection(result)
+
         val zoom = focusZoom.currentZoomRatio()
         val zoomRange = focusZoom.zoomRatioRange()
         val atZoomCeiling = zoom >= min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO) - 0.02f ||
