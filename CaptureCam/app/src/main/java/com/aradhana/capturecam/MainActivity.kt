@@ -1679,6 +1679,27 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        // Pan had no equivalent budget cap at all until now -- with the
+        // per-tick attempt cap also removed (see tickJewel's call site),
+        // that let a target-switch onto a distant gold cluster (fixed
+        // separately via MAX_TARGET_JUMP in bestGoldObjectBox()) walk pan
+        // arbitrarily far before MAX_TARGET_JUMP could reject it. Same
+        // pattern as tilt: exhausted budget falls back to the other axis if
+        // it still needs correcting, else gives up this round rather than
+        // pushing further.
+        if (choosePan) {
+            val panDurMs = centeringDurationFor(abs(dx))
+            val panSign = if (dx > 0) 1 else -1
+            if (abs(centeringPanMs + panSign * panDurMs) > PAN_MS_LIMIT) {
+                if (needsTilt) {
+                    choosePan = false
+                } else {
+                    Log.w(TAG, "centering: pan budget exhausted (ms=$centeringPanMs) and tilt not needed -- giving up this round")
+                    lastCenterAxis = CenterAxis.NONE
+                    return false
+                }
+            }
+        }
         centeringAttempts += 1
         setStatus("Centering ornament…", ready = false)
         if (choosePan) {
