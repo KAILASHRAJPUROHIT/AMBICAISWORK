@@ -2626,5 +2626,6 @@ class MainActivity : AppCompatActivity() {
         try { unregisterReceiver(testMoveReceiver) } catch (_: IllegalArgumentException) {}
         try { unregisterReceiver(recenterReceiver) } catch (_: IllegalArgumentException) {}
         try { unregisterReceiver(nudgeReceiver) } catch (_: IllegalArgumentException) {}
+        try { unregisterReceiver(zeroDriftReceiver) } catch (_: IllegalArgumentException) {}
     }
 }
