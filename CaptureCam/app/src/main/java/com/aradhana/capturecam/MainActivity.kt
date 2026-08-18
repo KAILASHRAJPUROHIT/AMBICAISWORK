@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.RectF
 import android.hardware.camera2.CaptureResult
@@ -326,6 +327,11 @@ class MainActivity : AppCompatActivity() {
         // instant TAG phase starts. Set back to false for real use --
         // uploaded items would otherwise carry a fake "TEST-..." tag code.
         private const val SKIP_BARCODE_FOR_TESTING = true
+        // PROVISIONAL, not yet calibrated -- see looksUnrotated()'s doc
+        // comment. Mean per-cell grayscale difference (0-255 scale) below
+        // which two angle shots are considered near-duplicates (item
+        // likely wasn't actually rotated between them).
+        private const val UNROTATED_MEAN_DIFF_THRESHOLD = 8.0
         // Gentler per-step ratio (was 1.15x) and a real pause between steps
         // (ZOOM_STEP_INTERVAL_MS) so the climb reads as a smooth, deliberate
         // approach rather than a jumpy series of jerks.
@@ -2194,6 +2200,68 @@ class MainActivity : AppCompatActivity() {
         handler.post(check)
     }
 
+    /** Cheap "did the item actually get moved between shots" check --
+     * downsamples both JPEGs to a small grayscale grid and compares mean
+     * absolute pixel difference. This is NOT a vision model or a precise
+     * pose comparison; it exists to catch the specific operator mistake
+     * this was built for -- tapping through angle1/angle2 without
+     * actually rotating the piece, so two of the three saved photos are
+     * near-duplicates of each other. PROVISIONAL threshold, not yet
+     * calibrated against real "rotated vs not" examples -- tune
+     * UNROTATED_MEAN_DIFF_THRESHOLD if it's too trigger-happy (flags a
+     * real rotation as unmoved -- e.g. a small/symmetric item shifted
+     * less than expected) or too lax (misses a genuine no-op retake).
+     * Fails open (returns false, i.e. "looks fine") if either image
+     * can't be decoded, since blocking a real capture on a decode glitch
+     * is worse than missing a duplicate-angle check. */
+    private fun looksUnrotated(a: ByteArray, b: ByteArray): Boolean {
+        val gridSize = 24
+        fun grayscaleGrid(bytes: ByteArray): IntArray? {
+            val opts = BitmapFactory.Options().apply { inSampleSize = 8 }
+            val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
+            val scaled = Bitmap.createScaledBitmap(decoded, gridSize, gridSize, true)
+            val pixels = IntArray(gridSize * gridSize)
+            scaled.getPixels(pixels, 0, gridSize, 0, 0, gridSize, gridSize)
+            if (scaled !== decoded) scaled.recycle()
+            decoded.recycle()
+            return IntArray(pixels.size) { i ->
+                val p = pixels[i]
+                (((p shr 16) and 0xFF) + ((p shr 8) and 0xFF) + (p and 0xFF)) / 3
+            }
+        }
+        val gridA = grayscaleGrid(a) ?: return false
+        val gridB = grayscaleGrid(b) ?: return false
+        var diffSum = 0L
+        for (i in gridA.indices) diffSum += abs(gridA[i] - gridB[i])
+        val meanDiff = diffSum.toDouble() / gridA.size
+        Log.i(TAG, "looksUnrotated meanDiff=$meanDiff threshold=$UNROTATED_MEAN_DIFF_THRESHOLD")
+        return meanDiff < UNROTATED_MEAN_DIFF_THRESHOLD
+    }
+
+    /** Gate an angle capture on looksUnrotated() -- if the new shot looks
+     * like a near-duplicate of the previous angle, asks the operator to
+     * actually move the item instead of silently accepting it. "Use
+     * anyway" stays available for the rare legitimate case (a genuinely
+     * symmetric piece that looks the same from multiple sides). */
+    private fun promptRotateIfUnmoved(
+        newBytes: ByteArray,
+        previousBytes: ByteArray?,
+        onConfirmed: () -> Unit,
+        onRetake: () -> Unit
+    ) {
+        if (previousBytes != null && looksUnrotated(newBytes, previousBytes)) {
+            AlertDialog.Builder(this)
+                .setTitle("Item doesn't look moved")
+                .setMessage("This angle looks the same as the previous shot. Please turn/move the item, then retake.")
+                .setPositiveButton("Retake") { _, _ -> onRetake() }
+                .setNegativeButton("Use anyway") { _, _ -> onConfirmed() }
+                .setCancelable(false)
+                .show()
+        } else {
+            onConfirmed()
+        }
+    }
+
     private fun captureAngle1() {
         setStatus("Capturing angle 1…", ready = false)
         focusZoom.triggerAutoFocus()
@@ -2211,17 +2279,23 @@ class MainActivity : AppCompatActivity() {
             captureAngle1()
             return
         }
-        showCapturePreview(
-            bytes,
-            onProceed = {
-                angle1Jpeg = bytes
-                promptForSideProfile("Turn the ornament to show the OTHER side profile, then tap READY") {
-                    centerThenCapture { captureAngle2() }
-                }
-            },
-            onRetake = { captureAngle1() },
-            onCancel = { cancelItem() }
-        )
+        // Item-not-moved check: angle1 should look visibly different from
+        // MAIN (the item was supposed to be turned to show a side
+        // profile) -- if it doesn't, the operator likely tapped through
+        // READY without actually rotating the piece.
+        promptRotateIfUnmoved(bytes, jewelJpeg, onConfirmed = {
+            showCapturePreview(
+                bytes,
+                onProceed = {
+                    angle1Jpeg = bytes
+                    promptForSideProfile("Turn the ornament to show the OTHER side profile, then tap READY") {
+                        centerThenCapture { captureAngle2() }
+                    }
+                },
+                onRetake = { captureAngle1() },
+                onCancel = { cancelItem() }
+            )
+        }, onRetake = { captureAngle1() })
     }
 
     private fun captureAngle2() {
@@ -2241,25 +2315,29 @@ class MainActivity : AppCompatActivity() {
             captureAngle2()
             return
         }
-        showCapturePreview(
-            bytes,
-            onProceed = {
-                angle2Jpeg = bytes
-                setStatus("Returning to center…", ready = false)
-                // Undoes the net tilt/pan correction accumulated across
-                // MAIN + angle1 + angle2's centering nudges in one shot, so
-                // the gimbal starts the next item from true center rather
-                // than wherever the last item's corrections left it.
-                // Tag was already scanned first under the #76 flip -- all
-                // 3 jewel shots are now done, upload instead of restarting.
-                undoCenteringThenAdvance {
-                    inAngleSequence = false
-                    uploadCapturedSet()
-                }
-            },
-            onRetake = { captureAngle2() },
-            onCancel = { cancelItem() }
-        )
+        // Same item-not-moved check as angle1, against angle1 this time --
+        // angle2 is supposed to be the OTHER side profile.
+        promptRotateIfUnmoved(bytes, angle1Jpeg, onConfirmed = {
+            showCapturePreview(
+                bytes,
+                onProceed = {
+                    angle2Jpeg = bytes
+                    setStatus("Returning to center…", ready = false)
+                    // Undoes the net tilt/pan correction accumulated across
+                    // MAIN + angle1 + angle2's centering nudges in one shot, so
+                    // the gimbal starts the next item from true center rather
+                    // than wherever the last item's corrections left it.
+                    // Tag was already scanned first under the #76 flip -- all
+                    // 3 jewel shots are now done, upload instead of restarting.
+                    undoCenteringThenAdvance {
+                        inAngleSequence = false
+                        uploadCapturedSet()
+                    }
+                },
+                onRetake = { captureAngle2() },
+                onCancel = { cancelItem() }
+            )
+        }, onRetake = { captureAngle2() })
     }
 
     private fun forceCaptureCurrentPhase() {
