@@ -917,8 +917,12 @@ def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_byt
         _embed_tag_metadata(main_path, tag_code=tag_code, category=category, staff_name=staff_name)
         # All three poses get the same tight segmentation crop, not just
         # MAIN -- the catalogue's 3-shot layout expects ANGLE_1/ANGLE_2 to be
-        # clean ornament-only crops too, not a raw gimbal-framed plate.
-        _segment_paths_async([main_path, angle1_path, angle2_path])
+        # clean ornament-only crops too, not a raw gimbal-framed plate. Then
+        # stitches the cropped MAIN/ANGLE_1/ANGLE_2 into one labeled
+        # composite image (<tag>_stitched.jpg), matching the approved
+        # reference layout.
+        stitched_path = os.path.join(tray_dir, f"{safe_name}_stitched.jpg")
+        _segment_and_stitch_async(main_path, angle1_path, angle2_path, stitched_path)
 
         if tag_code and not is_test:
             dedup = _load_dedup()
