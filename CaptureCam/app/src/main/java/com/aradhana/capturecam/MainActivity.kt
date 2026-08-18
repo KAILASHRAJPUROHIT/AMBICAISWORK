@@ -1041,13 +1041,24 @@ class MainActivity : AppCompatActivity() {
      * gimbal doesn't read as falsely idle-connected. */
     private fun updateGimbalStatusBadge() {
         val (text, color) = when {
-            !rsc2.isReady -> "Gimbal: not connected" to 0xB0663333.toInt()
-            rsc2.isMoving -> "Gimbal: moving" to 0xB0665C33.toInt()
-            else -> "Gimbal: connected" to 0xB0336633.toInt()
+            !rsc2.isReady -> "Gimbal: not connected" to 0xDD7F1D1D.toInt()
+            rsc2.isMoving -> "Gimbal: moving" to 0xDD92600A.toInt()
+            else -> "Gimbal: connected" to 0xDD15803D.toInt()
         }
         binding.gimbalStatusText.text = text
-        binding.gimbalStatusText.setBackgroundColor(color)
+        binding.gimbalStatusText.background = pillDrawable(color)
     }
+
+    /** Rounded, card-style pill background built at runtime -- used
+     * anywhere a status badge needs a state colour (gimbal connected/
+     * moving/not-connected, status-ready) without falling back to the
+     * old flat rectangle setBackgroundColor() gave, which clobbered the
+     * rounded @drawable/bg_card look applied in the layout XML. */
+    private fun pillDrawable(color: Int): android.graphics.drawable.GradientDrawable =
+        android.graphics.drawable.GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = 12f * resources.displayMetrics.density
+        }
 
     private fun tickTag() {
         if (previewShowing) return
@@ -2910,9 +2921,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setStatus(text: String, ready: Boolean) {
         binding.statusText.text = text
-        binding.statusText.setBackgroundColor(
-            if (ready) 0xB022C55E.toInt() else 0xB0000000.toInt()
-        )
+        binding.statusText.setBackgroundResource(if (ready) R.drawable.bg_card_ready else R.drawable.bg_card)
         val material = latestMaterial
         binding.debugText.text = if (phase == Phase.JEWEL) {
             val range = focusZoom.zoomRatioRange()
@@ -2924,6 +2933,42 @@ class MainActivity : AppCompatActivity() {
                 afStateLabel(focusZoom.afState.value)
             )
         } else ""
+        updateStepIndicator()
+    }
+
+    /** Drives the TAG/QR -> MAIN VIEW -> LEFT ANGLE -> RIGHT ANGLE step bar
+     * from state that already exists (phase, inAngleSequence, angle1Jpeg)
+     * -- purely a progress display, doesn't gate or alter any capture
+     * logic. Called every setStatus() so it never drifts out of sync with
+     * what the pipeline is actually doing. Completed steps go green,
+     * the current step goes purple, everything else stays neutral. */
+    private fun updateStepIndicator() {
+        val currentStep = when {
+            phase == Phase.TAG -> 1
+            phase == Phase.JEWEL && !inAngleSequence -> 2
+            phase == Phase.JEWEL && inAngleSequence && angle1Jpeg == null -> 3
+            phase == Phase.JEWEL && inAngleSequence -> 4
+            phase == Phase.UPLOADING -> 4
+            else -> 1
+        }
+        val steps = listOf(binding.stepTag, binding.stepMain, binding.stepLeft, binding.stepRight)
+        steps.forEachIndexed { i, view ->
+            val stepNumber = i + 1
+            when {
+                stepNumber < currentStep -> {
+                    view.setBackgroundResource(R.drawable.bg_step_done)
+                    view.setTextColor(0xFFFFFFFF.toInt())
+                }
+                stepNumber == currentStep -> {
+                    view.setBackgroundResource(R.drawable.bg_step_active)
+                    view.setTextColor(0xFFFFFFFF.toInt())
+                }
+                else -> {
+                    view.setBackgroundResource(R.drawable.bg_step_inactive)
+                    view.setTextColor(resources.getColor(R.color.text_muted, theme))
+                }
+            }
+        }
     }
 
     private fun afStateLabel(state: Int?): String = when (state) {
