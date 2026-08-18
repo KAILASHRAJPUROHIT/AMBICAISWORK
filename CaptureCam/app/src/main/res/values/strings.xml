@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aradhana Capture</string>
+    <string name="status_starting">Starting camera…</string>
+    <string name="settings">⚙</string>
+    <string name="manual_shutter">Manual capture</string>
+    <string name="ready_capture_angle">✓ READY — Capture This Angle</string>
+    <string name="server_url_label">Capture server URL</string>
+    <string name="staff_name_label">Staff name</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="retake">Retake</string>
+    <string name="cancel_item">Cancel item</string>
+    <string name="continue_now">Continue</string>
+    <string name="zoom_out">−</string>
+    <string name="zoom_in">+</string>
+    <string name="auto_tracking">AUTO TRACKING</string>
+    <string name="manual_mode">MANUAL — auto standing by</string>
+    <string name="exposure_label">EV</string>
+    <string name="resume_auto">Resume auto</string>
+</resources>

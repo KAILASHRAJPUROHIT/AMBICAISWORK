@@ -15,10 +15,12 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
 import android.widget.EditText
+import android.widget.SeekBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -41,7 +43,9 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import org.opencv.core.Mat
+import java.io.File
 import java.nio.ByteBuffer
 import kotlin.math.abs
 import kotlin.math.max
@@ -255,6 +259,23 @@ class MainActivity : AppCompatActivity() {
     // doesn't leave the NEXT item starting under-exposed.
     private var autoExposureEv = 0f
     private var lastExposureAdjustAt = 0L
+    // Manual-controls override (2026-08-18, explicit request): true the
+    // instant staff touches ANY manual control (zoom +/-, the exposure
+    // slider, tap/long-press-to-focus on the preview). While true,
+    // tickJewel()'s entire auto-tracking/zoom-climb/exposure/capture path
+    // stands down -- staff is flying the camera by hand, and auto mode
+    // fighting that input would be actively harmful (exactly the class of
+    // problem "manual override" was asked for). Cleared only by an
+    // explicit tap on resumeAutoButton, never automatically, so staff
+    // always knows which mode they're in. Reset to false per item in
+    // resetForNewItem so a manual session on one piece doesn't silently
+    // carry into the next.
+    private var manualModeActive = false
+    // Set by a long-press-to-focus-lock; while true, continuous AF
+    // tracking's region-steering (updateTrackingRegionFor) is skipped so
+    // the manually-locked focus point doesn't get silently re-aimed.
+    // Cleared alongside manualModeActive.
+    private var manualFocusLocked = false
     // Smoothed centre estimate used ONLY by meetsHardCaptureRules()'s
     // centering check -- raw bounds/mlBox centre jitters far more than the
     // deadband itself for small/split objects (confirmed live 2026-08-18:
@@ -686,6 +707,7 @@ class MainActivity : AppCompatActivity() {
             hideReadyButton()
             action()
         }
+        setupManualControls()
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
@@ -1244,6 +1266,16 @@ class MainActivity : AppCompatActivity() {
      */
     private fun tickJewel() {
         if (previewShowing || isZooming || inAngleSequence || jewelReadyPending) return
+        // Manual override (2026-08-18): staff is flying pan/tilt/zoom/focus/
+        // exposure by hand via the on-screen manual controls -- auto mode
+        // must not issue any competing gimbal/zoom/exposure/capture command
+        // while that's true. Continuous AF/preview keep running (this only
+        // gates tickJewel, not the camera pipeline itself); resumeAutoButton
+        // is the only way back to auto.
+        if (manualModeActive) {
+            setStatus("Manual mode — auto standing by", ready = false)
+            return
+        }
         val now = System.currentTimeMillis()
         val result = latestMaterial
 
@@ -2841,6 +2873,127 @@ class MainActivity : AppCompatActivity() {
         setupPreviewZoomAndPan()
     }
 
+    /** Every manual correction, logged as one JSON line -- the data-
+     * collection tier of "can this learn from manual corrections" (2026-08-
+     * 18, explicit request): no model, no training loop, just a durable
+     * record of what staff actually did (category via the scanned tag,
+     * before/after values, tap coordinates) so there's a real dataset to
+     * calibrate against, or eventually train on, once there's volume.
+     * Local-only (app-private external storage), append-only, fails silent
+     * -- logging must never be able to interrupt a live capture. */
+    private fun logManualAction(action: String, details: Map<String, Any?>) {
+        try {
+            val dir = getExternalFilesDir(null) ?: return
+            val file = File(dir, "manual_corrections.jsonl")
+            val entry = JSONObject().apply {
+                put("ts", System.currentTimeMillis())
+                put("action", action)
+                put("tag", stableTagCode)
+                put("phase", phase.name)
+                details.forEach { (k, v) -> put(k, v) }
+            }
+            file.appendText(entry.toString() + "\n")
+        } catch (e: Exception) {
+            Log.w(TAG, "logManualAction($action) failed: ${e.message}")
+        }
+    }
+
+    /** Wires the manual-controls row (zoom +/-, exposure slider, resume-
+     * auto) plus tap-to-focus/long-press-to-lock-focus on the live preview
+     * (2026-08-18, explicit request). Every control here funnels through
+     * engageManual() first, so touching ANY of them consistently hands
+     * control to staff and stands auto mode down -- see manualModeActive's
+     * doc comment. */
+    private fun setupManualControls() {
+        fun engageManual() {
+            if (!manualModeActive) {
+                manualModeActive = true
+                binding.manualModeText.text = getString(R.string.manual_mode)
+                binding.resumeAutoButton.visibility = View.VISIBLE
+            }
+        }
+
+        binding.zoomInButton.setOnClickListener {
+            engageManual()
+            val range = focusZoom.zoomRatioRange()
+            val before = focusZoom.currentZoomRatio()
+            val next = (before * 1.15f).coerceIn(range.start, min(range.endInclusive, MAX_LIVE_ZOOM_RATIO))
+            focusZoom.setZoomRatio(next)
+            logManualAction("zoom_in", mapOf("from" to before, "to" to next))
+        }
+        binding.zoomOutButton.setOnClickListener {
+            engageManual()
+            val range = focusZoom.zoomRatioRange()
+            val before = focusZoom.currentZoomRatio()
+            val next = (before / 1.15f).coerceIn(range.start, min(range.endInclusive, MAX_LIVE_ZOOM_RATIO))
+            focusZoom.setZoomRatio(next)
+            logManualAction("zoom_out", mapOf("from" to before, "to" to next))
+        }
+
+        if (focusZoom.exposureControlAvailable()) {
+            val evRange = focusZoom.exposureCompensationRangeEv()
+            val span = ((evRange.endInclusive - evRange.start) * 10).toInt().coerceAtLeast(1)
+            binding.exposureSeekBar.max = span
+            binding.exposureSeekBar.progress = ((autoExposureEv - evRange.start) * 10).toInt().coerceIn(0, span)
+            binding.exposureSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (!fromUser) return
+                    engageManual()
+                    val before = autoExposureEv
+                    val ev = evRange.start + progress / 10f
+                    autoExposureEv = ev
+                    focusZoom.setExposureCompensationEv(ev)
+                    logManualAction("exposure", mapOf("from" to before, "to" to ev))
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        } else {
+            binding.exposureRow.visibility = View.GONE
+        }
+
+        binding.resumeAutoButton.setOnClickListener {
+            manualModeActive = false
+            manualFocusLocked = false
+            binding.manualModeText.text = getString(R.string.auto_tracking)
+            binding.resumeAutoButton.visibility = View.GONE
+            focusZoom.startContinuousTracking()
+            logManualAction("resume_auto", emptyMap())
+        }
+
+        // Tap-to-focus / long-press-to-lock. Coordinates approximated as a
+        // fraction of previewView's own width/height -- this app runs the
+        // preview full-bleed (match_parent, no letterboxing crop applied
+        // in layout), so tap-fraction and camera-frame-fraction track
+        // closely enough for a metering region without needing CameraX's
+        // separate MeteringPointFactory machinery.
+        val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onSingleTapUp(e: MotionEvent): Boolean {
+                val cx = (e.x / binding.previewView.width).coerceIn(0f, 1f)
+                val cy = (e.y / binding.previewView.height).coerceIn(0f, 1f)
+                engageManual()
+                manualFocusLocked = false
+                focusZoom.updateTrackingRegion(cx, cy)
+                focusZoom.triggerAutoFocus()
+                logManualAction("tap_focus", mapOf("cx" to cx, "cy" to cy))
+                return true
+            }
+            override fun onLongPress(e: MotionEvent) {
+                val cx = (e.x / binding.previewView.width).coerceIn(0f, 1f)
+                val cy = (e.y / binding.previewView.height).coerceIn(0f, 1f)
+                engageManual()
+                focusZoom.updateTrackingRegion(cx, cy)
+                focusZoom.triggerAutoFocus()
+                manualFocusLocked = true
+                logManualAction("focus_lock", mapOf("cx" to cx, "cy" to cy))
+            }
+        })
+        binding.previewView.setOnTouchListener { _, event ->
+            gestureDetector.onTouchEvent(event)
+            true
+        }
+    }
+
     /**
      * Pinch-to-zoom + one-finger pan on the just-captured photo so the
      * operator can actually verify fine detail before accepting a shot,
@@ -3227,6 +3380,12 @@ class MainActivity : AppCompatActivity() {
         lastNudgeErrorMagnitude = null
         centerDivergeStreak = 0
         centeringSettledUntil = 0L
+        if (manualModeActive) {
+            manualModeActive = false
+            manualFocusLocked = false
+            binding.manualModeText.text = getString(R.string.auto_tracking)
+            binding.resumeAutoButton.visibility = View.GONE
+        }
         if (next == Phase.JEWEL) {
             // Normal completion already undid these via
             // undoCenteringThenAdvance() before calling here -- this is
