@@ -316,6 +316,9 @@ class MainActivity : AppCompatActivity() {
         // there is far more likely a detection glitch than a real framing
         // problem. See its use in tickJewel's material-loss branch.
         private const val ZOOM_BACKOFF_MIN_ZOOM = 1.5f
+        // How many failed barcode-scan attempts between AF re-triggers in
+        // tickTag() -- see its call site's doc comment.
+        private const val TAG_AF_RETRIGGER_ATTEMPTS = 15
         // Gentler per-step ratio (was 1.15x) and a real pause between steps
         // (ZOOM_STEP_INTERVAL_MS) so the climb reads as a smooth, deliberate
         // approach rather than a jumpy series of jerks.
@@ -1008,6 +1011,16 @@ class MainActivity : AppCompatActivity() {
         setStatus(stableTagCode?.let { "Tag locked. Capturing…" } ?: "Scanning tag…", ready = stableTagCode != null)
         binding.debugText.text = "attempts=$barcodeAttempts  lastSeen=$lastBarcodeCount" +
             (lastBarcodeError?.let { "  error=$it" } ?: "")
+        // TAG phase never explicitly triggers AF anywhere else -- it was
+        // relying entirely on whatever focus state carried over from
+        // continuous/passive AF. Confirmed live (2026-08-18): 173+ scan
+        // attempts with the QR clearly visible in frame, zero detections,
+        // zero AF re-triggers the whole time. Periodic nudge so a tag held
+        // up after the initial focus already settled elsewhere still gets
+        // a real AF pass, without spamming a trigger every single tick.
+        if (stableTagCode == null && barcodeAttempts > 0 && barcodeAttempts % TAG_AF_RETRIGGER_ATTEMPTS == 0) {
+            focusZoom.triggerAutoFocus()
+        }
         if (stableTagCode != null && !autoFired) {
             autoFired = true
             captureFullRes { bytes ->
@@ -1100,36 +1113,31 @@ class MainActivity : AppCompatActivity() {
 
         updateTrackingRegionFor(result)
 
-        if (result == null || !result.material) {
+        // THIRD pass on this same struggle (2026-08-18): the real bug was
+        // structural, not tuning. MaterialDetector.analyse() computes
+        // result.bounds whenever ANY warm/metal pixel was found at all
+        // (warm > 0) -- material=true is a STRICTER, separate threshold on
+        // top of that (coverage/ratio must additionally clear
+        // MIN_LIVE_COVERAGE-scale floors). But this branch was gating on
+        // material alone, so every time that stricter flag flickered false
+        // -- confirmed live swinging 0.006-0.15 tick to tick on a
+        // genuinely stationary piece -- centering was skipped entirely
+        // (this whole function returns early here), not just the zoom
+        // climb. That's what "gimbal not moving, stuck on Re-centre the
+        // item" actually was: bounds/mlBox were very likely still valid
+        // most of those ticks, but nothing downstream ever got to look at
+        // them. Only treat it as truly lost when NEITHER a gold ML box NOR
+        // MaterialDetector's own bounds exist -- that's the actual "no
+        // position estimate at all" case, not "coverage momentarily read
+        // low."
+        if (result == null || (bestObjectBox() == null && result.bounds == null)) {
             // Lost the piece -- likely walked out of frame on a zoom step
             // (digital/hybrid zoom on this class of lens is still centre-
             // anchored). Ease back to re-acquire rather than climbing
-            // further on an empty frame.
-            //
-            // Requires MATERIAL_LOSS_GRACE_TICKS consecutive misses, not
-            // just one, before actually backing off -- confirmed live
-            // (2026-08-18) that a small, shiny piece under reflective
-            // showroom lighting makes MaterialDetector's material=true/
-            // false read flicker tick-to-tick even while the piece is
-            // sitting still in frame (coverage bounced 0.01-0.10 tick to
-            // tick, well below the 0.24 threshold, on every single sample).
-            // Reacting to every flicker reset the zoom climb to ~1.0 over
-            // and over, so coverage could never accumulate enough across a
-            // real climb to cross that threshold -- the pipeline looked
-            // "stuck" even with the gimbal correctly centered on the piece,
-            // because it kept discarding its own progress.
-            //
-            // The grace-tick count alone wasn't enough: confirmed live
-            // (2026-08-18, second pass) coverage swings 0.006-0.15 tick to
-            // tick on a genuinely stationary piece -- readings BELOW the
-            // detector's own 0.012 material floor happen for real, several
-            // ticks in a row, not just single-frame noise. So on top of the
-            // grace period, only actually BACK OFF zoom once it's high
-            // enough that "walked out of frame" is physically plausible
-            // (ZOOM_BACKOFF_MIN_ZOOM) -- below that, a loss reading is far
-            // more likely a lighting/reflection glitch than the object
-            // actually leaving a still-wide frame, so just hold the current
-            // zoom and wait rather than erasing the climb.
+            // further on an empty frame. Same grace-tick + zoom-floor
+            // debounce as before (see MATERIAL_LOSS_GRACE_TICKS/
+            // ZOOM_BACKOFF_MIN_ZOOM doc comments) -- kept because a true
+            // zero-detection tick can still be a one-off glitch.
             materialLossStreak += 1
             if (materialLossStreak < MATERIAL_LOSS_GRACE_TICKS) {
                 setStatus("Re-centre the item…", ready = false)
@@ -2633,6 +2641,7 @@ class MainActivity : AppCompatActivity() {
             tagJpeg = null
             tagCodeHistory = mutableListOf()
             stableTagCode = null
+            focusZoom.triggerAutoFocus()
         }
         if (next == Phase.JEWEL) {
             // Deliberately does NOT touch tagJpeg/stableTagCode/
