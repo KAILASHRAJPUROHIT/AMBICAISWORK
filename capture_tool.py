@@ -710,11 +710,83 @@ def _stitch_font(size):
     return ImageFont.load_default()
 
 
+def _stitch_straighten_and_enlarge(img):
+    """Deskews the ornament to upright and crops tight around it BEFORE
+    the panel fit -- self-contained (OpenCV only, no SAM2/DINO
+    dependency) so it still runs even when the upstream sam_locate.
+    tight_crop(straighten=True) pass silently failed for one of the three
+    images (fail-open by design -- see _segment_and_stitch_async), which
+    is exactly what left a piece looking small and tilted in its panel
+    despite that earlier straighten step existing. A tight crop scaled up
+    to fill the panel IS the "enlargement" -- _stitch_fit letterboxing the
+    full, mostly-background source photo is what made the ornament look
+    tiny even though nothing was technically cropped wrong.
+
+    Finds the largest non-background contour (background = near-white,
+    tolerant of the RMBG pass's off-white edges), takes its minAreaRect,
+    rotates the whole image so that rect's long axis is vertical, then
+    crops tight around the (now-upright) content with a small margin.
+    Fails open -- returns the original image unchanged -- if no
+    foreground contour is found (e.g. background wasn't removed and the
+    whole frame reads as "content", a prop-heavy shot, etc.), since a bad
+    guess here is worse than leaving the framing as-is.
+    """
+    arr = np.array(img.convert("RGB"))
+    gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+    # Background (removed -> white, or not-yet-removed -> often still
+    # bright/uniform) is high-value, low local contrast; foreground is
+    # whatever's left after thresholding away near-white.
+    _, mask = cv2.threshold(gray, 245, 255, cv2.THRESH_BINARY_INV)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return img
+    largest = max(contours, key=cv2.contourArea)
+    # Too small a contour (a stray highlight/thread, not the actual
+    # piece) isn't worth trusting for rotation -- leave framing alone.
+    if cv2.contourArea(largest) < (arr.shape[0] * arr.shape[1] * 0.01):
+        return img
+    rect = cv2.minAreaRect(largest)
+    (rw, rh) = rect[1]
+    angle = rect[2]
+    # cv2.minAreaRect's angle convention is orientation-ambiguous (a
+    # square-ish or near-vertical object can report an angle that would
+    # rotate it onto its side) -- normalize to "rotate by the smallest
+    # amount that makes the long axis vertical."
+    if rw < rh:
+        angle = angle - 90
+    h, w = arr.shape[:2]
+    center = (w / 2, h / 2)
+    rot_mat = cv2.getRotationMatrix2D(center, angle, 1.0)
+    rotated = cv2.warpAffine(
+        arr, rot_mat, (w, h), flags=cv2.INTER_LANCZOS4,
+        borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255)
+    )
+    # Re-threshold the ROTATED image (rotation moves foreground pixels,
+    # the old mask/contour coordinates no longer apply) to get a tight
+    # crop box in the new, upright orientation.
+    rot_gray = cv2.cvtColor(rotated, cv2.COLOR_RGB2GRAY)
+    _, rot_mask = cv2.threshold(rot_gray, 245, 255, cv2.THRESH_BINARY_INV)
+    rot_mask = cv2.morphologyEx(rot_mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
+    rot_contours, _ = cv2.findContours(rot_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not rot_contours:
+        return Image.fromarray(rotated)
+    x, y, cw, ch = cv2.boundingRect(max(rot_contours, key=cv2.contourArea))
+    margin = int(max(cw, ch) * 0.08)
+    x0, y0 = max(0, x - margin), max(0, y - margin)
+    x1, y1 = min(w, x + cw + margin), min(h, y + ch + margin)
+    return Image.fromarray(rotated[y0:y1, x0:x1])
+
+
 def _stitch_fit(img, box_w, box_h):
     """Letterbox-fit (preserve aspect, center on white) into box_w x box_h --
     matches the reference example's clean, uncropped product-shot panels
     rather than a center-crop that could clip part of the ornament."""
     from PIL import Image
+    try:
+        img = _stitch_straighten_and_enlarge(img)
+    except Exception:
+        logging.getLogger("capture_tool").exception("_stitch_straighten_and_enlarge failed, using original framing")
     scale = min(box_w / img.width, box_h / img.height)
     new_w, new_h = max(1, int(img.width * scale)), max(1, int(img.height * scale))
     resized = img.resize((new_w, new_h), Image.LANCZOS)
