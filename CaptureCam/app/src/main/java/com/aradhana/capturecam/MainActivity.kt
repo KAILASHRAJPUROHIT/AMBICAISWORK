@@ -1434,35 +1434,51 @@ class MainActivity : AppCompatActivity() {
     private fun bestObjectBox(): RectF? {
         val boxes = latestObjectBoxesUpright
         if (boxes.isEmpty()) return null
-        val points = latestMaterial?.points
-        if (!points.isNullOrEmpty()) {
-            val rotation = lastMaterialRotationDegrees
-            val best = boxes.maxByOrNull { box ->
-                points.count { p ->
-                    val up = uprightPoint(p, rotation)
-                    box.contains(up[0], up[1])
-                }
-            }
-            if (best != null) {
-                val goldCount = points.count { p ->
-                    val up = uprightPoint(p, rotation)
-                    best.contains(up[0], up[1])
-                }
-                if (goldCount > 0) return best
-            }
-        }
+        val gold = bestGoldObjectBox()
+        if (gold != null) return gold
         return boxes.maxByOrNull { it.width() * it.height() }
     }
 
-    /** Continuously steers the AF/AE tracking region at wherever the
+    /** Same ML Kit box selection as bestObjectBox(), but returns null
+     * (never a fallback) when no candidate box actually contains gold/warm
+     * MaterialDetector points this tick. Use this, never bestObjectBox(),
+     * anywhere that must never target a non-gold region -- currently just
+     * updateTrackingRegionFor() (continuous AF/AE steering), per explicit
+     * rule: focus tracks gold ONLY, always, never a generic ML Kit object
+     * (a box lid, a hand, a shadow) even as a last-resort fallback. */
+    private fun bestGoldObjectBox(): RectF? {
+        val boxes = latestObjectBoxesUpright
+        if (boxes.isEmpty()) return null
+        val points = latestMaterial?.points
+        if (points.isNullOrEmpty()) return null
+        val rotation = lastMaterialRotationDegrees
+        val best = boxes.maxByOrNull { box ->
+            points.count { p ->
+                val up = uprightPoint(p, rotation)
+                box.contains(up[0], up[1])
+            }
+        } ?: return null
+        val goldCount = points.count { p ->
+            val up = uprightPoint(p, rotation)
+            best.contains(up[0], up[1])
+        }
+        return if (goldCount > 0) best else null
+    }
+
+    /** Continuously steers the AF/AE tracking region at wherever the GOLD
      * ornament currently is -- called every tick once armed, including
      * while the gimbal is mid-move, so continuous AF follows the object
-     * through motion instead of losing it and having to re-search once
-     * the gimbal stops. Prefers ML Kit's real box, falls back to
-     * MaterialDetector's bounds, no-ops if neither has anything this tick
-     * (nothing to steer toward). */
+     * through motion instead of losing it and having to re-search once the
+     * gimbal stops.
+     *
+     * NON-NEGOTIABLE: focus tracks gold only, always. Prefers a gold-
+     * verified ML Kit box (bestGoldObjectBox()), falls back to
+     * MaterialDetector's own bounds (also gold-derived, never a generic
+     * object), and if NEITHER has gold evidence this tick, does nothing --
+     * holds the last good AF region rather than ever steering focus onto
+     * an unverified/non-gold area (a display box, a hand, a shadow). */
     private fun updateTrackingRegionFor(result: MaterialDetector.Result?) {
-        val box = bestObjectBox()
+        val box = bestGoldObjectBox()
         val cx: Float
         val cy: Float
         if (box != null) {
