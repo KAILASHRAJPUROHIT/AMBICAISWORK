@@ -1111,7 +1111,21 @@ class MainActivity : AppCompatActivity() {
             focusZoom.startContinuousTracking()
         }
 
-        updateTrackingRegionFor(result)
+        // Skip once a definitive triggerAutoFocus() lock is in flight for
+        // this zoom level. Root cause found live (2026-08-18): CameraX's
+        // Camera2CameraControl.setCaptureRequestOptions() REPLACES the
+        // entire interop option set on every call, it does not merge --
+        // updateTrackingRegionFor()'s call only sets AF_REGIONS/AE_REGIONS,
+        // so calling it every tick (as before) silently wiped out
+        // CONTROL_AF_MODE_AUTO + CONTROL_AF_TRIGGER_START the very next
+        // tick after triggerAutoFocus() set them, before Camera2 could
+        // ever report FOCUSED_LOCKED. That's what "stuck at max zoom,
+        // status stuck on Focusing…, af never leaves passive-focused,
+        // never captures" actually was -- the pipeline was re-cancelling
+        // its own focus lock every ~150ms, forever.
+        if (!focusTriggeredThisLevel) {
+            updateTrackingRegionFor(result)
+        }
 
         // THIRD pass on this same struggle (2026-08-18): the real bug was
         // structural, not tuning. MaterialDetector.analyse() computes
