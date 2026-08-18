@@ -1618,6 +1618,37 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Loads the persisted center-drift reference (SharedPreferences,
+     * survives app kill/relaunch) -- "remember center permanently". Called
+     * once from onCreate. If nothing was ever saved (first run after this
+     * feature existed), defaults to 0 -- treats whatever position the
+     * gimbal physically starts this session at as the reference, which is
+     * correct the first time since that's exactly what a fresh manual
+     * recenter followed by a relaunch means. */
+    private fun loadCenterDrift() {
+        centeringPanMs = prefs.getInt("center_drift_pan_ms", 0)
+        centeringTiltMs = prefs.getInt("center_drift_tilt_ms", 0)
+        lastPersistedPanMs = centeringPanMs
+        lastPersistedTiltMs = centeringTiltMs
+        Log.i(TAG, "loaded persisted center drift: pan=$centeringPanMs tilt=$centeringTiltMs")
+    }
+
+    /** Flushes centeringPanMs/TiltMs to prefs if either changed since the
+     * last flush. Called from tickRunnable (every TICK_INTERVAL_MS) rather
+     * than at each individual mutation site -- there are many (legacy hunt/
+     * centering AND VisionServoController's applyServoCommand) and periodic
+     * flushing is simpler and safe: at worst one tick's drift (~150ms) is
+     * lost on an app kill, not the whole session's. */
+    private fun persistCenterDriftIfChanged() {
+        if (centeringPanMs == lastPersistedPanMs && centeringTiltMs == lastPersistedTiltMs) return
+        lastPersistedPanMs = centeringPanMs
+        lastPersistedTiltMs = centeringTiltMs
+        prefs.edit()
+            .putInt("center_drift_pan_ms", centeringPanMs)
+            .putInt("center_drift_tilt_ms", centeringTiltMs)
+            .apply()
+    }
+
     private fun min(a: Float, b: Float) = if (a < b) a else b
 
     /** Converts a MaterialDetector.Point (normalized, raw sensor-space, same
