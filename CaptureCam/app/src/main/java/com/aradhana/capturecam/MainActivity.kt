@@ -164,7 +164,7 @@ class MainActivity : AppCompatActivity() {
     // been detected for this item -- see huntStep(). Deterministic sweep
     // order per explicit spec: DOWN first, then level->LEFT, then
     // center->RIGHT, stopping the instant gold is found at any point.
-    private enum class HuntPhase { SCAN_DOWN, RETURN_TILT, SCAN_LEFT, RETURN_PAN, SCAN_RIGHT, GIVE_UP }
+    private enum class HuntPhase { SCAN_DOWN, SCAN_LEFT, RETURN_PAN, SCAN_RIGHT, GIVE_UP }
     private var huntPhase = HuntPhase.SCAN_DOWN
     private var huntPhaseMsSpent = 0
     private var huntBusy = false
