@@ -1402,9 +1402,11 @@ class MainActivity : AppCompatActivity() {
                 huntBusy = false
                 resetHuntState()
                 huntCooldownUntil = System.currentTimeMillis() + HUNT_COOLDOWN_MS
-                // Undoes whatever net pan/tilt the sweep left behind (should
-                // already be ~0 after RETURN_TILT/RETURN_PAN, this is the
-                // defensive belt-and-suspenders close-out) and returns home.
+                // Undoes whatever net pan/tilt the sweep left behind -- pan
+                // should already be ~0 after RETURN_PAN, but tilt has been
+                // held down since SCAN_DOWN (never returned to level
+                // between phases, see this function's doc comment), so
+                // this is the first point tilt gets undone.
                 undoCenteringThenAdvance {
                     setStatus("Not found — reposition the ornament", ready = false)
                 }
