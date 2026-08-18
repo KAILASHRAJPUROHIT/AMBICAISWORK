@@ -1330,6 +1330,26 @@ class MainActivity : AppCompatActivity() {
         readyStreak = 0
 
         if (!coverageOk) {
+            // Real bug found live (2026-08-18): this branch used to climb
+            // zoom repeatedly, tick after tick, with NO centering check in
+            // between -- centering only ever ran once material was
+            // completely lost (see the result.material==false branch
+            // above) or once coverage was already trustworthy (the ready-
+            // branch further up). A small drift during each zoom step (this
+            // class of digital/hybrid zoom is center-anchored but not
+            // perfectly so) went unchecked across MANY consecutive climb
+            // ticks, compounding until the item walked out of frame
+            // entirely with zoom already maxed out. Non-negotiable rule per
+            // explicit correction: zoom -> focus -> gimbal-center -> repeat,
+            // as one interleaved cycle at every micro-step, not zoom climbed
+            // in a long uninterrupted burst. Center FIRST, every single
+            // tick, before ever taking a zoom step -- attemptCenteringCorrection
+            // is already a safe no-op (returns false) once within
+            // CENTERING_DEADBAND, so this costs nothing once genuinely centered.
+            if (rsc2.isReady && attemptCenteringCorrection(result)) {
+                setStatus("Centering ornament…", ready = false)
+                return
+            }
             // Too small to trust a focus verdict either way yet -- climb on
             // coverage alone, same reasoning as the web version's identical
             // branch (a crop this small would be judged on an upscaled,
