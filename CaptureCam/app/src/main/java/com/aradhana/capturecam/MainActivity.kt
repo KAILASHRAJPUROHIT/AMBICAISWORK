@@ -241,6 +241,9 @@ class MainActivity : AppCompatActivity() {
     // gets one last forced re-focus attempt instead of shuttering on
     // whatever frame happens to be live at that exact millisecond.
     private var stallGraceAt = 0L
+    // Consecutive ticks with no material detected -- see its use in
+    // tickJewel's "lost the piece" branch for why this exists.
+    private var materialLossStreak = 0
     // One-shot per item: whether the "too close to focus" warning has
     // already extended the stall clock once. Prevents it from looping
     // forever if the piece genuinely never gets moved back.
@@ -281,6 +284,12 @@ class MainActivity : AppCompatActivity() {
         // from far away"). 0.24 asks for the piece to fill about half the
         // guide box before settling, which actually uses the climb.
         private const val MIN_LIVE_COVERAGE = 0.24f
+        // How many CONSECUTIVE ticks with material=false before the
+        // "lost the piece" zoom-backoff actually fires. See its use in
+        // tickJewel -- a single flickered false reading (common on small,
+        // shiny pieces under reflective lighting) must not discard a real
+        // zoom climb in progress.
+        private const val MATERIAL_LOSS_GRACE_TICKS = 4
         // Non-negotiable hard capture gate (user requirement): the ornament
         // must occupy at least this fraction of the FULL frame, and be
         // centered, or nothing fires -- not even the stall-safety-valve.
@@ -1074,6 +1083,24 @@ class MainActivity : AppCompatActivity() {
             // (digital/hybrid zoom on this class of lens is still centre-
             // anchored). Ease back to re-acquire rather than climbing
             // further on an empty frame.
+            //
+            // Requires MATERIAL_LOSS_GRACE_TICKS consecutive misses, not
+            // just one, before actually backing off -- confirmed live
+            // (2026-08-18) that a small, shiny piece under reflective
+            // showroom lighting makes MaterialDetector's material=true/
+            // false read flicker tick-to-tick even while the piece is
+            // sitting still in frame (coverage bounced 0.01-0.10 tick to
+            // tick, well below the 0.24 threshold, on every single sample).
+            // Reacting to every flicker reset the zoom climb to ~1.0 over
+            // and over, so coverage could never accumulate enough across a
+            // real climb to cross that threshold -- the pipeline looked
+            // "stuck" even with the gimbal correctly centered on the piece,
+            // because it kept discarding its own progress.
+            materialLossStreak += 1
+            if (materialLossStreak < MATERIAL_LOSS_GRACE_TICKS) {
+                setStatus("Re-centre the item…", ready = false)
+                return
+            }
             val zoom = focusZoom.currentZoomRatio()
             if (zoom > 1.05f) {
                 smoothZoomTo((zoom * ZOOM_BACKOFF_RATIO).coerceAtLeast(1f))
@@ -1083,6 +1110,7 @@ class MainActivity : AppCompatActivity() {
             setStatus("Re-centre the item…", ready = false)
             return
         }
+        materialLossStreak = 0
 
         if (result.material && now - armedAt > MAX_STALL_MS) {
             // Absolute safety valve -- accept the best frame on offer rather
@@ -2530,6 +2558,7 @@ class MainActivity : AppCompatActivity() {
         focusTriggeredThisLevel = false
         isZooming = false
         stallGraceAt = 0L
+        materialLossStreak = 0
         readyStreak = 0
         jewelCaptureRetries = 0
         if (next == Phase.JEWEL) {
