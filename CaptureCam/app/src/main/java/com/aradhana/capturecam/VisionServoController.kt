@@ -172,12 +172,14 @@ class VisionServoController(private val log: (String) -> Unit) {
             }
             VisionState.PREDICTING -> {
                 tracker.seed(mat, dino.toRectF())
+                pendingDisagreement = null
                 state = VisionState.TRACKING
                 log("[STATE] PREDICTING -> TRACKING (DINO reseed)")
                 log("[RESEED] from PREDICTING")
             }
             VisionState.REACQUIRING -> {
                 tracker.seed(mat, dino.toRectF())
+                pendingDisagreement = null
                 state = VisionState.TRACKING
                 log("[STATE] REACQUIRING -> TRACKING (DINO reacquired)")
                 log("[RESEED] from REACQUIRING")
