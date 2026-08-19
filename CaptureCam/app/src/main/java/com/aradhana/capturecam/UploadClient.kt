@@ -31,6 +31,8 @@ import javax.net.ssl.X509TrustManager
  */
 object UploadClient {
 
+    data class CategoryResult(val key: String, val label: String, val prefix: String)
+
     data class SaveResult(
         val ok: Boolean,
         val error: String?,
@@ -53,6 +55,88 @@ object UploadClient {
             .hostnameVerifier(HostnameVerifier { _, _ -> true })
             .build()
     }
+
+    /** capture_server.py's /api/capture/resolve_category -- the tag's code
+     * prefix is the sole source of truth for its category, this just gives
+     * the phone app the same resolution the browser capture tool already
+     * had. Added 2026-08-19 for category-aware behavior on-device (the
+     * ghungroo/dangler symmetry check needs to know which items actually
+     * have a mirror-symmetric pair/halves worth comparing). Null on any
+     * failure -- callers must treat this as advisory-only and never block
+     * a capture on it being unavailable. */
+    suspend fun resolveCategory(baseUrl: String, tagCode: String): CategoryResult? = withContext(Dispatchers.IO) {
+        try {
+            val encoded = java.net.URLEncoder.encode(tagCode, "UTF-8")
+            val request = Request.Builder()
+                .url("${baseUrl.trimEnd('/')}/api/capture/resolve_category?tag_code=$encoded")
+                .get()
+                .build()
+            client.newCall(request).execute().use { response ->
+                val text = response.body?.string() ?: "{}"
+                val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
+                if (!json.optBoolean("ok", false)) return@withContext null
+                CategoryResult(
+                    key = json.getString("key"),
+                    label = json.getString("label"),
+                    prefix = json.getString("prefix")
+                )
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Per-tag stud/rhodium-accent flag, persisted server-side (see
+     * capture_server.py's /api/capture/stud_flag) -- 2026-08-19, explicit
+     * request: a correction made once for a tag must survive a delete+
+     * recapture of that same item, so this is looked up fresh whenever a
+     * tag resolves, not cached across items. Null on any failure -- the
+     * live UI falls back to the on-device auto-guess when this can't be
+     * reached, same "advisory, never blocking" posture as resolveCategory. */
+    suspend fun getStudFlag(baseUrl: String, tagCode: String): Boolean? = withContext(Dispatchers.IO) {
+        try {
+            val encoded = java.net.URLEncoder.encode(tagCode, "UTF-8")
+            val request = Request.Builder()
+                .url("${baseUrl.trimEnd('/')}/api/capture/stud_flag?tag_code=$encoded")
+                .get()
+                .build()
+            client.newCall(request).execute().use { response ->
+                val text = response.body?.string() ?: "{}"
+                val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
+                if (!json.optBoolean("ok", false)) return@withContext null
+                json.getBoolean("has_stud")
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Staff correction from the live preview overlay. Returns the saved
+     * value on success (should echo hasStud), null on failure -- caller
+     * should NOT optimistically update its own UI state past what this
+     * confirms actually persisted. */
+    suspend fun setStudFlag(baseUrl: String, tagCode: String, hasStud: Boolean, staffName: String): Boolean? =
+        withContext(Dispatchers.IO) {
+            try {
+                val body = JSONObject().apply {
+                    put("tag_code", tagCode)
+                    put("has_stud", hasStud)
+                    put("staff_name", staffName)
+                }.toString().toRequestBody("application/json".toMediaType())
+                val request = Request.Builder()
+                    .url("${baseUrl.trimEnd('/')}/api/capture/stud_flag")
+                    .post(body)
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    val text = response.body?.string() ?: "{}"
+                    val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
+                    if (!json.optBoolean("ok", false)) return@withContext null
+                    json.getBoolean("has_stud")
+                }
+            } catch (e: Exception) {
+                null
+            }
+        }
 
     suspend fun savePair(
         baseUrl: String,

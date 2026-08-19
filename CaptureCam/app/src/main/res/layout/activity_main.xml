@@ -169,6 +169,24 @@
             android:paddingVertical="8dp"
             android:textColor="@color/text_muted"
             android:textSize="11sp" />
+
+        <!-- Stud/rhodium-accent status (2026-08-19, explicit request): a
+             live guess with a persistent per-tag correction, not just a
+             per-photo note. Tap toggles and saves via
+             UploadClient.setStudFlag; see MainActivity.updateStudStatusUi. -->
+        <TextView
+            android:id="@+id/studStatusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_card"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="10dp"
+            android:textColor="@color/white"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
     </LinearLayout>
 
     <LinearLayout

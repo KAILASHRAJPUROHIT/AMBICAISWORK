@@ -33,6 +33,8 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -42,7 +44,9 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.opencv.core.Mat
 import java.io.File
@@ -212,6 +216,9 @@ class MainActivity : AppCompatActivity() {
     private var huntCooldownUntil = 0L
 
     private val prefs by lazy { getSharedPreferences("capturecam", MODE_PRIVATE) }
+
+    private fun serverUrl(): String =
+        prefs.getString("server_url", DEFAULT_SERVER_URL)?.trim()?.ifEmpty { DEFAULT_SERVER_URL } ?: DEFAULT_SERVER_URL
     private val handler = Handler(Looper.getMainLooper())
     private val barcodeScanner by lazy { BarcodeScanning.getClient() }
     // Lightweight on-device "Google Lens"-style object localizer -- a small
@@ -247,6 +254,11 @@ class MainActivity : AppCompatActivity() {
     private var armedAt = 0L
     private var stepFocusAttempts = 0
     private var maxUsableZoom = Float.MAX_VALUE
+    // 0L = not currently stuck. Set the first tick meetsHardCaptureRules()
+    // finds itself at maxUsableZoom (not the hardware zoom ceiling) with
+    // occupancy still below CAPTURE_MIN_OCCUPANCY -- see that function's
+    // own doc comment for why this distinction matters.
+    private var maxUsableZoomStuckSince = 0L
     // Timestamp of the last actual zoom change (climb step or backoff
     // step) -- ZOOM_SETTLE_MS after this is the earliest focus may be
     // triggered/judged; ZOOM_STEP_INTERVAL_MS after this is the earliest
@@ -354,6 +366,20 @@ class MainActivity : AppCompatActivity() {
     private var tagJpeg: ByteArray? = null
     private var tagCodeHistory = mutableListOf<String>()
     private var stableTagCode: String? = null
+    // Resolved async right after the tag locks (see recordTagCode) --
+    // null until resolution completes or if it fails; every consumer
+    // treats null as "skip the category-aware behavior," never as a
+    // reason to block anything.
+    private var resolvedCategoryKey: String? = null
+    // Stud/rhodium-accent status (2026-08-19, explicit request). Null
+    // means "not yet fetched/no correction on record" -- the live UI falls
+    // back to studAutoGuess in that case. Once studFlagPersisted is
+    // non-null (either fetched from the server or set by a staff tap), it
+    // wins over the auto-guess -- a human correction should not keep
+    // getting silently overwritten by a flickering per-frame guess.
+    private var studFlagPersisted: Boolean? = null
+    private var studAutoGuess: Boolean = false
+    private var studFlagFetchInFlight = false
     private var autoFired = false
     private var lastAnalysisAt = 0L
     // True while the post-capture preview (image + Retake/Cancel) is on
@@ -402,6 +428,13 @@ class MainActivity : AppCompatActivity() {
         // (can't verify compliance -> don't capture) rather than falling
         // back to a metric that can't represent the requirement.
         private const val CAPTURE_MIN_OCCUPANCY = 0.75f
+        // How long meetsHardCaptureRules() holds off accepting a small
+        // frame caused by a maxUsableZoom focus-failure backoff (see its
+        // own doc comment) before falling back to the old accept-anyway
+        // behaviour. Long enough for staff to notice and nudge the item
+        // back from the lens; short enough not to meaningfully slow a
+        // genuinely stuck item down relative to the old always-accept path.
+        private const val MAX_USABLE_ZOOM_GRACE_MS = 6000L
         private const val MAX_FOCUS_RETRIES = 2
         private const val ZOOM_BACKOFF_RATIO = 0.8f
         // Below this zoom, a "lost the piece" reading only pauses the climb
@@ -469,8 +502,32 @@ class MainActivity : AppCompatActivity() {
         // which reads as the lens racking rapidly and never converging.
         private const val ZOOM_SETTLE_MS = 450L
         private const val MAX_STALL_MS = 12_000L
+        // Baked-in default so staff never have to see or fill in a server
+        // URL -- confirmed reachable (2026-08-19). Settings still allows
+        // overriding it (e.g. a different LAN IP if the laptop changes),
+        // but the app now works correctly out of the box with zero setup.
+        private const val DEFAULT_SERVER_URL = "https://192.168.0.7:7660"
+        // ~1.5s total grace before treating the gimbal as truly disconnected
+        // (see waitForGimbalReady's caller doc comment).
+        private const val GIMBAL_READY_GRACE_ATTEMPTS = 5
+        private const val GIMBAL_READY_GRACE_INTERVAL_MS = 300L
+        // Blank counts as "not configured" too -- SharedPreferences' own
+        // getString(key, default) only substitutes the default when the KEY
+        // is entirely absent, not when it's present but blank (confirmed
+        // live 2026-08-19: an earlier empty Settings save left the key
+        // sitting at "" forever, so the intended default never took over).
         private const val TICK_INTERVAL_MS = 150L
         private const val SHARPNESS_THRESHOLD = 40f
+        // physId=4 from logCameraDiagnostics's real dump on this exact
+        // phone (2026-08-19): 5.56mm, closestFocus~10cm -- the macro-
+        // capable sensor. physId=3 (12.19mm "telephoto") only focuses down
+        // to ~40cm, unusable for jewellery work; physId=2 is the ultra-wide.
+        // Device-specific by construction (a different phone's logical
+        // camera would enumerate different physical IDs) -- bindUseCasesPinned
+        // already fails open to the unpinned default if this ID doesn't
+        // exist/isn't accepted, so a phone swap degrades gracefully rather
+        // than breaking the camera outright.
+        private const val MACRO_PHYSICAL_CAMERA_ID = "4"
         // Below this, autofocus isn't "struggling" -- it never converged at
         // all. Real-world observed range for a genuinely too-close subject
         // was ~2-4 (see the sharpness=2.0-4.3 readings that forced a soft
@@ -685,6 +742,11 @@ class MainActivity : AppCompatActivity() {
     // (finish()) or loops internally for the next item -- see uploadPair.
     private var launchedFromBrowser = false
 
+    // Guards the one-time "arm a fresh TAG scan + start the tick loop" work
+    // in startCamera() -- see its doc comment. startCamera() runs on every
+    // onResume() and camera-error rebind, not just true cold start.
+    private var pipelineStarted = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -752,8 +814,27 @@ class MainActivity : AppCompatActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         launchedFromBrowser = intent.data?.scheme == "capturecam"
-        if (::cameraProvider.isInitialized) {
+        // Same bug shape already found and fixed for bindUseCases()
+        // (2026-08-19, see its own comment above) -- resetForNewItem(TAG)
+        // wipes tagJpeg/stableTagCode but NOT jewelJpeg/angle1Jpeg/
+        // angle2Jpeg, so any stray re-entry mid-item silently drops just
+        // the tag while the jewel photos survive, producing exactly
+        // "Missing photo or tag" at upload time with all 3 photos present.
+        // THIS call site had the same unconditional reset and was missed
+        // by that fix -- confirmed live (2026-08-19, tag WATI item):
+        // browser capture.html re-firing capturecam://start (plausible
+        // right after a server reconnect/page reload) while this app was
+        // still mid-JEWEL with all 3 angles already shot. A genuinely
+        // fresh item start (finished previous item, browser launches the
+        // next one) always arrives with no unsaved jewel photos in
+        // flight, so gating on that distinguishes "real new item" from
+        // "stray duplicate re-entry" without needing to track intent
+        // identity at all.
+        val midItemWithUnsavedWork = jewelJpeg != null || angle1Jpeg != null || angle2Jpeg != null
+        if (::cameraProvider.isInitialized && !midItemWithUnsavedWork) {
             resetForNewItem(Phase.TAG)
+        } else if (midItemWithUnsavedWork) {
+            Log.w(TAG, "onNewIntent ignored reset -- mid-item with unsaved jewel photo(s) in flight")
         }
         attemptGimbalConnect()
     }
@@ -789,6 +870,25 @@ class MainActivity : AppCompatActivity() {
         providerFuture.addListener({
             cameraProvider = providerFuture.get()
             bindUseCases()
+            // Only the very first bind should arm a fresh TAG/QR scan and
+            // start the tick loop -- startCamera() also runs on every
+            // onResume() (screen lock/unlock, a notification, switching
+            // away and back) and from the capture-error rebind in
+            // captureFullRes(). Before this fix, bindUseCases() itself
+            // unconditionally called resetForNewItem(Phase.TAG), which
+            // wipes tagJpeg/stableTagCode but NOT jewelJpeg/angle1Jpeg/
+            // angle2Jpeg (those only clear on next==Phase.JEWEL) -- so any
+            // resume or transient capture error mid angle1/angle2 silently
+            // discarded the tag while the jewel photos survived untouched.
+            // Confirmed live (2026-08-19): a real capture with all 3 jewel
+            // photos present but stableTagCode null at upload time, which
+            // is exactly this shape. A rebind after this point now only
+            // rebuilds the CameraX pipeline, never touches capture state.
+            if (!pipelineStarted) {
+                pipelineStarted = true
+                resetForNewItem(Phase.TAG)
+                handler.post(tickRunnable)
+            }
             logCameraDiagnostics()
             logExtensionsDiagnostics()
         }, ContextCompat.getMainExecutor(this))
@@ -856,6 +956,29 @@ class MainActivity : AppCompatActivity() {
                         val pSensor = pch.get(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
                         val pPixels = pch.get(android.hardware.camera2.CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
                         val pClosestCm = if (pMinFocus != null && pMinFocus > 0f) 100f / pMinFocus else null
+                        // 2026-08-19, explicit request: check whether this physical
+                        // sensor has a higher native resolution hidden behind
+                        // binned default output -- common on modern phone sensors
+                        // (quad/nona-bayer). ULTRA_HIGH_RESOLUTION_SENSOR (cap 18,
+                        // API 33+) plus the MAXIMUM_RESOLUTION stream config map is
+                        // the only reliable way to check this; SENSOR_INFO_
+                        // PIXEL_ARRAY_SIZE alone only reports the DEFAULT (usually
+                        // binned) mode.
+                        val pCaps = pch.get(android.hardware.camera2.CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+                        val hasUltraHighRes = pCaps?.contains(18) == true  // CAPABILITIES_ULTRA_HIGH_RESOLUTION_SENSOR
+                        var maxResSizes = "n/a"
+                        if (hasUltraHighRes && android.os.Build.VERSION.SDK_INT >= 33) {
+                            val maxMap = pch.get(android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP_MAXIMUM_RESOLUTION)
+                            val sizes = maxMap?.getOutputSizes(android.graphics.ImageFormat.JPEG)
+                            maxResSizes = sizes?.sortedByDescending { it.width.toLong() * it.height }
+                                ?.take(3)?.joinToString { "${it.width}x${it.height}" } ?: "none"
+                        }
+                        val defaultMap = pch.get(android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                        val defaultJpegSizes = defaultMap?.getOutputSizes(android.graphics.ImageFormat.JPEG)
+                            ?.sortedByDescending { it.width.toLong() * it.height }?.take(3)
+                            ?.joinToString { "${it.width}x${it.height}" } ?: "none"
+                        Log.i("CameraDiag", "  physId=$physId ultraHighRes=$hasUltraHighRes " +
+                            "maxResJpegSizes=[$maxResSizes] defaultJpegSizes=[$defaultJpegSizes]")
                         Log.i("CameraDiag", "  physId=$physId focalLen=${pFocal?.joinToString()}mm " +
                             "minFocusDist=${pMinFocus}diopters closestFocus=${pClosestCm}cm " +
                             "sensor=$pSensor pixels=$pPixels")
@@ -869,33 +992,90 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Pins every use case to a specific PHYSICAL sensor inside this
+     * phone's logical back multi-camera (2026-08-19, real production
+     * finding). logCameraDiagnostics() dumped all 3 physical lenses:
+     * physId 4 (5.56mm, closestFocus~10cm, the main/wide sensor) vs physId
+     * 3 (12.19mm "telephoto", closestFocus~40cm). Android's own logical-
+     * camera zoom handling auto-switches to whichever physical sensor its
+     * own heuristic prefers at a given zoomRatio, with NO awareness that
+     * this app needs macro focus down to a few cm -- at the zoom levels a
+     * small ring/stud needs to fill frame, it was handing off to physId 3,
+     * a lens that CANNOT focus that close at all. AF still reports LOCKED
+     * (it genuinely locked, just at the nearest distance THAT lens allows),
+     * so every existing software focus/sharpness gate passed while the
+     * shot was unavoidably soft -- confirmed by comparing directly against
+     * the stock Nothing Camera app on the identical ring/lighting/stand,
+     * which came out sharp (it's tuned to stay on the macro sensor).
+     * Pinning here makes "zoom" a pure digital crop within the ALWAYS-
+     * macro-capable sensor instead of a hardware lens swap -- correct
+     * regardless of how big the item is or how far/high the gimbal sits,
+     * since none of that changes which physical sensor gets used. */
     private fun bindUseCases() {
+        bindUseCasesPinned(MACRO_PHYSICAL_CAMERA_ID)
+    }
+
+    /** physicalCameraId: non-null pins every use case to that physical
+     * sensor; null uses the logical multi-camera's own default switching
+     * (the pre-2026-08-19 behaviour) -- kept as the fallback path in case
+     * this device/CameraX combination rejects the pinned bind, so a
+     * rejection degrades to "same as before" rather than a dead camera. */
+    private fun bindUseCasesPinned(physicalCameraId: String?) {
         val previewBuilder = Preview.Builder()
         focusZoom.attachCaptureCallback(previewBuilder)
+        val analysisBuilder = ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+        val captureBuilder = ImageCapture.Builder()
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+            // Explicit, not relying on CAPTURE_MODE_MAXIMIZE_QUALITY's
+            // documented default alone (2026-08-19) -- confirmed via
+            // Camera2 characteristics that physId=4's real ceiling is
+            // 4096x3072 (12.6MP, no genuine higher-resolution mode exists
+            // on this sensor for JPEG output), and the raw capture WAS
+            // already landing there. This is insurance against CameraX
+            // silently negotiating a lower resolution due to the other
+            // simultaneously-bound use cases (Preview/ImageAnalysis), not
+            // a fix for a confirmed regression.
+            .setResolutionSelector(
+                ResolutionSelector.Builder()
+                    .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
+                    .build()
+            )
+            .setJpegQuality(100)
+
+        if (physicalCameraId != null) {
+            androidx.camera.camera2.interop.Camera2Interop.Extender(previewBuilder)
+                .setPhysicalCameraId(physicalCameraId)
+            androidx.camera.camera2.interop.Camera2Interop.Extender(analysisBuilder)
+                .setPhysicalCameraId(physicalCameraId)
+            androidx.camera.camera2.interop.Camera2Interop.Extender(captureBuilder)
+                .setPhysicalCameraId(physicalCameraId)
+        }
+
         val preview = previewBuilder.build().also {
             it.setSurfaceProvider(binding.previewView.surfaceProvider)
         }
-
-        val analysis = ImageAnalysis.Builder()
-            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .build()
-        analysis.setAnalyzer(ContextCompat.getMainExecutor(this)) { imageProxy ->
-            onFrame(imageProxy)
+        val analysis = analysisBuilder.build().also {
+            it.setAnalyzer(ContextCompat.getMainExecutor(this)) { imageProxy -> onFrame(imageProxy) }
         }
-
-        imageCapture = ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-            .build()
+        imageCapture = captureBuilder.build()
 
         cameraProvider.unbindAll()
-        camera = cameraProvider.bindToLifecycle(
-            this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis, imageCapture
-        )
+        try {
+            camera = cameraProvider.bindToLifecycle(
+                this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis, imageCapture
+            )
+            Log.i("CameraDiag", "bindUseCases physicalCameraId=$physicalCameraId OK")
+        } catch (e: Exception) {
+            if (physicalCameraId != null) {
+                Log.e("CameraDiag", "bindUseCases physicalCameraId=$physicalCameraId REJECTED, falling back to default", e)
+                bindUseCasesPinned(null)
+                return
+            }
+            throw e
+        }
         camera?.let { focusZoom.bind(it, getSystemService(android.hardware.camera2.CameraManager::class.java)) }
         configureExposureSlider()
-
-        resetForNewItem(Phase.TAG)
-        handler.post(tickRunnable)
     }
 
     // ---------------------------------------------------------------- Frame analysis
@@ -1063,7 +1243,7 @@ class MainActivity : AppCompatActivity() {
     // captureJewel(). Do not wire that until the checkpoint has passed.
 
     private fun connectDetector() {
-        val serverUrl = prefs.getString("server_url", "") ?: return
+        val serverUrl = serverUrl()
         val host = try { java.net.URI(serverUrl).host } catch (e: Exception) { null }
         if (host.isNullOrBlank()) return
         val wsUrl = "ws://$host:8765"
@@ -1156,7 +1336,100 @@ class MainActivity : AppCompatActivity() {
         val trimmed = code.trim()
         tagCodeHistory = (if (tagCodeHistory.lastOrNull() == trimmed) tagCodeHistory + trimmed else mutableListOf(trimmed))
             .takeLast(3).toMutableList()
+        val wasNull = stableTagCode == null
         stableTagCode = if (tagCodeHistory.size >= 2) trimmed else null
+        if (wasNull && stableTagCode != null) {
+            resolveCategoryForCurrentTag()
+        }
+    }
+
+    /** Fire-and-forget category lookup the instant the tag locks -- needed
+     * on-device (2026-08-19, explicit request) for the ghungroo/dangler
+     * symmetry check, which only applies to categories with a genuine
+     * mirror-symmetric pair/halves (see CategoryOrientation.kt). Advisory
+     * only: resolvedCategoryKey stays null on any failure, and every
+     * caller treats that as "skip the check," never as a reason to block
+     * or retry the capture itself. */
+    private fun resolveCategoryForCurrentTag() {
+        val code = stableTagCode ?: return
+        resolvedCategoryKey = null
+        lifecycleScope.launch {
+            resolvedCategoryKey = try {
+                UploadClient.resolveCategory(serverUrl(), code)?.key
+            } catch (e: Exception) {
+                null
+            }
+        }
+        fetchStudFlagForCurrentTag(code)
+    }
+
+    /** Fire-and-forget stud-flag lookup, same pattern/reasoning as category
+     * resolution just above -- fetched fresh per tag so a correction made
+     * on a PREVIOUS item for this same tag code (recapture after delete)
+     * is picked back up, not silently reset to "unknown". */
+    private fun fetchStudFlagForCurrentTag(code: String) {
+        studFlagFetchInFlight = true
+        lifecycleScope.launch {
+            val result = try {
+                UploadClient.getStudFlag(serverUrl(), code)
+            } catch (e: Exception) {
+                null
+            }
+            if (stableTagCode == code) {
+                studFlagPersisted = result
+            }
+            studFlagFetchInFlight = false
+        }
+    }
+
+    /** Tap handler for studStatusText -- flips whichever value is
+     * currently displayed and persists it immediately. Optimistic UI
+     * (updates studFlagPersisted before the network call resolves) since
+     * this is a deliberate, explicit staff action, not a background guess
+     * -- reverted only if the save actually fails, logged so a silent
+     * network failure doesn't leave staff believing a correction stuck
+     * when it didn't. */
+    private fun onStudStatusTapped() {
+        val code = stableTagCode ?: return
+        val current = studFlagPersisted ?: studAutoGuess
+        val next = !current
+        studFlagPersisted = next
+        updateStudStatusUi()
+        lifecycleScope.launch {
+            val staffName = prefs.getString("staff_name", "") ?: ""
+            val saved = try {
+                UploadClient.setStudFlag(serverUrl(), code, next, staffName)
+            } catch (e: Exception) {
+                null
+            }
+            if (saved == null) {
+                Log.w(TAG, "onStudStatusTapped: save failed for tag=$code hasStud=$next")
+                Toast.makeText(this@MainActivity, "Stud correction didn't save — check connection", Toast.LENGTH_LONG).show()
+            } else if (stableTagCode == code) {
+                studFlagPersisted = saved
+                updateStudStatusUi()
+            }
+        }
+    }
+
+    /** Shows/updates the stud status card. "(guess)" vs no suffix
+     * distinguishes an unconfirmed on-device heuristic from an actual
+     * persisted/confirmed value -- staff should be able to tell at a
+     * glance whether this needs their attention. Hidden entirely outside
+     * JEWEL phase or before a tag has resolved, since there's nothing
+     * meaningful to show yet. */
+    private fun updateStudStatusUi() {
+        val card = binding.studStatusText
+        if (phase != Phase.JEWEL || stableTagCode == null) {
+            card.visibility = View.GONE
+            return
+        }
+        card.visibility = View.VISIBLE
+        val persisted = studFlagPersisted
+        val shown = persisted ?: studAutoGuess
+        val suffix = if (persisted == null) " (guess — tap to correct)" else " (tap to correct)"
+        card.text = if (shown) "Stud: Yes$suffix" else "Stud: No$suffix"
+        card.setOnClickListener { onStudStatusTapped() }
     }
 
     // ---------------------------------------------------------------- Pipeline tick
@@ -1279,6 +1552,10 @@ class MainActivity : AppCompatActivity() {
         }
         val now = System.currentTimeMillis()
         val result = latestMaterial
+        if (result != null) {
+            studAutoGuess = MaterialDetector.studCandidate(result.points)
+        }
+        updateStudStatusUi()
 
         if (TRACKING_PIPELINE_ACTIVE) {
             // VisionServoController is fully in charge of centering/framing/
@@ -1522,6 +1799,18 @@ class MainActivity : AppCompatActivity() {
         val focusLocked = focusZoom.isFocusLocked(afState)
         val focusFailed = focusZoom.isFocusFailed(afState)
         val sharpEnough = latestSharpness >= SHARPNESS_THRESHOLD
+        // Standing rule: no blown-out white on the gold at all -- any
+        // clipped highlight there is already-lost design detail (engraving,
+        // texture) that no post-processing gets back. applyAutoExposure()
+        // above steps EV down toward fixing this, but it was only ever a
+        // continuous background corrector -- nothing stopped the shutter
+        // from firing mid-correction, before the step-down had actually
+        // brought the highlight under control. Confirmed live (2026-08-19,
+        // GR22/127): captured with a visibly blown highlight straight
+        // across the ring's engraved face despite the corrector running.
+        // Gating capture on this (not just adjusting exposure and hoping)
+        // closes that gap.
+        val goldOverexposed = result.highlightClipFraction > 0f
         // Explicit phase label for diagnostics, in the spirit of the DINO/
         // MIL branch's VisionState enum (2026-08-18 port) -- derived
         // read-only from signals already computed above, no new EMA-
@@ -1547,7 +1836,23 @@ class MainActivity : AppCompatActivity() {
         // there. Requiring REQUIRED_READY_TICKS consecutive centered ticks,
         // same as coverage/focus/sharpness already get, means a transient
         // pass-through no longer counts.
-        if (coverageOk && zoomSettled && focusLocked && sharpEnough && isCenteredNow()) {
+        // Same shape sanity check as waitForStableFrame's angle1/angle2 gate
+        // (see CategoryOrientation.looksWrongShape's doc comment) -- MAIN
+        // can hit the identical failure mode, a tracked box that's fully
+        // inside frame and clears coverage/focus/sharp but is locked onto
+        // the wrong sub-part of the piece.
+        val wrongShape = CategoryOrientation.looksWrongShape(resolvedCategoryKey, result.bounds)
+        // Exempt once EV compensation has already hit its floor -- that
+        // means applyAutoExposure() has corrected as much as this device
+        // physically allows and the highlight is still clipping (a genuine
+        // ambient-light problem, not something waiting-longer fixes).
+        // Blocking forever on an uncorrectable glare would just stall the
+        // item; every OTHER gate here already has the same fail-open
+        // instinct once its own corrective mechanism is exhausted.
+        val exposureExhausted = focusZoom.exposureControlAvailable() &&
+            autoExposureEv <= max(focusZoom.exposureCompensationRangeEv().start, EXPOSURE_MIN_EV) + 0.05f
+        if (coverageOk && !wrongShape && (!goldOverexposed || exposureExhausted) &&
+            zoomSettled && focusLocked && sharpEnough && isCenteredNow()) {
             // Require this to hold for a few consecutive ticks, not just one
             // instant read -- a single tick can catch a momentarily-still
             // hand between small shakes, and the few hundred ms the shutter
@@ -1588,6 +1893,23 @@ class MainActivity : AppCompatActivity() {
         // good shot sitting right there. Decrementing tolerates the odd
         // bad tick while still requiring sustained quality overall.
         readyStreak = (readyStreak - 1).coerceAtLeast(0)
+
+        if (coverageOk && wrongShape) {
+            // Otherwise on track (coverage/focus climb wouldn't stall on
+            // this) but the tracked box's own proportions don't match this
+            // category -- give staff an explicit reason instead of a
+            // silently-stuck "Framing…" they can't act on.
+            setStatus("Reposition — tracking looks off", ready = false)
+            return
+        }
+
+        if (coverageOk && goldOverexposed && !exposureExhausted) {
+            // applyAutoExposure() above is already stepping EV down --
+            // this just holds the shutter until it's actually taken effect
+            // instead of firing on a highlight it hasn't corrected yet.
+            setStatus("Reducing glare…", ready = false)
+            return
+        }
 
         if (!coverageOk) {
             // Too small to trust a focus verdict either way yet -- climb on
@@ -1968,9 +2290,40 @@ class MainActivity : AppCompatActivity() {
         // only occupancy.
         val zoom = focusZoom.currentZoomRatio()
         val zoomRange = focusZoom.zoomRatioRange()
-        val atZoomCeiling = zoom >= min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO) - 0.02f ||
-            zoom >= maxUsableZoom - 0.02f
-        if (occupancy < CAPTURE_MIN_OCCUPANCY && !atZoomCeiling) return false
+        // Split what used to be one combined "atZoomCeiling" check
+        // (2026-08-19, real production finding, tag GR22/127): a HARDWARE
+        // ceiling (device physically cannot zoom further) is a genuine
+        // "nothing more we can do" case, fine to accept as-is. But
+        // maxUsableZoom is a SELF-IMPOSED backoff this app applies after
+        // repeated focus failures at a given zoom level -- and on this
+        // phone's macro-pinned physical sensor (~10cm minimum focus
+        // distance), that almost always means the item was placed CLOSER
+        // than the lens can focus at all, not that more zoom wasn't
+        // available. Treating that the same as a hardware ceiling silently
+        // accepted a tiny, design-detail-poor frame (confirmed live:
+        // GR22/127 captured at ~7% occupancy this way) when the real fix
+        // was simply "move the item back a little" -- fixable, not a
+        // hardware limit.
+        val atHardwareZoomCeiling = zoom >= min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO) - 0.02f
+        val atUsableZoomCeiling = zoom >= maxUsableZoom - 0.02f
+        if (occupancy < CAPTURE_MIN_OCCUPANCY) {
+            if (atUsableZoomCeiling && !atHardwareZoomCeiling) {
+                // Bounded grace window, not an outright block -- falls
+                // back to the old accept-anyway behaviour after
+                // MAX_USABLE_ZOOM_GRACE_MS so this can't regress into the
+                // original 2026-08-18 infinite-stall bug this escape
+                // hatch was built to fix. The window exists to give staff
+                // a real chance to notice and reposition before a
+                // marginal shot gets accepted.
+                val now = System.currentTimeMillis()
+                if (maxUsableZoomStuckSince == 0L) maxUsableZoomStuckSince = now
+                if (now - maxUsableZoomStuckSince < MAX_USABLE_ZOOM_GRACE_MS) return false
+            } else if (!atHardwareZoomCeiling) {
+                return false
+            }
+        } else {
+            maxUsableZoomStuckSince = 0L
+        }
         return isCenteredNow()
     }
 
@@ -2469,14 +2822,43 @@ class MainActivity : AppCompatActivity() {
      */
     private fun onMainCaptureAccepted() {
         Log.i(TAG, "onMainCaptureAccepted: rsc2.isReady=${rsc2.isReady}")
-        if (!rsc2.isReady) {
-            // No gimbal -- no angle shots possible, and the tag was already
-            // scanned FIRST under the #76 flip, so this MAIN shot is the
-            // last jewel photo needed. Upload now instead of restarting.
-            inAngleSequence = false
-            uploadCapturedSet()
+        // rsc2.isReady is a live BLE-state check (commandCharacteristic !=
+        // null && gatt != null), not debounced -- a momentary BLE blip
+        // exactly at this instant used to permanently fall back to a
+        // single-photo item with zero warning to staff. Confirmed live
+        // (2026-08-19, tag WT22/6): item saved with just MAIN, no angle1/
+        // angle2, no visible sign anything was different, discovered only
+        // because staff noticed the app moved to the next item faster than
+        // usual. Give the connection a short grace window to recover before
+        // treating it as truly gone.
+        waitForGimbalReady { ready ->
+            if (!ready) {
+                logCaptureEvent("gimbal_not_ready_single_photo_fallback")
+                Toast.makeText(
+                    this, "Gimbal not connected — saved MAIN photo only for this item",
+                    Toast.LENGTH_LONG
+                ).show()
+                inAngleSequence = false
+                uploadCapturedSet()
+                return@waitForGimbalReady
+            }
+            onMainCaptureAcceptedWithGimbal()
+        }
+    }
+
+    private fun waitForGimbalReady(attemptsLeft: Int = GIMBAL_READY_GRACE_ATTEMPTS, onResult: (Boolean) -> Unit) {
+        if (rsc2.isReady) {
+            onResult(true)
             return
         }
+        if (attemptsLeft <= 0) {
+            onResult(false)
+            return
+        }
+        handler.postDelayed({ waitForGimbalReady(attemptsLeft - 1, onResult) }, GIMBAL_READY_GRACE_INTERVAL_MS)
+    }
+
+    private fun onMainCaptureAcceptedWithGimbal() {
         inAngleSequence = true
         promptForSideProfile("Turn the ornament to show a SIDE profile, then tap READY") {
             centerThenCapture { captureAngle1() }
@@ -2613,8 +2995,26 @@ class MainActivity : AppCompatActivity() {
                 val present = bestObjectBox() != null || result?.bounds != null
                 val focusLocked = focusZoom.isFocusLocked(focusZoom.afState.value)
                 val sharpEnough = latestSharpness >= SHARPNESS_THRESHOLD
+                // Bracelet/bangle-shaped items can present as a bright band
+                // the tracker locks onto and zooms into without ever
+                // checking whether the band's own box has spilled off the
+                // visible frame -- confirmed live 2026-08-19: coverage,
+                // goldClip and sceneClip all read fine while the tracked
+                // box ran edge-to-edge left-right at 3.4x zoom. Reject that
+                // as "not really present" so READY never lights on a
+                // clipped shot; the deadline below still fails open rather
+                // than stalling forever on a piece too large for any zoom
+                // level to fully frame.
+                val edgeClipped = MaterialDetector.touchesFrameEdge(result?.bounds)
+                // Catches the OTHER half of the 2026-08-19 bracelet bug:
+                // even when the tracked box is fully inside the frame, it
+                // can still be locked onto the wrong sub-part of the piece
+                // (a thin highlight band instead of the whole bracelet).
+                // touchesFrameEdge alone wouldn't catch that if the bad
+                // box happened not to reach an edge.
+                val wrongShape = CategoryOrientation.looksWrongShape(resolvedCategoryKey, result?.bounds)
                 val now = System.currentTimeMillis()
-                if (present && focusLocked && sharpEnough) {
+                if (present && !edgeClipped && !wrongShape && focusLocked && sharpEnough) {
                     angleStableStreak += 1
                     if (angleStableStreak >= ANGLE_STABLE_TICKS) {
                         setStatus("Holding steady…", ready = true)
@@ -2624,8 +3024,16 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     angleStableStreak = 0
                 }
+                if ((edgeClipped || wrongShape) && now < deadline) {
+                    setStatus(
+                        if (edgeClipped) "Too close — zoom out or reposition" else "Reposition — not fully in view",
+                        ready = false
+                    )
+                    handler.postDelayed(this, 150L)
+                    return
+                }
                 if (now >= deadline) {
-                    Log.w(TAG, "waitForStableFrame forced after timeout present=$present focusLocked=$focusLocked sharp=$latestSharpness")
+                    Log.w(TAG, "waitForStableFrame forced after timeout present=$present edgeClipped=$edgeClipped focusLocked=$focusLocked sharp=$latestSharpness")
                     onDetected()
                     return
                 }
@@ -2799,7 +3207,19 @@ class MainActivity : AppCompatActivity() {
                         tagJpeg = bytes
                         showCapturePreview(
                             bytes,
-                            onProceed = { resetForNewItem(Phase.JEWEL); promptToPlaceMainItem() },
+                            // Manual Capture on TAG is a staff override for a
+                            // barcode that won't scan -- it takes a photo but
+                            // was NEVER setting stableTagCode, since only the
+                            // real scanner's success path does that. Confirmed
+                            // live (2026-08-19): uploadMulti()/uploadPair()
+                            // both hard-require a non-null tag code and
+                            // silently discard the whole item otherwise
+                            // ("Missing photo — retake", immediately
+                            // overwritten by "Scanning tag…" on the next
+                            // tick) -- two full items captured and lost with
+                            // no visible error at all. Prompt for the code by
+                            // hand here instead of leaving it null.
+                            onProceed = { promptForManualTagCode() },
                             onRetake = { retakeTag() },
                             onCancel = { cancelItem() }
                         )
@@ -2808,6 +3228,45 @@ class MainActivity : AppCompatActivity() {
             }
             Phase.UPLOADING -> {}
         }
+    }
+
+    /** TAG-phase Manual Capture never runs the real barcode scanner, so
+     * stableTagCode is never set by that path -- ask the operator to type
+     * the code by hand instead of silently proceeding with it null (see the
+     * doc comment on the caller for the incident this closes). Blocks with
+     * a non-cancelable dialog; blank/whitespace input keeps the dialog open
+     * rather than letting the item continue untagged. */
+    private fun promptForManualTagCode() {
+        val input = EditText(this).apply {
+            hint = "Tag code, e.g. WT22/128"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+        }
+        val padding = (16 * resources.displayMetrics.density).toInt()
+        val container = android.widget.FrameLayout(this).apply {
+            setPadding(padding, padding, padding, padding)
+            addView(input)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Enter tag code")
+            .setMessage("Barcode wasn't scanned for this item — type the tag code by hand.")
+            .setView(container)
+            .setCancelable(false)
+            .setPositiveButton("Continue", null)
+            .show()
+            .apply {
+                getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val code = input.text.toString().trim()
+                    if (code.isEmpty()) {
+                        input.error = "Required"
+                        return@setOnClickListener
+                    }
+                    stableTagCode = code
+                    logCaptureEvent("manual_tag_code_entered", mapOf("code" to code))
+                    dismiss()
+                    resetForNewItem(Phase.JEWEL)
+                    promptToPlaceMainItem()
+                }
+            }
     }
 
     // ---------------------------------------------------------------- Capture preview
@@ -2909,6 +3368,49 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.w(TAG, "logManualAction($action) failed: ${e.message}")
         }
+    }
+
+    /** Durable record of every capture/upload outcome (2026-08-19, added
+     * after 2 WATI items were captured in full auto mode but never landed
+     * in capture_intake, with zero evidence to explain why -- logcat had
+     * already rotated past it by the time it was noticed the next morning,
+     * and every failure branch in uploadMulti/uploadPair only ever showed a
+     * few-second Toast, easy to miss on an unattended run). Same
+     * append-only, fail-silent JSONL convention as logManualAction, in a
+     * SEPARATE file so a long unattended run's event history doesn't get
+     * lost/rotated the way logcat did. Survives across app restarts, so the
+     * next incident is a grep instead of a guess. */
+    private fun logCaptureEvent(event: String, details: Map<String, Any?> = emptyMap()) {
+        try {
+            val dir = getExternalFilesDir(null) ?: return
+            val file = File(dir, "capture_events.jsonl")
+            val entry = JSONObject().apply {
+                put("ts", System.currentTimeMillis())
+                put("event", event)
+                put("tag", stableTagCode)
+                put("phase", phase.name)
+                details.forEach { (k, v) -> put(k, v) }
+            }
+            file.appendText(entry.toString() + "\n")
+        } catch (e: Exception) {
+            Log.w(TAG, "logCaptureEvent($event) failed: ${e.message}")
+        }
+    }
+
+    /** Same reasoning as showItemSavedPopup: a failure Toast disappears in a
+     * couple seconds and is trivial to miss with hands full of jewellery, or
+     * on an unattended auto-mode run -- which is exactly how 2 real items
+     * went missing with no visible trace (2026-08-19). Every upload failure
+     * path now blocks on an explicit acknowledgment instead, and is always
+     * paired with a logCaptureEvent call so it's also in capture_events.jsonl
+     * even if nobody was there to see the dialog. */
+    private fun showUploadFailedPopup(reason: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Save failed")
+            .setMessage(reason)
+            .setCancelable(false)
+            .setPositiveButton("OK") { _, _ -> resetForNewItem(Phase.TAG) }
+            .show()
     }
 
     /** Wires the manual-controls row (zoom +/-, exposure slider, resume-
@@ -3091,6 +3593,7 @@ class MainActivity : AppCompatActivity() {
         armed = false
         stepFocusAttempts = 0
         maxUsableZoom = Float.MAX_VALUE
+        maxUsableZoomStuckSince = 0L
         latestMaterial = null
         autoFired = false
         armedAt = System.currentTimeMillis()
@@ -3126,6 +3629,10 @@ class MainActivity : AppCompatActivity() {
         tagJpeg = null
         tagCodeHistory = mutableListOf()
         stableTagCode = null
+        resolvedCategoryKey = null
+        studFlagPersisted = null
+        studAutoGuess = false
+        updateStudStatusUi()
         autoFired = false
         barcodeAttempts = 0
         lastBarcodeCount = -1
@@ -3150,7 +3657,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun captureFullRes(onResult: (ByteArray?) -> Unit) {
+    /** Takes exactly one still and returns its bytes, or null on failure.
+     * Internal building block for [captureFullRes]'s 2-frame burst -- kept
+     * separate so the burst/compare logic below doesn't have to duplicate
+     * the ImageCapture callback plumbing or the dead-session rebind fix. */
+    private fun captureOneFrame(onResult: (ByteArray?) -> Unit) {
         val capture = imageCapture ?: run { onResult(null); return }
         capture.takePicture(
             ContextCompat.getMainExecutor(this),
@@ -3184,6 +3695,70 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    /** 2-frame burst, keeps the sharper one -- explicit request (2026-08-19):
+     * "capture 2 frames per angle and automatically keep the sharper one."
+     * Even with focus locked and the gimbal stationary, a real capture can
+     * land slightly softer than the very next one (residual micro-vibration,
+     * a hair of AF settling) -- catalogue-source images going into Flux.2
+     * Pro need the sharper of the two, not whichever happened to fire first.
+     * Scored with SharpnessAnalyzer.scoreBitmapRaw() on the ACTUAL decoded
+     * full-res bytes (not the low-res live-preview metric) -- this is a
+     * RELATIVE comparison between two frames of the same shot, which sidesteps
+     * the exact problem that sank the earlier attempt at an absolute
+     * full-res threshold (real captures land at 0.6-15 raw variance with no
+     * calibrated cutoff ever established): two frames of the same subject,
+     * same framing, same light are directly comparable to each other even
+     * without knowing what "good" looks like in absolute terms.
+     * Fails open at every step -- if the second shot fails, or either
+     * fails to decode, whichever frame IS usable is returned rather than
+     * the whole capture failing over a burst-compare technicality.
+     *
+     * Scoring runs on Dispatchers.Default, NOT inline in the CameraX
+     * capture callback -- confirmed live (2026-08-19): decoding a ~12MP
+     * JPEG to a Bitmap and running SharpnessAnalyzer's manual per-pixel
+     * Laplacian loop over it is real CPU work, and CameraX's
+     * OnImageCapturedCallback fires on ContextCompat.getMainExecutor, so
+     * doing this scoring inline (as the first version of this burst
+     * feature did) froze the entire UI thread for several real seconds
+     * between every pair of shots -- reported as "the capture tool gets
+     * stuck between image 1 and image 2." The two takePicture() calls
+     * themselves still go through CameraX's own executor as before; only
+     * the decode+score step moves off it. */
+    private fun captureFullRes(onResult: (ByteArray?) -> Unit) {
+        captureOneFrame firstFrame@{ first ->
+            if (first == null) {
+                onResult(null)
+                return@firstFrame
+            }
+            captureOneFrame secondFrame@{ second ->
+                if (second == null) {
+                    onResult(first)
+                    return@secondFrame
+                }
+                lifecycleScope.launch {
+                    val (firstScore, secondScore) = withContext(Dispatchers.Default) {
+                        scoreCaptureSharpness(first) to scoreCaptureSharpness(second)
+                    }
+                    Log.i(TAG, "captureFullRes burst scores: first=$firstScore second=$secondScore")
+                    onResult(if (secondScore >= firstScore) second else first)
+                }
+            }
+        }
+    }
+
+    private fun scoreCaptureSharpness(bytes: ByteArray): Double {
+        val bmp = try {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        } catch (e: Exception) {
+            null
+        } ?: return -1.0
+        return try {
+            SharpnessAnalyzer.scoreBitmapRaw(bmp)
+        } finally {
+            bmp.recycle()
+        }
+    }
+
     private fun jpegBytesFrom(image: ImageProxy): ByteArray {
         val buffer: ByteBuffer = image.planes[0].buffer
         val bytes = ByteArray(buffer.remaining())
@@ -3204,15 +3779,20 @@ class MainActivity : AppCompatActivity() {
         val angle2 = angle2Jpeg
         val tagCode = stableTagCode
         if (main == null || angle1 == null || angle2 == null || tagCode == null) {
-            setStatus("Missing photo — retake", ready = false)
-            resetForNewItem(Phase.TAG)
+            logCaptureEvent("upload_multi_missing_field", mapOf(
+                "main" to (main != null), "angle1" to (angle1 != null),
+                "angle2" to (angle2 != null), "tagCode" to (tagCode != null)
+            ))
+            showUploadFailedPopup("Missing photo or tag — please retake this item.")
             return
         }
         phase = Phase.UPLOADING
         setStatus("Uploading 3-angle set…", ready = false)
-        val serverUrl = prefs.getString("server_url", "") ?: ""
+        logCaptureEvent("upload_multi_attempt")
+        val serverUrl = serverUrl()
         val staffName = prefs.getString("staff_name", "") ?: ""
         if (serverUrl.isBlank()) {
+            logCaptureEvent("upload_blocked_no_server_url")
             Toast.makeText(this, "Set the capture server URL in Settings first", Toast.LENGTH_LONG).show()
             showSettingsDialog()
             resetForNewItem(Phase.TAG)
@@ -3223,15 +3803,18 @@ class MainActivity : AppCompatActivity() {
                 UploadClient.saveMulti(serverUrl, tagCode, staffName, main, angle1, angle2)
             } catch (e: Exception) {
                 Log.e(TAG, "Multi-angle upload failed", e)
+                logCaptureEvent("upload_multi_exception", mapOf("message" to e.message))
                 null
             }
             if (result == null) {
-                Toast.makeText(this@MainActivity, "Upload failed — check server URL/network", Toast.LENGTH_LONG).show()
-                resetForNewItem(Phase.TAG)
+                showUploadFailedPopup("Upload failed — check server URL/network.")
                 return@launch
             }
             when {
-                result.ok -> showItemSavedPopup(tagCode)
+                result.ok -> {
+                    logCaptureEvent("upload_multi_ok")
+                    showItemSavedPopup(tagCode)
+                }
                 result.duplicate -> confirmOverrideAndRetry("Duplicate tag $tagCode — save anyway?") { overrideDup ->
                     retryUploadMulti(tagCode, staffName, main, angle1, angle2, overrideDuplicate = overrideDup)
                 }
@@ -3242,13 +3825,24 @@ class MainActivity : AppCompatActivity() {
                     retryUploadMulti(tagCode, staffName, main, angle1, angle2, overrideVisibility = overrideVis)
                 }
                 else -> {
-                    Toast.makeText(this@MainActivity, "Save failed: ${result.error}", Toast.LENGTH_LONG).show()
-                    resetForNewItem(Phase.TAG)
+                    logCaptureEvent("upload_multi_failed", mapOf("error" to result.error))
+                    showUploadFailedPopup("Save failed: ${result.error}")
                 }
             }
         }
     }
 
+    /** One override at a time (e.g. duplicate) does not guarantee the NEXT
+     * gate passes -- confirmed live (2026-08-19, tag BL18/2): duplicate
+     * override accepted, then the server's separate visibility check
+     * rejected the same retry, and this function used to treat that as a
+     * flat dead-end failure ("Save failed: not_clearly_visible") with no
+     * way to override it, forcing a full retake even though the operator
+     * had already cleared one warning. Chains through the same
+     * confirm-and-retry dialogs uploadMulti() itself uses, carrying
+     * forward whichever overrides were already granted, so a second (or
+     * third) distinct gate gets its own chance to be overridden instead of
+     * silently discarding a photo set that was otherwise fine. */
     private fun retryUploadMulti(
         tagCode: String, staffName: String, main: ByteArray, angle1: ByteArray, angle2: ByteArray,
         overrideDuplicate: Boolean = false, overrideBlur: Boolean = false, overrideVisibility: Boolean = false
@@ -3256,17 +3850,38 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val result = try {
                 UploadClient.saveMulti(
-                    prefs.getString("server_url", "") ?: "", tagCode, staffName, main, angle1, angle2,
+                    serverUrl(), tagCode, staffName, main, angle1, angle2,
                     overrideDuplicate, overrideBlur, overrideVisibility
                 )
             } catch (e: Exception) {
+                logCaptureEvent("upload_multi_retry_exception", mapOf("message" to e.message))
                 null
             }
-            if (result?.ok == true) {
-                showItemSavedPopup(tagCode)
-            } else {
-                Toast.makeText(this@MainActivity, "Save failed: ${result?.error}", Toast.LENGTH_LONG).show()
-                resetForNewItem(Phase.TAG)
+            if (result == null) {
+                showUploadFailedPopup("Upload failed — check server URL/network.")
+                return@launch
+            }
+            when {
+                result.ok -> {
+                    logCaptureEvent("upload_multi_retry_ok")
+                    showItemSavedPopup(tagCode)
+                }
+                result.duplicate -> confirmOverrideAndRetry("Duplicate tag $tagCode — save anyway?") { overrideDup ->
+                    retryUploadMulti(tagCode, staffName, main, angle1, angle2,
+                        overrideDuplicate = overrideDup, overrideBlur = overrideBlur, overrideVisibility = overrideVisibility)
+                }
+                result.blurry -> confirmOverrideAndRetry("A photo in the set looked blurry — save anyway?") { overrideBlur2 ->
+                    retryUploadMulti(tagCode, staffName, main, angle1, angle2,
+                        overrideDuplicate = overrideDuplicate, overrideBlur = overrideBlur2, overrideVisibility = overrideVisibility)
+                }
+                result.notVisible -> confirmOverrideAndRetry("Jewellery not clearly visible — save anyway?") { overrideVis ->
+                    retryUploadMulti(tagCode, staffName, main, angle1, angle2,
+                        overrideDuplicate = overrideDuplicate, overrideBlur = overrideBlur, overrideVisibility = overrideVis)
+                }
+                else -> {
+                    logCaptureEvent("upload_multi_retry_failed", mapOf("error" to result.error))
+                    showUploadFailedPopup("Save failed: ${result.error}")
+                }
             }
         }
     }
@@ -3282,28 +3897,31 @@ class MainActivity : AppCompatActivity() {
         }
         phase = Phase.UPLOADING
         setStatus("Uploading…", ready = false)
-        val serverUrl = prefs.getString("server_url", "") ?: ""
+        val serverUrl = serverUrl()
         val staffName = prefs.getString("staff_name", "") ?: ""
         if (serverUrl.isBlank()) {
+            logCaptureEvent("upload_blocked_no_server_url")
             Toast.makeText(this, "Set the capture server URL in Settings first", Toast.LENGTH_LONG).show()
             showSettingsDialog()
             resetForNewItem(Phase.TAG)
             return
         }
+        logCaptureEvent("upload_pair_attempt")
         lifecycleScope.launch {
             val result = try {
                 UploadClient.savePair(serverUrl, tagCode, staffName, jewel, tag)
             } catch (e: Exception) {
                 Log.e(TAG, "Upload failed", e)
+                logCaptureEvent("upload_pair_exception", mapOf("message" to e.message))
                 null
             }
             if (result == null) {
-                Toast.makeText(this@MainActivity, "Upload failed — check server URL/network", Toast.LENGTH_LONG).show()
-                resetForNewItem(Phase.TAG)
+                showUploadFailedPopup("Upload failed — check server URL/network.")
                 return@launch
             }
             when {
                 result.ok -> {
+                    logCaptureEvent("upload_pair_ok")
                     Toast.makeText(this@MainActivity, "Saved: $tagCode", Toast.LENGTH_SHORT).show()
                     finishOrResetForNewItem()
                 }
@@ -3317,13 +3935,14 @@ class MainActivity : AppCompatActivity() {
                     retryUpload(tagCode, staffName, jewel, tag, overrideVisibility = overrideVis)
                 }
                 else -> {
-                    Toast.makeText(this@MainActivity, "Save failed: ${result.error}", Toast.LENGTH_LONG).show()
-                    resetForNewItem(Phase.TAG)
+                    logCaptureEvent("upload_pair_failed", mapOf("error" to result.error))
+                    showUploadFailedPopup("Save failed: ${result.error}")
                 }
             }
         }
     }
 
+    /** Same chained-override fix as retryUploadMulti -- see its doc comment. */
     private fun retryUpload(
         tagCode: String, staffName: String, jewel: ByteArray, tag: ByteArray,
         overrideDuplicate: Boolean = false, overrideBlur: Boolean = false, overrideVisibility: Boolean = false
@@ -3331,18 +3950,39 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val result = try {
                 UploadClient.savePair(
-                    prefs.getString("server_url", "") ?: "", tagCode, staffName, jewel, tag,
+                    serverUrl(), tagCode, staffName, jewel, tag,
                     overrideDuplicate, overrideBlur, overrideVisibility
                 )
             } catch (e: Exception) {
+                logCaptureEvent("upload_pair_retry_exception", mapOf("message" to e.message))
                 null
             }
-            if (result?.ok == true) {
-                Toast.makeText(this@MainActivity, "Saved: $tagCode", Toast.LENGTH_SHORT).show()
-                finishOrResetForNewItem()
-            } else {
-                Toast.makeText(this@MainActivity, "Save failed: ${result?.error}", Toast.LENGTH_LONG).show()
-                resetForNewItem(Phase.TAG)
+            if (result == null) {
+                showUploadFailedPopup("Upload failed — check server URL/network.")
+                return@launch
+            }
+            when {
+                result.ok -> {
+                    logCaptureEvent("upload_pair_retry_ok")
+                    Toast.makeText(this@MainActivity, "Saved: $tagCode", Toast.LENGTH_SHORT).show()
+                    finishOrResetForNewItem()
+                }
+                result.duplicate -> confirmOverrideAndRetry("Duplicate tag $tagCode — save anyway?") { overrideDup ->
+                    retryUpload(tagCode, staffName, jewel, tag,
+                        overrideDuplicate = overrideDup, overrideBlur = overrideBlur, overrideVisibility = overrideVisibility)
+                }
+                result.blurry -> confirmOverrideAndRetry("Jewel photo looked blurry — save anyway?") { overrideBlur2 ->
+                    retryUpload(tagCode, staffName, jewel, tag,
+                        overrideDuplicate = overrideDuplicate, overrideBlur = overrideBlur2, overrideVisibility = overrideVisibility)
+                }
+                result.notVisible -> confirmOverrideAndRetry("Jewellery not clearly visible — save anyway?") { overrideVis ->
+                    retryUpload(tagCode, staffName, jewel, tag,
+                        overrideDuplicate = overrideDuplicate, overrideBlur = overrideBlur, overrideVisibility = overrideVis)
+                }
+                else -> {
+                    logCaptureEvent("upload_pair_retry_failed", mapOf("error" to result.error))
+                    showUploadFailedPopup("Save failed: ${result.error}")
+                }
             }
         }
     }
@@ -3391,6 +4031,7 @@ class MainActivity : AppCompatActivity() {
         armedAt = System.currentTimeMillis()
         stepFocusAttempts = 0
         maxUsableZoom = Float.MAX_VALUE
+        maxUsableZoomStuckSince = 0L
         autoFired = false
         latestMaterial = null
         lastZoomChangeAt = 0L
@@ -3436,6 +4077,10 @@ class MainActivity : AppCompatActivity() {
             tagJpeg = null
             tagCodeHistory = mutableListOf()
             stableTagCode = null
+            resolvedCategoryKey = null
+            studFlagPersisted = null
+            studAutoGuess = false
+            updateStudStatusUi()
             // Auto-exposure bias is per-item, not permanent -- a piece
             // that needed heavy negative EV shouldn't leave the NEXT
             // item starting under-exposed.
@@ -3464,7 +4109,7 @@ class MainActivity : AppCompatActivity() {
         val material = latestMaterial
         binding.debugText.text = if (phase == Phase.JEWEL) {
             val range = focusZoom.zoomRatioRange()
-            "zoom=%.1fx range=[%.1f,%.1f] max=%.1f  coverage=%.3f  sharp=%.0f  af=%s\nev=%.2f  goldClip=%.3f  sceneClip=%.3f".format(
+            val base = "zoom=%.1fx range=[%.1f,%.1f] max=%.1f  coverage=%.3f  sharp=%.0f  af=%s\nev=%.2f  goldClip=%.3f  sceneClip=%.3f".format(
                 focusZoom.currentZoomRatio(),
                 range.start, range.endInclusive, maxUsableZoom,
                 material?.coverage ?: 0f,
@@ -3474,8 +4119,38 @@ class MainActivity : AppCompatActivity() {
                 material?.highlightClipFraction ?: 0f,
                 material?.sceneClipFraction ?: 0f
             )
+            val symmetryWarning = danglerSymmetryWarning(material)
+            if (symmetryWarning != null) "$base\n$symmetryWarning" else base
         } else ""
         updateStepIndicator()
+    }
+
+    /** Advisory-only (explicit request, 2026-08-19): staff flagged that a
+     * bent-under or hidden ghungroo/dangler is easy to miss by eye through
+     * the phone screen while framing a symmetric pair (matched earrings)
+     * or a piece with mirror-symmetric halves (WATI's twin bowls). Splits
+     * the small "dangler" blobs MaterialDetector already found in the
+     * lower portion of the piece (see its danglerBlobs doc comment) by
+     * which side of the piece's own horizontal midline they fall on, and
+     * flags a left/right COUNT mismatch. Deliberately never gates or
+     * blocks capture -- only applies to categories with a genuine
+     * mirror-symmetric pair/halves (CategoryOrientation), and only once
+     * resolvedCategoryKey has actually come back from the server, so an
+     * unresolved or non-symmetric category silently shows nothing rather
+     * than a false alarm. */
+    private fun danglerSymmetryWarning(material: MaterialDetector.Result?): String? {
+        if (!CategoryOrientation.hasMirrorSymmetry(resolvedCategoryKey)) return null
+        val bounds = material?.bounds ?: return null
+        if (material.danglerBlobs.isEmpty()) return null
+        val midX = (bounds.x0 + bounds.x1) / 2f
+        var left = 0
+        var right = 0
+        for (b in material.danglerBlobs) {
+            val cx = (b.x0 + b.x1) / 2f
+            if (cx < midX) left++ else right++
+        }
+        if (left == right) return null
+        return "⚠ danglers L=$left R=$right — check symmetry"
     }
 
     /** Drives the TAG/QR -> MAIN VIEW -> LEFT ANGLE -> RIGHT ANGLE step bar
@@ -3529,7 +4204,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showSettingsDialog() {
         val dialogBinding = DialogSettingsBinding.inflate(layoutInflater)
-        dialogBinding.serverUrlInput.setText(prefs.getString("server_url", ""))
+        dialogBinding.serverUrlInput.setText(serverUrl())
         dialogBinding.staffNameInput.setText(prefs.getString("staff_name", ""))
         AlertDialog.Builder(this)
             .setTitle(R.string.settings)

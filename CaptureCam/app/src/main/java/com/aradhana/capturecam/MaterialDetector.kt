@@ -62,8 +62,58 @@ object MaterialDetector {
         // scene/background was, and gold-only clipping has zero visibility
         // into that. This is the scene-wide signal applyAutoExposure()
         // needed but didn't have.
-        val sceneClipFraction: Float = 0f
+        val sceneClipFraction: Float = 0f,
+        // Small gold blobs sitting in the lower portion of the piece's own
+        // bounds -- candidate ghungroo/dangler beads, for the left/right
+        // symmetry check (2026-08-19, explicit request: staff flagged that
+        // a bent-under or hidden ghungroo is easy to miss by eye through
+        // the phone screen during capture). Deliberately loose (any small
+        // low-hanging blob, not a verified bead shape) since this only
+        // feeds an advisory count-mismatch warning, never a capture gate.
+        val danglerBlobs: List<Bounds> = emptyList()
     )
+
+    /** True if the detected material's bounding box touches (or nearly
+     * touches) any of the four frame edges -- the ornament is bigger than
+     * what the frame can currently show, not merely well-framed. Distinct
+     * from highlightClipFraction/sceneClipFraction (those measure
+     * BRIGHTNESS clipping on gold/scene pixels, not spatial framing).
+     * Confirmed live (2026-08-19) on a bracelet at 3.4x zoom during the
+     * LEFT ANGLE step: goldClip=0.000, sceneClip=0.029 (no exposure
+     * problem at all) while the tracked band ran edge-to-edge left-right
+     * and the bracelet's own curve continued past top/bottom -- nothing
+     * caught it before READY lit up, because neither clip metric nor
+     * waitForStableFrame's presence/focus/sharpness gate looks at whether
+     * the object's own box is spilling off the visible frame. `bounds` is
+     * already normalized 0..1 against the analysis frame (see Point's doc
+     * comment above), so this needs no new pixel sampling. */
+    fun touchesFrameEdge(bounds: Bounds?, margin: Float = 0.015f): Boolean {
+        if (bounds == null) return false
+        return bounds.x0 <= margin || bounds.y0 <= margin ||
+            bounds.x1 >= 1f - margin || bounds.y1 >= 1f - margin
+    }
+
+    /** Rough live guess at "does this piece have a diamond/rhodium stud
+     * accent" (2026-08-19, explicit request) -- reuses the sparkle-near-
+     * metal points [analyse] already builds for the focus-peaking overlay
+     * (Point.gold=false marks them), no new pixel analysis. Deliberately
+     * approximate: a small, scattered non-gold cluster reads as a likely
+     * stone/stud accent; a near-zero or near-total non-gold fraction reads
+     * as "no accent" or "broadly silver-toned metal" respectively, neither
+     * of which is a stud. This is advisory ONLY -- explicitly a starting
+     * guess the operator confirms or corrects in the live preview
+     * (MainActivity.studStatusText), never a capture gate. False positives
+     * are expected (a blown-out gold specular highlight also reads as
+     * "sparkle near metal", the same ambiguity found live 2026-08-19 on
+     * GR22/127's ring engraving) -- that is exactly why the UI needs a
+     * one-tap correction rather than trusting this outright. */
+    fun studCandidate(points: List<Point>): Boolean {
+        val total = points.size
+        if (total < 20) return false
+        val nonGold = points.count { !it.gold }
+        val frac = nonGold.toFloat() / total
+        return nonGold >= 5 && frac in 0.02f..0.35f
+    }
 
     private fun looksLikeGold(r: Int, g: Int, b: Int): Boolean {
         val maxV = max(r, max(g, b))
@@ -435,6 +485,23 @@ object MaterialDetector {
             x1 = (startX + (bestMaxCol + 1) * step).toFloat() / width,
             y1 = (startY + (bestMaxRow + 1) * step).toFloat() / height
         )
+        // Candidate danglers: small relative to the main piece (a real
+        // ghungroo/bead is a fraction of the body's size, not comparable
+        // to it -- that's what separates this from the pair-union above,
+        // which unions comparably-SIZED components like a second earring)
+        // and sitting in the lower ~45% of the piece's own bounds, where
+        // hanging elements actually are.
+        val danglerRowThreshold = bestMinRow + ((bestMaxRow - bestMinRow) * 0.55f).toInt()
+        val danglerBlobs = real.filter { c ->
+            c !== primary && c.size < primary.size * 0.15f && c.minRow >= danglerRowThreshold
+        }.map { c ->
+            Bounds(
+                x0 = (startX + c.minCol * step).toFloat() / width,
+                y0 = (startY + c.minRow * step).toFloat() / height,
+                x1 = (startX + (c.maxCol + 1) * step).toFloat() / width,
+                y1 = (startY + (c.maxRow + 1) * step).toFloat() / height
+            )
+        }
         val warmCoverage = bestSize.toFloat() / mask.size
         val goldRatio = warm.toFloat() / mask.size
         val goldBoxArea = bounds.area()
@@ -469,7 +536,8 @@ object MaterialDetector {
             goldBoxArea = goldBoxArea,
             points = points,
             highlightClipFraction = highlightClipFraction,
-            sceneClipFraction = sceneClipFraction
+            sceneClipFraction = sceneClipFraction,
+            danglerBlobs = danglerBlobs
         )
     }
 }
