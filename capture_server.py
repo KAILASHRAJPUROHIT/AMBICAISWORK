@@ -238,10 +238,11 @@ def api_capture_stud_flag_get():
     comment for why this outlives any individual capture. Missing tag_code
     returns has_stud=False rather than an error, matching every OTHER
     per-tag lookup in this file (fail to the safe/conservative default)."""
+    import capture_tool as ct
     tag_code = request.args.get("tag_code", "")
     if not tag_code:
         return jsonify({"ok": False, "error": "tag_code required"}), 400
-    meta = capture_tool.get_tag_metadata(tag_code)
+    meta = ct.get_tag_metadata(tag_code)
     return jsonify({"ok": True, "tag_code": tag_code, "has_stud": bool(meta.get("has_stud", False))})
 
 
