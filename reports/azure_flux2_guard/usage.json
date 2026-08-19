@@ -39369,6 +39369,70 @@
       "reserved_usd": 0.19,
       "completed_at_utc": "2026-08-19T07:35:42.311954+00:00",
       "output_bytes": 524002
+    },
+    {
+      "id": "6a04a69f2da97892",
+      "reserved_at_utc": "2026-08-19T07:36:37.274530+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\BL18_45.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\BL18_45_8bede0fe03e8_wb.png",
+      "prepared_background_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\round_hoop_45_1df636637c7b_wb.png",
+      "secondary_reference_source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\assets\\geometry_guides\\bali\\round_hoop_45.jpg",
+      "secondary_reference_role": "automatic_reviewed_item_angle_guide",
+      "secondary_reference_profile": "round_hoop",
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\5\\0001_BL18_45.png",
+      "prompt_sha256": "8efa0b049438c17db489155f7363569b950d9a7f983536e18200d82205a04f2c",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            593,
+            710,
+            791,
+            1115
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00027,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "bali_18",
+      "category_geometry_hint_applied": true,
+      "native_dimensions": [
+        1440,
+        1920
+      ],
+      "native_megapixels": 2.7648,
+      "reference_resize": "none",
+      "reference_dimensions": [
+        1440,
+        1920
+      ],
+      "reference_megapixels": 2.7648,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 7.0,
+      "input_dimensions": [
+        [
+          1440,
+          1920
+        ],
+        [
+          1152,
+          864
+        ]
+      ],
+      "input_billed_mp": 4,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.09,
+      "reserved_usd": 0.12,
+      "completed_at_utc": "2026-08-19T07:36:52.896216+00:00",
+      "output_bytes": 542235
     }
   ]
 }

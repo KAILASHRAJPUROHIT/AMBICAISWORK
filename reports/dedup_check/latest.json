@@ -1,40 +1,8 @@
 {
-  "checked_at": "2026-08-19T07:35:43Z",
+  "checked_at": "2026-08-19T07:40:50Z",
   "capture_intake_files": 671,
-  "processed_files": 368,
+  "processed_files": 364,
   "label_conflicts": {
-    "GR22_188_stitched": {
-      "capture_intake": [
-        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\16 GENTS RING 22\\GR22_188_stitched.jpg"
-      ],
-      "processed": [
-        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\processed\\GENTS RING 22\\GR22_188_stitched.jpg"
-      ]
-    },
-    "BL22_16": {
-      "capture_intake": [
-        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\BALI 22\\BL22_16.jpg"
-      ],
-      "processed": [
-        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\processed\\BALI 22\\BL22_16.jpg"
-      ]
-    },
-    "BL22_18": {
-      "capture_intake": [
-        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\BALI 22\\BL22_18.jpg"
-      ],
-      "processed": [
-        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\processed\\BALI 22\\BL22_18.jpg"
-      ]
-    },
-    "BL22_5": {
-      "capture_intake": [
-        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\BALI 22\\BL22_5.jpg"
-      ],
-      "processed": [
-        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\processed\\BALI 22\\BL22_5.jpg"
-      ]
-    },
     "GR22_107_2": {
       "capture_intake": [
         "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\GENTS RING 22\\GR22_107_2.jpg"

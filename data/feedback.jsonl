@@ -847,3 +847,7 @@
 {"label": "BL22_16", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787124948.3877585}
 {"label": "BL22_18", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787124951.739466}
 {"label": "BL22_5", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787124954.3854983}
+{"label": "BL18_45", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787125026.563513}
+{"label": "BL22_16", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787125029.5895436}
+{"label": "BL22_18", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787125031.008576}
+{"label": "BL22_5", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787125032.2518132}

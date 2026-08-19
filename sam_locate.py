@@ -448,7 +448,8 @@ def _composite_on_white(bgr_crop: np.ndarray, mask_crop: np.ndarray, feather: in
 
 def tight_crop(src_path: str, out_path: str, expect: int = 1,
                margin: float = 0.10, straighten: bool = True,
-               max_tilt: float = 30.0, remove_background: bool = True):
+               max_tilt: float = 30.0, remove_background: bool = True,
+               fixed_angle: float | None = None):
     """Crop a plate down to just the ornament(s). Returns (path, info).
 
     When ``straighten`` is on, the crop is levelled first so the piece sits
@@ -457,6 +458,16 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
     reference yields a tilted catalogue image that then has to be rotated
     after generation — resampling an already-generated image and cutting into
     its edges. Straightening the input costs nothing.
+
+    ``fixed_angle``, when given, uses that rotation directly instead of
+    computing one from this image's own mask. Requested live (2026-08-19):
+    a set's MAIN/ANGLE_1/ANGLE_2 shots each straighten to THEIR OWN mask's
+    tilt independently, so the three panels could level to visibly
+    different angles even though they're meant to read as one consistent
+    triptych. The caller computes the angle from MAIN once, then passes it
+    in for ANGLE_1/ANGLE_2 so all three share one rotation reference
+    instead of three independent (and sometimes disagreeing) ones. Still
+    gated by the same max_tilt safety cap as the auto path.
 
     When ``remove_background`` is on (single-piece crops only -- the
     side-by-side multi-piece path has no single aligned mask to reuse), the
@@ -482,7 +493,7 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
         try:
             m = _last_mask
             if m is not None:
-                tilt = _upright_angle(m)
+                tilt = float(fixed_angle) if fixed_angle is not None else _upright_angle(m)
                 if 0.5 < abs(tilt) <= max_tilt:
                     bgr, m2 = _rotate_keep(bgr, m, tilt)
                     aligned_mask = m2
