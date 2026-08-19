@@ -356,7 +356,15 @@ def _rotate_keep(bgr: np.ndarray, mask: np.ndarray, ang: float):
     return bgr, mask
 
 
-def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray) -> np.ndarray:
+# Mangalsutra family: the black is a REAL bead chain, not hollow
+# negative-space design work -- the one exception to the owner's
+# "no black jewellery, black = hollow" rule (2026-08-19), called out
+# directly by the owner for these categories specifically. Keyed the same
+# way category_orientation.py is (ornament_code_map.Category.key).
+_BLACK_IS_MATERIAL_CATEGORIES = frozenset({"wati_22", "ms_long_22", "mss_short_20", "mss_short_22"})
+
+
+def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray, category: str | None = None) -> np.ndarray:
     """Strips display-prop pixels SAM2 wrongly pulled into the object mask.
 
     Confirmed live (2026-08-19, tag WT22/19): on a navy-blue dot-print
