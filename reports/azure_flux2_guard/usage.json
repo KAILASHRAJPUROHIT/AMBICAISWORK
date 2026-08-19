@@ -39676,6 +39676,72 @@
       "reserved_usd": 0.08,
       "completed_at_utc": "2026-08-19T10:56:15.962489+00:00",
       "output_bytes": 563950
+    },
+    {
+      "id": "ab22f110a6cb3935",
+      "reserved_at_utc": "2026-08-19T10:59:51.993882+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\image-1787137131177.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\image-1787137131177_a1faf9c1f331_wb.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\3\\0001_image-1787137131177.png",
+      "prompt_sha256": "694ae3922ae1ad84baceeb372d89b8e7cf4c41933fae71c40ac42931dcf9e7ef",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            689,
+            560,
+            835,
+            931
+          ],
+          [
+            791,
+            508,
+            968,
+            590
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00033,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "gents_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        1600,
+        1200
+      ],
+      "native_megapixels": 1.92,
+      "reference_resize": "none",
+      "reference_dimensions": [
+        1600,
+        1200
+      ],
+      "reference_megapixels": 1.92,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          1600,
+          1200
+        ]
+      ],
+      "input_billed_mp": 2,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.06,
+      "reserved_usd": 0.08,
+      "completed_at_utc": "2026-08-19T11:00:07.240933+00:00",
+      "output_bytes": 661253
     }
   ]
 }
