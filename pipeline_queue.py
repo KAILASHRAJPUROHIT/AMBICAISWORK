@@ -121,12 +121,25 @@ def discover_intake(
     candidates: list[IntakeCandidate] = []
     for directory, directory_names, file_names in os.walk(root):
         directory_names.sort(key=str.casefold)
+        # Case-fold set of filenames in THIS directory only, used below to
+        # tell a genuine angle/preview sibling ("GR22_127_1.jpg" next to a
+        # real "GR22_127.jpg") apart from a tag whose own serial number
+        # just happens to end in 1/2 ("TP22_1.jpg" with no sibling
+        # "TP22.jpg" at all -- confirmed live 2026-08-19: tag serials are
+        # sequential from 1, so this collision is common, not an edge case).
+        names_in_dir = {name.casefold() for name in file_names}
         for file_name in sorted(file_names, key=str.casefold):
             source = Path(directory) / file_name
             if source.is_symlink() or not source.is_file():
                 continue
             relative = source.relative_to(root)
             stat = source.stat()
+            stem = Path(file_name).stem
+            suffix = Path(file_name).suffix
+            is_angle_or_preview = False
+            if _ANGLE_OR_PREVIEW_SUFFIX_RE.search(stem):
+                main_stem = _ANGLE_OR_PREVIEW_SUFFIX_RE.sub("", stem)
+                is_angle_or_preview = f"{main_stem}{suffix}".casefold() in names_in_dir
             candidates.append(
                 IntakeCandidate(
                     source_path=source,
@@ -138,6 +151,7 @@ def discover_intake(
                         for part in relative.parts[:-1]
                     ),
                     voided=relative in voided_paths,
+                    is_angle_or_preview_sibling=is_angle_or_preview,
                 )
             )
     candidates.sort(
