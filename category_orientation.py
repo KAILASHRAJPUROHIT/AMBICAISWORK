@@ -60,6 +60,12 @@ GUIDES: dict[str, OrientationGuide] = {
     "ladies_bracelet_18": OrientationGuide(OrientationType.OPEN_CURVE, "moderate"),
     "ladies_bracelet_22": OrientationGuide(OrientationType.OPEN_CURVE, "moderate"),
     "ladies_kada_22": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
+    # CORRECTED by owner (2026-08-19): MANGOTA is a kids' protection
+    # bracelet/anklet (Nazariya evil-eye charm, black beads + gold/silver),
+    # NOT a necklace -- an earlier guess (mango-motif necklace) was wrong
+    # and has been corrected. Open curve like other flexible bead/chain
+    # bracelets, worn on wrist or ankle.
+    "mangota_22": OrientationGuide(OrientationType.OPEN_CURVE, "high"),
 
     # -- Studs / small flat earrings --
     "bali_18": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
