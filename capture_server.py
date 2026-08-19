@@ -232,6 +232,34 @@ def api_capture_resolve_category():
     return jsonify({"ok": True, "key": cat.key, "label": cat.label, "prefix": cat.prefix})
 
 
+@app.route("/api/capture/stud_flag")
+def api_capture_stud_flag_get():
+    """Per-tag stud/rhodium-accent flag -- see set_stud_flag's own doc
+    comment for why this outlives any individual capture. Missing tag_code
+    returns has_stud=False rather than an error, matching every OTHER
+    per-tag lookup in this file (fail to the safe/conservative default)."""
+    tag_code = request.args.get("tag_code", "")
+    if not tag_code:
+        return jsonify({"ok": False, "error": "tag_code required"}), 400
+    meta = capture_tool.get_tag_metadata(tag_code)
+    return jsonify({"ok": True, "tag_code": tag_code, "has_stud": bool(meta.get("has_stud", False))})
+
+
+@app.route("/api/capture/stud_flag", methods=["POST"])
+def api_capture_stud_flag_set():
+    """Staff correction from the live preview overlay (2026-08-19, explicit
+    request): the automated stud-detection guess can be wrong, and the
+    correction needs to stick to the TAG, not just the current photo."""
+    data = request.get_json(silent=True) or {}
+    tag_code = str(data.get("tag_code", "")).strip()
+    if not tag_code:
+        return jsonify({"ok": False, "error": "tag_code required"}), 400
+    has_stud = bool(data.get("has_stud", False))
+    staff_name = str(data.get("staff_name", ""))
+    entry = capture_tool.set_stud_flag(tag_code, has_stud, staff_name=staff_name)
+    return jsonify({"ok": True, "tag_code": tag_code, "has_stud": entry["has_stud"]})
+
+
 # ── Multi-angle calibration (RSC 2 category profiles) ────────────────────────
 # Calibration belongs to the CATEGORY, resolved above via resolve_category —
 # never to an individual tag. See calibration_repository.py's own docstring.
