@@ -737,7 +737,7 @@ def _segment_paths_async(paths: list, category: str | None = None) -> None:
         try:
             for path in paths:
                 try:
-                    result_path, angle = sam_locate.tight_crop(path, path, expect=1, straighten=False)
+                    result_path, angle = sam_locate.tight_crop(path, path, expect=1, straighten=False, category=category)
                     log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
                 except Exception:
                     log.exception("sam_locate.tight_crop FAILED for %s", path)
