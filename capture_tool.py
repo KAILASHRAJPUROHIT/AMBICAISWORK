@@ -792,17 +792,19 @@ def _segment_paths_async(paths: list, category: str | None = None) -> None:
 # width MAIN VIEW on top, LEFT ANGLE / RIGHT ANGLE side-by-side below, bold
 # uppercase caption under each panel, thin light-grey dividers, white
 # background). Sized for catalogue/web use, not print.
-# Explicit 60/20/20 height split (2026-08-19, explicit request): MAIN VIEW
-# is 60% of the total photo-content height, LEFT ANGLE and RIGHT ANGLE
-# share the bottom 40% side by side (20% each, since they sit in one row
-# rather than stacked). MAIN_H stays at the 1200px this business already
-# asked for ("main image should be bigger", earlier the same day); SIDE_H
-# is DERIVED from the ratio (1200 * 20/60) rather than picked separately,
-# so the two constants can't silently drift out of the requested 60/20/20
-# proportion if MAIN_H ever changes again.
+# Explicit 60/20/20 split (2026-08-19, explicit request): MAIN VIEW is 60%
+# of the total photo AREA; LEFT ANGLE and RIGHT ANGLE each get 20% of that
+# same total area, sitting side by side in one bottom row. Since the two
+# side panels each span only half the canvas WIDTH, their combined ROW
+# HEIGHT is 40% of the total (20% area / 50% width = 40% height each,
+# and they share that row rather than stacking). MAIN_H stays at the
+# 1200px this business already asked for ("main image should be bigger",
+# earlier the same day); SIDE_H is DERIVED from the ratio (1200 * 40/60)
+# rather than picked separately, so the two constants can't silently
+# drift out of the requested 60/20/20 proportion if MAIN_H ever changes.
 _STITCH_PANEL_W = 900
 _STITCH_MAIN_H = 1200
-_STITCH_SIDE_H = round(_STITCH_MAIN_H * (20 / 60))
+_STITCH_SIDE_H = round(_STITCH_MAIN_H * (40 / 60))
 _STITCH_PAD = 24
 _STITCH_LABEL_H = 60
 _STITCH_BG = (255, 255, 255)
