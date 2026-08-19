@@ -40079,7 +40079,7 @@
     {
       "id": "8396d45133e4accc",
       "reserved_at_utc": "2026-08-19T13:01:13.943168+00:00",
-      "status": "RESERVED_BEFORE_NETWORK",
+      "status": "SUCCEEDED",
       "model": "FLUX.2-pro",
       "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\image-1787144439380.jpg",
       "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\image-1787144439380_be6a6211714e_wb.png",
@@ -40150,7 +40150,9 @@
       ],
       "output_billed_mp": 1,
       "list_price_estimate_usd": 0.075,
-      "reserved_usd": 0.1
+      "reserved_usd": 0.1,
+      "completed_at_utc": "2026-08-19T13:01:29.865200+00:00",
+      "output_bytes": 676043
     }
   ]
 }

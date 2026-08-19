@@ -656,6 +656,24 @@ def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray, category: str | No
 def _mask_quality_ok(mask: np.ndarray, s: np.ndarray, v: np.ndarray) -> bool:
     """QA gate for a refined mask, BEFORE it's used to composite onto white.
 
+    TEMPORARILY DISABLED, unconditional False (2026-08-19): background-
+    removal compositing is producing bad output on real production
+    captures (GR22/127 reshoot) that this QA gate does NOT catch --
+    confirmed live it's not a rotation/straighten artifact (reproduced
+    identically with straighten=False) and not the since-removed RMBG
+    double-processing (reproduced with sam_locate's single SAM3 pass
+    alone, no RMBG involved at all): dark smudged patches bleeding into
+    the piece's own open lattice/cage sections, an over-smoothed "waxy"
+    look across the whole surface. Root cause not yet identified. Rather
+    than ship compositing that's actively destroying real catalogue
+    photos while under investigation, this gate now rejects every mask
+    unconditionally, so every caller's existing fail-open path (skip
+    _composite_on_white, keep the plain straightened crop with real
+    background) is what actually ships. Crop/straighten/orientation
+    logic is unaffected and confirmed clean -- only the white-background
+    compositing step is disabled. Re-enable only after the actual defect
+    is found and fixed, not by reverting this alone.
+
     Confirmed live (2026-08-19, tag GR22/127): a stray light-reflection
     streak on the display stand sat close enough to touch the ring in
     SAM2's own raw mask that component selection in _refine_mask couldn't
