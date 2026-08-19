@@ -40153,6 +40153,159 @@
       "reserved_usd": 0.1,
       "completed_at_utc": "2026-08-19T13:01:29.865200+00:00",
       "output_bytes": 676043
+    },
+    {
+      "id": "00142722d5e0a628",
+      "reserved_at_utc": "2026-08-19T13:30:35.898244+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\WT22_140_stitched.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\WT22_140_stitched_41e0e806c26e_wb.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\2\\0001_WT22_140_stitched.png",
+      "prompt_sha256": "1f1367c7c7ea14088fadc55cb1ba869a3ad7ed1abb1365e3786262c91536ad5b",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            90,
+            1595,
+            185,
+            1707
+          ],
+          [
+            579,
+            1507,
+            716,
+            1617
+          ],
+          [
+            606,
+            1685,
+            723,
+            1877
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00171,
+        "dominant_hue_degrees": 12.0,
+        "hue_label": "orange/gold",
+        "position": "centre",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "wati_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        972,
+        2192
+      ],
+      "native_megapixels": 2.1306,
+      "reference_resize": "none",
+      "reference_dimensions": [
+        972,
+        2192
+      ],
+      "reference_megapixels": 2.1306,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          972,
+          2192
+        ]
+      ],
+      "input_billed_mp": 3,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.075,
+      "reserved_usd": 0.1,
+      "completed_at_utc": "2026-08-19T13:30:52.507342+00:00",
+      "output_bytes": 667084
+    },
+    {
+      "id": "135825cd2c8cee06",
+      "reserved_at_utc": "2026-08-19T13:42:54.762742+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\WT22_1_stitched.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\WT22_1_stitched_719bfb226d40_wb.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\3\\0001_WT22_1_stitched.png",
+      "prompt_sha256": "f1c7273cb8a5ffb88d161e02fb4316fc26dd56b9bbd7b13c967f9eaab2488483",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            238,
+            1690,
+            482,
+            1865
+          ],
+          [
+            267,
+            1536,
+            336,
+            1702
+          ],
+          [
+            745,
+            1573,
+            927,
+            1700
+          ],
+          [
+            823,
+            394,
+            898,
+            445
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00087,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "wati_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        972,
+        2192
+      ],
+      "native_megapixels": 2.1306,
+      "reference_resize": "none",
+      "reference_dimensions": [
+        972,
+        2192
+      ],
+      "reference_megapixels": 2.1306,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          972,
+          2192
+        ]
+      ],
+      "input_billed_mp": 3,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.075,
+      "reserved_usd": 0.1,
+      "completed_at_utc": "2026-08-19T13:43:09.625765+00:00",
+      "output_bytes": 474233
     }
   ]
 }

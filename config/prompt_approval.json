@@ -1,7 +1,7 @@
 {
   "engine": "azure_flux2_pro",
   "model": "FLUX.2-pro",
-  "prompt_sha256": "bec86aab28134de06b1c63a89f5c0f89519b045edaa59378228ed41f1dc4689b",
+  "prompt_sha256": "21cdebbb91dbe33c2ece81f10b62bc956601ba0982756263508e9930d231594a",
   "reviewed_by": "catalogue owner",
-  "approved_at": "2026-08-19T11:28:22.112197+00:00"
+  "approved_at": "2026-08-19T13:30:28.946964+00:00"
 }

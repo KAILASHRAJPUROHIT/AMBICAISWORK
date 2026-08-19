@@ -822,17 +822,27 @@ def _stitch_font(size):
     return ImageFont.load_default()
 
 
-def _stitch_fit(img, box_w, box_h):
-    """Letterbox-fit (preserve aspect, center on white) into box_w x box_h --
-    matches the reference example's clean, uncropped product-shot panels
-    rather than a center-crop that could clip part of the ornament."""
+def _stitch_fit_height(img, target_h, max_w):
+    """Scale to an EXACT target height, natural (unpadded) width -- no
+    letterbox whitespace. Confirmed live (2026-08-19, tag WT22/1): the old
+    letterbox-into-a-fixed-PORTRAIT-box approach assumed every crop was
+    taller than wide (true for most single vertical-hang pieces), but a
+    flat-lying category like WATI produces a genuinely wide/landscape
+    crop -- fit into that same tall box left the actual photo tiny with
+    huge wasted white margins above and below it, which read as "only
+    half the image is shown." Scaling to a fixed HEIGHT with natural width
+    fills the row exactly regardless of the crop's own aspect ratio.
+    max_w only guards against a pathologically wide/panoramic source
+    (never expected in practice) blowing the canvas out unboundedly --
+    still fits by height up to that width, then falls back to fitting by
+    width instead so nothing overflows."""
     from PIL import Image
-    scale = min(box_w / img.width, box_h / img.height)
-    new_w, new_h = max(1, int(img.width * scale)), max(1, int(img.height * scale))
-    resized = img.resize((new_w, new_h), Image.LANCZOS)
-    panel = Image.new("RGB", (box_w, box_h), _STITCH_BG)
-    panel.paste(resized, ((box_w - new_w) // 2, (box_h - new_h) // 2))
-    return panel
+    scale = target_h / img.height
+    new_w, new_h = max(1, int(img.width * scale)), target_h
+    if new_w > max_w:
+        scale = max_w / img.width
+        new_w, new_h = max_w, max(1, int(img.height * scale))
+    return img.resize((new_w, new_h), Image.LANCZOS)
 
 
 def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: str) -> None:
@@ -844,6 +854,14 @@ def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: 
     Fail-open by design (same convention as sam_locate.tight_crop): any
     error here must never block or corrupt the underlying save_multi()
     result, which has already succeeded by the time this runs.
+
+    Canvas WIDTH is derived from the actual panel sizes (2026-08-19, fixes
+    the landscape-crop letterboxing described in _stitch_fit_height's own
+    doc comment) rather than fixed at _STITCH_PANEL_W -- each panel is
+    scaled to its fixed HEIGHT budget (60/20/20 split, see the constants
+    above) with natural width, then the canvas is sized to whichever row
+    (MAIN, or LEFT+RIGHT together) ends up wider, and everything is
+    centered within that.
     """
     from PIL import Image, ImageDraw
     log = logging.getLogger("capture_tool")
@@ -852,32 +870,39 @@ def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: 
         angle1_img = Image.open(angle1_path).convert("RGB")
         angle2_img = Image.open(angle2_path).convert("RGB")
 
-        canvas_w = _STITCH_PAD * 3 + _STITCH_PANEL_W
-        side_w = (_STITCH_PANEL_W - _STITCH_PAD) // 2
+        max_panel_w = _STITCH_PANEL_W * 3  # generous cap, see _stitch_fit_height
+        main_panel = _stitch_fit_height(main_img, _STITCH_MAIN_H, max_panel_w)
+        left_panel = _stitch_fit_height(angle1_img, _STITCH_SIDE_H, max_panel_w)
+        right_panel = _stitch_fit_height(angle2_img, _STITCH_SIDE_H, max_panel_w)
+
+        side_row_w = left_panel.width + _STITCH_PAD + right_panel.width
+        content_w = max(main_panel.width, side_row_w)
+        canvas_w = content_w + _STITCH_PAD * 2
         canvas_h = (_STITCH_PAD * 3 + _STITCH_MAIN_H + _STITCH_LABEL_H
                     + _STITCH_SIDE_H + _STITCH_LABEL_H)
         canvas = Image.new("RGB", (canvas_w, canvas_h), _STITCH_BG)
         draw = ImageDraw.Draw(canvas)
         label_font = _stitch_font(28)
 
-        def _panel_with_label(img, box_w, box_h, x, y, label):
-            canvas.paste(_stitch_fit(img, box_w, box_h), (x, y))
+        def _panel_with_label(panel, x, y, box_w, label):
+            canvas.paste(panel, (x + (box_w - panel.width) // 2, y))
             bbox = draw.textbbox((0, 0), label, font=label_font)
             tw = bbox[2] - bbox[0]
-            draw.text((x + (box_w - tw) // 2, y + box_h + 16), label,
+            draw.text((x + (box_w - tw) // 2, y + panel.height + 16), label,
                        font=label_font, fill=_STITCH_TEXT)
 
         x0 = _STITCH_PAD
         y0 = _STITCH_PAD
-        _panel_with_label(main_img, _STITCH_PANEL_W, _STITCH_MAIN_H, x0, y0, "MAIN VIEW")
+        _panel_with_label(main_panel, x0, y0, content_w, "MAIN VIEW")
 
         divider_y = y0 + _STITCH_MAIN_H + _STITCH_LABEL_H
-        draw.line([(x0, divider_y), (x0 + _STITCH_PANEL_W, divider_y)], fill=_STITCH_DIVIDER, width=2)
+        draw.line([(x0, divider_y), (x0 + content_w, divider_y)], fill=_STITCH_DIVIDER, width=2)
 
         y1 = divider_y + _STITCH_PAD
-        _panel_with_label(angle1_img, side_w, _STITCH_SIDE_H, x0, y1, "LEFT ANGLE")
-        x1 = x0 + side_w + _STITCH_PAD
-        _panel_with_label(angle2_img, side_w, _STITCH_SIDE_H, x1, y1, "RIGHT ANGLE")
+        row_x0 = x0 + (content_w - side_row_w) // 2
+        _panel_with_label(left_panel, row_x0, y1, left_panel.width, "LEFT ANGLE")
+        _panel_with_label(right_panel, row_x0 + left_panel.width + _STITCH_PAD, y1,
+                          right_panel.width, "RIGHT ANGLE")
 
         canvas.save(out_path, quality=92)
         log.info("stitch_angles wrote %s", out_path)
