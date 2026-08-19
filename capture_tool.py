@@ -856,7 +856,8 @@ def _backup_raw(path: str) -> None:
         logging.getLogger("capture_tool").warning("_backup_raw failed for %s", path, exc_info=True)
 
 
-def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str, stitched_path: str) -> None:
+def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str, stitched_path: str,
+                              category: str | None = None) -> None:
     """save_multi's version of _segment_paths_async: crops all three poses
     (SAM2/DINO), removes what's left of the background inside each crop
     (RMBG-2.0), THEN stitches the composite from the cleaned results.
