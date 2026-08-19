@@ -273,6 +273,21 @@ def _sam3_predictor():
     return _sam3_processor, _sam3_model
 
 
+# Categories where SAM3's instance segmentation tends to read ONE physical
+# piece as multiple separate detected instances -- confirmed live
+# (2026-08-19, tag WT22/1): a WATI's two round bowl medallions, connected
+# by a short bead chain to one shared bail, come back as two SEPARATE SAM3
+# instances rather than one. With expect=1 keeping only the top-scoring
+# instance, the delivered photo silently lost an entire bowl -- confirmed
+# by checking SAM3's OWN returned box before any downstream crop/rotate
+# step touched it: it exactly matched the delivered (wrong, one-bowl) box.
+# Unlike _PAIRED_ITEM_CATEGORIES (earrings etc., which really ARE two
+# separate physical pieces meant to be shown as two side-by-side panels),
+# WATI is ONE pendant -- the fix is to UNION the nearby extra instances
+# into a single combined box/mask, not split them into a pair layout.
+_SAM3_UNION_MULTI_INSTANCE = frozenset({"wati_22"})
+
+
 def _sam3_boxes_and_masks(bgr: np.ndarray, expect: int, category: str | None,
                           threshold: float = 0.3):
     """Text-prompted instance segmentation -- returns (boxes, masks) sorted
@@ -296,9 +311,49 @@ def _sam3_boxes_and_masks(bgr: np.ndarray, expect: int, category: str | None,
     if masks_t is None or len(masks_t) == 0:
         return [], []
     H, W = bgr.shape[:2]
-    scored = sorted(
+    scored_all = sorted(
         range(len(masks_t)), key=lambda i: float(scores_t[i]), reverse=True
-    )[:expect]
+    )
+
+    if category in _SAM3_UNION_MULTI_INSTANCE and expect == 1:
+        # Start from the top-scoring instance, then fold in any OTHER
+        # instance whose mask sits close to the growing combined region --
+        # close enough that it's plausibly the other half of the SAME
+        # physical piece (a connecting chain/bail bridges them), not an
+        # unrelated stray detection elsewhere in the frame. "Close" is
+        # measured as: the gap between the candidate's box and the current
+        # combined box is no more than half the combined box's own longer
+        # side -- generous enough for a chain-linked twin bowl, tight
+        # enough that a genuinely separate object across the frame won't
+        # get pulled in.
+        combined_mask = None
+        combined_box = None
+        for i in scored_all:
+            mask = masks_t[i].cpu().numpy().astype(bool)
+            ys, xs = np.nonzero(mask)
+            if len(xs) < 50:
+                continue
+            x0, x1, y0, y1 = int(xs.min()), int(xs.max()), int(ys.min()), int(ys.max())
+            if combined_box is None:
+                combined_mask = mask
+                combined_box = (x0, y0, x1, y1)
+                continue
+            cx0, cy0, cx1, cy1 = combined_box
+            gap_x = max(0, max(x0, cx0) - min(x1, cx1))
+            gap_y = max(0, max(y0, cy0) - min(y1, cy1))
+            gap = max(gap_x, gap_y)
+            tolerance = 0.5 * max(cx1 - cx0, cy1 - cy0)
+            if gap <= tolerance:
+                combined_mask = combined_mask | mask
+                combined_box = (min(x0, cx0), min(y0, cy0), max(x1, cx1), max(y1, cy1))
+        if combined_box is None:
+            return [], []
+        x0, y0, x1, y1 = combined_box
+        pad_x, pad_y = int(0.08 * (x1 - x0)), int(0.08 * (y1 - y0))
+        box = (max(0, x0 - pad_x), max(0, y0 - pad_y), min(W, x1 + pad_x), min(H, y1 + pad_y))
+        return [box], [combined_mask]
+
+    scored = scored_all[:expect]
     boxes, masks = [], []
     for i in scored:
         mask = masks_t[i].cpu().numpy().astype(bool)
