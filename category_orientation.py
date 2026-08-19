@@ -106,7 +106,16 @@ GUIDES: dict[str, OrientationGuide] = {
     "baju_bandh_22": OrientationGuide(OrientationType.OPEN_CURVE, "moderate"),
 
     # -- Ground truth: WATI is the twin-bowl mangalsutra pendant --
-    "wati_22": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
+    # Moved FLAT_FACE_UP -> HANGS_VERTICAL (2026-08-19, explicit owner
+    # correction with a reference photo): a WATI has a real hanging
+    # direction -- bail/loop at top, pendant body extending straight down,
+    # level and centered -- the same "attachment point up, ornament down"
+    # geometry earrings/jhumka already get forced into, not just a small
+    # nearest-right-angle nudge. FLAT_FACE_UP's own docstring is explicit
+    # that it never axis-forces; that was the wrong bucket for WATI once
+    # the piece is understood to have a real hang direction, not merely a
+    # left-right-symmetric flat face with no up/down preference.
+    "wati_22": OrientationGuide(OrientationType.HANGS_VERTICAL, "high"),
 
     # -- Gold coins: flat, face up, embossed motif toward camera --
     "gold_coin_22_kt": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),

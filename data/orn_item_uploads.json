@@ -1625,7 +1625,7 @@
     "ok": false,
     "label": "LR22_142",
     "error": "ValueError: LR22_142: expected one current-stock label, found 0",
-    "attempted_at": 1787147223.6782103
+    "attempted_at": 1787147943.7741141
   },
   "LR22_143": {
     "ok": true,
@@ -1652,7 +1652,7 @@
     "ok": false,
     "label": "LR22_150",
     "error": "ValueError: LR22_150: expected one current-stock label, found 0",
-    "attempted_at": 1787147223.7209783
+    "attempted_at": 1787147943.817134
   },
   "LR22_151": {
     "ok": true,
@@ -1735,7 +1735,7 @@
     "ok": false,
     "label": "LR22_179",
     "error": "ValueError: LR22_179: expected one current-stock label, found 0",
-    "attempted_at": 1787147223.7634883
+    "attempted_at": 1787147943.8586826
   },
   "LR22_18": {
     "ok": true,
@@ -1755,7 +1755,7 @@
     "ok": false,
     "label": "LR22_188",
     "error": "ValueError: LR22_188: expected one current-stock label, found 0",
-    "attempted_at": 1787147223.8047566
+    "attempted_at": 1787147943.9000106
   },
   "LR22_190": {
     "ok": true,
@@ -1887,7 +1887,7 @@
     "ok": false,
     "label": "LR22_237",
     "error": "ValueError: LR22_237: expected one current-stock label, found 0",
-    "attempted_at": 1787147223.8464718
+    "attempted_at": 1787147943.9415784
   },
   "LR22_238": {
     "ok": true,
@@ -1956,7 +1956,7 @@
     "ok": false,
     "label": "LR22_268",
     "error": "ValueError: LR22_268: expected one current-stock label, found 0",
-    "attempted_at": 1787147223.8888626
+    "attempted_at": 1787147943.9837775
   },
   "LR22_271": {
     "ok": true,
@@ -1976,13 +1976,13 @@
     "ok": false,
     "label": "LR22_276",
     "error": "ValueError: LR22_276: expected one current-stock label, found 0",
-    "attempted_at": 1787147223.9308908
+    "attempted_at": 1787147944.026374
   },
   "LR22_281": {
     "ok": false,
     "label": "LR22_281",
     "error": "ValueError: LR22_281: expected one current-stock label, found 0",
-    "attempted_at": 1787147223.9803746
+    "attempted_at": 1787147944.0764287
   },
   "LR22_282": {
     "ok": true,
@@ -2072,7 +2072,7 @@
     "ok": false,
     "label": "LR22_340",
     "error": "ValueError: LR22_340: expected one current-stock label, found 0",
-    "attempted_at": 1787147224.0240152
+    "attempted_at": 1787147944.1172059
   },
   "LR22_342": {
     "ok": true,
@@ -2148,7 +2148,7 @@
     "ok": false,
     "label": "LR22_400",
     "error": "ValueError: LR22_400: expected one current-stock label, found 0",
-    "attempted_at": 1787147224.065151
+    "attempted_at": 1787147944.1585903
   },
   "LR22_401": {
     "ok": true,
@@ -2427,7 +2427,7 @@
     "ok": false,
     "label": "LR22_90",
     "error": "ValueError: LR22_90: expected one current-stock label, found 0",
-    "attempted_at": 1787147224.1082392
+    "attempted_at": 1787147944.199027
   },
   "LR22_91": {
     "ok": true,
@@ -2489,6 +2489,6 @@
     "ok": false,
     "label": "image-1787142374333",
     "error": "ValueError: image-1787142374333: expected one current-stock label, found 0",
-    "attempted_at": 1787147224.1497
+    "attempted_at": 1787147944.2405283
   }
 }
