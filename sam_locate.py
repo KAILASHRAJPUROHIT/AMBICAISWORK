@@ -811,7 +811,9 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
                         # away", which is what this check is actually for.
                         mask_px = float(mask_crop.sum())
                         if refined.any() and mask_px > 0 and float(refined.sum()) / mask_px >= 0.5:
-                            piece = _composite_on_white(crop, refined)
+                            crop_hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+                            if _mask_quality_ok(refined, crop_hsv[..., 1], crop_hsv[..., 2]):
+                                piece = _composite_on_white(crop, refined)
                 except Exception:
                     piece = crop
             crops.append(piece)
