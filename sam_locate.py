@@ -710,10 +710,35 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
         # i.e. barely a crop at all, which is why those came back as invented
         # jewellery. Side-by-side keeps both pieces and their relative size
         # while dropping the stand in between.
-        crops = [bgr[b[1]:b[3], b[0]:b[2]] for b in boxes]
-        crops = [c for c in crops if c.size and c.shape[0] > 16 and c.shape[1] > 16]
-        if not crops:
+        #
+        # Each piece now gets the SAME background-removal treatment as the
+        # single-piece path (refine + sanity floor + composite on white),
+        # using ITS OWN mask -- not the separate no-removal side-by-side
+        # path this used to be. Requested explicitly (2026-08-19): "if you
+        # can get this result on one side earring get it on both" --
+        # there was never a real reason pairs couldn't have clean
+        # backgrounds too, the mask was just being discarded.
+        raw_crops = [(bgr[b[1]:b[3], b[0]:b[2]], box_masks[i] if i < len(box_masks) else None, b)
+                    for i, b in enumerate(boxes)]
+        raw_crops = [(c, m, b) for c, m, b in raw_crops if c.size and c.shape[0] > 16 and c.shape[1] > 16]
+        if not raw_crops:
             return src_path, None
+
+        crops = []
+        for crop, mask, box in raw_crops:
+            piece = crop
+            if mask is not None:
+                try:
+                    mask_crop = mask[box[1]:box[3], box[0]:box[2]]
+                    if mask_crop.shape[:2] == crop.shape[:2] and mask_crop.any():
+                        refined = _refine_mask(crop, mask_crop, category=category)
+                        crop_px = crop.shape[0] * crop.shape[1]
+                        if refined.any() and float(refined.sum()) / crop_px >= 0.15:
+                            piece = _composite_on_white(crop, refined)
+                except Exception:
+                    piece = crop
+            crops.append(piece)
+
         if prefer_vertical:
             # Per-piece, BEFORE scaling/pasting -- see _align_vertical_hang's
             # own docstring for why this must happen per-piece and not on
