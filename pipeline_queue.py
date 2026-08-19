@@ -14,6 +14,7 @@ from __future__ import annotations
 import errno
 import hashlib
 import os
+import re
 import shutil
 import time
 import uuid
@@ -27,6 +28,26 @@ import capture_voids
 TAG_ARCHIVE_DIRNAME = "_tag_archive"
 PROCESSABLE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png"})
 DEFAULT_STABLE_AGE_SECONDS = 10.0
+
+# Real, confirmed production bug (2026-08-19): IntakeCandidate.processable
+# only ever filtered out DIRECTORY components starting with "_"/"." -- it
+# never looked at the FILENAME at all. capture_tool.py's save_multi() saves
+# FOUR files per 3-angle item: <tag>.jpg (the real MAIN photo), <tag>_1.jpg
+# and <tag>_2.jpg (LEFT/RIGHT angle references, never meant to stand alone),
+# and stitch_angles() additionally writes <tag>_stitched.jpg (a small,
+# letterboxed, re-compressed 3-panel PREVIEW composite for the tray UI, not
+# a catalogue-quality source image). With no filename filter, all four were
+# being queued and submitted to Azure FLUX.2 Pro as separate, independent
+# items -- confirmed live via reports/azure_flux2_guard/usage.json and
+# data/dedup_hash_cache.json, which show real batch submissions like
+# "0001_GR22_188_stitched.png". That's not just a quality problem (the
+# stitched file is deliberately downscaled to ~1.1MP and re-JPEG'd for fast
+# preview loading, nowhere near catalogue fidelity) -- it was quadrupling
+# real AI generation cost per item and putting garbage duplicate entries
+# into the catalogue under tag-like names. Only the bare <tag>.jpg (or
+# <tag>_stud.jpg per capture_tool.py's stud-aware naming, 2026-08-19) is a
+# real standalone catalogue source; _1/_2/_stitched are always excluded.
+_ANGLE_OR_PREVIEW_SUFFIX_RE = re.compile(r"_(1|2|stitched)$", re.IGNORECASE)
 
 
 class PipelineQueueError(RuntimeError):

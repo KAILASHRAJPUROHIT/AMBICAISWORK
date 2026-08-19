@@ -1074,10 +1074,10 @@
   "reviewed_at": 1786786189.8782084
  },
  "GR22_127": {
-  "verdict": "approved",
-  "reason": null,
+  "verdict": "rejected",
+  "reason": "design_mismatch",
   "note": null,
-  "reviewed_at": 1786783110.3534317
+  "reviewed_at": 1787138970.3068895
  },
  "GR22_130": {
   "verdict": "approved",

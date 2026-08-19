@@ -39742,6 +39742,129 @@
       "reserved_usd": 0.08,
       "completed_at_utc": "2026-08-19T11:00:07.240933+00:00",
       "output_bytes": 661253
+    },
+    {
+      "id": "fd098f19a6aa2f3e",
+      "reserved_at_utc": "2026-08-19T11:28:37.760814+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\GR22_127_1.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\GR22_127_1_0d780ca72592_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\4\\0002_GR22_127_1.png",
+      "prompt_sha256": "ab876963b3f57ef92a8331919a3dac4d783f65fb2ba908b5cbf620c875296bf0",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            1597,
+            1169,
+            2316,
+            1688
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00178,
+        "dominant_hue_degrees": 10.0,
+        "hue_label": "orange/gold",
+        "position": "centre",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "gents_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        4096,
+        3072
+      ],
+      "native_megapixels": 12.5829,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3651,
+        2738
+      ],
+      "reference_megapixels": 9.9964,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3651,
+          2738
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-19T11:29:00.173294+00:00",
+      "output_bytes": 728073
+    },
+    {
+      "id": "96b0dfeb37379df7",
+      "reserved_at_utc": "2026-08-19T11:29:04.692445+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\GR22_127_2.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\GR22_127_2_5fa245bc4902_10mp.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\4\\0003_GR22_127_2.png",
+      "prompt_sha256": "c45d87cd1a85f7bffafcb3dc6e6e9c7623524b5af628a548410c84a4bcddad39",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            1474,
+            1256,
+            2371,
+            1911
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00057,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "gents_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        4096,
+        3072
+      ],
+      "native_megapixels": 12.5829,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3651,
+        2738
+      ],
+      "reference_megapixels": 9.9964,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          3651,
+          2738
+        ]
+      ],
+      "input_billed_mp": 10,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.18,
+      "reserved_usd": 0.23,
+      "completed_at_utc": "2026-08-19T11:29:23.454272+00:00",
+      "output_bytes": 431807
     }
   ]
 }
