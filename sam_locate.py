@@ -396,9 +396,34 @@ def _centre_seed_from_boxes(boxes: list, bgr: np.ndarray) -> list:
     return pts
 
 
-def locate(bgr: np.ndarray, expect: int = 1, margin: float = 0.10):
+def locate(bgr: np.ndarray, expect: int = 1, margin: float = 0.10, category: str | None = None):
+    """Return tight boxes around each ornament, left-to-right.
+
+    Tries SAM3 first (2026-08-19) -- category-aware text-prompted concept
+    segmentation, see _SAM3_PROMPTS' doc comment for why this directly
+    fixes the tag/reflection-contamination failure mode DINO+SAM2 box-
+    seeding couldn't. Falls back to the original DINO+SAM2 pipeline
+    (_locate_sam2) whenever SAM3 isn't installed/available, finds nothing
+    (including the common case of a synthetic/non-jewellery test image),
+    or raises for any reason -- this function must never be a NEW way for
+    a real capture to fail that the old pipeline would have handled."""
+    global _last_masks
+    if _sam3_available():
+        try:
+            boxes, masks = _sam3_boxes_and_masks(bgr, expect, category)
+            if boxes:
+                _last_masks = masks
+                return boxes
+        except Exception:
+            pass
+    return _locate_sam2(bgr, expect, margin)
+
+
+def _locate_sam2(bgr: np.ndarray, expect: int = 1, margin: float = 0.10):
     global _last_mask, _last_masks
-    """Return tight boxes around each ornament, left-to-right."""
+    """Original DINO+SAM2 localisation -- now the fallback path behind
+    locate()'s SAM3 attempt above, kept verbatim so existing behaviour
+    (and the tests exercising its tiebreak/fallback logic) is unchanged."""
     pred = _predictor()
     rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
     pred.set_image(rgb)
