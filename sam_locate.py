@@ -643,6 +643,12 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
         crops = [c for c in crops if c.size and c.shape[0] > 16 and c.shape[1] > 16]
         if not crops:
             return src_path, None
+        if prefer_vertical:
+            # Per-piece, BEFORE scaling/pasting -- see _align_vertical_hang's
+            # own docstring for why this must happen per-piece and not on
+            # the assembled side-by-side canvas (that would find the
+            # PAIR's own wide axis and rotate both pieces as one unit).
+            crops = [_align_vertical_hang(c) for c in crops]
         th = max(c.shape[0] for c in crops)
         scaled = [cv2.resize(c, (max(1, int(c.shape[1] * th / c.shape[0])), th),
                              interpolation=cv2.INTER_AREA) for c in crops]
