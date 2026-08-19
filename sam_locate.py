@@ -356,6 +356,38 @@ def _rotate_keep(bgr: np.ndarray, mask: np.ndarray, ang: float):
     return bgr, mask
 
 
+def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray) -> np.ndarray:
+    """Strips display-prop pixels SAM2 wrongly pulled into the object mask.
+
+    Confirmed live (2026-08-19, tag WT22/19): on a navy-blue dot-print
+    display card, SAM2's mask correctly covered the gold-and-ruby earrings
+    but ALSO swallowed a large connected chunk of the card itself --
+    visually confirmed via a mask overlay, not a crop-tightness or feather
+    issue. RMBG-2.0 failed the identical way on the same image, so this
+    isn't one model being weak; the card's texture/lighting genuinely reads
+    as "object" to both. Same fix pattern as this repo's existing pixel-veto
+    material check: no jewellery in this catalogue is blue, so any
+    saturated-blue pixel inside the mask is provably wrong and gets veto'd
+    regardless of which model (or how confidently) included it. Gold
+    (H~15-35), ruby/red stones (H~0-10 or ~170-179), and white/silver
+    (low saturation) are all untouched by this range.
+    Only the largest remaining connected blob survives afterward, so the
+    veto can't leave the jewellery mask fragmented into disconnected
+    islands (a stray metal glint on the card, for instance) -- the real
+    piece is always one solid connected region.
+    """
+    hsv = cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2HSV)
+    h, s = hsv[..., 0], hsv[..., 1]
+    is_blue_prop = (h >= 95) & (h <= 130) & (s >= 40)
+    refined = mask_crop.astype(bool) & ~is_blue_prop
+
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(refined.astype(np.uint8), 8)
+    if n > 1:
+        largest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+        refined = lab == largest
+    return refined
+
+
 def _composite_on_white(bgr_crop: np.ndarray, mask_crop: np.ndarray, feather: int = 3) -> np.ndarray:
     """Cuts bgr_crop out against a white background using mask_crop (SAM2's
     own segmentation, already proven correct by being what picked this exact
