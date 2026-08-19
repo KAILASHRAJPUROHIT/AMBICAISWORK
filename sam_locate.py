@@ -586,7 +586,7 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
         try:
             mask_crop = aligned_mask[y0:y1, x0:x1]
             if mask_crop.shape[:2] == crop.shape[:2] and mask_crop.any():
-                refined = _refine_mask(crop, mask_crop)
+                refined = _refine_mask(crop, mask_crop, category=category)
                 # Sanity floor, not just "is it empty": confirmed live
                 # (2026-08-19, tag WT22/19's LEFT ANGLE) that SAM2's raw mask
                 # can be mostly noise with the paper TAG as its one solid
