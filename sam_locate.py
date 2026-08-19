@@ -910,7 +910,7 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
     if bgr is None or not available():
         return src_path, None
     try:
-        boxes = locate(bgr, expect=expect, margin=margin)
+        boxes = locate(bgr, expect=expect, margin=margin, category=category)
     except Exception as e:
         return src_path, {"error": f"{type(e).__name__}: {e}"}
     if not boxes:
