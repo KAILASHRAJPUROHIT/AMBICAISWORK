@@ -48,6 +48,7 @@ import sam_locate
 BASE = os.path.dirname(os.path.abspath(__file__))
 CAPTURE_ROOT = os.path.join(BASE, "capture_intake")
 DEDUP_PATH = os.path.join(BASE, "data", "capture_dedup.json")
+TAG_METADATA_PATH = os.path.join(BASE, "data", "capture_tag_metadata.json")
 VOID_REGISTRY_PATH = str(capture_voids.configured_void_registry_path())
 TAG_ARCHIVE_DIRNAME = "_tag_archive"
 
