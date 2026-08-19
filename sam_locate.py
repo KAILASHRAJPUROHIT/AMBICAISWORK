@@ -501,8 +501,10 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
         try:
             mask_crop = aligned_mask[y0:y1, x0:x1]
             if mask_crop.shape[:2] == crop.shape[:2] and mask_crop.any():
-                crop = _composite_on_white(crop, mask_crop)
-                bg_removed = True
+                mask_crop = _refine_mask(crop, mask_crop)
+                if mask_crop.any():
+                    crop = _composite_on_white(crop, mask_crop)
+                    bg_removed = True
         except Exception:
             bg_removed = False
     cv2.imwrite(out_path, crop)
