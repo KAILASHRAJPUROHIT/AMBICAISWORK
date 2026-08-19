@@ -662,9 +662,31 @@ def _remove_background(path: str) -> None:
         im = Image.open(path).convert("RGB")
         x = _rmbg_tf(im).unsqueeze(0).to(_rmbg_dev)
         with torch.no_grad():
-            pred = _rmbg_seg(x)[-1].sigmoid().cpu()[0].squeeze()
-        from torchvision import transforms as _t
-        mask = _t.ToPILImage()(pred).resize(im.size)
+            pred = _rmbg_seg(x)[-1].sigmoid().cpu()[0].squeeze().numpy()
+        pred_resized = cv2.resize(pred, im.size, interpolation=cv2.INTER_LINEAR)
+        binary = (pred_resized > _RMBG_MASK_THRESHOLD).astype(np.uint8)
+
+        # RMBG-2.0's raw sigmoid mask is soft/probabilistic -- on a busy
+        # patterned background (confirmed live 2026-08-19: a blue dot-print
+        # display card) it scatters small patches of partial-confidence
+        # "foreground" across the pattern instead of a clean cut, which the
+        # old raw-mask composite then blended through as visible speckle.
+        # Keeping only the largest connected foreground component removes
+        # that speckle entirely -- the real jewellery is always one solid
+        # connected blob, the pattern noise is many small disconnected ones.
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
+        if num_labels > 1:
+            largest_label = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+            cleaned = (labels == largest_label).astype(np.uint8) * 255
+        else:
+            cleaned = binary * 255
+
+        # Light blur for an anti-aliased edge, applied AFTER component
+        # filtering so it can't reintroduce the speckle that was just
+        # removed.
+        cleaned = cv2.GaussianBlur(cleaned, (5, 5), 0)
+        mask = Image.fromarray(cleaned)
+
         white = Image.new("RGB", im.size, (255, 255, 255))
         out = Image.composite(im, white, mask)
         out.save(path, quality=92)
