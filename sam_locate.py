@@ -677,6 +677,7 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
         return src_path, {"error": f"{type(e).__name__}: {e}"}
     if not boxes:
         return src_path, None
+    box_masks = list(_last_masks)
 
     aligned_mask = _last_mask
     tilt = None
