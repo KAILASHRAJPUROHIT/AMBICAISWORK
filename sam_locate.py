@@ -251,7 +251,7 @@ def _centre_seed_from_boxes(boxes: list, bgr: np.ndarray) -> list:
 
 
 def locate(bgr: np.ndarray, expect: int = 1, margin: float = 0.10):
-    global _last_mask
+    global _last_mask, _last_masks
     """Return tight boxes around each ornament, left-to-right."""
     pred = _predictor()
     rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
@@ -261,6 +261,7 @@ def locate(bgr: np.ndarray, expect: int = 1, margin: float = 0.10):
     gboxes = _dino_boxes(bgr, expect)
     seeds = _centre_seed_from_boxes(gboxes, bgr)
     boxes = []
+    box_masks = []
     for idx, (cx, cy) in enumerate(seeds):
         gb = gboxes[idx] if idx < len(gboxes) else None
         masks, scores, _ = pred.predict(
