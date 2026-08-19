@@ -593,6 +593,7 @@ def check_duplicate(tag_code: str) -> dict | None:
 
 
 _RMBG_MODEL = "briaai/RMBG-2.0"
+_RMBG_MASK_THRESHOLD = 0.5
 _rmbg_lock = threading.Lock()
 _rmbg_seg = _rmbg_tf = _rmbg_dev = None
 
