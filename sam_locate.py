@@ -170,6 +170,152 @@ def focus_boxes(bgr: np.ndarray, expect: int, pct: float = 99.0) -> list:
     return boxes
 
 
+# SAM3 category-aware text prompts (2026-08-19) -- Meta's SAM3 supports
+# open-vocabulary CONCEPT prompting (find all instances matching a short
+# text phrase), which sidesteps the exact failure DINO+SAM2 box-seeding
+# hit on tag/name (GR22/127): SAM2's mask on a hand-held or tag-adjacent
+# plate genuinely can't tell "the ring" apart from "the paper tag right
+# next to it" from a point/box prompt alone, since both are inside the
+# seed box. A category-aware CONCEPT prompt ("gold men's ring" instead of
+# generic "jewellery") gives SAM3 an explicit semantic target instead.
+# Confirmed live on this exact failing photo (2026-08-19): "gold ring" and
+# "jewellery" both independently converged on a clean single-instance mask
+# (0.92 and 0.98 confidence) that excluded the tag AND a nearby light-
+# reflection streak that had contaminated the old pipeline's mask, with no
+# exemplar/box/negative-point tuning needed.
+_SAM3_PROMPTS: dict[str, str] = {
+    "baby_braclet_22": "gold baby bracelet",
+    "baby_kadli_22": "gold baby bangle",
+    "baby_ring_22": "gold baby ring",
+    "baju_bandh_22": "gold armlet",
+    "bali_18": "gold hoop earring",
+    "bali_22": "gold hoop earring",
+    "bangle_22": "gold bangle",
+    "chain_22": "gold chain",
+    "dull_22": "gold stud earring",
+    "earring_22": "gold dangle earring",
+    "fancy_mala_18": "gold beaded necklace",
+    "fancy_mala_22": "gold beaded necklace",
+    "gents_bracelet_22": "gold men's bracelet",
+    "gents_kada_18": "gold men's bangle",
+    "gents_kada_22": "gold men's bangle",
+    "gents_ring_22": "gold men's ring",
+    "haar_chain_22": "gold necklace chain",
+    "jhumka_22": "gold jhumka earring",
+    "kaan_chain_22": "gold ear chain",
+    "ladies_bracelet_18": "gold women's bracelet",
+    "ladies_bracelet_22": "gold women's bracelet",
+    "ladies_kada_22": "gold women's bangle",
+    "ladies_ring_18": "gold women's ring",
+    "ladies_ring_22": "gold women's ring",
+    "locket_18": "gold locket pendant",
+    "locket_22": "gold locket pendant",
+    "mangota_22": "gold and black beaded bracelet",
+    "moti_nath_18": "gold pearl nose ring",
+    "ms_long_22": "gold mangalsutra necklace with black beads",
+    "mss_short_20": "gold mangalsutra necklace with black beads",
+    "mss_short_22": "gold mangalsutra necklace with black beads",
+    "nath_22": "gold nose ring",
+    "necklace_22": "gold necklace",
+    "necklace_set_18": "gold necklace and earring set",
+    "necklace_set_22": "gold necklace and earring set",
+    "pendent_18": "gold pendant",
+    "pendent_22": "gold pendant",
+    "pendent_set_18": "gold pendant and earring set",
+    "pendent_set_22": "gold pendant and earring set",
+    "tikka_22": "gold maang tikka forehead jewellery",
+    "tops_18": "gold stud earring",
+    "tops_22": "gold stud earring",
+    "wati_22": "gold mangalsutra pendant with black beads",
+}
+_SAM3_DEFAULT_PROMPT = "gold jewellery"
+for _gc_key in (
+    "gold_coin_22_kt", "gold_coin_0_025_m", "gold_coin_0_050_m", "gold_coin_0_100_m",
+    "gold_coin_0_200_m", "gold_coin_0_250_m", "gold_coin_0_300_m", "gold_coin_0_500_m",
+    "gold_coin_0_750_m", "gold_coin_1_gm", "gold_coin_10_gm", "gold_coin_2_gm",
+    "gold_coin_20_gm", "gold_coin_5_gm",
+):
+    _SAM3_PROMPTS[_gc_key] = "gold coin"
+
+
+def _sam3_prompt_for(category: str | None) -> str:
+    if category is None:
+        return _SAM3_DEFAULT_PROMPT
+    return _SAM3_PROMPTS.get(category, _SAM3_DEFAULT_PROMPT)
+
+
+_sam3_model = None
+_sam3_processor = None
+
+
+def _sam3_available() -> bool:
+    try:
+        from transformers import Sam3Model, Sam3Processor  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def _sam3_predictor():
+    """Lazy-loaded, cached singleton -- same style as _dino_predictor()/
+    _predictor(). ~3.3GB download on first call (cached by huggingface_hub
+    afterward), ~6GB VRAM resident once loaded on this GPU (confirmed live,
+    RTX 5070 8GB) -- single-image inference only, no batching, matching
+    this pipeline's existing one-item-at-a-time processing."""
+    global _sam3_model, _sam3_processor
+    if _sam3_model is not None:
+        return _sam3_processor, _sam3_model
+    import torch
+    from transformers import Sam3Model, Sam3Processor
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    _sam3_processor = Sam3Processor.from_pretrained("facebook/sam3")
+    _sam3_model = Sam3Model.from_pretrained("facebook/sam3").to(dev)
+    return _sam3_processor, _sam3_model
+
+
+def _sam3_boxes_and_masks(bgr: np.ndarray, expect: int, category: str | None,
+                          threshold: float = 0.3):
+    """Text-prompted instance segmentation -- returns (boxes, masks) sorted
+    left-to-right, same shape/convention _dino_boxes()+SAM2's predict loop
+    in locate() produces, so it's a drop-in primary path with the existing
+    DINO+SAM2 loop as automatic fallback (see locate())."""
+    import torch
+    from PIL import Image
+    processor, model = _sam3_predictor()
+    prompt = _sam3_prompt_for(category)
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    img = Image.fromarray(rgb)
+    inputs = processor(images=img, text=prompt, return_tensors="pt").to(model.device)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    results = processor.post_process_instance_segmentation(
+        outputs, threshold=threshold, target_sizes=[img.size[::-1]]
+    )[0]
+    masks_t = results.get("masks")
+    scores_t = results.get("scores")
+    if masks_t is None or len(masks_t) == 0:
+        return [], []
+    H, W = bgr.shape[:2]
+    scored = sorted(
+        range(len(masks_t)), key=lambda i: float(scores_t[i]), reverse=True
+    )[:expect]
+    boxes, masks = [], []
+    for i in scored:
+        mask = masks_t[i].cpu().numpy().astype(bool)
+        ys, xs = np.nonzero(mask)
+        if len(xs) < 50:
+            continue
+        x0, x1, y0, y1 = int(xs.min()), int(xs.max()), int(ys.min()), int(ys.max())
+        pad_x, pad_y = int(0.08 * (x1 - x0)), int(0.08 * (y1 - y0))
+        boxes.append((max(0, x0 - pad_x), max(0, y0 - pad_y),
+                      min(W, x1 + pad_x), min(H, y1 + pad_y)))
+        full_mask = np.zeros((H, W), dtype=bool)
+        full_mask[:, :] = mask
+        masks.append(full_mask)
+    order = sorted(range(len(boxes)), key=lambda i: boxes[i][0])
+    return [boxes[i] for i in order], [masks[i] for i in order]
+
+
 _DINO_PROMPT = "jewellery. ring. bracelet. necklace. pendant. earring. bangle."
 _DINO_MODEL_ID = "IDEA-Research/grounding-dino-base"
 _dino_model = None
