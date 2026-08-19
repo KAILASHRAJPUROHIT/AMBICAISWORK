@@ -875,9 +875,31 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
         for path in (main_path, angle1_path, angle2_path):
             _backup_raw(path)
         try:
-            for path in (main_path, angle1_path, angle2_path):
+            # MAIN goes first and straightens to ITS OWN mask -- that tilt
+            # then becomes the shared reference for angle1/angle2, instead
+            # of each of the 3 shots straightening to their own mask
+            # independently. Requested live (2026-08-19): the three panels
+            # need to read as one consistent triptych, not three separately
+            # "corrected" (and sometimes disagreeing) angles. MAIN also
+            # gets a tighter margin -- "more zoomed in" -- since it's the
+            # hero shot; angle1/angle2 keep the wider default so the
+            # shared rotation still has enough frame to land inside without
+            # a corner clipping off.
+            main_tilt = None
+            try:
+                _, info = sam_locate.tight_crop(main_path, main_path, expect=1,
+                                                straighten=True, margin=0.04)
+                log.info("sam_locate.tight_crop done for %s (angle=%s)", main_path, info)
+                if info:
+                    main_tilt = info.get("tilt")
+            except Exception:
+                log.exception("sam_locate.tight_crop FAILED for %s", main_path)
+
+            for path in (angle1_path, angle2_path):
                 try:
-                    result_path, angle = sam_locate.tight_crop(path, path, expect=1, straighten=False)
+                    result_path, angle = sam_locate.tight_crop(
+                        path, path, expect=1, straighten=True, fixed_angle=main_tilt
+                    )
                     log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
                 except Exception:
                     log.exception("sam_locate.tight_crop FAILED for %s", path)
