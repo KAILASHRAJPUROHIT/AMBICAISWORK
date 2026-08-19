@@ -39433,6 +39433,87 @@
       "reserved_usd": 0.12,
       "completed_at_utc": "2026-08-19T07:36:52.896216+00:00",
       "output_bytes": 542235
+    },
+    {
+      "id": "72a90b313b5a8e9f",
+      "reserved_at_utc": "2026-08-19T09:00:37.521006+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\d146bbf5-6e7e-49fe-8c55-22e93879c224.png",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\d146bbf5-6e7e-49fe-8c55-22e93879c224_6d78e95f225f_wb.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\8\\0001_d146bbf5-6e7e-49fe-8c55-22e93879c224.png",
+      "prompt_sha256": "bbaf6f65b35285d43ff5d38974c17232f435a6dcbaad0dabf36c88aa9af330bf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            522,
+            771,
+            648,
+            968
+          ],
+          [
+            535,
+            322,
+            635,
+            468
+          ],
+          [
+            544,
+            502,
+            662,
+            664
+          ],
+          [
+            1573,
+            317,
+            1704,
+            571
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00158,
+        "dominant_hue_degrees": 10.0,
+        "hue_label": "orange/gold",
+        "position": "middle-left",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "wati_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        2000,
+        1500
+      ],
+      "native_megapixels": 3.0,
+      "reference_resize": "none",
+      "reference_dimensions": [
+        2000,
+        1500
+      ],
+      "reference_megapixels": 3.0,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          2000,
+          1500
+        ]
+      ],
+      "input_billed_mp": 3,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.075,
+      "reserved_usd": 0.1,
+      "completed_at_utc": "2026-08-19T09:00:54.108283+00:00",
+      "output_bytes": 328668
     }
   ]
 }
