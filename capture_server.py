@@ -54,6 +54,18 @@ _SSL_CERT_PATH = os.path.join(BASE, "data", "capture_https_cert.pem")
 _SSL_KEY_PATH = os.path.join(BASE, "data", "capture_https_key.pem")
 _SSL_META_PATH = os.path.join(BASE, "data", "capture_https_meta.json")
 
+# Without this, every logging.getLogger("capture_tool")/"sam_locate" call
+# throughout the pipeline (tight_crop results, RMBG failures, segmentation
+# errors -- all of it) goes to Python's default null handler and is never
+# written anywhere. Confirmed live (2026-08-19): repeatedly needed to
+# reproduce real capture failures offline from scratch, with zero log
+# evidence available, because nothing had ever actually been configured to
+# capture this output despite extensive log.info/log.exception calls
+# already existing in the code. service_capture_stderr.log already
+# captures this process's stderr, so a plain StreamHandler is enough --
+# no new log file/rotation to manage.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
 app = Flask(__name__)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.jinja_env.auto_reload = True
