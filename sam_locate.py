@@ -802,7 +802,16 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
                 # (no bg removal, but the full item stays visible) rather
                 # than risk shipping a photo with the product cut out.
                 crop_px = crop.shape[0] * crop.shape[1]
-                if refined.any() and float(refined.sum()) / crop_px >= 0.15:
+                mask_px = float(mask_crop.sum())
+                # Two floors: relative to the crop area (catches "wrong tiny
+                # blob" on an already-straightened, tightly-fit box -- the
+                # common case here) OR relative to SAM's own mask (catches a
+                # legitimate diagonal piece when prefer_vertical skipped the
+                # pre-straighten step, so the box is still loose -- see the
+                # matching comment in the side-by-side branch above).
+                if refined.any() and (float(refined.sum()) / crop_px >= 0.15
+                                       or (prefer_vertical and mask_px > 0
+                                           and float(refined.sum()) / mask_px >= 0.5)):
                     crop = _composite_on_white(crop, refined)
                     bg_removed = True
         except Exception:
