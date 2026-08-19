@@ -950,14 +950,18 @@ _PAIRED_ITEM_CATEGORIES = frozenset({
 })
 
 # Categories that hang/dangle (matches category_orientation.py's
-# OrientationType.HANGS_VERTICAL / CategoryOrientation.kt's mirror-symmetry
-# set, minus WATI which is FLAT_FACE_UP not hanging). These need their
-# elongated axis forced vertical, dangle end down -- "wherever the piece's
+# OrientationType.HANGS_VERTICAL). These need their elongated axis forced
+# vertical, attachment point up / dangle end down -- "wherever the piece's
 # own tilt happened to land" is not correct for a hanging item the way it
-# is for a flat-lying ring/bangle.
+# is for a flat-lying ring/bangle. WATI added 2026-08-19 (explicit owner
+# correction with a reference photo): it has a real bail-up/body-down
+# hang direction too, same as the rest of this set, not a symmetric flat
+# face with no up/down preference -- see category_orientation.py's own
+# updated comment for the full reasoning.
 _HANGS_VERTICAL_CATEGORIES = frozenset({
     "bali_18", "bali_22", "tops_18", "tops_22", "dull_22",
     "earring_22", "jhumka_22", "kaan_chain_22", "moti_nath_18", "nath_22", "tikka_22",
+    "wati_22",
 })
 
 
