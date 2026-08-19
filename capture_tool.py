@@ -185,6 +185,41 @@ def _load_dedup() -> dict:
     return {}
 
 
+def _load_tag_metadata() -> dict:
+    """Per-TAG-CODE facts that must outlive any individual capture --
+    deliberately a SEPARATE store from DEDUP_PATH (which tracks capture
+    STATE and gets cleared/rewritten on delete/retake) and separate from
+    the image files themselves. 2026-08-19, explicit request: a stud/
+    rhodium-accent flag set once for a tag must survive the operator
+    deleting the photos and recapturing that same item -- an AI edit
+    later needs to know "does this real piece actually have a diamond
+    stud" independent of whichever photo currently sits in capture_intake."""
+    if os.path.exists(TAG_METADATA_PATH):
+        try:
+            with open(TAG_METADATA_PATH, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def get_tag_metadata(tag_code: str) -> dict:
+    with _lock:
+        return dict(_load_tag_metadata().get(tag_code, {}))
+
+
+def set_stud_flag(tag_code: str, has_stud: bool, staff_name: str = "") -> dict:
+    with _lock:
+        meta = _load_tag_metadata()
+        entry = dict(meta.get(tag_code, {}))
+        entry["has_stud"] = bool(has_stud)
+        entry["stud_set_by"] = staff_name or entry.get("stud_set_by", "")
+        entry["stud_set_at"] = time.time()
+        meta[tag_code] = entry
+        _atomic_write_json(TAG_METADATA_PATH, meta)
+        return dict(entry)
+
+
 # The 57 real stock categories from \\Server2k22\D\01082026.xls (2814 real
 # tags, verified 2026-08-01 with zero mismatches against every real Label No
 # in that report — see ornament_code_map.py). Supersedes the earlier
