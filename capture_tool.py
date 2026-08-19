@@ -596,6 +596,24 @@ _RMBG_MODEL = "briaai/RMBG-2.0"
 _rmbg_lock = threading.Lock()
 _rmbg_seg = _rmbg_tf = _rmbg_dev = None
 
+# Guards the ENTIRE per-item SAM2/DINO crop + RMBG-2.0 bg-removal + stitch
+# pipeline, not just model loading. Root cause of a confirmed live bug
+# (2026-08-19, tag WT22/19): _segment_and_stitch_async's background thread
+# runs one capture's 3-image loop against the shared global _rmbg_seg model
+# handle with no synchronization beyond _load_rmbg()'s own init lock. If a
+# SECOND concurrent capture's thread finishes first and calls
+# _release_rmbg() (which sets _rmbg_seg = None) while this thread is still
+# mid-loop, the next _remove_background() call hits `None(x)` ->
+# TypeError, silently swallowed by the fail-open except-block, leaving that
+# image's background un-removed with zero visible error. 2 of that item's 3
+# images kept their raw background, 1 didn't -- exactly this race. Multiple
+# staff capturing concurrently makes this near-guaranteed, not rare.
+# Serializing the whole GPU pipeline per item (not just load) fixes it:
+# concurrent items queue for GPU work instead of tearing down each other's
+# model handle mid-use. GPU inference is short (~1-3s/image) so queuing
+# adds negligible latency compared to the capture cycle itself.
+_gpu_pipeline_lock = threading.Lock()
+
 
 def _load_rmbg():
     """Lazy, once -- same reasoning as design_verify_local.py's _load():
