@@ -471,24 +471,68 @@ def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray, category: str | No
         if best_label is not None:
             refined = lab == best_label
     return refined
-    # NOTE (2026-08-19, tag GR22/127): a stray light-reflection streak on
-    # the display stand sat close enough to touch the ring in SAM2's own
-    # raw mask, so component selection above can't separate them (same
-    # connected blob). Two automated fixes were tried and both failed on
-    # (superseded below by a QA-gate approach)
-    # this real photo: morphological opening couldn't sever the neck
-    # without eroding the ring's own band just as much, and a color+shape
-    # (near-white + elongated) filter stripped a LEGITIMATE engraving
-    # highlight on the ring's face instead of the actual spike (the real
-    # spike measured LESS elongated than that highlight -- aspect alone
-    # doesn't reliably separate "background artifact touching the piece"
-    # from "a highlight on the piece itself"). Reverted rather than ship a
-    # heuristic that already cut into real design detail on production
-    # data. Left as a known gap: this specific failure mode (a reflective
-    # display surface glare fusing into the mask) needs either a better
-    # geometric signal (e.g. whether the region sits on the mask's own
-    # outer silhouette vs. is fully interior) or a staging fix (keep
-    # pieces off directly reflective backdrops), not attempted here.
+
+
+def _mask_quality_ok(mask: np.ndarray, s: np.ndarray, v: np.ndarray) -> bool:
+    """QA gate for a refined mask, BEFORE it's used to composite onto white.
+
+    Confirmed live (2026-08-19, tag GR22/127): a stray light-reflection
+    streak on the display stand sat close enough to touch the ring in
+    SAM2's own raw mask that component selection in _refine_mask couldn't
+    separate them. Two automated FIXES were tried and both made things
+    worse on real production data -- morphological opening couldn't sever
+    the neck without eroding the ring's own band just as much, and a
+    color+shape strip filter cut a legitimate engraving highlight instead
+    of the actual intrusion (the real intrusion measured LESS elongated
+    than that highlight, so the "large + elongated" signal alone can't
+    tell "background artifact touching the piece" apart from "a highlight
+    on the piece itself" reliably enough to safely EDIT).
+
+    But that same signal IS reliable enough to REJECT: detecting "this
+    mask probably has something wrong with it" is a much lower bar than
+    correctly identifying and excising the exact wrong pixels. When this
+    returns False, the caller should skip white-compositing entirely and
+    keep the plain crop (background visible) -- a clean, unmodified photo
+    with the real background is a better Flux.2 Pro input than a confident
+    but wrong cutout with a tag or reflection baked into the silhouette,
+    since Flux's own prompt already does its own background/stand/tag
+    removal downstream (see config/flux2_pro_catalogue_prompt.txt) and
+    doesn't need a pre-cut silhouette to work from.
+
+    Two independent checks, either one failing rejects the mask:
+    1. Large + elongated near-white island still present (same detector
+       that proved unsafe to use as a STRIP target, safe to use as a
+       reject signal).
+    2. Low solidity (mask area / convex-hull area) -- a real piece of
+       jewellery, even an open/lacy design, fills most of its own convex
+       hull; a mask with a large contaminating attachment (a tag hanging
+       off to one side, a sprawling reflection) does not.
+    """
+    total = int(mask.sum())
+    if total < 200:
+        return True  # too small to judge either way -- don't block on it
+    mask_u8 = mask.astype(np.uint8)
+
+    whiteish = mask & (s < 45) & (v >= 100)
+    wn, wlab, wstats, _ = cv2.connectedComponentsWithStats(whiteish.astype(np.uint8), 8)
+    for label in range(1, wn):
+        area = wstats[label, cv2.CC_STAT_AREA]
+        if area < max(1000, 0.015 * total):
+            continue
+        w = wstats[label, cv2.CC_STAT_WIDTH]
+        h = wstats[label, cv2.CC_STAT_HEIGHT]
+        aspect = max(w, h) / max(1, min(w, h))
+        if aspect >= 2.2:
+            return False
+
+    contours, _ = cv2.findContours(mask_u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if contours:
+        biggest = max(contours, key=cv2.contourArea)
+        hull_area = cv2.contourArea(cv2.convexHull(biggest))
+        if hull_area > 0 and total / hull_area < 0.35:
+            return False
+
+    return True
 
 
 def _composite_on_white(bgr_crop: np.ndarray, mask_crop: np.ndarray, feather: int = 3) -> np.ndarray:
