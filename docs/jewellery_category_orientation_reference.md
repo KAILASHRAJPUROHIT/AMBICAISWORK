@@ -165,3 +165,113 @@ Reference: https://www.totaram.com/22k-gold-lakshmi-coin-5-gram.html — Confide
      a real supporting source.
 5. Gold coins (14 of the 57 labels) are trivial: one shared rule (flat,
    face up, embossed motif toward camera) covers all weight variants.
+
+## Size & Wearer Reference
+
+Compiled 2026-08-19, extending the orientation research above with real
+sourced dimensions for a capture-time shape/aspect-ratio sanity check. Does
+**not** re-guess wearer/body-part/shape/orientation already established
+above — those are carried forward unchanged. Method: targeted web search
+against the same class of sources as the orientation doc (Totaram Jewelers,
+BlueStone, CaratLane, Kushal's, Virani Jewelers, Kalyan/Candere, Meesho/
+IndiaMART trade listings, plus a few Western retailers — Etsy, Croghan's,
+Amazon.com — used only as size/shape analogs where noted, never as the
+primary Indian-market source). Where a specific product page states
+length/width/diameter in inches, that is converted to mm (1 in = 25.4 mm)
+and cited directly. Where retailer pages state weight only, that is
+reported honestly as "weight only, no dimensions" rather than invented.
+`aspect_ratio_range` is expressed as **width : height** of the piece as it
+would be laid down / worn for the capture photo, derived from the shape and
+orientation already fixed in the sections above, cross-checked against the
+dimension data found here.
+
+Confidence here reflects the size/dimension research specifically (it can
+be lower than the orientation-doc confidence for the same category, since a
+category's orientation can be well-established while its dimensions are
+still poorly documented).
+
+### Rings
+
+| Category (key) | Wearer | Body part | Typical size | Aspect ratio (W:H) | Source | Confidence |
+|---|---|---|---|---|---|---|
+| BABY RING 22 (baby_ring_22) | babies-and-toddlers | finger | Weight only: ~0.29–0.85 g (22K/18K infant rings). No explicit diameter/band-width found on a baby-specific listing. | ~1:1 (round band, same framing as adult rings, scaled down) | https://www.totaram.com/22k-gold-ring-for-baby-48086.html ; https://www.amazon.in/Baby-Hallmarked-stamped-weight-0-300g/dp/B0CKZCL25J | low (weight sourced; dimensions inferred by analogy to adult rings, not found) |
+| GENTS RING 22 (gents_ring_22) | men | finger | Weight ~4.0–8.9 g across 10 Totaram listings; one 18K listing states band width 5.0 mm. Outer diameter not stated (ring "size" given as US sizing, not mm). | ~1:1 (round band, stone/setting face up) | https://www.totaram.com/22k-gold-ring-for-men-235-gr7733.html ; https://www.totaram.com/18k-gold-solitaire-diamond-ring-with-men.html | moderate (weight and one width found; no outer-diameter mm) |
+| LADIES RING 18/22 (ladies_ring_18, ladies_ring_22) | women | finger | Weight ~2.1–5.6 g across 10 Totaram listings. Totaram's own listings state weights but explicitly do not give mm dimensions for these SKUs. | ~1:1 (round band, daintier, stone/setting face up) | https://www.totaram.com/22k-gold-ring-for-women-48100.html | moderate (weight found; no mm dimensions on sourced listings — honestly not found) |
+
+### Bangles, Kada, Bracelets
+
+| Category (key) | Wearer | Body part | Typical size | Aspect ratio (W:H) | Source | Confidence |
+|---|---|---|---|---|---|---|
+| BABY BRACLET 22 (baby_braclet_22) | babies-and-toddlers | wrist | No baby-bracelet-specific mm/weight found. By analogy to MANGOTA (a similar flexible infant wrist piece, see below): adjustable ~125–200 mm laid length, 5 mm band width, 5.5–11.6 g. | ~2.5:1 to 3.5:1 (open curve laid flatter/wider than tall) | https://www.totaram.com/22k-gold-jewelry/womens-jewelry/gold-bangles-for-women-baby-bangles.html (category page only; no dedicated product dimensions found) | low (no direct source; extrapolated from MANGOTA/adult-bracelet analogs) |
+| BABY KADLI 22 (baby_kadli_22) | babies-and-toddlers | wrist | Standard infant bangle inner diameter ~32 mm (0–12 mo) to ~38 mm (1–3 yr); one named "baby nazariya kadli" example: ~40 mm diameter, 6.5 g (silver, cited in original doc as visual analog, not gold). | ~1:1 (full circle face-on) | https://caratvogue.com/bangle-size-chart/ ; https://www.amazon.in/Sahiba-Gems-Exclusive-Bracelet-Nazariya/dp/B096STCYW2 | moderate (age-based diameter chart is real but generic; not a gold-specific KADLI listing) |
+| BANGLE 22 (bangle_22) | women | wrist | Standard adult women's bangle diameter ~57–66 mm (size 2.4–2.6); outer band width 4.7–12.4 mm across 5 Totaram set listings (weights 16.4–127.25 g depending on set size/count). No single-bangle outer-diameter mm stated on any listing found. | ~1:1 (full circle + band face-on) | https://www.totaram.com/22k-gold-bangles-set-of-8-4-pair-235-gbl1124.html ; https://www.caratlane.com/blog/bangle-size-chart-guide/ | moderate (width and standard-size diameter found from two different sources, not one listing) |
+| GENTS BRACELET 22 (gents_bracelet_22) | men | wrist | Length 190–216 mm (7.5–8.5 in) laid, width 6.4–14.0 mm (0.25–0.55 in), weight 10.35–39.35 g — 8 Totaram listings, consistent. | ~3:1 to 3.5:1 (open curve, laid length dominates) | https://www.totaram.com/22k-gold-bracelet-for-men-45233.html ; https://www.totaram.com/22k-gold-bracelet-for-men-48615.html | high (multiple consistent Totaram listings with explicit length+width) |
+| GENTS KADA 18/22 (gents_kada_18, gents_kada_22) | men | wrist | Diameter ~63–76 mm (2.5–3.0 in), width 3.0–24.0 mm depending on style, weight 20.2–41.55 g (commonly 25–40 g). | ~1:1 (full circle face-on, hinge to the side) | https://blog.bluestone.com/how-much-does-a-gold-kada-for-men-weigh-price-weight-guide/ ; https://www.viranijewelers.com/products/22k-yellow-gold-mens-kada-bangle-25-9-grams ; https://www.totaram.com/22-karat-gold-kada-mens-gold-bangle-with-beads-temple-jewellery-single-piece.html | moderate (weight and diameter ranges consistent across sources; not from one single product spec sheet) |
+| LADIES BRACELET 18/22 (ladies_bracelet_18, ladies_bracelet_22) | women | wrist | Length ~170–235 mm (US size 7–9.25 adjustable), width 2.0–3.5 mm, height/thickness 4.25–4.9 mm, weight as low as ~1–2 g for delicate chain styles (CaratLane US-site listings; karat differs — treat as shape analog, not Indian-market weight). | ~3:1 to 3.5:1 (open curve, daintier than gents bracelet) | https://www.caratlane.us/celestial-adjustable-gold-bracelet.html ; https://www.caratlane.us/smart-multiwear-gold-bracelet.html | low-moderate (CaratLane US site, not the India catalogue — used as shape/size analog only, flagged) |
+| LADIES KADA 22 (ladies_kada_22) | women | wrist | Diameter ~57–61 mm inferred from standard adult bangle size range (no ladies-KADA-specific gold listing with mm found); analogous steel/silver kada listings show width 4.5 mm as a shape reference only. | ~1:1 (full circle face-on) | https://www.totaram.com/22k-gold-kada-with-single-piece.html (weight/description only, no mm) ; https://www.caratlane.com/blog/bangle-size-chart-guide/ | low (diameter is inferred from the general bangle-size chart, not a KADA-specific listing) |
+| MANGOTA 22 (mangota_22) | babies-and-toddlers | wrist or ankle | Adjustable ~125–200 mm (5–8 in, extendable) laid length, band/chain width ~5 mm, weight ~5.5–11.6 g — sourced from black-bead nazariya bracelet/anklet listings for 0–2-year-olds, matching the owner-corrected MANGOTA identification. | ~2.5:1 to 3.5:1 (open curve, clasp hidden) | https://silverlinings.in/products/black-beads-nazaria-anklet-bb087 ; https://karizmajewels.com/products/925-real-silver-black-beads-nazariya-kids-anklet-ankle-chain-foot-baby-bracelet-7 | moderate (dimensions come from nazariya/Mangota-equivalent listings, mostly silver — gold-specific weight not found, but shape/length is well corroborated) |
+
+### Studs / small flat earrings
+
+| Category (key) | Wearer | Body part | Typical size | Aspect ratio (W:H) | Source | Confidence |
+|---|---|---|---|---|---|---|
+| BALI 18/22 (bali_18, bali_22) | women | ear (earlobe) | Length 20–46 mm (0.8–1.8 in), width 19–25 mm (0.75–1.0 in), weight 2.0–13.7 g across 8 Totaram listings; a baby-bali variant exists at 0.65 g. | ~1:1 to 1.3:1 (near-round hoop, slightly wider than tall) | https://www.totaram.com/22k-gold-hoop-earrings-ear-bali-for-women-48948.html ; https://www.totaram.com/22k-gold-hoop-earrings-ear-bali-for-baby-50365.html | high (multiple consistent Totaram listings with explicit length+width) |
+| DULL 22 (dull_22) | women | ear (earlobe) | Weight ~1.0–1.5 g per the trade "Gold Dull/Tar Dull" listing already cited in the orientation doc. No mm dimensions found on any DULL-specific listing this pass either. | ~1:1 (small stud, same framing as TOPS) | https://www.indiamart.com/proddetail/gold-dull-tar-dull-15190329291.html | low (weight only; dimensions honestly not found, inferred 1:1 by analogy to TOPS/studs generally) |
+| TOPS 18/22 (tops_18, tops_22) | women | ear (earlobe) | General stud-earring diameter range 2–10 mm reported industry-wide (not TOPS-specific); one 22K CZ stud example: 10.07 mm x 5.82 mm, 1.35 g. Weight bands commonly quoted 0–2 g up to 5–10 g. | ~1:1 (flat disc, decorative front face up) | https://goldpalace.com/collections/gold-earrings ; https://www.vaibhavjewellers.com/gold-jewellery/women/earrings/stud-earrings.html | low-moderate (general stud-size ranges found; no dedicated "TOPS"-branded product spec page) |
+
+### Dangling / hanging earrings and ear ornaments
+
+| Category (key) | Wearer | Body part | Typical size | Aspect ratio (W:H) | Source | Confidence |
+|---|---|---|---|---|---|---|
+| EARRING 22 (earring_22) | women | ear, hanging below lobe | No dimensions found for this umbrella "drop/dangle, not otherwise classed" category specifically. By analogy to JHUMKA/BALI dangle ranges below: roughly 20–65 mm hang length, 2–15 g. | ~1:2 to 1:3 (taller than wide, post at top) | https://www.malabargoldanddiamonds.com/us/gold-jewellery/earring/style/hoops-bali.html (category page only; no product-level dimensions found) | low (no dedicated listing found; extrapolated from JHUMKA range) |
+| JHUMKA 22 (jhumka_22) | women | ear, hanging below lobe | Small: ~21.7 mm total height x 8.7 mm dangle width, 3.6 g/pair. Larger styles: up to ~63 mm (2.5 in) length x ~29 mm width. Weight spans 2–50 g depending on size/intricacy. | ~1:2 to 1:2.5 (bell shape, taller than wide) | https://www.etsy.com/listing/1794962612/22k-solid-gold-jimiki-kammal-jhumka ; https://queenofheartsjewelry.us/product/22k-gold-small-jhumka-earrings-5-55g/ ; https://www.viranijewelers.com/products/22k-yellow-gold-jhumka-earrings-67-3gm | moderate (consistent small-vs-large size split found, but not one single Indian-retailer spec page) |
+| KAAN CHAIN 22 (kaan_chain_22) | women | ear-to-hair (side of face) | Length ~150–190 mm (one 7.5 in / ~190 mm listing, one 15.5 cm / 155 mm listing), weight ~11–13 g. Chain itself is only a few mm wide; end fittings (hook + earring loop) may add ~10–20 mm locally. | ~1:8 to 1:15 (very elongated, cascades diagonally/vertically) | https://theoliostories.com/en-us/products/kaan-chain ; https://erajewels.com/products/bahubali_eaarrings_kaan_sahara_hair_accessories | moderate (two independent length figures agree; not an India-market gold listing specifically) |
+| MOTI NATH 18 (moti_nath_18) | women | nose (left nostril) + ear-support chain | Reported ranges vary widely by source: one product-level figure gives length 25–35 mm x breadth 15–20 mm x height 3–4 mm, weight 3–5 g; a separate large-format example is ~50 mm (2 in) diameter, 15 g; general guidance says the crescent spans "2 to 4 inches" (~50–100 mm) across for bridal/statement styles. | ~1.5:1 to 2:1 (crescent wider than tall, horns up) | https://londejewellers.com/guides/nath-nose-ring-nagpur ; https://aurangabadkarsaraf.com/traditional-jewellery/Nath | low-moderate (wide, inconsistent range across sources — daily-wear vs. bridal Nath sizes differ a lot; no single MOTI-NATH-branded spec page) |
+| NATH 22 (nath_22) | women | nose (left nostril) | No NATH-specific (non-pearl) dimension source found this pass. By analogy to MOTI NATH (same crescent shape, without the pearl bulk): likely at the smaller end of the MOTI NATH range, roughly 40–70 mm across, ~2–8 g plain gold. | ~1.5:1 to 2:1 (same crescent shape as MOTI NATH) | https://www.pngjewellers.com/collections/gold-nath (category page only; no product-level dimensions found) | low (extrapolated from MOTI NATH, not independently sourced) |
+| TIKKA 22 (tikka_22) | women | forehead / hair parting | Tikka-plate length 94–121 mm (3.7–4.75 in), chain width 2.8–3.1 mm, weight 1.95–4.85 g (18K, lightweight styles). Heavier/statement styles found up to ~239 mm (9.4 in) total with 20–29 g. | ~1:4 to 1:6 (hook-chain-pendant, elongated vertical) | https://www.totaram.com/18k-gold-maang-tikka-chain-papidi-billa-chain-only.html ; https://www.totaram.com/18k-gold-diamond-maang-tikka-chain-papidi-billa-chain-only.html | moderate (Totaram gives consistent chain-width + length; heavier-style figures come from a non-Totaram source) |
+
+### Necklaces, chains, mala, mangalsutra
+
+| Category (key) | Wearer | Body part | Typical size | Aspect ratio (W:H) | Source | Confidence |
+|---|---|---|---|---|---|---|
+| CHAIN 22 (chain_22) | unisex (men's/women's/kids' chains all fall under this one code per ornament_code_map) | neck | Length 400–535 mm (16–21 in), weight 7.7–16.6 g across 6 Totaram listings. No width/gauge in mm found on these listings. | ~1.3:1 to 1.8:1 (laid loop/S-curve, wider than tall) | https://www.totaram.com/22k-gold-chain-necklace-for-women-235-gn1817.html ; https://www.totaram.com/22k-gold-chain-necklace-for-women-235-gn1964.html | moderate (length+weight solid; no chain-gauge mm found) |
+| FANCY MALA 18/22 (fancy_mala_18, fancy_mala_22) | women | neck (long/statement) | Length 400–710 mm (16–28 in), weight 10.5–43 g across multiple UK/US-retailer 22ct listings (used as size analog, not Indian-market pricing). | ~1.2:1 to 1.6:1 (wide symmetric loop/drape) | https://www.purejewels.com/product/22ct-gold-mala-style-necklace-24-traditional-beaded-elegance/ ; https://www.minarjewellers.com/en-us/products/22ct-gold-long-beaded-mala-chain-43g | moderate (consistent length/weight range, but sourced from UK/US 22ct retailers rather than a domestic-India listing) |
+| HAAR CHAIN 22 (haar_chain_22) | unisex/women (per existing doc: general Hindi/Marathi word for necklace) | neck | No HAAR-CHAIN-specific listing found; per the existing doc's own identification ("a chain-style haar"), the CHAIN 22 figures above (400–535 mm, 7.7–16.6 g) are the best available analog. | ~1.3:1 to 1.8:1 (same as CHAIN) | https://www.amazon.in/Traditional-Mangalsutra-Necklace-Wedding-Jewelry/dp/B0FYZ3WJMP (terminology usage only, not a dimension source) | low (no dedicated source; carried over from CHAIN by the doc's own stated identification) |
+| MS LONG 22 (ms_long_22) | women | neck (long mangalsutra, lower drape) | Length 610–760 mm (24–30 in), commonly cited industry-wide; weight ranges from ~5–10 g (lightweight) up to 30–50 g for elaborate bridal double-strand styles with large pendant. | ~1.3:1 to 1.7:1 (double-strand loop, pendant centered at bottom) | https://blog.bluestone.com/how-to-choose-the-right-design-length-weight-of-your-mangalsutra/ ; https://www.kushals.com/collections/long-mangalsutra (category page; general guidance, not one product spec) | moderate (length range well corroborated across 3 independent sources; weight is a broad band, not a single SKU) |
+| MSS-SHORT 20/22 (mss_short_20, mss_short_22) | women | neck (short mangalsutra, close to neckline) | Length 400–460 mm (16–18 in), weight ~5–10 g for daily-wear lightweight styles. | ~1.2:1 to 1.5:1 (tighter loop than MS LONG) | https://www.caratlane.com/jewellery/short+mangalsutra.html ; https://blog.bluestone.com/how-many-grams-is-a-gold-mangalsutra-average-weight-length-for-women/ | moderate (length and weight band both corroborated, general guidance rather than one SKU) |
+| NECKLACE 22 (necklace_22) | women | neck | No NECKLACE-specific (with-pendant) listing distinct from CHAIN was found; using the same chain-necklace figures as a floor estimate: length 400–535 mm, weight 7.7–16.6 g plus whatever the built-in pendant/motif adds. | ~1.3:1 to 1.7:1 (symmetric curve, focal motif centered at bottom) | https://www.totaram.com/22k-gold-jewelry/womens-jewelry/necklaces-for-women-choker-temple-jewellery-necklaces/gold-necklaces-for-women.html (category page only) | low-moderate (dimension figures borrowed from CHAIN, not a NECKLACE-with-pendant-specific listing) |
+| NECKLACE SET 18/22 (necklace_set_18, necklace_set_22) | women | neck + ears (necklace + matching earrings) | No combined-set dimension source found. Composite estimate: NECKLACE figures above (loop, ~400–535 mm) plus a pair of BALI/TOPS-sized earrings (20–46 mm each) placed below/beside it. | ~1:1 to 1.3:1 (necklace loop at top, earrings below add height, pulling the bounding box toward square) | https://www.totaram.com/22-karat-gold-necklace-drop-earrings-set-235-gs142.html (product exists; page did not surface individual-piece mm on this pass) | low (no explicit combined dimensions found; reasoned composite of the two component categories) |
+
+### Pendants, lockets, pendant sets
+
+| Category (key) | Wearer | Body part | Typical size | Aspect ratio (W:H) | Source | Confidence |
+|---|---|---|---|---|---|---|
+| WATI 22 (wati_22) | women | neck (pendant on mangalsutra chain) | Single-vati pendant: ~14 mm x 19 mm (0.55 in x 0.75 in), 1.0–1.8 g. Twin-bowl "2 Vati" pendant (the owner-confirmed WATI shape): ~14 mm x 32 mm (0.55 in x 1.25 in), 3.2–8.35 g across 6 Totaram listings. | ~2:1 to 2.5:1 (two round bowls side by side, wider than tall) | https://www.totaram.com/22k-gold-2-vati-mangalsutra-pendant-51815.html ; https://www.totaram.com/22k-gold-vati-mangalsutra-pendant-51818.html | high (owner-confirmed shape identification; "2 Vati" SKUs match the described twin-bowl pendant closely, consistent weight range across 6 listings) |
+| LOCKET 18/22 (locket_18, locket_22) | women (also unisex religious-pendant styles) | neck (pendant, opens) | Western/US locket analogs: small ~15 mm x 11 mm (1.5 g) up to large oval ~39 mm x 47 mm; a heart-shaped 14K locket at 29 mm x 20 mm, 5.2 g is a reasonable mid-size reference. No India-market gold-locket-specific mm found; Totaram's Sai Baba pendant listing (used as the orientation doc's reference) states weight only. | ~0.7:1 to 0.85:1 (slightly taller than wide, bail at top) | https://www.amazon.com/Yellow-Weight-Locket-Pendant-Height/dp/B00Q87T47O ; https://www.croghansjewelbox.com/products/adult-14k-yellow-gold-20x25mm-oval-locket-necklace | low (Western retailer analogs only; no Indian-market LOCKET-specific mm found) |
+| PENDENT 18/22 (pendent_18, pendent_22) | women (also unisex religious pendants, e.g. Om) | neck (pendant, closed) | Length 23–39 mm (0.9–1.55 in), width 13–30 mm (0.5–1.2 in), weight 1.4–8.1 g across 5 Totaram listings. | ~0.6:1 to 0.85:1 (taller than wide, bail at top) | https://www.totaram.com/22k-gold-om-pendant-45597.html ; https://www.totaram.com/22k-gold-pendant-235-gp2781.html | high (multiple consistent Totaram listings with explicit length+width) |
+| PENDENT SET 18/22 (pendent_set_18, pendent_set_22) | women | neck + ears (pendant + matching earrings) | No combined-set dimension source found. Composite estimate: PENDENT figures above (~23–39 mm tall) plus a pair of small drop earrings (~20–40 mm each) placed below/beside it. | ~0.7:1 to 1:1 (pendant at top, earrings below add height) | https://www.totaram.com/22-karat-gold-pendant-earring-set-with-ruby.html (product exists; page did not surface individual-piece mm on this pass) | low (no explicit combined dimensions found; reasoned composite of the two component categories) |
+
+### Armlet
+
+| Category (key) | Wearer | Body part | Typical size | Aspect ratio (W:H) | Source | Confidence |
+|---|---|---|---|---|---|---|
+| BAJU BANDH 22 (baju_bandh_22) | women | upper arm / bicep | Weight 14.85–18.5 g across 3 Totaram listings. No mm circumference/width found on any listing; many are described only as "adjustable." | ~2:1 to 3:1 (open curve/band, or open V if vanki-style — treated like a larger bracelet) | https://www.totaram.com/22k-gold-baju-bandh-235-armv085.html ; https://www.totaram.com/22k-gold-baju-bandh-235-armv083.html | low (weight found; no dimensions found on any sourced listing — honestly not found) |
+
+### Gold coins
+
+All 14 weight variants are the same flat, round, stamped coin — see the
+orientation section above for the shared "flat, face up, embossed motif
+toward camera" rule. Weight is already known exactly from the category
+label itself (e.g. "Gold Coin 5 Gm" = 5.000 g); what's added here is an
+honest note on diameter, since no Indian retailer (Totaram, Tanishq,
+MMTC-PAMP) listing found in this pass states a diameter-by-weight table.
+International bullion-coin size charts (not India-specific, and not
+necessarily the same mint standard) suggest roughly 13 mm at the ~1.5 g end
+up to ~30–33 mm at the ~1 oz (31.1 g) end, scaling roughly with the square
+root of weight — offered only as a rough physical-plausibility check, not a
+sourced Indian-market figure.
+
+| Category (key) | Wearer | Body part | Typical size | Aspect ratio (W:H) | Source | Confidence |
+|---|---|---|---|---|---|---|
+| GOLD COIN 22 KT (gold_coin_22_kt) / Gold Coin 0.025 M (gold_coin_0_025_m) / Gold Coin 0.050 M (gold_coin_0_050_m) / Gold Coin 0.100 M (gold_coin_0_100_m) / Gold Coin 0.200 M (gold_coin_0_200_m) / Gold Coin 0.250 M (gold_coin_0_250_m) / Gold Coin 0.300 M (gold_coin_0_300_m) / Gold Coin 0.500 M (gold_coin_0_500_m) / Gold Coin 0.750 M (gold_coin_0_750_m) / Gold Coin 1 Gm (gold_coin_1_gm) / Gold Coin 10 Gm (gold_coin_10_gm) / Gold Coin 2 Gm (gold_coin_2_gm) / Gold Coin 20 Gm (gold_coin_20_gm) / Gold Coin 5 Gm (gold_coin_5_gm) | unisex (gift/investment coin) | worn only as pendant if drilled; normally displayed flat | Weight is exact per label (0.025 g to 20 g). Diameter not found on an India-market listing for any specific weight; general bullion-coin charts suggest ~13 mm (smallest) to ~30 mm+ (largest denominations only — none of these 14 SKUs reach 1 oz). | 1:1 (round, flat, no meaningful top/bottom) | https://www.totaram.com/22k-gold-lakshmi-coin-5-gram.html (weight confirmed; no diameter stated) ; https://mineralsbase.com/gold-coin-size-chart/ (non-India bullion analog only) | low for diameter (honestly not found on an India-market listing); high for the 1:1 aspect ratio itself, since a round coin cannot be anything else |
+

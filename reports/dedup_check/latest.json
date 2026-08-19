@@ -1,8 +1,16 @@
 {
-  "checked_at": "2026-08-19T09:00:55Z",
+  "checked_at": "2026-08-19T10:16:22Z",
   "capture_intake_files": 675,
-  "processed_files": 365,
+  "processed_files": 366,
   "label_conflicts": {
+    "TP22_83_stitched": {
+      "capture_intake": [
+        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\56 TOPS 22\\TP22_83_stitched.jpg"
+      ],
+      "processed": [
+        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\processed\\TOPS 22\\TP22_83_stitched.jpg"
+      ]
+    },
     "GR22_107_2": {
       "capture_intake": [
         "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\GENTS RING 22\\GR22_107_2.jpg"
