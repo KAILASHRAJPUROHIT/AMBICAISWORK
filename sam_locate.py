@@ -47,6 +47,11 @@ _pred = None
 # Mask of the last located piece, kept so tight_crop can derive the tilt from
 # SAM2's own boundary instead of re-deriving one from colour.
 _last_mask = None
+# One mask per box in the most recent locate() call, same order as its
+# returned boxes -- added 2026-08-19 so the side-by-side (expect>1) crop
+# path can background-remove EACH piece individually using its own mask,
+# instead of only the single-piece path having a mask to work with.
+_last_masks: list = []
 
 
 def available() -> bool:
