@@ -501,9 +501,22 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
         try:
             mask_crop = aligned_mask[y0:y1, x0:x1]
             if mask_crop.shape[:2] == crop.shape[:2] and mask_crop.any():
-                mask_crop = _refine_mask(crop, mask_crop)
-                if mask_crop.any():
-                    crop = _composite_on_white(crop, mask_crop)
+                refined = _refine_mask(crop, mask_crop)
+                # Sanity floor, not just "is it empty": confirmed live
+                # (2026-08-19, tag WT22/19's LEFT ANGLE) that SAM2's raw mask
+                # can be mostly noise with the paper TAG as its one solid
+                # blob -- "largest connected component" then picks the tag,
+                # not the jewellery, and the composite wipes out the actual
+                # product. A tight crop is, by construction, mostly filled
+                # by the piece (occupancy logged above typically 0.75-0.95),
+                # so a kept mask covering only a sliver of the crop is a
+                # sign the segmentation locked onto the wrong thing, not
+                # that the piece is genuinely tiny. Bail to the plain crop
+                # (no bg removal, but the full item stays visible) rather
+                # than risk shipping a photo with the product cut out.
+                crop_px = crop.shape[0] * crop.shape[1]
+                if refined.any() and float(refined.sum()) / crop_px >= 0.15:
+                    crop = _composite_on_white(crop, refined)
                     bg_removed = True
         except Exception:
             bg_removed = False
