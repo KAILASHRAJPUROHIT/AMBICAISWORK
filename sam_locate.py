@@ -488,7 +488,7 @@ def _composite_on_white(bgr_crop: np.ndarray, mask_crop: np.ndarray, feather: in
 def tight_crop(src_path: str, out_path: str, expect: int = 1,
                margin: float = 0.10, straighten: bool = True,
                max_tilt: float = 30.0, remove_background: bool = True,
-               fixed_angle: float | None = None):
+               fixed_angle: float | None = None, category: str | None = None):
     """Crop a plate down to just the ornament(s). Returns (path, info).
 
     When ``straighten`` is on, the crop is levelled first so the piece sits
