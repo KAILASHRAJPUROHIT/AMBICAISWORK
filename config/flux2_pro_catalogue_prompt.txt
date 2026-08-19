@@ -12,4 +12,6 @@ Blend these three tones along the piece's actual surface geometry for real dimen
 
 Keep every round element -- domes, medallions, studs, discs -- a true, evenly curved circle at its original proportions.
 
+This catalogue's stock has no black stones, black enamel or black stud settings anywhere. Any dark or black-looking area inside Image 1's openwork, filigree gaps, engraved grooves, chain links or between prongs is a hollow opening or a shadow -- background or empty space showing through, not a real black material -- and must render as transparent open space or the actual background behind it, never as a solid black fill, black outline or black panel. This applies to every dark region without exception, including reflections and shadows cast by the metal itself: render those as a darker shade of gold or as transparent gap, never as flat black.
+
 If an item-specific instruction assigns a role to Image 2, follow that role exactly. Otherwise, use Image 2's background, framing or display surface as the new scene, placing the Image-1 jewellery naturally within it.
