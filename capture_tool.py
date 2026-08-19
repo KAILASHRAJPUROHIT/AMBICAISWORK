@@ -939,11 +939,25 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
                     log.exception("sam_locate.tight_crop FAILED for %s", path)
         finally:
             sam_locate.release()
-        try:
-            for path in (main_path, angle1_path, angle2_path):
-                _remove_background(path)
-        finally:
-            _release_rmbg()
+        if expect == 1:
+            # RMBG-2.0's own connected-component pass (_remove_background)
+            # keeps only the SINGLE largest blob -- correct for one piece,
+            # actively destructive for two. Confirmed live (2026-08-19, tag
+            # TP22/83): the pair-crop fix above correctly kept both
+            # earrings (pieces=2 confirmed), but running RMBG on that
+            # two-object canvas afterward erased one of them entirely,
+            # since RMBG has no concept of "there are supposed to be two
+            # things here." tight_crop's own side-by-side mode already
+            # crops tightly around both pieces with only a small gap
+            # between them, so skipping this extra pass for pairs trades
+            # a still-visible backdrop sliver for never silently deleting
+            # half the product -- the same trade already accepted for the
+            # LEFT ANGLE sanity-floor fallback earlier today.
+            try:
+                for path in (main_path, angle1_path, angle2_path):
+                    _remove_background(path)
+            finally:
+                _release_rmbg()
         stitch_angles(main_path, angle1_path, angle2_path, stitched_path)
 
     threading.Thread(target=_run, daemon=True).start()
