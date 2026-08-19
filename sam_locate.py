@@ -596,16 +596,21 @@ def _align_vertical_hang(bgr_crop: np.ndarray) -> np.ndarray:
             top_in_bottom_half = (transformed[1] - y0) > (cropped.shape[0] / 2.0)
             return (aspect, cropped, top_in_bottom_half)
 
-        # Stage 1 -- coarse: which of the 2 perpendicular candidates (the
-        # minAreaRect angle and its +90) actually makes the piece taller
-        # than wide. (+180/-90 variants are the same axis, so only 2
-        # DISTINCT aspect-ratio outcomes exist regardless of how many
-        # were tried -- verified live 2026-08-19.)
+        # Stage 1 -- coarse: minAreaRect's box-fit angle is only a
+        # starting guess for an irregular shape (chain + bell + ball +
+        # hook is not a clean rectangle), and it can be off by more than
+        # a few degrees. Scanning only 2 perpendicular candidates around
+        # it risked anchoring stage 2's fine sweep near a wrong local
+        # optimum -- "make it dead straight" (2026-08-19) still showed
+        # visible lean after a narrow +-4 deg fine sweep around that kind
+        # of bad anchor. Fixed by scanning the FULL 0-180 deg range at
+        # coarse resolution first (independent of minAreaRect's guess),
+        # so stage 2 always refines around the true global best.
         coarse_best = None
-        for ang in (rect_angle, rect_angle + 90.0):
-            result = _try_angle(ang)
+        for ang in np.arange(0.0, 180.0, 5.0):
+            result = _try_angle(float(ang))
             if result is not None and (coarse_best is None or result[0] > coarse_best[1]):
-                coarse_best = (ang, result[0])
+                coarse_best = (float(ang), result[0])
         if coarse_best is None:
             return bgr_crop
         coarse_ang = coarse_best[0]
