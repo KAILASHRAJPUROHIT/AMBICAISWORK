@@ -251,13 +251,14 @@ def api_capture_stud_flag_set():
     """Staff correction from the live preview overlay (2026-08-19, explicit
     request): the automated stud-detection guess can be wrong, and the
     correction needs to stick to the TAG, not just the current photo."""
+    import capture_tool as ct
     data = request.get_json(silent=True) or {}
     tag_code = str(data.get("tag_code", "")).strip()
     if not tag_code:
         return jsonify({"ok": False, "error": "tag_code required"}), 400
     has_stud = bool(data.get("has_stud", False))
     staff_name = str(data.get("staff_name", ""))
-    entry = capture_tool.set_stud_flag(tag_code, has_stud, staff_name=staff_name)
+    entry = ct.set_stud_flag(tag_code, has_stud, staff_name=staff_name)
     return jsonify({"ok": True, "tag_code": tag_code, "has_stud": entry["has_stud"]})
 
 
