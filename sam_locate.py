@@ -543,10 +543,18 @@ def _align_vertical_hang(bgr_crop: np.ndarray) -> np.ndarray:
         if len(xs) < 50:
             return bgr_crop
 
-        # The point that was topmost BEFORE any rotation -- tracked through
-        # each candidate's transform below to decide top-vs-bottom.
-        top_idx = int(np.argmin(ys))
-        orig_top = (float(xs[top_idx]), float(ys[top_idx]))
+        # Where the ORIGINAL top of the piece was, before any rotation --
+        # tracked through each candidate's transform below to decide
+        # top-vs-bottom. The CENTROID of the topmost 15% of metal pixels
+        # (by original y), not a single extreme pixel: confirmed live
+        # (2026-08-19) that a lone noisy/misclassified pixel near one edge
+        # was enough to flip a real piece upside down on one of a pair
+        # while its twin (same photo, same physical orientation) came out
+        # correct -- a single-pixel extremum has zero tolerance for that
+        # kind of noise, an averaged cluster does.
+        y_cutoff = np.percentile(ys, 15)
+        top_cluster = ys <= y_cutoff
+        orig_top = (float(xs[top_cluster].mean()), float(ys[top_cluster].mean()))
 
         pts = np.column_stack([xs, ys]).astype(np.int32)
         rect_angle = float(cv2.minAreaRect(pts)[2])
