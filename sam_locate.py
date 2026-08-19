@@ -470,7 +470,63 @@ def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray, category: str | No
                 best_area, best_label = area, label
         if best_label is not None:
             refined = lab == best_label
-    return refined
+    return _sever_thin_protrusions(refined)
+
+
+def _sever_thin_protrusions(mask: np.ndarray) -> np.ndarray:
+    """Cuts off thin spikes/streaks still attached to the main blob after
+    component selection above.
+
+    Confirmed live (2026-08-19, tag GR22/127): a stray light-reflection
+    streak on the glossy black display stand sat close enough to touch the
+    ring in SAM2's own raw mask, so the two were already ONE connected
+    component before this function ever runs -- component selection above
+    can't separate them, it only picks WHICH blob, not how to trim one.
+    The reflection reads as bright/low-saturation, passing the same
+    "bright" branch of the metal-fraction test real silver/white-gold
+    passes, so it can't be pixel-veto'd like the blue-prop check either.
+
+    What actually distinguishes it: it's a THIN, elongated spike hanging
+    off the ring's bulk, connected by a narrow neck. A morphological open
+    (erode then dilate) with a kernel sized to exceed that neck's width
+    breaks the connection -- the neck disappears under erosion and never
+    comes back under dilation, while the ring's own solid body survives
+    intact. Reconstructing from the opened "core" by re-growing it back
+    into the ORIGINAL (unopened) mask -- not just returning the eroded
+    core directly -- keeps the ring's real, undilated boundary; only
+    regions unreachable from the core (the severed spike) get dropped.
+
+    Fails open on either end: if opening leaves nothing (a genuinely
+    razor-thin piece, e.g. a plain wire ring band, could plausibly not
+    survive erosion), or if reconstruction recovers less than 70% of the
+    original area (opening was too aggressive for this shape), the
+    original mask is returned unchanged rather than risk cutting into a
+    real, thin piece of jewellery.
+    """
+    mask_u8 = mask.astype(np.uint8)
+    total = int(mask_u8.sum())
+    if total < 200:
+        return mask
+    ys, xs = np.nonzero(mask_u8)
+    box_h = ys.max() - ys.min() + 1
+    box_w = xs.max() - xs.min() + 1
+    k = max(3, int(round(0.02 * min(box_h, box_w))))
+    if k % 2 == 0:
+        k += 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    opened = cv2.morphologyEx(mask_u8, cv2.MORPH_OPEN, kernel)
+    if not opened.any():
+        return mask
+    small_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    seed = opened
+    for _ in range(200):
+        grown = cv2.dilate(seed, small_kernel) & mask_u8
+        if np.array_equal(grown, seed):
+            break
+        seed = grown
+    if float(seed.sum()) / total < 0.70:
+        return mask
+    return seed.astype(bool)
 
 
 def _composite_on_white(bgr_crop: np.ndarray, mask_crop: np.ndarray, feather: int = 3) -> np.ndarray:

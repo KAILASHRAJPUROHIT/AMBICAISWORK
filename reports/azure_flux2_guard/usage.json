@@ -39595,6 +39595,87 @@
       "reserved_usd": 0.08,
       "completed_at_utc": "2026-08-19T10:16:21.367698+00:00",
       "output_bytes": 466879
+    },
+    {
+      "id": "f656065b240777ae",
+      "reserved_at_utc": "2026-08-19T10:56:01.400598+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\GR22_127_stitched.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\GR22_127_stitched_58c5ef2f370c_wb.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\2\\0001_GR22_127_stitched.png",
+      "prompt_sha256": "bbaf6f65b35285d43ff5d38974c17232f435a6dcbaad0dabf36c88aa9af330bf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            158,
+            1931,
+            324,
+            1989
+          ],
+          [
+            230,
+            1703,
+            333,
+            1824
+          ],
+          [
+            592,
+            1453,
+            699,
+            1618
+          ],
+          [
+            603,
+            1929,
+            795,
+            1991
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00157,
+        "dominant_hue_degrees": 12.0,
+        "hue_label": "orange/gold",
+        "position": "middle-left",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "gents_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        972,
+        2012
+      ],
+      "native_megapixels": 1.9557,
+      "reference_resize": "none",
+      "reference_dimensions": [
+        972,
+        2012
+      ],
+      "reference_megapixels": 1.9557,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          972,
+          2012
+        ]
+      ],
+      "input_billed_mp": 2,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.06,
+      "reserved_usd": 0.08,
+      "completed_at_utc": "2026-08-19T10:56:15.962489+00:00",
+      "output_bytes": 563950
     }
   ]
 }
