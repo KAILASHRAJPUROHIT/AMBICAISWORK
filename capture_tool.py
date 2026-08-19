@@ -153,7 +153,24 @@ def _atomic_write_json(path, data):
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
-    os.replace(tmp, path)
+    # os.replace() has been observed to fail with PermissionError
+    # ([WinError 5]) on this machine (confirmed live 2026-08-03) -- almost
+    # certainly a transient external lock (AV/indexer briefly opening the
+    # target file) rather than a real conflict, since the write always
+    # succeeds a moment later. Left unhandled, this raised out of
+    # save_pair/save_multi and 500'd the whole request even though the
+    # jewel photos themselves were already safely on disk by this point --
+    # so the client saw "save failed" for an item that had, in fact, saved.
+    # Retry briefly before giving up for real.
+    last_err = None
+    for attempt in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as e:
+            last_err = e
+            time.sleep(0.1 * (attempt + 1))
+    raise last_err
 
 
 def _load_dedup() -> dict:
