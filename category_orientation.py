@@ -64,7 +64,7 @@ GUIDES: dict[str, OrientationGuide] = {
     # -- Studs / small flat earrings --
     "bali_18": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
     "bali_22": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
-    "dull_22": OrientationGuide(OrientationType.FLAT_FACE_UP, "low"),
+    "dull_22": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
     "tops_18": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
     "tops_22": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
 
