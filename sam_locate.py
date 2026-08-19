@@ -626,7 +626,7 @@ def _align_vertical_hang(bgr_crop: np.ndarray) -> np.ndarray:
         # possible bounding box, so maximizing aspect ratio directly
         # targets "dead straight" rather than approximating it.
         best = None
-        for delta in np.arange(-4.0, 4.01, 0.25):
+        for delta in np.arange(-6.0, 6.01, 0.1):
             result = _try_angle(coarse_ang + delta)
             if result is not None and (best is None or result[0] > best[0]):
                 best = result
