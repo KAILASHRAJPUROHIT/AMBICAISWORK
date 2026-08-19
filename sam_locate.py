@@ -687,6 +687,8 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
                     bg_removed = True
         except Exception:
             bg_removed = False
+    if prefer_vertical:
+        crop = _align_vertical_hang(crop)
     cv2.imwrite(out_path, crop)
     return out_path, {"box": [x0, y0, x1, y1], "pieces": len(boxes),
                       "occupancy": round((x1 - x0) * (y1 - y0) / float(W * H), 4),
