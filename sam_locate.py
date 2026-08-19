@@ -426,6 +426,16 @@ def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray, category: str | No
         # area (hollow parts included) below, since the hollow interior is
         # genuinely part of the piece's silhouette, not something to
         # shrink it for.
+        #
+        # ONE exception (owner-flagged, same day): mangalsutra-family
+        # pieces (WATI, MS LONG, MSS-SHORT) have a REAL black bead chain --
+        # there, black is legitimate material, not hollow space, and must
+        # not be excluded or it gets stripped/painted white right along
+        # with genuine background. _BLACK_IS_MATERIAL_CATEGORIES skips the
+        # black carve-out entirely for those, falling back to the plain
+        # area-based fraction (black pixels neither help nor hurt the
+        # score, same treatment as any other non-metal-colour pixel).
+        black_is_material = category in _BLACK_IS_MATERIAL_CATEGORIES
         is_black = v < 40
         best_label, best_area = None, -1
         for label in range(1, n):
@@ -433,11 +443,16 @@ def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray, category: str | No
             if area < 200:
                 continue
             component = lab == label
-            non_black = component & ~is_black
-            non_black_area = int(non_black.sum())
-            if non_black_area < 50:
+            if black_is_material:
+                denom_area = area
+                numerator = component & metal
+            else:
+                non_black = component & ~is_black
+                denom_area = int(non_black.sum())
+                numerator = non_black & metal
+            if denom_area < 50:
                 continue
-            metal_fraction = float((non_black & metal).sum()) / float(non_black_area)
+            metal_fraction = float(numerator.sum()) / float(denom_area)
             if metal_fraction < 0.15:
                 continue
             if area > best_area:
