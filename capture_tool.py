@@ -732,6 +732,8 @@ def _segment_paths_async(paths: list) -> None:
 
     def _run():
         log = logging.getLogger("capture_tool")
+        for path in paths:
+            _backup_raw(path)
         try:
             for path in paths:
                 try:
