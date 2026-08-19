@@ -737,8 +737,18 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
                     mask_crop = mask[box[1]:box[3], box[0]:box[2]]
                     if mask_crop.shape[:2] == crop.shape[:2] and mask_crop.any():
                         refined = _refine_mask(crop, mask_crop, category=category)
-                        crop_px = crop.shape[0] * crop.shape[1]
-                        if refined.any() and float(refined.sum()) / crop_px >= 0.15:
+                        # Sanity floor relative to SAM's OWN mask, not the raw
+                        # AABB area: side-by-side boxes are un-straightened, so
+                        # a piece captured on a diagonal legitimately has a lot
+                        # of empty corner space in its axis-aligned box (found
+                        # live 2026-08-19, TP22_83 piece 0: SAM mask ~13.6% of
+                        # its own loose box, correctly kept -- an area-of-crop
+                        # floor rejected it as "must be a wrong blob" when it
+                        # was just diagonal). Comparing refined-vs-original
+                        # mask size instead answers "did refine throw signal
+                        # away", which is what this check is actually for.
+                        mask_px = float(mask_crop.sum())
+                        if refined.any() and mask_px > 0 and float(refined.sum()) / mask_px >= 0.5:
                             piece = _composite_on_white(crop, refined)
                 except Exception:
                     piece = crop
