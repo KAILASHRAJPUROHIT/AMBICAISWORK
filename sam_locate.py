@@ -750,7 +750,10 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
                              interpolation=cv2.INTER_AREA) for c in crops]
         gap = max(8, int(th * 0.04))
         tw = sum(c.shape[1] for c in scaled) + gap * (len(scaled) - 1)
-        canvas = np.zeros((th, tw, 3), np.uint8)
+        # White, not zeros/black: now that each piece is individually
+        # background-removed onto white, a black gap fill between them
+        # looked like a stray bar rather than blending in.
+        canvas = np.full((th, tw, 3), 255, np.uint8)
         x = 0
         for c in scaled:
             canvas[:, x:x + c.shape[1]] = c
