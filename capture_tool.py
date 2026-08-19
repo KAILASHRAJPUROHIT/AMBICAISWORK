@@ -1073,6 +1073,10 @@ def save_pair(category: str, jewel_bytes: bytes, tag_bytes: bytes, tag_code: str
         os.makedirs(tray_dir, exist_ok=True)
 
         safe_name = _safe_filename_from_tag(tag_code) if tag_code else f"untagged_{int(time.time())}"
+        if tag_code and get_tag_metadata(tag_code).get("has_stud"):
+            # See the matching comment in save_multi() -- same convention,
+            # both save paths need to agree on it.
+            safe_name = f"{safe_name}_stud"
         jewel_path = os.path.join(tray_dir, f"{safe_name}.jpg")
         # Guard against silently overwriting a different piece — happens if
         # the same code is deliberately re-saved via override_duplicate, or
