@@ -35,6 +35,7 @@ import re
 import time
 import json
 import logging
+import shutil
 import threading
 import functools
 
