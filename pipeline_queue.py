@@ -74,6 +74,7 @@ class IntakeCandidate:
     size: int
     is_tag_archive: bool
     voided: bool
+    is_angle_or_preview_sibling: bool = False
 
     @property
     def processable(self) -> bool:
@@ -84,7 +85,7 @@ class IntakeCandidate:
                 for part in self.relative_path.parts[:-1]
             )
             and self.relative_path.suffix.casefold() in PROCESSABLE_EXTENSIONS
-            and not _ANGLE_OR_PREVIEW_SUFFIX_RE.search(self.relative_path.stem)
+            and not self.is_angle_or_preview_sibling
         )
 
 
