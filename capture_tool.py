@@ -917,9 +917,10 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
             # hero shot; angle1/angle2 keep the wider default so the
             # shared rotation still has enough frame to land inside without
             # a corner clipping off.
+            expect = _expect_for_category(category)
             main_tilt = None
             try:
-                _, info = sam_locate.tight_crop(main_path, main_path, expect=1,
+                _, info = sam_locate.tight_crop(main_path, main_path, expect=expect,
                                                 straighten=True, margin=0.04, category=category)
                 log.info("sam_locate.tight_crop done for %s (angle=%s)", main_path, info)
                 if info:
@@ -930,7 +931,7 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
             for path in (angle1_path, angle2_path):
                 try:
                     result_path, angle = sam_locate.tight_crop(
-                        path, path, expect=1, straighten=True, fixed_angle=main_tilt, category=category
+                        path, path, expect=expect, straighten=True, fixed_angle=main_tilt, category=category
                     )
                     log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
                 except Exception:
