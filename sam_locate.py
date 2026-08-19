@@ -566,29 +566,54 @@ def _align_vertical_hang(bgr_crop: np.ndarray) -> np.ndarray:
         ch, cw = padded.shape[:2]
         padded_top = (orig_top[0] + pad, orig_top[1] + pad)
 
-        best = None  # (aspect_ratio, cropped, top_in_bottom_half)
-        for ang in (rect_angle, rect_angle + 90.0, rect_angle - 90.0, rect_angle + 180.0):
+        def _try_angle(ang):
             matrix = cv2.getRotationMatrix2D((cw / 2, ch / 2), ang, 1.0)
             rotated = cv2.warpAffine(padded, matrix, (cw, ch), flags=cv2.INTER_LANCZOS4,
                                      borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
             metal2 = _metal_mask(rotated)
             ys2, xs2 = np.nonzero(metal2)
             if len(xs2) < 50:
-                continue
+                return None
             margin = 20
             y0 = max(0, int(ys2.min()) - margin); y1 = min(rotated.shape[0], int(ys2.max()) + margin)
             x0 = max(0, int(xs2.min()) - margin); x1 = min(rotated.shape[1], int(xs2.max()) + margin)
             cropped = rotated[y0:y1, x0:x1]
             if cropped.shape[0] < 8 or cropped.shape[1] < 8:
-                continue
+                return None
             aspect = cropped.shape[0] / float(cropped.shape[1])  # height / width
-
             transformed = matrix @ np.array([padded_top[0], padded_top[1], 1.0])
-            top_y_in_crop = transformed[1] - y0
-            top_in_bottom_half = top_y_in_crop > (cropped.shape[0] / 2.0)
+            top_in_bottom_half = (transformed[1] - y0) > (cropped.shape[0] / 2.0)
+            return (aspect, cropped, top_in_bottom_half)
 
-            if best is None or aspect > best[0]:
-                best = (aspect, cropped, top_in_bottom_half)
+        # Stage 1 -- coarse: which of the 2 perpendicular candidates (the
+        # minAreaRect angle and its +90) actually makes the piece taller
+        # than wide. (+180/-90 variants are the same axis, so only 2
+        # DISTINCT aspect-ratio outcomes exist regardless of how many
+        # were tried -- verified live 2026-08-19.)
+        coarse_best = None
+        for ang in (rect_angle, rect_angle + 90.0):
+            result = _try_angle(ang)
+            if result is not None and (coarse_best is None or result[0] > coarse_best[1]):
+                coarse_best = (ang, result[0])
+        if coarse_best is None:
+            return bgr_crop
+        coarse_ang = coarse_best[0]
+
+        # Stage 2 -- fine: "dead straight" (2026-08-19 explicit request)
+        # needs more precision than a single box-fit angle reliably gives
+        # on an irregular shape (chain + bell + ball + hook is not a
+        # clean rectangle, so minAreaRect's best-fit angle is a good
+        # starting point but not necessarily the exact optimum). Sweep a
+        # small window around the coarse angle in fine steps and keep
+        # whichever produces the TIGHTEST vertical fit (max aspect
+        # ratio) -- a perfectly straight piece produces the narrowest
+        # possible bounding box, so maximizing aspect ratio directly
+        # targets "dead straight" rather than approximating it.
+        best = None
+        for delta in np.arange(-4.0, 4.01, 0.25):
+            result = _try_angle(coarse_ang + delta)
+            if result is not None and (best is None or result[0] > best[0]):
+                best = result
 
         if best is None:
             return bgr_crop
