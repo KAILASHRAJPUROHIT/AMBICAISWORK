@@ -373,6 +373,27 @@ def main() -> int:
     import reference_color_report
     color_report = reference_color_report.analyze(str(source))
     prompt = f"{prompt}\n\n{color_report['prompt_line']}"
+    # Stud/rhodium accent awareness (2026-08-19, explicit request): reads
+    # straight off the ACTUAL input filename this call opens, per
+    # capture_tool.py's stud-aware naming convention (a "_stud" suffix set
+    # once per tag and persisted server-side, survives recapture) --
+    # app.py's own output-naming path strips that suffix before it ever
+    # reaches a delivered filename, so this is the one place that still
+    # sees it. No suffix means the source photo has no stud/rhodium accent
+    # at all; FLUX.2 has no way to know that on its own and could
+    # otherwise invent one (a real observed failure on this catalogue --
+    # a plain gold surface rendered with an added diamond stud that
+    # doesn't exist on the real piece).
+    if re.search(r"_stud$", source.stem, re.IGNORECASE):
+        prompt = (f"{prompt}\n\nImage 1's filename confirms this piece has a genuine diamond or "
+                  "rhodium stud/accent. Preserve it exactly as shown -- position, size, colour and count.")
+    else:
+        prompt = (f"{prompt}\n\nThis piece has NO diamond stud, rhodium accent or any white/clear stone "
+                  "setting anywhere on it -- confirmed, not merely unclear from the photo. Do not add, "
+                  "invent or render any diamond, rhodium, cubic zirconia or other white stone/accent "
+                  "anywhere on the piece, even if a bright highlight or reflection in Image 1 might "
+                  "suggest one. Every surface is plain gold unless Image 1 shows an actual coloured "
+                  "gemstone or enamel fill at that spot.")
     width = int(config["output_width"])
     height = int(config["output_height"])
     background_reference = None
