@@ -40015,6 +40015,142 @@
       "reserved_usd": 0.08,
       "completed_at_utc": "2026-08-19T12:27:01.259908+00:00",
       "output_bytes": 627197
+    },
+    {
+      "id": "0b060a147fb91ade",
+      "reserved_at_utc": "2026-08-19T12:41:27.523156+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\123.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\123_750c29c5b484_wb.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\3\\0001_123.png",
+      "prompt_sha256": "c45d87cd1a85f7bffafcb3dc6e6e9c7623524b5af628a548410c84a4bcddad39",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            191,
+            153,
+            263,
+            223
+          ]
+        ],
+        "coloured_pixel_fraction": 0.0,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "gents_rings",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        439,
+        500
+      ],
+      "native_megapixels": 0.2195,
+      "reference_resize": "none",
+      "reference_dimensions": [
+        439,
+        500
+      ],
+      "reference_megapixels": 0.2195,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          439,
+          500
+        ]
+      ],
+      "input_billed_mp": 1,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.045,
+      "reserved_usd": 0.06,
+      "completed_at_utc": "2026-08-19T12:41:40.390969+00:00",
+      "output_bytes": 483091
+    },
+    {
+      "id": "8396d45133e4accc",
+      "reserved_at_utc": "2026-08-19T13:01:13.943168+00:00",
+      "status": "RESERVED_BEFORE_NETWORK",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\image-1787144439380.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\image-1787144439380_be6a6211714e_wb.png",
+      "prepared_background_reference": null,
+      "secondary_reference_source": null,
+      "secondary_reference_role": null,
+      "secondary_reference_profile": null,
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\1\\0001_image-1787144439380.png",
+      "prompt_sha256": "c45d87cd1a85f7bffafcb3dc6e6e9c7623524b5af628a548410c84a4bcddad39",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            766,
+            522,
+            1097,
+            757
+          ],
+          [
+            797,
+            820,
+            966,
+            1037
+          ],
+          [
+            1106,
+            595,
+            1182,
+            740
+          ],
+          [
+            1106,
+            851,
+            1175,
+            957
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00074,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "gents_ring_22",
+      "category_geometry_hint_applied": false,
+      "native_dimensions": [
+        2000,
+        1500
+      ],
+      "native_megapixels": 3.0,
+      "reference_resize": "none",
+      "reference_dimensions": [
+        2000,
+        1500
+      ],
+      "reference_megapixels": 3.0,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 10.0,
+      "input_dimensions": [
+        [
+          2000,
+          1500
+        ]
+      ],
+      "input_billed_mp": 3,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.075,
+      "reserved_usd": 0.1
     }
   ]
 }

@@ -1002,25 +1002,23 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
                     log.exception("sam_locate.tight_crop FAILED for %s", path)
         finally:
             sam_locate.release()
-        if expect == 1:
-            # RMBG-2.0's own connected-component pass (_remove_background)
-            # keeps only the SINGLE largest blob -- correct for one piece,
-            # actively destructive for two. Confirmed live (2026-08-19, tag
-            # TP22/83): the pair-crop fix above correctly kept both
-            # earrings (pieces=2 confirmed), but running RMBG on that
-            # two-object canvas afterward erased one of them entirely,
-            # since RMBG has no concept of "there are supposed to be two
-            # things here." tight_crop's own side-by-side mode already
-            # crops tightly around both pieces with only a small gap
-            # between them, so skipping this extra pass for pairs trades
-            # a still-visible backdrop sliver for never silently deleting
-            # half the product -- the same trade already accepted for the
-            # LEFT ANGLE sanity-floor fallback earlier today.
-            try:
-                for path in (main_path, angle1_path, angle2_path):
-                    _remove_background(path)
-            finally:
-                _release_rmbg()
+        # RMBG-2.0's separate pass (_remove_background) used to run here for
+        # single-piece items ("expect == 1") on top of whatever tight_crop()
+        # above already produced. Confirmed live (2026-08-19, tag GR22/127
+        # reshoot): tight_crop() now does a full, clean crop+background-
+        # removal itself (SAM3 primary, SAM2 fallback, quality-gated --
+        # see sam_locate.py), so this second pass was running a DIFFERENT
+        # background-removal model again on an already-processed image,
+        # stacking degradation on top of an already-correct result -- the
+        # posterized/waxy look the owner flagged was RMBG re-processing (and
+        # likely internally downsampling/upsampling) a file that didn't need
+        # touching a second time at all. This was always somewhat redundant
+        # (pairs were already exempted for a related but distinct reason,
+        # see git history) but went unnoticed for singles while SAM2's own
+        # masks were still mediocre enough that RMBG's extra smoothing
+        # wasn't the dominant visible defect. Removed entirely -- tight_crop()
+        # is now the only background-removal pass, for both single and
+        # paired items.
         stitch_angles(main_path, angle1_path, angle2_path, stitched_path)
 
     threading.Thread(target=_run, daemon=True).start()
