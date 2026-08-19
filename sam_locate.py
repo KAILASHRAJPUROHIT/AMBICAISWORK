@@ -706,6 +706,7 @@ def _mask_quality_ok(mask: np.ndarray, s: np.ndarray, v: np.ndarray) -> bool:
        hull; a mask with a large contaminating attachment (a tag hanging
        off to one side, a sprawling reflection) does not.
     """
+    return False  # unconditional -- see the "TEMPORARILY DISABLED" note above
     total = int(mask.sum())
     if total < 200:
         return True  # too small to judge either way -- don't block on it
