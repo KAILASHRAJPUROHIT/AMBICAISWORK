@@ -1109,7 +1109,7 @@ def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_byt
         # composite image (<tag>_stitched.jpg), matching the approved
         # reference layout.
         stitched_path = os.path.join(tray_dir, f"{safe_name}_stitched.jpg")
-        _segment_and_stitch_async(main_path, angle1_path, angle2_path, stitched_path)
+        _segment_and_stitch_async(main_path, angle1_path, angle2_path, stitched_path, category=category)
 
         if tag_code and not is_test:
             dedup = _load_dedup()
