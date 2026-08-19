@@ -610,7 +610,7 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
 
     aligned_mask = _last_mask
     tilt = None
-    if straighten and expect == 1:
+    if straighten and expect == 1 and not prefer_vertical:
         try:
             m = _last_mask
             if m is not None:
