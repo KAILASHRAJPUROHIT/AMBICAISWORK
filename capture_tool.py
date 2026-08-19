@@ -889,7 +889,7 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
             main_tilt = None
             try:
                 _, info = sam_locate.tight_crop(main_path, main_path, expect=1,
-                                                straighten=True, margin=0.04)
+                                                straighten=True, margin=0.04, category=category)
                 log.info("sam_locate.tight_crop done for %s (angle=%s)", main_path, info)
                 if info:
                     main_tilt = info.get("tilt")
@@ -899,7 +899,7 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
             for path in (angle1_path, angle2_path):
                 try:
                     result_path, angle = sam_locate.tight_crop(
-                        path, path, expect=1, straighten=True, fixed_angle=main_tilt
+                        path, path, expect=1, straighten=True, fixed_angle=main_tilt, category=category
                     )
                     log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
                 except Exception:
