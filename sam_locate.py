@@ -371,20 +371,45 @@ def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray) -> np.ndarray:
     regardless of which model (or how confidently) included it. Gold
     (H~15-35), ruby/red stones (H~0-10 or ~170-179), and white/silver
     (low saturation) are all untouched by this range.
-    Only the largest remaining connected blob survives afterward, so the
-    veto can't leave the jewellery mask fragmented into disconnected
-    islands (a stray metal glint on the card, for instance) -- the real
-    piece is always one solid connected region.
+    Only ONE remaining connected blob survives afterward, so the veto can't
+    leave the jewellery mask fragmented into disconnected islands (a stray
+    metal glint on the card, for instance) -- the real piece is always one
+    solid connected region. That blob is picked by METAL/GEMSTONE CONTENT,
+    not raw pixel area -- confirmed live (2026-08-19, tag BL22/135): a thin
+    ring band shot against a lot of visible black interior backdrop had the
+    backdrop as the larger connected region, so "largest wins" kept the
+    background and painted the actual ring white, permanently destroying
+    that photo (the pipeline overwrites files in place, no raw survived to
+    recover it). Same warm/bright "metal" definition already proven
+    elsewhere in this file (see focus_boxes()) and in capture_tool.py's own
+    visibility gate -- reused here for consistency rather than inventing a
+    third threshold. Picking the material-rich blob instead of the big one
+    directly targets what actually distinguishes jewellery from a plain
+    prop or backdrop, regardless of which one happens to occupy more
+    pixels in a given crop.
     """
     hsv = cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2HSV)
-    h, s = hsv[..., 0], hsv[..., 1]
+    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
     is_blue_prop = (h >= 95) & (h <= 130) & (s >= 40)
     refined = mask_crop.astype(bool) & ~is_blue_prop
 
     n, lab, stats, _ = cv2.connectedComponentsWithStats(refined.astype(np.uint8), 8)
     if n > 1:
-        largest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
-        refined = lab == largest
+        warm = (h >= 5) & (h <= 45) & (s >= 60) & (v >= 60)
+        red_stone = ((h <= 10) | (h >= 170)) & (s >= 50) & (v >= 40)
+        bright = (v >= 150) & (s < 60)
+        metal = warm | red_stone | bright
+        best_label, best_score = None, -1.0
+        for label in range(1, n):
+            area = stats[label, cv2.CC_STAT_AREA]
+            if area < 200:
+                continue
+            component = lab == label
+            metal_fraction = float((component & metal).sum()) / float(area)
+            if metal_fraction > best_score:
+                best_score, best_label = metal_fraction, label
+        if best_label is not None:
+            refined = lab == best_label
     return refined
 
 
