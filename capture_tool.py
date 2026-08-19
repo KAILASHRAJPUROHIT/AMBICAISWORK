@@ -707,7 +707,7 @@ def _release_rmbg():
         pass
 
 
-def _segment_paths_async(paths: list) -> None:
+def _segment_paths_async(paths: list, category: str | None = None) -> None:
     """Replace each of the given saved photos in-place with a SAM2/DINO
     segmentation crop, off the request thread.
 
