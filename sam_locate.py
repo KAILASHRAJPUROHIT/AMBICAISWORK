@@ -407,13 +407,29 @@ def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray) -> np.ndarray:
         red_stone = ((h <= 10) | (h >= 170)) & (s >= 50) & (v >= 40)
         bright = (v >= 150) & (s < 60)
         metal = warm | red_stone | bright
+        # Owner rule (2026-08-19, critical): this catalogue has NO black
+        # studs or black diamonds -- any black pixel inside a piece's own
+        # silhouette is a hollow/negative-space design element (filigree,
+        # openwork, a gap you see the backdrop through), never real
+        # material. Excluded from the metal-fraction DENOMINATOR entirely
+        # (not just failed as "not metal"), so an ornate lacy piece with a
+        # lot of legitimate open/cutout work doesn't get unfairly scored
+        # as low-metal-content and disqualified. Still ranked by its TOTAL
+        # area (hollow parts included) below, since the hollow interior is
+        # genuinely part of the piece's silhouette, not something to
+        # shrink it for.
+        is_black = v < 40
         best_label, best_area = None, -1
         for label in range(1, n):
             area = stats[label, cv2.CC_STAT_AREA]
             if area < 200:
                 continue
             component = lab == label
-            metal_fraction = float((component & metal).sum()) / float(area)
+            non_black = component & ~is_black
+            non_black_area = int(non_black.sum())
+            if non_black_area < 50:
+                continue
+            metal_fraction = float((non_black & metal).sum()) / float(non_black_area)
             if metal_fraction < 0.15:
                 continue
             if area > best_area:
