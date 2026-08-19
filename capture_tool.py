@@ -1163,6 +1163,16 @@ def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_byt
         os.makedirs(tray_dir, exist_ok=True)
 
         safe_name = _safe_filename_from_tag(tag_code) if tag_code else f"untagged_{int(time.time())}"
+        if tag_code and get_tag_metadata(tag_code).get("has_stud"):
+            # Explicit request (2026-08-19): a diamond/rhodium stud accent
+            # needs to be visible in the filename itself so the AI editing
+            # step (see tools/azure_flux2_guarded.py) can tell "genuinely
+            # has a stud" apart from "just a bright reflection" without
+            # re-running detection at edit time. Reads the flag set via
+            # set_stud_flag() -- persists per TAG, survives this exact
+            # recapture. app.py's own output-naming strips this suffix
+            # before any delivered catalogue file is ever named.
+            safe_name = f"{safe_name}_stud"
         main_path = os.path.join(tray_dir, f"{safe_name}.jpg")
         angle1_path = os.path.join(tray_dir, f"{safe_name}_1.jpg")
         angle2_path = os.path.join(tray_dir, f"{safe_name}_2.jpg")
