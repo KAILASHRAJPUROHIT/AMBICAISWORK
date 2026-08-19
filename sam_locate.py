@@ -470,75 +470,24 @@ def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray, category: str | No
                 best_area, best_label = area, label
         if best_label is not None:
             refined = lab == best_label
-    return _strip_elongated_glare(refined, s, v)
-
-
-def _strip_elongated_glare(mask: np.ndarray, s: np.ndarray, v: np.ndarray) -> np.ndarray:
-    """Cuts off a stray light-reflection streak still attached to the main
-    blob after component selection above.
-
-    Confirmed live (2026-08-19, tag GR22/127): a reflection streak on the
-    glossy black display stand sat close enough to touch the ring in
-    SAM2's own raw mask, so the two were already ONE connected component
-    before this function runs -- component selection above only picks
-    WHICH blob, not how to trim one. A morphological open/erode approach
-    was tried first and DIDN'T WORK on this real case: even a kernel
-    covering 16% of the ring's own bounding box never severed the
-    connection, because the ring's band is genuinely thick where the
-    streak attaches -- eroding enough to break that neck would erode the
-    ring's own real structure just as much.
-
-    What actually separates them is COLOR + SHAPE, not connectivity: this
-    catalogue's gold reads warm/saturated (measured on this exact photo,
-    S~140 median on the ring's face) while the reflection reads near-white
-    (S~13 median) -- the same distinction the "bright" branch of the
-    metal-fraction test already draws, just not acted on here yet. Real
-    specular highlights ON gold jewellery are small and roughly round
-    (measured on this photo: the largest genuine highlight was area=15797
-    but aspect only 1.34, near-square). A reflection artifact large AND
-    elongated (area 11726, aspect 3.08 on this photo) is the combination
-    that's actually diagnostic -- neither trait alone is safe (a large
-    round highlight is normal; a small elongated glint off an engraved
-    line is normal), but a LARGE, ELONGATED, near-white island is not
-    normal jewellery geometry.
-
-    Deliberately does NOT touch small/roundish white regions -- those are
-    everyday facet sparkle and diamond/rhodium accents this catalogue
-    does have elsewhere, not something to strip.
-    """
-    mask_u8 = mask.astype(np.uint8)
-    total = int(mask_u8.sum())
-    if total < 200:
-        return mask
-    whiteish = mask & (s < 45) & (v >= 100)
-    wn, wlab, wstats, _ = cv2.connectedComponentsWithStats(whiteish.astype(np.uint8), 8)
-    if wn <= 1:
-        return mask
-    to_strip = np.zeros_like(mask_u8)
-    for label in range(1, wn):
-        area = wstats[label, cv2.CC_STAT_AREA]
-        if area < max(1000, 0.015 * total):
-            continue
-        w = wstats[label, cv2.CC_STAT_WIDTH]
-        h = wstats[label, cv2.CC_STAT_HEIGHT]
-        aspect = max(w, h) / max(1, min(w, h))
-        if aspect < 2.2:
-            continue
-        to_strip |= (wlab == label).astype(np.uint8)
-    if not to_strip.any():
-        return mask
-    stripped = mask_u8.astype(bool) & ~to_strip.astype(bool)
-    # Keep only the largest surviving component -- stripping a glare
-    # streak can leave the real piece as the single dominant remainder,
-    # but guards against an unexpected split leaving disconnected debris.
-    n2, lab2, stats2, _ = cv2.connectedComponentsWithStats(stripped.astype(np.uint8), 8)
-    if n2 <= 1:
-        return mask
-    best2 = max(range(1, n2), key=lambda i: stats2[i, cv2.CC_STAT_AREA])
-    result = lab2 == best2
-    if float(result.sum()) / total < 0.5:
-        return mask
-    return result
+    return refined
+    # NOTE (2026-08-19, tag GR22/127): a stray light-reflection streak on
+    # the display stand sat close enough to touch the ring in SAM2's own
+    # raw mask, so component selection above can't separate them (same
+    # connected blob). Two automated fixes were tried and both failed on
+    # this real photo: morphological opening couldn't sever the neck
+    # without eroding the ring's own band just as much, and a color+shape
+    # (near-white + elongated) filter stripped a LEGITIMATE engraving
+    # highlight on the ring's face instead of the actual spike (the real
+    # spike measured LESS elongated than that highlight -- aspect alone
+    # doesn't reliably separate "background artifact touching the piece"
+    # from "a highlight on the piece itself"). Reverted rather than ship a
+    # heuristic that already cut into real design detail on production
+    # data. Left as a known gap: this specific failure mode (a reflective
+    # display surface glare fusing into the mask) needs either a better
+    # geometric signal (e.g. whether the region sits on the mask's own
+    # outer silhouette vs. is fully interior) or a staging fix (keep
+    # pieces off directly reflective backdrops), not attempted here.
 
 
 def _composite_on_white(bgr_crop: np.ndarray, mask_crop: np.ndarray, feather: int = 3) -> np.ndarray:
