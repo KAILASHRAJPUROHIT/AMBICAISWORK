@@ -133,3 +133,121 @@ def orientation_for(category_key: str) -> OrientationGuide:
     orientation that could actively rotate an unfamiliar item the wrong
     way."""
     return GUIDES.get(category_key, OrientationGuide(OrientationType.FLAT_FACE_UP, "low"))
+
+
+@dataclass(frozen=True, slots=True)
+class CategoryProfile:
+    """Wearer/body-part/expected-shape metadata, from
+    docs/jewellery_category_orientation_reference.md's "Size & Wearer
+    Reference" section (2026-08-19 sourced research -- real retailer
+    listings where dimensions exist, honestly flagged "not found" where
+    they don't, never invented). aspect_ratio is (min, max) WIDTH:HEIGHT
+    as the piece would be laid/worn for the capture photo -- e.g. a
+    bracelet's open curve reads much wider than tall (~3:1), a tikka's
+    hook-chain-pendant reads much taller than wide (~1:5).
+
+    confidence here is about the SIZE/SHAPE data specifically, not the
+    orientation call in OrientationGuide above -- a category's orientation
+    can be well-established while its aspect ratio is still a rough
+    estimate (see the doc's own note on this). ``gate_worthy`` is a
+    deliberately small, hand-picked subset (moderate/high confidence AND
+    a ratio far enough from 1:1 that a wrong-shaped tracked blob is a real
+    signal, not noise) -- built to catch the exact 2026-08-19 bracelet
+    failure (tracker locked onto a thin highlight band, coverage/goldClip/
+    sceneClip all read fine, nothing checked whether the TRACKED SHAPE
+    looked like a bracelet at all) without adding false capture-blocks on
+    categories whose true shape is closer to round/square (rings, studs)
+    or whose size data is still too thin to trust as a gate.
+    """
+    wearer: str
+    body_part: str
+    aspect_ratio: tuple[float, float] | None  # (min W:H, max W:H), None if not established
+    size_confidence: str  # "high" | "moderate" | "low" | "low-moderate"
+
+
+PROFILES: dict[str, CategoryProfile] = {
+    "baby_ring_22": CategoryProfile("babies-and-toddlers", "finger", (0.85, 1.15), "low"),
+    "gents_ring_22": CategoryProfile("men", "finger", (0.85, 1.15), "moderate"),
+    "ladies_ring_18": CategoryProfile("women", "finger", (0.85, 1.15), "moderate"),
+    "ladies_ring_22": CategoryProfile("women", "finger", (0.85, 1.15), "moderate"),
+
+    "baby_braclet_22": CategoryProfile("babies-and-toddlers", "wrist", (2.5, 3.5), "low"),
+    "baby_kadli_22": CategoryProfile("babies-and-toddlers", "wrist", (0.85, 1.15), "moderate"),
+    "bangle_22": CategoryProfile("women", "wrist", (0.85, 1.15), "moderate"),
+    "gents_bracelet_22": CategoryProfile("men", "wrist", (3.0, 3.5), "high"),
+    "gents_kada_18": CategoryProfile("men", "wrist", (0.85, 1.15), "moderate"),
+    "gents_kada_22": CategoryProfile("men", "wrist", (0.85, 1.15), "moderate"),
+    "ladies_bracelet_18": CategoryProfile("women", "wrist", (3.0, 3.5), "low-moderate"),
+    "ladies_bracelet_22": CategoryProfile("women", "wrist", (3.0, 3.5), "low-moderate"),
+    "ladies_kada_22": CategoryProfile("women", "wrist", (0.85, 1.15), "low"),
+    "mangota_22": CategoryProfile("babies-and-toddlers", "wrist or ankle", (2.5, 3.5), "moderate"),
+
+    "bali_18": CategoryProfile("women", "ear", (1.0, 1.3), "high"),
+    "bali_22": CategoryProfile("women", "ear", (1.0, 1.3), "high"),
+    "dull_22": CategoryProfile("women", "ear", (0.85, 1.15), "low"),
+    "tops_18": CategoryProfile("women", "ear", (0.85, 1.15), "low-moderate"),
+    "tops_22": CategoryProfile("women", "ear", (0.85, 1.15), "low-moderate"),
+
+    "earring_22": CategoryProfile("women", "ear (hanging)", (0.33, 0.5), "low"),
+    "jhumka_22": CategoryProfile("women", "ear (hanging)", (0.4, 0.5), "moderate"),
+    "kaan_chain_22": CategoryProfile("women", "ear-to-hair", (0.067, 0.125), "moderate"),
+    "moti_nath_18": CategoryProfile("women", "nose + ear-support", (1.5, 2.0), "low-moderate"),
+    "nath_22": CategoryProfile("women", "nose", (1.5, 2.0), "low"),
+    "tikka_22": CategoryProfile("women", "forehead / hair parting", (0.167, 0.25), "moderate"),
+
+    "chain_22": CategoryProfile("unisex", "neck", (1.3, 1.8), "moderate"),
+    "fancy_mala_18": CategoryProfile("women", "neck", (1.2, 1.6), "moderate"),
+    "fancy_mala_22": CategoryProfile("women", "neck", (1.2, 1.6), "moderate"),
+    "haar_chain_22": CategoryProfile("unisex/women", "neck", (1.3, 1.8), "low"),
+    "ms_long_22": CategoryProfile("women", "neck", (1.3, 1.7), "moderate"),
+    "mss_short_20": CategoryProfile("women", "neck", (1.2, 1.5), "moderate"),
+    "mss_short_22": CategoryProfile("women", "neck", (1.2, 1.5), "moderate"),
+    "necklace_22": CategoryProfile("women", "neck", (1.3, 1.7), "low-moderate"),
+    "necklace_set_18": CategoryProfile("women", "neck + ears", (1.0, 1.3), "low"),
+    "necklace_set_22": CategoryProfile("women", "neck + ears", (1.0, 1.3), "low"),
+
+    "wati_22": CategoryProfile("women", "neck (pendant)", (2.0, 2.5), "high"),
+    "locket_18": CategoryProfile("women", "neck (pendant)", (0.7, 0.85), "low"),
+    "locket_22": CategoryProfile("women", "neck (pendant)", (0.7, 0.85), "low"),
+    "pendent_18": CategoryProfile("women", "neck (pendant)", (0.6, 0.85), "high"),
+    "pendent_22": CategoryProfile("women", "neck (pendant)", (0.6, 0.85), "high"),
+    "pendent_set_18": CategoryProfile("women", "neck + ears", (0.7, 1.0), "low"),
+    "pendent_set_22": CategoryProfile("women", "neck + ears", (0.7, 1.0), "low"),
+
+    "baju_bandh_22": CategoryProfile("women", "upper arm / bicep", (2.0, 3.0), "low"),
+
+    "gold_coin_22_kt": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_0_025_m": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_0_050_m": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_0_100_m": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_0_200_m": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_0_250_m": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_0_300_m": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_0_500_m": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_0_750_m": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_1_gm": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_10_gm": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_2_gm": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_20_gm": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+    "gold_coin_5_gm": CategoryProfile("unisex", "displayed flat", (0.85, 1.15), "high"),
+}
+
+# Hand-picked subset of PROFILES worth gating live capture on: moderate/high
+# size-confidence AND a ratio far enough from 1:1 that a wrong-shaped
+# tracked blob is a real signal. Deliberately excludes "low"/"low-moderate"
+# confidence entries (the size data itself is too thin to block a real
+# capture on) and near-1:1 shapes (rings/studs/gold coins -- little
+# separation between "right shape" and "wrong shape" there, not worth the
+# false-block risk). Built directly in response to the 2026-08-19 bracelet
+# mis-framing: coverage/goldClip/sceneClip all read fine while the tracker
+# had locked onto a thin sub-segment of the band, and nothing checked
+# whether the tracked shape looked like a bracelet at all.
+GATE_WORTHY_CATEGORIES = frozenset(
+    key for key, p in PROFILES.items()
+    if p.size_confidence in ("moderate", "high") and p.aspect_ratio is not None
+    and (p.aspect_ratio[0] < 0.7 or p.aspect_ratio[1] > 1.4)
+)
+
+
+def profile_for(category_key: str) -> CategoryProfile | None:
+    return PROFILES.get(category_key)
