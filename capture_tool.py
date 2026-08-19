@@ -833,6 +833,27 @@ def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: 
                        main_path, angle1_path, angle2_path, out_path)
 
 
+def _backup_raw(path: str) -> None:
+    """Copies the as-saved, unprocessed file into a hidden sibling folder
+    before any in-place crop/bg-removal mutation touches it.
+
+    Confirmed live (2026-08-19, tag BL22/135): a bad mask selection painted
+    the actual ring white and kept the black backdrop -- since tight_crop()
+    and _remove_background() both overwrite the SAME path they read from,
+    that was permanent, unrecoverable data loss with no original to fall
+    back to. Fails open (a backup failure must never block the real save,
+    which has already succeeded by the time this runs) and is best-effort:
+    if it can't write, processing still proceeds -- an occasional missing
+    backup is a far smaller problem than blocking real capture work over
+    it."""
+    try:
+        backup_dir = os.path.join(os.path.dirname(path), ".raw_backup")
+        os.makedirs(backup_dir, exist_ok=True)
+        shutil.copy2(path, os.path.join(backup_dir, os.path.basename(path)))
+    except Exception:
+        logging.getLogger("capture_tool").warning("_backup_raw failed for %s", path, exc_info=True)
+
+
 def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str, stitched_path: str) -> None:
     """save_multi's version of _segment_paths_async: crops all three poses
     (SAM2/DINO), removes what's left of the background inside each crop
@@ -849,6 +870,8 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
 
     def _run():
         log = logging.getLogger("capture_tool")
+        for path in (main_path, angle1_path, angle2_path):
+            _backup_raw(path)
         try:
             for path in (main_path, angle1_path, angle2_path):
                 try:
