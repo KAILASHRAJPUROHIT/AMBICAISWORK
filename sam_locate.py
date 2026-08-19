@@ -876,8 +876,10 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
                 if refined.any() and (float(refined.sum()) / crop_px >= 0.15
                                        or (prefer_vertical and mask_px > 0
                                            and float(refined.sum()) / mask_px >= 0.5)):
-                    crop = _composite_on_white(crop, refined)
-                    bg_removed = True
+                    crop_hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+                    if _mask_quality_ok(refined, crop_hsv[..., 1], crop_hsv[..., 2]):
+                        crop = _composite_on_white(crop, refined)
+                        bg_removed = True
         except Exception:
             bg_removed = False
     if prefer_vertical:
