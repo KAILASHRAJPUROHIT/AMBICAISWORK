@@ -395,9 +395,20 @@ def api_upload():
     return jsonify({"saved": saved, "folder_name": folder_name or None, "detected_category": detection})
 
 
+_STUD_SUFFIX_RE = re.compile(r"_stud$", re.IGNORECASE)
+
+
 def _derive_single_items_from_disk() -> list[dict]:
+    # "jewel" keeps pointing at the REAL file on disk (its name may still
+    # carry a "_stud" suffix -- see capture_tool.py's stud-aware filename
+    # convention, 2026-08-19) so azure_flux2_guarded.py can still read that
+    # suffix straight off the actual input path it opens. "label" strips it
+    # -- explicit request: "irrespective of the pre edit file name post
+    # edit the name would only just be the tag number nothing else", and
+    # label is what _run_batch() uses for the delivered output filename.
     return [
-        {"pair": index, "jewel": path.name, "tag": None, "label": path.stem, "folder": str(INPUT)}
+        {"pair": index, "jewel": path.name, "tag": None,
+         "label": _STUD_SUFFIX_RE.sub("", path.stem), "folder": str(INPUT)}
         for index, path in enumerate(_images(INPUT), start=1)
     ]
 
