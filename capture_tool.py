@@ -949,7 +949,8 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
             for path in (angle1_path, angle2_path):
                 try:
                     result_path, angle = sam_locate.tight_crop(
-                        path, path, expect=expect, straighten=True, fixed_angle=main_tilt, category=category
+                        path, path, expect=expect, straighten=True, fixed_angle=main_tilt,
+                        category=category, prefer_vertical=prefer_vertical
                     )
                     log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
                 except Exception:
