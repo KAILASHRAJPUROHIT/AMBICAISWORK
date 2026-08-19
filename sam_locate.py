@@ -569,7 +569,8 @@ def _align_vertical_hang(bgr_crop: np.ndarray) -> np.ndarray:
 def tight_crop(src_path: str, out_path: str, expect: int = 1,
                margin: float = 0.10, straighten: bool = True,
                max_tilt: float = 30.0, remove_background: bool = True,
-               fixed_angle: float | None = None, category: str | None = None):
+               fixed_angle: float | None = None, category: str | None = None,
+               prefer_vertical: bool = False):
     """Crop a plate down to just the ornament(s). Returns (path, info).
 
     When ``straighten`` is on, the crop is levelled first so the piece sits
