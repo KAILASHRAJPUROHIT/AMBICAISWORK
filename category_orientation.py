@@ -87,7 +87,6 @@ GUIDES: dict[str, OrientationGuide] = {
     "fancy_mala_18": OrientationGuide(OrientationType.SYMMETRIC_CURVE, "moderate"),
     "fancy_mala_22": OrientationGuide(OrientationType.SYMMETRIC_CURVE, "moderate"),
     "haar_chain_22": OrientationGuide(OrientationType.SYMMETRIC_CURVE, "moderate"),
-    "mangota_22": OrientationGuide(OrientationType.OPEN_CURVE, "high"),
     "ms_long_22": OrientationGuide(OrientationType.SYMMETRIC_CURVE, "high"),
     "mss_short_20": OrientationGuide(OrientationType.SYMMETRIC_CURVE, "high"),
     "mss_short_22": OrientationGuide(OrientationType.SYMMETRIC_CURVE, "high"),
