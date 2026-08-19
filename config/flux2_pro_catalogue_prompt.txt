@@ -8,6 +8,6 @@ Render metal as genuine high-polish gold with real specular highlights and dimen
 
 This catalogue has no black stones or black enamel: any dark area in openwork, engraving, or gaps is a hollow opening or a shadow, not material -- render it as transparent/background or a darker gold shade, never as solid black.
 
-Image 1 may show up to three angles of the same piece (a main front view plus two side views) in one reference photo. The side views exist only so you can see the piece's true 3D geometry and avoid inventing unseen detail -- produce exactly ONE output image, matching the main/front view's pose and framing, never a multi-panel or composite image.
+Image 1 is a single stitched reference photo with up to three labelled panels of the same piece: a large "MAIN VIEW" on top and two smaller "LEFT ANGLE" / "RIGHT ANGLE" panels below it. The two side panels exist only so you can see the piece's true 3D geometry and avoid inventing unseen detail -- they are reference only, never part of the output. Produce exactly ONE output image, matching the MAIN VIEW panel's pose and framing, never a multi-panel or composite image.
 
 If an item-specific instruction assigns a role to Image 2, follow it. Otherwise use Image 2's background/scene and place the jewellery naturally within it.
