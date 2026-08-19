@@ -53,6 +53,7 @@ top, both bowl halves visible side by side.
 | GENTS KADA 18 (GK18) / GENTS KADA 22 (GK22) | Thick, solid, usually single-piece or hinged men's bangle | Lies flat face-on, full circle visible, hinge (if any) to the side | https://www.totaram.com/22k-gold-sikh-kada-sikh-kara-mens-gold-bangle-single-peice-235-m-gbl014.html | high |
 | LADIES BRACELET 18 (LB18) / LADIES BRACELET 22 (LB22) | Delicate linked/chain-style wrist ornament | Gentle open curve/oval, clasp hidden | https://www.totaram.com/22k-gold-jewelry/womens-jewelry/gold-bangles-for-women-baby-bangles.html | moderate |
 | LADIES KADA 22 (LK22) | Thick solid single-piece or hinged women's bangle | Lies flat face-on, full circle visible, hinge to the side | https://www.totaram.com/22k-gold-kada-with-single-piece.html | high |
+| MANGOTA 22 (MG22) | **CORRECTED by owner (2026-08-19): a kids' protection bracelet/anklet ("Mangota"/"Mangati"/"Mangotha") — a Nazariya evil-eye charm, black beads (crystal/glass/onyx) with gold or silver accents, worn on an infant/toddler's wrist or ankle, closed with a gentle screw clasp or slipknot.** (An earlier guess — a South Indian mango-motif necklace — was wrong; corrected directly by the owner, do not re-guess.) | Gentle open curve like other flexible bead/chain bracelets, clasp hidden, black beads and gold/silver accents visible | https://www.meesho.com/baby-nazarya-for-girl-and-boy-unisex-mangati-baby-hand-bracelet/p/4vq0ik | high (owner-confirmed) |
 
 ## 3. Studs / small flat earrings — lies flat, decorative face up
 
