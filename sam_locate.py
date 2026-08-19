@@ -907,44 +907,47 @@ def _align_vertical_hang(bgr_crop: np.ndarray) -> np.ndarray:
             cropped = rotated[y0:y1, x0:x1]
             if cropped.shape[0] < 8 or cropped.shape[1] < 8:
                 return None
-            aspect = cropped.shape[0] / float(cropped.shape[1])  # height / width
+            # Score = how far the tracked anchor point (orig_top, the
+            # attachment end) sits from directly above the mask's own
+            # centroid, at THIS candidate rotation -- smaller is better.
+            # Confirmed live (2026-08-19, tag WT22/1): the previous
+            # objective (maximize height:width aspect ratio) is WRONG for
+            # a twin-bowl WATI -- its true correct pose (bail up, both
+            # bowls spread side by side below it) is WIDER than tall, not
+            # the tallest rotation available, so aspect-maximizing search
+            # rotated it to some other, incorrect angle entirely. "The
+            # anchor point sits directly above the piece's own centre of
+            # mass" is the actual geometric definition of "hangs straight
+            # down from this point" -- it doesn't assume anything about
+            # whether the correct final shape is tall or wide, so it
+            # works for both a simple single-axis dangle (earring, jhumka)
+            # AND a wide symmetric twin-element piece (WATI) alike.
             transformed = matrix @ np.array([padded_top[0], padded_top[1], 1.0])
+            centroid_x = float(xs2.mean())
+            anchor_offset = abs(transformed[0] - centroid_x)
             top_in_bottom_half = (transformed[1] - y0) > (cropped.shape[0] / 2.0)
-            return (aspect, cropped, top_in_bottom_half)
+            return (anchor_offset, cropped, top_in_bottom_half)
 
-        # Stage 1 -- coarse: minAreaRect's box-fit angle is only a
-        # starting guess for an irregular shape (chain + bell + ball +
-        # hook is not a clean rectangle), and it can be off by more than
-        # a few degrees. Scanning only 2 perpendicular candidates around
-        # it risked anchoring stage 2's fine sweep near a wrong local
-        # optimum -- "make it dead straight" (2026-08-19) still showed
-        # visible lean after a narrow +-4 deg fine sweep around that kind
-        # of bad anchor. Fixed by scanning the FULL 0-180 deg range at
-        # coarse resolution first (independent of minAreaRect's guess),
-        # so stage 2 always refines around the true global best.
+        # Stage 1 -- coarse: scan the FULL 0-180 deg range (independent of
+        # any box-fit guess) so stage 2 always refines around the true
+        # global best rather than a local one near a possibly-bad anchor.
         coarse_best = None
         for ang in np.arange(0.0, 180.0, 5.0):
             result = _try_angle(float(ang))
-            if result is not None and (coarse_best is None or result[0] > coarse_best[1]):
+            if result is not None and (coarse_best is None or result[0] < coarse_best[1]):
                 coarse_best = (float(ang), result[0])
         if coarse_best is None:
             return bgr_crop
         coarse_ang = coarse_best[0]
 
-        # Stage 2 -- fine: "dead straight" (2026-08-19 explicit request)
-        # needs more precision than a single box-fit angle reliably gives
-        # on an irregular shape (chain + bell + ball + hook is not a
-        # clean rectangle, so minAreaRect's best-fit angle is a good
-        # starting point but not necessarily the exact optimum). Sweep a
-        # small window around the coarse angle in fine steps and keep
-        # whichever produces the TIGHTEST vertical fit (max aspect
-        # ratio) -- a perfectly straight piece produces the narrowest
-        # possible bounding box, so maximizing aspect ratio directly
-        # targets "dead straight" rather than approximating it.
+        # Stage 2 -- fine: sweep a small window around the coarse angle in
+        # fine steps and keep whichever minimises the anchor-to-centroid
+        # offset -- the closer to zero, the more precisely the piece hangs
+        # straight down from its own attachment point.
         best = None
         for delta in np.arange(-6.0, 6.01, 0.1):
             result = _try_angle(coarse_ang + delta)
-            if result is not None and (best is None or result[0] > best[0]):
+            if result is not None and (best is None or result[0] < best[0]):
                 best = result
 
         if best is None:

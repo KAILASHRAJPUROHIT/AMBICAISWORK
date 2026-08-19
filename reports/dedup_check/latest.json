@@ -1,7 +1,7 @@
 {
-  "checked_at": "2026-08-19T13:43:10Z",
+  "checked_at": "2026-08-19T14:15:24Z",
   "capture_intake_files": 686,
-  "processed_files": 371,
+  "processed_files": 372,
   "label_conflicts": {
     "GR22_127": {
       "capture_intake": [
@@ -49,6 +49,14 @@
       ],
       "processed": [
         "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\processed\\WATI 22\\WT22_140_stitched.jpg"
+      ]
+    },
+    "WT22_1_2": {
+      "capture_intake": [
+        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\57 WATI 22\\WT22_1_2.jpg"
+      ],
+      "processed": [
+        "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\processed\\WATI 22\\WT22_1_2.jpg"
       ]
     },
     "WT22_1_stitched": {
