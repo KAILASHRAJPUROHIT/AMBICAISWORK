@@ -569,7 +569,7 @@ def tight_crop(src_path: str, out_path: str, expect: int = 1,
     cv2.imwrite(out_path, crop)
     return out_path, {"box": [x0, y0, x1, y1], "pieces": len(boxes),
                       "occupancy": round((x1 - x0) * (y1 - y0) / float(W * H), 4),
-                      "background_removed": bg_removed}
+                      "background_removed": bg_removed, "tilt": tilt}
 
 
 def best_single_crop(src_path: str, out_path: str, margin: float = 0.12):
