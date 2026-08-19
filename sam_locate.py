@@ -407,12 +407,21 @@ def locate(bgr: np.ndarray, expect: int = 1, margin: float = 0.10, category: str
     (including the common case of a synthetic/non-jewellery test image),
     or raises for any reason -- this function must never be a NEW way for
     a real capture to fail that the old pipeline would have handled."""
-    global _last_masks
+    global _last_mask, _last_masks
     if _sam3_available():
         try:
             boxes, masks = _sam3_boxes_and_masks(bgr, expect, category)
             if boxes:
                 _last_masks = masks
+                # The single-piece straighten/background-removal path below
+                # (tight_crop, expect==1) still reads the legacy SINGULAR
+                # _last_mask global, predating _last_masks (added for pair
+                # support) -- without this, SAM3 masks never reach that
+                # path at all, silently degrading every single-piece SAM3
+                # result to "mask found, but never used" (confirmed live
+                # 2026-08-19: tilt=None, background_removed=False on a mask
+                # that was actually clean this time).
+                _last_mask = masks[0] if masks else None
                 return boxes
         except Exception:
             pass

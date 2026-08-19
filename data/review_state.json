@@ -3250,5 +3250,11 @@
   "reason": "design_mismatch",
   "note": null,
   "reviewed_at": 1787125032.2477732
+ },
+ "image-1787142374333": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1787142459.3358324
  }
 }

@@ -1,5 +1,5 @@
 {
-  "ran_at": 1787142364.415697,
+  "ran_at": 1787142484.480618,
   "published": [],
   "failed": [
     {
@@ -45,7 +45,11 @@
     {
       "label": "LR22_90",
       "error": "ValueError: LR22_90: expected one current-stock label, found 0"
+    },
+    {
+      "label": "image-1787142374333",
+      "error": "ValueError: image-1787142374333: expected one current-stock label, found 0"
     }
   ],
-  "remaining": 11
+  "remaining": 12
 }
