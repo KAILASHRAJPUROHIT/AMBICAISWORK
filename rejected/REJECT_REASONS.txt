@@ -1,11 +1,14 @@
-Rejected items -- regenerated 2026-08-15 19:59:59
-131 item(s)
+Rejected items -- regenerated 2026-08-19 13:05:54
+134 item(s)
 
 BL18_29.jpg -- Design differs from original
 BL18_31.jpg -- Design differs from original
 BL18_4.jpg -- Design differs from original
 BL18_45.jpg -- Design differs from original
 BL18_51.jpg -- Design differs from original
+BL22_16.jpg -- Design differs from original
+BL22_18.jpg -- Design differs from original
+BL22_5.jpg -- Design differs from original
 GR22_100.jpg -- Stones wrong colour or position
 GR22_132.jpg -- Stones wrong colour or position
 GR22_139.jpg -- Design differs from original

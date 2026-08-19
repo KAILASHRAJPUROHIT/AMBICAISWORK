@@ -39138,6 +39138,237 @@
       "reserved_usd": 0.17,
       "completed_at_utc": "2026-08-19T06:27:31.142205+00:00",
       "output_bytes": 628674
+    },
+    {
+      "id": "96ab1d6cab6d0b4d",
+      "reserved_at_utc": "2026-08-19T07:34:32.237329+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\BL22_16.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\BL22_16_e9d597816505_7mp.png",
+      "prepared_background_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\compact_huggie_45_74de6aa2b0a5_1mp.png",
+      "secondary_reference_source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\assets\\geometry_guides\\bali\\compact_huggie_45.jpg",
+      "secondary_reference_role": "automatic_reviewed_item_angle_guide",
+      "secondary_reference_profile": "compact_huggie",
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\4\\0001_BL22_16.png",
+      "prompt_sha256": "34f707dea2fd1448a77e20a22b92098d5062ad5e1ac45749dbff3862c93586d0",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            447,
+            2903,
+            915,
+            3756
+          ],
+          [
+            557,
+            2008,
+            908,
+            2373
+          ],
+          [
+            5125,
+            3109,
+            5586,
+            3412
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00028,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "bali_22",
+      "category_geometry_hint_applied": true,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3240,
+        2160
+      ],
+      "reference_megapixels": 6.9984,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 7.0,
+      "input_dimensions": [
+        [
+          3240,
+          2160
+        ],
+        [
+          1000,
+          1000
+        ]
+      ],
+      "input_billed_mp": 8,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.15,
+      "reserved_usd": 0.19,
+      "completed_at_utc": "2026-08-19T07:34:51.721853+00:00",
+      "output_bytes": 536581
+    },
+    {
+      "id": "a4f9ecf7245cf556",
+      "reserved_at_utc": "2026-08-19T07:34:58.518895+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\BL22_18.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\BL22_18_912cb88a21b0_7mp.png",
+      "prepared_background_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\compact_huggie_45_74de6aa2b0a5_1mp.png",
+      "secondary_reference_source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\assets\\geometry_guides\\bali\\compact_huggie_45.jpg",
+      "secondary_reference_role": "automatic_reviewed_item_angle_guide",
+      "secondary_reference_profile": "compact_huggie",
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\4\\0002_BL22_18.png",
+      "prompt_sha256": "34f707dea2fd1448a77e20a22b92098d5062ad5e1ac45749dbff3862c93586d0",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": false,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            839,
+            2573,
+            1073,
+            2807
+          ],
+          [
+            866,
+            1892,
+            1128,
+            2297
+          ],
+          [
+            4905,
+            1603,
+            5338,
+            2297
+          ],
+          [
+            5153,
+            2518,
+            5380,
+            2731
+          ]
+        ],
+        "coloured_pixel_fraction": 0.00049,
+        "prompt_line": "Reference-measured product evidence: use gold for this piece's metal and decorative surfaces. Preserve every clear or white stone exactly as Image 1 shows it."
+      },
+      "category": "bali_22",
+      "category_geometry_hint_applied": true,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3240,
+        2160
+      ],
+      "reference_megapixels": 6.9984,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 7.0,
+      "input_dimensions": [
+        [
+          3240,
+          2160
+        ],
+        [
+          1000,
+          1000
+        ]
+      ],
+      "input_billed_mp": 8,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.15,
+      "reserved_usd": 0.19,
+      "completed_at_utc": "2026-08-19T07:35:16.973881+00:00",
+      "output_bytes": 548146
+    },
+    {
+      "id": "18bf1388c4f75c67",
+      "reserved_at_utc": "2026-08-19T07:35:25.170551+00:00",
+      "status": "SUCCEEDED",
+      "model": "FLUX.2-pro",
+      "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\input\\BL22_5.jpg",
+      "prepared_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\BL22_5_632fd3dbf716_7mp.png",
+      "prepared_background_reference": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\prepared_references\\compact_huggie_45_74de6aa2b0a5_1mp.png",
+      "secondary_reference_source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\assets\\geometry_guides\\bali\\compact_huggie_45.jpg",
+      "secondary_reference_role": "automatic_reviewed_item_angle_guide",
+      "secondary_reference_profile": "compact_huggie",
+      "output": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\reports\\azure_flux2_guard\\batches\\4\\0003_BL22_5.png",
+      "prompt_sha256": "dafd40ce4d7b2fe5d82102705d68c2b44305c320db49613f3bcc4c6f07d7becf",
+      "automatic_retries": 0,
+      "reference_color_report": {
+        "has_colour": true,
+        "colour_measurement": "product_region",
+        "localisation_boxes": [
+          [
+            619,
+            2366,
+            1376,
+            2979
+          ],
+          [
+            4967,
+            2270,
+            5662,
+            3206
+          ]
+        ],
+        "coloured_pixel_fraction": 0.05082,
+        "dominant_hue_degrees": 176.0,
+        "hue_label": "cyan",
+        "position": "middle-left",
+        "prompt_line": "Reference-measured product evidence: Image 1 contains genuine coloured stone or enamel surfaces embedded within the jewellery. Copy each visible product colour exactly at its corresponding jewellery location and render every remaining non-stone product surface in gold."
+      },
+      "category": "bali_22",
+      "category_geometry_hint_applied": true,
+      "native_dimensions": [
+        6192,
+        4128
+      ],
+      "native_megapixels": 25.5606,
+      "reference_resize": "Lanczos; aspect ratio preserved; no crop; no upscale",
+      "reference_dimensions": [
+        3240,
+        2160
+      ],
+      "reference_megapixels": 6.9984,
+      "white_balance_normalized": true,
+      "effective_reference_limit_megapixels": 7.0,
+      "input_dimensions": [
+        [
+          3240,
+          2160
+        ],
+        [
+          1000,
+          1000
+        ]
+      ],
+      "input_billed_mp": 8,
+      "output_dimensions": [
+        1152,
+        864
+      ],
+      "output_billed_mp": 1,
+      "list_price_estimate_usd": 0.15,
+      "reserved_usd": 0.19,
+      "completed_at_utc": "2026-08-19T07:35:42.311954+00:00",
+      "output_bytes": 524002
     }
   ]
 }

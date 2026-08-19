@@ -844,3 +844,6 @@
 {"label": "LR22_97", "verdict": "approved", "reason": null, "note": null, "ts": 1786804194.533689}
 {"label": "LR22_98", "verdict": "approved", "reason": null, "note": null, "ts": 1786804197.7028496}
 {"label": "LR22_99", "verdict": "approved", "reason": null, "note": null, "ts": 1786804199.7639062}
+{"label": "BL22_16", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787124948.3877585}
+{"label": "BL22_18", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787124951.739466}
+{"label": "BL22_5", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787124954.3854983}

@@ -3232,5 +3232,23 @@
   "reason": null,
   "note": null,
   "reviewed_at": 1786804199.7608652
+ },
+ "BL22_16": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1787124948.3842485
+ },
+ "BL22_18": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1787124951.7354763
+ },
+ "BL22_5": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1787124954.382244
  }
 }

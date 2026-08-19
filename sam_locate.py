@@ -383,10 +383,18 @@ def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray) -> np.ndarray:
     recover it). Same warm/bright "metal" definition already proven
     elsewhere in this file (see focus_boxes()) and in capture_tool.py's own
     visibility gate -- reused here for consistency rather than inventing a
-    third threshold. Picking the material-rich blob instead of the big one
-    directly targets what actually distinguishes jewellery from a plain
-    prop or backdrop, regardless of which one happens to occupy more
-    pixels in a given crop.
+    third threshold.
+
+    Two-stage, not a pure metal-fraction max: an early version picked
+    whichever blob had the HIGHEST metal fraction, which backfired the
+    opposite way -- a tiny, purely-gold sliver (100% metal, small area)
+    beat the real object's full connected region (which legitimately
+    includes the paper tag, dark crevices, and specular highlights outside
+    the metal colour ranges, so its fraction reads lower even though it's
+    unambiguously the right blob). Metal fraction is only used to DISQUALIFY
+    implausible candidates now (a background blob genuinely has near-zero
+    metal content); the largest surviving candidate wins, same as before,
+    just with the background blob no longer eligible to compete.
     """
     hsv = cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2HSV)
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
@@ -399,15 +407,17 @@ def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray) -> np.ndarray:
         red_stone = ((h <= 10) | (h >= 170)) & (s >= 50) & (v >= 40)
         bright = (v >= 150) & (s < 60)
         metal = warm | red_stone | bright
-        best_label, best_score = None, -1.0
+        best_label, best_area = None, -1
         for label in range(1, n):
             area = stats[label, cv2.CC_STAT_AREA]
             if area < 200:
                 continue
             component = lab == label
             metal_fraction = float((component & metal).sum()) / float(area)
-            if metal_fraction > best_score:
-                best_score, best_label = metal_fraction, label
+            if metal_fraction < 0.15:
+                continue
+            if area > best_area:
+                best_area, best_label = area, label
         if best_label is not None:
             refined = lab == best_label
     return refined
