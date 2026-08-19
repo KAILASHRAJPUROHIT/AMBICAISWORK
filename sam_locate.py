@@ -485,81 +485,98 @@ def _composite_on_white(bgr_crop: np.ndarray, mask_crop: np.ndarray, feather: in
     return (bgr_crop.astype(np.float32) * alpha + white.astype(np.float32) * (1.0 - alpha)).astype(np.uint8)
 
 
+def _metal_mask(bgr: np.ndarray) -> np.ndarray:
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    return ((h >= 5) & (h <= 45) & (s >= 60) & (v >= 60)) | ((v >= 150) & (s < 60))
+
+
 def _align_vertical_hang(bgr_crop: np.ndarray) -> np.ndarray:
     """Rotates a SINGLE piece's crop so its elongated axis is vertical,
-    ornamental (heavier) end down -- for categories that hang/dangle
-    (earrings, jhumka, nath, tikka) rather than lie flat. Requested
-    explicitly (2026-08-19, tag TP22/83): the piece's bottom should face
-    where the MAIN VIEW/LEFT ANGLE/RIGHT ANGLE caption sits, i.e. hang
-    downward in frame, matching how it's actually worn -- confirmed the
-    existing straighten path (a small "nearest axis" nudge, see
-    _upright_angle's docstring) is the wrong tool for this: it can level
-    a piece to horizontal just as easily as vertical, and the pair-crop
-    path had no rotation correction at all.
+    attachment end up -- for categories that hang/dangle (earrings,
+    jhumka, nath, tikka) rather than lie flat. Requested explicitly
+    (2026-08-19, tag TP22/83): the piece's bottom should face where the
+    MAIN VIEW/LEFT ANGLE/RIGHT ANGLE caption sits, i.e. hang downward in
+    frame, matching how it's actually worn -- confirmed the existing
+    straighten path (a small "nearest axis" nudge, see _upright_angle's
+    docstring) is the wrong tool for this, and the pair-crop path had no
+    rotation correction at all.
 
     Must be called on ONE piece's own crop, before it's placed into any
     multi-piece canvas -- running this on a side-by-side pair composite
     would find the axis of the PAIR (wide, side-by-side) and rotate both
     pieces as one wrong unit instead of straightening each individually.
 
-    PCA on the gold-pixel mask, not minAreaRect: this class of piece is
-    reliably elongated by design (stud/hook + dangling chain/bell/plate),
-    unlike the compact near-square shapes minAreaRect was chosen for
-    elsewhere in this file -- PCA's principal axis is stable exactly when
-    the shape is genuinely elongated.
+    Candidate rotations, picked by MEASURING the result, not by trusting
+    a single trig formula: an earlier version computed one "correct"
+    rotation via atan2 on a PCA axis and got the direction backwards --
+    confirmed live (2026-08-19), it produced pieces WIDER than tall,
+    the opposite of intended. This file already has one documented
+    minAreaRect sign-convention bug (see _upright_angle's docstring);
+    rather than risk a second unverified trig formula, this tries several
+    candidate angles from minAreaRect and keeps whichever one actually
+    produces the tallest (most vertical) result, verified directly on
+    the pixels rather than assumed from the angle's sign.
 
-    Which end is "down": the ornamental/dangling end is assumed to carry
-    MORE gold-pixel mass than the small stud/hook attachment (bells, caps,
-    chain terminus vs. a plain post) -- if the top half has more mass than
-    the bottom after aligning to vertical, the piece is upside down and
-    gets flipped 180. A real, testable heuristic for this dataset, not a
-    universal guarantee. Fails open (returns the crop unchanged) on any
-    error or if there's not enough signal to work with.
+    Which end is "up": whichever end was ALREADY topmost in the
+    ORIGINAL, unrotated crop is kept on top -- confirmed live
+    (2026-08-19): a mass-based guess ("the heavier/more ornate end hangs
+    down") got flipped upside down on a real piece, because a small but
+    highly reflective stud scored as more "gold pixel mass" than the
+    actual dangling ornament. Trusting how staff physically positioned
+    the piece for the photo is a far safer assumption than guessing from
+    pixel content. Fails open (returns the crop unchanged) on any error
+    or insufficient signal.
     """
     try:
-        hsv = cv2.cvtColor(bgr_crop, cv2.COLOR_BGR2HSV)
-        h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-        metal = ((h >= 5) & (h <= 45) & (s >= 60) & (v >= 60)) | ((v >= 150) & (s < 60))
+        metal = _metal_mask(bgr_crop)
         ys, xs = np.nonzero(metal)
         if len(xs) < 50:
             return bgr_crop
 
-        pts = np.column_stack([xs, ys]).astype(np.float32)
-        _, eigenvectors = cv2.PCACompute(pts, mean=None, maxComponents=1)
-        vx, vy = float(eigenvectors[0][0]), float(eigenvectors[0][1])
-        angle = float(np.degrees(np.arctan2(vy, vx)))
-        correction = 90.0 - angle
-        while correction > 90:
-            correction -= 180
-        while correction < -90:
-            correction += 180
+        # The point that was topmost BEFORE any rotation -- tracked through
+        # each candidate's transform below to decide top-vs-bottom.
+        top_idx = int(np.argmin(ys))
+        orig_top = (float(xs[top_idx]), float(ys[top_idx]))
+
+        pts = np.column_stack([xs, ys]).astype(np.int32)
+        rect_angle = float(cv2.minAreaRect(pts)[2])
 
         h0, w0 = bgr_crop.shape[:2]
-        pad = int(0.4 * max(h0, w0))
-        padded = cv2.copyMakeBorder(bgr_crop, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(255, 255, 255))
+        pad = int(0.5 * max(h0, w0))
+        padded = cv2.copyMakeBorder(bgr_crop, pad, pad, pad, pad,
+                                    cv2.BORDER_CONSTANT, value=(255, 255, 255))
         ch, cw = padded.shape[:2]
-        matrix = cv2.getRotationMatrix2D((cw / 2, ch / 2), -correction, 1.0)
-        rotated = cv2.warpAffine(padded, matrix, (cw, ch), flags=cv2.INTER_LANCZOS4,
-                                 borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+        padded_top = (orig_top[0] + pad, orig_top[1] + pad)
 
-        hsv2 = cv2.cvtColor(rotated, cv2.COLOR_BGR2HSV)
-        h2, s2, v2 = hsv2[..., 0], hsv2[..., 1], hsv2[..., 2]
-        metal2 = ((h2 >= 5) & (h2 <= 45) & (s2 >= 60) & (v2 >= 60)) | ((v2 >= 150) & (s2 < 60))
-        ys2, xs2 = np.nonzero(metal2)
-        if len(xs2) < 50:
-            return rotated
-        margin = 20
-        y0 = max(0, int(ys2.min()) - margin); y1 = min(rotated.shape[0], int(ys2.max()) + margin)
-        x0 = max(0, int(xs2.min()) - margin); x1 = min(rotated.shape[1], int(xs2.max()) + margin)
-        cropped = rotated[y0:y1, x0:x1]
+        best = None  # (aspect_ratio, cropped, top_in_bottom_half)
+        for ang in (rect_angle, rect_angle + 90.0, rect_angle - 90.0, rect_angle + 180.0):
+            matrix = cv2.getRotationMatrix2D((cw / 2, ch / 2), ang, 1.0)
+            rotated = cv2.warpAffine(padded, matrix, (cw, ch), flags=cv2.INTER_LANCZOS4,
+                                     borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+            metal2 = _metal_mask(rotated)
+            ys2, xs2 = np.nonzero(metal2)
+            if len(xs2) < 50:
+                continue
+            margin = 20
+            y0 = max(0, int(ys2.min()) - margin); y1 = min(rotated.shape[0], int(ys2.max()) + margin)
+            x0 = max(0, int(xs2.min()) - margin); x1 = min(rotated.shape[1], int(xs2.max()) + margin)
+            cropped = rotated[y0:y1, x0:x1]
+            if cropped.shape[0] < 8 or cropped.shape[1] < 8:
+                continue
+            aspect = cropped.shape[0] / float(cropped.shape[1])  # height / width
 
-        mid = cropped.shape[0] // 2
-        crop_hsv = cv2.cvtColor(cropped, cv2.COLOR_BGR2HSV)
-        ch_, cs_, cv_ = crop_hsv[..., 0], crop_hsv[..., 1], crop_hsv[..., 2]
-        crop_metal = ((ch_ >= 5) & (ch_ <= 45) & (cs_ >= 60) & (cv_ >= 60)) | ((cv_ >= 150) & (cs_ < 60))
-        top_mass = int(crop_metal[:mid].sum())
-        bottom_mass = int(crop_metal[mid:].sum())
-        if top_mass > bottom_mass:
+            transformed = matrix @ np.array([padded_top[0], padded_top[1], 1.0])
+            top_y_in_crop = transformed[1] - y0
+            top_in_bottom_half = top_y_in_crop > (cropped.shape[0] / 2.0)
+
+            if best is None or aspect > best[0]:
+                best = (aspect, cropped, top_in_bottom_half)
+
+        if best is None:
+            return bgr_crop
+        _, cropped, top_in_bottom_half = best
+        if top_in_bottom_half:
             cropped = cv2.rotate(cropped, cv2.ROTATE_180)
         return cropped
     except Exception:
