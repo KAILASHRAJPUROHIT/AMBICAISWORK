@@ -306,6 +306,7 @@ def locate(bgr: np.ndarray, expect: int = 1, margin: float = 0.10):
             # boundary but a far better answer than the display stand.
             if gb is not None:
                 boxes.append((int(gb[0]), int(gb[1]), int(gb[2]), int(gb[3])))
+                box_masks.append(None)
             continue
         _last_mask = chosen
         ys, xs = np.nonzero(chosen)
@@ -315,8 +316,12 @@ def locate(bgr: np.ndarray, expect: int = 1, margin: float = 0.10):
         mx, my = int((x1 - x0) * margin), int((y1 - y0) * margin)
         boxes.append((int(max(0, x0 - mx)), int(max(0, y0 - my)),
                       int(min(W, x1 + mx)), int(min(H, y1 + my))))
+        box_masks.append(chosen)
 
-    boxes.sort(key=lambda b: b[0])
+    order = sorted(range(len(boxes)), key=lambda i: boxes[i][0])
+    boxes = [boxes[i] for i in order]
+    box_masks = [box_masks[i] for i in order]
+    _last_masks = box_masks
     return boxes
 
 
