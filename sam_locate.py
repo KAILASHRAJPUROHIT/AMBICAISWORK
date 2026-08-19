@@ -488,7 +488,16 @@ def _composite_on_white(bgr_crop: np.ndarray, mask_crop: np.ndarray, feather: in
 def _metal_mask(bgr: np.ndarray) -> np.ndarray:
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-    return ((h >= 5) & (h <= 45) & (s >= 60) & (v >= 60)) | ((v >= 150) & (s < 60))
+    # v < 250, not just s < 60: confirmed live (2026-08-19) that the plain
+    # "bright, low-saturation" silver/white-metal test also matches pure
+    # WHITE -- which is exactly the padding colour _align_vertical_hang
+    # fills around the piece before rotating. Without this bound, the
+    # entire white padding area reads as "metal" too, making every
+    # bounding-box/aspect-ratio measurement in that function meaningless
+    # (the mask was effectively just the whole padded rectangle). Real
+    # silver/white-metal jewellery highlights sit comfortably under 250;
+    # only near-pure-white padding/background gets excluded.
+    return ((h >= 5) & (h <= 45) & (s >= 60) & (v >= 60)) | ((v >= 150) & (v < 250) & (s < 60))
 
 
 def _align_vertical_hang(bgr_crop: np.ndarray) -> np.ndarray:
