@@ -792,14 +792,17 @@ def _segment_paths_async(paths: list, category: str | None = None) -> None:
 # width MAIN VIEW on top, LEFT ANGLE / RIGHT ANGLE side-by-side below, bold
 # uppercase caption under each panel, thin light-grey dividers, white
 # background). Sized for catalogue/web use, not print.
-# MAIN_H bumped 900 -> 1200 (2026-08-19, explicit request: "main image
-# should be bigger"). Letterbox-fit already scales up to fill whichever of
-# width/height is the binding constraint (_stitch_fit), so a taller box
-# directly means a bigger MAIN panel for anything that isn't already
-# wider than 900px at 1200px scale -- most single/paired jewellery crops.
+# Explicit 60/20/20 height split (2026-08-19, explicit request): MAIN VIEW
+# is 60% of the total photo-content height, LEFT ANGLE and RIGHT ANGLE
+# share the bottom 40% side by side (20% each, since they sit in one row
+# rather than stacked). MAIN_H stays at the 1200px this business already
+# asked for ("main image should be bigger", earlier the same day); SIDE_H
+# is DERIVED from the ratio (1200 * 20/60) rather than picked separately,
+# so the two constants can't silently drift out of the requested 60/20/20
+# proportion if MAIN_H ever changes again.
 _STITCH_PANEL_W = 900
 _STITCH_MAIN_H = 1200
-_STITCH_SIDE_H = 620
+_STITCH_SIDE_H = round(_STITCH_MAIN_H * (20 / 60))
 _STITCH_PAD = 24
 _STITCH_LABEL_H = 60
 _STITCH_BG = (255, 255, 255)
