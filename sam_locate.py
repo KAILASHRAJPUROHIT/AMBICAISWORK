@@ -475,6 +475,7 @@ def _refine_mask(bgr_crop: np.ndarray, mask_crop: np.ndarray, category: str | No
     # the display stand sat close enough to touch the ring in SAM2's own
     # raw mask, so component selection above can't separate them (same
     # connected blob). Two automated fixes were tried and both failed on
+    # (superseded below by a QA-gate approach)
     # this real photo: morphological opening couldn't sever the neck
     # without eroding the ring's own band just as much, and a color+shape
     # (near-white + elongated) filter stripped a LEGITIMATE engraving
