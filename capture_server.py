@@ -31,6 +31,7 @@ same tray/dedup files concurrently.
 """
 import ipaddress
 import json
+import logging
 import os
 import socket
 import ssl
