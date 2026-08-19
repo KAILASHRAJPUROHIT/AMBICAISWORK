@@ -856,6 +856,28 @@ def _backup_raw(path: str) -> None:
         logging.getLogger("capture_tool").warning("_backup_raw failed for %s", path, exc_info=True)
 
 
+# Categories that are TWO separate physical pieces sold/worn as a matched
+# pair (both earrings shot together), as opposed to a single item that
+# merely has internal left/right symmetry (WATI's twin-bowl pendant is
+# still ONE object) or is genuinely worn singly (NATH/MOTI NATH -- one
+# nose ring; TIKKA -- one forehead ornament). Confirmed live (2026-08-19,
+# tag TP22/83): tight_crop() was called with expect=1 for every category
+# unconditionally, so a real matched pair correctly captured in frame
+# (both studs visible, verified against the raw backup) got cropped down
+# to just ONE of the two -- the second was silently discarded from the
+# final saved photo, in every panel. sam_locate.tight_crop already has a
+# working side-by-side expect>1 crop path; this was just never told to
+# use it. Keyed the same way category_orientation.py is.
+_PAIRED_ITEM_CATEGORIES = frozenset({
+    "bali_18", "bali_22", "tops_18", "tops_22", "dull_22",
+    "earring_22", "jhumka_22", "kaan_chain_22",
+})
+
+
+def _expect_for_category(category: str | None) -> int:
+    return 2 if category in _PAIRED_ITEM_CATEGORIES else 1
+
+
 def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str, stitched_path: str,
                               category: str | None = None) -> None:
     """save_multi's version of _segment_paths_async: crops all three poses
@@ -864,7 +886,16 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
     Order matters: stitching before cropping would bake the raw, uncropped
     gimbal framing into the permanent composite; removing background before
     cropping would waste RMBG-2.0 on the whole wide shot instead of just the
-    already-isolated ornament crop."""
+    already-isolated ornament crop.
+
+    Paired categories (_PAIRED_ITEM_CATEGORIES) crop with expect=2, which
+    routes into sam_locate.tight_crop's side-by-side mode -- that path
+    does NOT support straighten/fixed_angle or background removal (no
+    single aligned mask exists for two separate pieces), so main_tilt
+    sharing and RMBG below are correctly skipped for those without any
+    extra branching here; tight_crop's own info dict simply won't have a
+    'tilt' key for the pair path, and _remove_background still runs on the
+    resulting side-by-side crop same as any other image."""
     if not sam_locate.available():
         logging.getLogger("capture_tool").warning(
             "sam_locate.available() is False -- skipping segmentation+stitch for %s", stitched_path
