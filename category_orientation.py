@@ -95,12 +95,16 @@ GUIDES: dict[str, OrientationGuide] = {
     "necklace_set_22": OrientationGuide(OrientationType.SYMMETRIC_CURVE, "high"),
 
     # -- Pendants, lockets, pendant sets --
-    "locket_18": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
-    "locket_22": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
-    "pendent_18": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
-    "pendent_22": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
-    "pendent_set_18": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
-    "pendent_set_22": OrientationGuide(OrientationType.FLAT_FACE_UP, "high"),
+    # CORRECTED by owner (2026-08-21): same "bail/loop at top, body hanging
+    # straight down" geometry as WATI below -- a locket/pendant hangs from a
+    # chain, it isn't laid flat with no up/down preference. Moved from
+    # FLAT_FACE_UP to match.
+    "locket_18": OrientationGuide(OrientationType.HANGS_VERTICAL, "high"),
+    "locket_22": OrientationGuide(OrientationType.HANGS_VERTICAL, "high"),
+    "pendent_18": OrientationGuide(OrientationType.HANGS_VERTICAL, "high"),
+    "pendent_22": OrientationGuide(OrientationType.HANGS_VERTICAL, "high"),
+    "pendent_set_18": OrientationGuide(OrientationType.HANGS_VERTICAL, "high"),
+    "pendent_set_22": OrientationGuide(OrientationType.HANGS_VERTICAL, "high"),
 
     # -- Armlet --
     "baju_bandh_22": OrientationGuide(OrientationType.OPEN_CURVE, "moderate"),
