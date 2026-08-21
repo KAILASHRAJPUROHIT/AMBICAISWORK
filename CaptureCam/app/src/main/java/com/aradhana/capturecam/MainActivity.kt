@@ -695,6 +695,8 @@ class MainActivity : AppCompatActivity() {
         private const val SERVO_MAX_MS = 260L
         private const val SERVO_MAX_DEFLECTION = 220
         private const val ZOOM_SERVO_INTERVAL_MS = 250L
+        private const val GIMBAL_RETRY_INTERVAL_MS = 5_000L
+        private const val MAX_GIMBAL_PERMISSION_PROMPTS = 3
     }
 
     private val requestPermissionLauncher = registerForActivityResult(
@@ -708,30 +710,34 @@ class MainActivity : AppCompatActivity() {
 
     // Best-effort, silent RSC 2 connect -- fails open (single-image mode)
     // if permissions are denied or no gimbal is found; never blocks the
-    // camera pipeline on this.
+    // camera pipeline on this. Self-heals: if the gimbal is off/out of
+    // range/not yet paired at launch, scheduleGimbalRetry keeps quietly
+    // re-trying in the background (matching DetectorClient's own
+    // Handler.postDelayed reconnect pattern) so it upgrades to 3-angle
+    // capture automatically the moment the gimbal becomes reachable,
+    // without the operator needing to restart the app.
     private val requestBlePermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        if (results.values.all { it }) attemptGimbalConnect()
+    ) { _ ->
+        // Never call attemptGimbalConnect() directly from here. Confirmed
+        // live production crash (2026-08-21): on this device, this
+        // callback reported every permission granted, but
+        // ContextCompat.checkSelfPermission in attemptGimbalConnect still
+        // reported the same ones missing right after -- calling it inline
+        // re-launched the request, whose callback called it again, forever,
+        // synchronously (no dialog shown, no frame yielded back to the
+        // user), until the stack overflowed. Routing through
+        // scheduleGimbalRetry defers the next attempt onto the Handler
+        // queue instead of the current call stack, so this exact loop can
+        // never recur regardless of why the permission states disagree.
+        scheduleGimbalRetry(immediate = true)
     }
 
-    // Confirmed live production crash (2026-08-21): on this device,
-    // requestBlePermissions' callback reports every permission granted, but
-    // ContextCompat.checkSelfPermission below still reports the same ones
-    // missing right after -- attemptGimbalConnect() then re-launches the
-    // request, whose callback calls attemptGimbalConnect() again, forever,
-    // synchronously (no dialog shown, no frame yielded back to the user),
-    // until the stack overflows. Root cause is a permission-state disagreement
-    // on this specific device/OS build, not something fixable from here in
-    // the middle of a live capture session -- this guard caps the whole
-    // dance to one attempt per app launch so it can never retry-storm again,
-    // matching this function's own "best-effort, silent, fails open" design:
-    // a gimbal that never connects just means single-image mode, same as a
-    // denied permission already did.
-    private var gimbalConnectAttempted = false
+    private var gimbalPermissionPromptCount = 0
+    private var gimbalRetryScheduled = false
 
     private fun attemptGimbalConnect() {
-        if (rsc2.isReady || gimbalConnectAttempted) return
+        if (rsc2.isReady) return
         val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= 31) {
             needed += Manifest.permission.BLUETOOTH_SCAN
@@ -743,13 +749,31 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isNotEmpty()) {
-            gimbalConnectAttempted = true
-            requestBlePermissions.launch(missing.toTypedArray())
+            // Cap how many times the system permission dialog itself gets
+            // shown -- an operator who's denied it a few times shouldn't
+            // get nagged on every resume. The CONNECTION retry below still
+            // keeps running regardless, in case permission is later granted
+            // from Settings without ever seeing another in-app prompt.
+            if (gimbalPermissionPromptCount < MAX_GIMBAL_PERMISSION_PROMPTS) {
+                gimbalPermissionPromptCount++
+                requestBlePermissions.launch(missing.toTypedArray())
+            }
+            scheduleGimbalRetry()
             return
         }
         rsc2.connect(this) { success ->
             Log.i(TAG, if (success) "RSC 2 connected -- 3-angle capture enabled" else "No RSC 2 found -- single-image mode")
+            if (!success) scheduleGimbalRetry()
         }
+    }
+
+    private fun scheduleGimbalRetry(immediate: Boolean = false) {
+        if (rsc2.isReady || gimbalRetryScheduled) return
+        gimbalRetryScheduled = true
+        handler.postDelayed({
+            gimbalRetryScheduled = false
+            attemptGimbalConnect()
+        }, if (immediate) 0L else GIMBAL_RETRY_INTERVAL_MS)
     }
 
     // True when launched via the capturecam://start deep link from
@@ -4240,7 +4264,11 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        handler.removeCallbacks(tickRunnable)
+        // Clears tickRunnable and any pending scheduleGimbalRetry callback
+        // both -- the latter is posted as an anonymous lambda (no stable
+        // Runnable reference to remove individually), and nothing should
+        // fire against this Activity once it's destroyed anyway.
+        handler.removeCallbacksAndMessages(null)
         rsc2.disconnect()
         try { unregisterReceiver(testMoveReceiver) } catch (_: IllegalArgumentException) {}
         try { unregisterReceiver(testExposureReceiver) } catch (_: IllegalArgumentException) {}
