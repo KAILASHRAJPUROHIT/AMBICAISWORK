@@ -43,6 +43,7 @@ import cv2
 import numpy as np
 
 import capture_voids
+import category_orientation
 import sam_locate
 
 BASE = os.path.dirname(os.path.abspath(__file__))
