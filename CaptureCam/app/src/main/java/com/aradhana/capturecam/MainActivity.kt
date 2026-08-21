@@ -2827,10 +2827,10 @@ class MainActivity : AppCompatActivity() {
         } else {
             ::captureFullRes
         }
-        captureFn { bytes ->
+        captureFn jewelCapture@{ bytes ->
             if (bytes == null) {
                 setStatus("Capture failed — retrying", ready = false)
-                return@captureFullRes
+                return@jewelCapture
             }
             // Logged for calibration only -- NOT used as a pass/fail gate.
             // The first attempt at a real threshold (300) was a guess from
