@@ -715,8 +715,23 @@ class MainActivity : AppCompatActivity() {
         if (results.values.all { it }) attemptGimbalConnect()
     }
 
+    // Confirmed live production crash (2026-08-21): on this device,
+    // requestBlePermissions' callback reports every permission granted, but
+    // ContextCompat.checkSelfPermission below still reports the same ones
+    // missing right after -- attemptGimbalConnect() then re-launches the
+    // request, whose callback calls attemptGimbalConnect() again, forever,
+    // synchronously (no dialog shown, no frame yielded back to the user),
+    // until the stack overflows. Root cause is a permission-state disagreement
+    // on this specific device/OS build, not something fixable from here in
+    // the middle of a live capture session -- this guard caps the whole
+    // dance to one attempt per app launch so it can never retry-storm again,
+    // matching this function's own "best-effort, silent, fails open" design:
+    // a gimbal that never connects just means single-image mode, same as a
+    // denied permission already did.
+    private var gimbalConnectAttempted = false
+
     private fun attemptGimbalConnect() {
-        if (rsc2.isReady) return
+        if (rsc2.isReady || gimbalConnectAttempted) return
         val needed = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= 31) {
             needed += Manifest.permission.BLUETOOTH_SCAN
@@ -728,6 +743,7 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isNotEmpty()) {
+            gimbalConnectAttempted = true
             requestBlePermissions.launch(missing.toTypedArray())
             return
         }
