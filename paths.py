@@ -61,6 +61,8 @@ PROCESSED_DIR = _configured_root("AJ_PROCESSED_DIR", "processed")
 OUTPUT_DIR = _configured_root("AJ_OUTPUT_DIR", "output")
 NEEDS_REVIEW_DIR = _configured_root("AJ_NEEDS_REVIEW_DIR", "needs_review")
 REJECTED_DIR = _configured_root("AJ_REJECTED_DIR", "rejected")
+BACKGROUNDS_DIR = _configured_root("AJ_BACKGROUNDS_DIR", "backgrounds")
+MODELS_DIR = _configured_root("AJ_MODELS_DIR", "models")
 
 
 ROOTS_BY_NAME = {
@@ -70,6 +72,8 @@ ROOTS_BY_NAME = {
     "output": OUTPUT_DIR,
     "needs_review": NEEDS_REVIEW_DIR,
     "rejected": REJECTED_DIR,
+    "backgrounds": BACKGROUNDS_DIR,
+    "models": MODELS_DIR,
 }
 
 ROOTS = tuple(ROOTS_BY_NAME.values())

@@ -397,6 +397,26 @@ def api_upload():
 
 _STUD_SUFFIX_RE = re.compile(r"_stud$", re.IGNORECASE)
 
+# Same disambiguation rule as pipeline_queue.py's _ANGLE_OR_PREVIEW_SUFFIX_RE
+# (confirmed live 2026-08-19 there, and the exact same bug independently
+# confirmed live here on 2026-08-21): capture_tool.py's save_multi() saves
+# FOUR files per 3-angle item -- <tag>.jpg (the real main photo), <tag>_1.jpg
+# / <tag>_2.jpg (angle references), and <tag>_stitched.jpg (a downscaled
+# preview composite) -- none of which are meant to be queued as their own
+# paid generation item. Without this filter, _derive_single_items_from_disk
+# queued all four separately, quadrupling real Azure FLUX.2 Pro cost per
+# item. A suffix match alone isn't enough: some real tags legitimately end
+# in _1/_2 as part of their own serial number, so a file is only excluded
+# when the bare <tag>.jpg ALSO exists alongside it in the same folder.
+_ANGLE_OR_PREVIEW_SUFFIX_RE = re.compile(r"_(1|2|stitched)$", re.IGNORECASE)
+
+
+def _is_angle_or_preview_sibling(path: Path, names_in_dir: set[str]) -> bool:
+    if not _ANGLE_OR_PREVIEW_SUFFIX_RE.search(path.stem):
+        return False
+    main_stem = _ANGLE_OR_PREVIEW_SUFFIX_RE.sub("", path.stem)
+    return f"{main_stem}{path.suffix}".casefold() in names_in_dir
+
 
 def _derive_single_items_from_disk() -> list[dict]:
     # "jewel" keeps pointing at the REAL file on disk (its name may still
@@ -406,10 +426,13 @@ def _derive_single_items_from_disk() -> list[dict]:
     # -- explicit request: "irrespective of the pre edit file name post
     # edit the name would only just be the tag number nothing else", and
     # label is what _run_batch() uses for the delivered output filename.
+    images = _images(INPUT)
+    names_in_dir = {path.name.casefold() for path in images}
+    primary = [path for path in images if not _is_angle_or_preview_sibling(path, names_in_dir)]
     return [
         {"pair": index, "jewel": path.name, "tag": None,
          "label": _STUD_SUFFIX_RE.sub("", path.stem), "folder": str(INPUT)}
-        for index, path in enumerate(_images(INPUT), start=1)
+        for index, path in enumerate(primary, start=1)
     ]
 
 
