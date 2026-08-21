@@ -64,7 +64,7 @@ TAG_ARCHIVE_DIRNAME = "_tag_archive"
 # blurry catalogue photo through) — tune BLUR_VARIANCE_THRESHOLD up/down if
 # the team finds it's too trigger-happy or too lax in real use.
 BLUR_MAX_DIM = 1000
-BLUR_VARIANCE_THRESHOLD = 60.0
+BLUR_VARIANCE_THRESHOLD = 80.0
 
 
 def _stock_write_guard(function):
