@@ -867,21 +867,21 @@ def _prefer_vertical_for_category(category: str | None) -> bool:
 def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str, stitched_path: str,
                               category: str | None = None) -> None:
     """save_multi's version of _segment_paths_async: crops all three poses
-    (SAM2/DINO), removes what's left of the background inside each crop
-    (RMBG-2.0), THEN stitches the composite from the cleaned results.
+    (SAM2/DINO), THEN stitches the composite from the cropped results.
     Order matters: stitching before cropping would bake the raw, uncropped
-    gimbal framing into the permanent composite; removing background before
-    cropping would waste RMBG-2.0 on the whole wide shot instead of just the
-    already-isolated ornament crop.
+    gimbal framing into the permanent composite.
+
+    RMBG-2.0 background removal used to run here as a second pass after
+    tight_crop -- removed 2026-08-19 (the RMBG re-processing was contributing
+    to a posterized/waxy look the owner flagged; sam_locate.tight_crop is now
+    the only background-removal pass, for both single and paired items).
 
     Paired categories (_PAIRED_ITEM_CATEGORIES) crop with expect=2, which
     routes into sam_locate.tight_crop's side-by-side mode -- that path
-    does NOT support straighten/fixed_angle or background removal (no
-    single aligned mask exists for two separate pieces), so main_tilt
-    sharing and RMBG below are correctly skipped for those without any
-    extra branching here; tight_crop's own info dict simply won't have a
-    'tilt' key for the pair path, and _remove_background still runs on the
-    resulting side-by-side crop same as any other image."""
+    does NOT support straighten/fixed_angle (no single aligned mask exists
+    for two separate pieces), so main_tilt sharing is correctly skipped for
+    those without any extra branching here; tight_crop's own info dict
+    simply won't have a 'tilt' key for the pair path."""
     if not sam_locate.available():
         logging.getLogger("capture_tool").warning(
             "sam_locate.available() is False -- skipping segmentation+stitch for %s", stitched_path
