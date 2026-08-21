@@ -27,12 +27,8 @@ sys.path.insert(0, str(ROOT))
 
 import ornament_code_map as ocm  # noqa: E402
 import sam_locate  # noqa: E402
+from capture_tool import _PAIRED_ITEM_CATEGORIES as PAIRED_CATEGORIES  # noqa: E402
 
-
-PAIRED_CATEGORIES = frozenset({
-    "bali_18", "bali_22", "tops_18", "tops_22", "dull_22",
-    "earring_22", "jhumka_22", "kaan_chain_22",
-})
 IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".webp"})
 
 
