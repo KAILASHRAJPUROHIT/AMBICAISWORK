@@ -13,8 +13,8 @@
   "daily_hard_cap_usd": 150,
   "maximum_calls_per_day": 1000,
   "cost_safety_factor": 1.25,
-  "trial_credit_start_usd": 207.22,
-  "historical_estimated_spend_usd": 1.22,
+  "trial_credit_start_usd": 132.03,
+  "historical_estimated_spend_usd": 0,
   "automatic_retries": 0,
   "credential_protection": "Windows DPAPI LocalMachine; ACL limited to setup user and SYSTEM"
 }
