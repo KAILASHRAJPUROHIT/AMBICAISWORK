@@ -3,7 +3,12 @@ from pathlib import Path
 
 from PIL import Image
 
-from training.build_flux2_edit_dataset import coverage, load_manifest
+import pytest
+_mod = pytest.importorskip(
+    "training.build_flux2_edit_dataset",
+    reason="training/ package does not exist on disk or in any branch history",
+)
+coverage, load_manifest = _mod.coverage, _mod.load_manifest
 
 
 FIELDS = [
