@@ -27,7 +27,7 @@
 
     <!-- Package-visibility declaration (API 30+) so PackageManager can find
          Nothing Camera's launch intent and NothingCameraAccessibilityService
-         can be scoped to its package -- no QUERY_ALL_PACKAGES needed since
+         can be scoped to its package: no QUERY_ALL_PACKAGES needed since
          we only ever need this one specific, known package. -->
     <queries>
         <package android:name="com.nothing.camera" />
@@ -73,7 +73,7 @@
 
         <!-- Drives Nothing Camera's own shutter via its Accessibility node
              tree (see NothingCameraBridge.kt doc comment for the full
-             design) -- lets capture use the phone's real, proven camera
+             design): lets capture use the phone's real, proven camera
              pipeline instead of this app's own CameraX/zoom-climb logic,
              while CaptureCam still owns gimbal positioning, tag scanning,
              and upload. Requires a one-time manual enable in Settings ->
