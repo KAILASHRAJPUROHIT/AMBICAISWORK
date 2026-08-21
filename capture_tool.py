@@ -132,16 +132,61 @@ def _jewellery_clearly_visible(image_bytes: bytes) -> dict:
         return {"ok": True, "reason": f"Local check unavailable: {type(e).__name__}: {e}", "unverified": True}
 
 
+def _gold_region_bbox(gray_or_color_bgr):
+    """Best-effort bounding box of the largest gold-hue blob, same detection
+    already used by _jewellery_clearly_visible. Returns None if nothing
+    passes a minimal size floor (silver/white-metal items, or detection
+    failure) so callers can fall back to whole-frame behavior instead of
+    measuring blur on a bogus tiny/empty region."""
+    try:
+        hsv = cv2.cvtColor(gray_or_color_bgr, cv2.COLOR_BGR2HSV)
+        gold = cv2.inRange(hsv, np.array([8, 65, 45]), np.array([38, 255, 255]))
+        gold = cv2.morphologyEx(gold, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+        contours, _ = cv2.findContours(gold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+        largest = max(contours, key=cv2.contourArea)
+        area = cv2.contourArea(largest)
+        h, w = gray_or_color_bgr.shape[:2]
+        if area < 0.001 * h * w:
+            return None
+        return cv2.boundingRect(largest)  # x, y, w, h
+    except Exception:
+        return None
+
+
 def _blur_variance(image_bytes: bytes):
     """Returns the Laplacian variance of the image (lower = blurrier), or
     None if the bytes couldn't be decoded as an image — decode failures fail
     OPEN (no blur warning) since save_pair separately validates the file is
-    a real image; this is purely a quality signal, not a correctness gate."""
+    a real image; this is purely a quality signal, not a correctness gate.
+
+    Measures the JEWELLERY REGION specifically, not the whole frame. Confirmed
+    live (2026-08-21, tag GR22/59): a photo can score well on whole-frame
+    Laplacian variance purely from sharp background detail (the acrylic
+    stand's rail edges/screws) while the actual jewellery is soft -- that
+    exact photo measured 79 within just the ring's own bounding box (barely
+    above BLUR_VARIANCE_THRESHOLD) but scored far higher over the full frame,
+    which is why it silently passed the gate despite visibly mushy engraving.
+    Falls back to the old whole-frame measurement when no gold region is
+    found (silver/white-metal items, or detection failure) -- this is a
+    refinement of an existing signal, not a new hard block, so failing open
+    to the prior behavior is the safe default rather than guessing a region.
+    """
     try:
         arr = np.frombuffer(image_bytes, dtype=np.uint8)
-        img = cv2.imdecode(arr, cv2.IMREAD_GRAYSCALE)
-        if img is None:
+        color = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if color is None:
             return None
+        bbox = _gold_region_bbox(color)
+        img = cv2.cvtColor(color, cv2.COLOR_BGR2GRAY)
+        if bbox is not None:
+            x, y, bw, bh = bbox
+            pad = int(0.08 * max(bw, bh))
+            H, W = img.shape[:2]
+            x0, y0 = max(0, x - pad), max(0, y - pad)
+            x1, y1 = min(W, x + bw + pad), min(H, y + bh + pad)
+            img = img[y0:y1, x0:x1]
         h, w = img.shape[:2]
         scale = min(1.0, BLUR_MAX_DIM / max(h, w))
         if scale < 1.0:
