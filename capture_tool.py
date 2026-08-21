@@ -953,30 +953,29 @@ _PAIRED_ITEM_CATEGORIES = frozenset({
     "earring_22", "jhumka_22", "kaan_chain_22",
 })
 
-# Categories that hang/dangle (matches category_orientation.py's
-# OrientationType.HANGS_VERTICAL). These need their elongated axis forced
-# vertical, attachment point up / dangle end down -- "wherever the piece's
-# own tilt happened to land" is not correct for a hanging item the way it
-# is for a flat-lying ring/bangle. WATI added 2026-08-19 (explicit owner
-# correction with a reference photo): it has a real bail-up/body-down
-# hang direction too, same as the rest of this set, not a symmetric flat
-# face with no up/down preference -- see category_orientation.py's own
-# updated comment for the full reasoning.
-_HANGS_VERTICAL_CATEGORIES = frozenset({
-    "bali_18", "bali_22", "tops_18", "tops_22", "dull_22",
-    "earring_22", "jhumka_22", "kaan_chain_22", "moti_nath_18", "nath_22", "tikka_22",
-    "wati_22",
-    # Owner-corrected 2026-08-21, same "bail at top, body hangs down" reasoning as WATI.
-    "locket_18", "locket_22", "pendent_18", "pendent_22", "pendent_set_18", "pendent_set_22",
-})
-
-
 def _expect_for_category(category: str | None) -> int:
     return 2 if category in _PAIRED_ITEM_CATEGORIES else 1
 
 
 def _prefer_vertical_for_category(category: str | None) -> bool:
-    return category in _HANGS_VERTICAL_CATEGORIES
+    """Whether this category needs its elongated axis forced vertical
+    (attachment point up, dangle end down) rather than just nudged to the
+    nearest right angle.
+
+    Reads category_orientation.py's OrientationGuide directly -- that
+    module is the documented, researched source of truth (see its own
+    docstring: "so sam_locate.py/capture_tool.py can act on it without
+    parsing markdown"), but this function used to instead check a
+    hand-duplicated frozenset kept here, which drifted out of sync: it force-
+    vertical'd bali/tops/dull (studs) while category_orientation.py's
+    researched guide classifies those FLAT_FACE_UP (a stud has no dangle
+    direction to force). Fixed 2026-08-21 by reading the one source
+    directly instead of maintaining a second copy.
+    """
+    if category is None:
+        return False
+    guide = category_orientation.orientation_for(category)
+    return guide.orientation == category_orientation.OrientationType.HANGS_VERTICAL
 
 
 def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str, stitched_path: str,
