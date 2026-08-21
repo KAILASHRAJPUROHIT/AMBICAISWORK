@@ -94,6 +94,26 @@ class BleDiagnosticsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_ble_diagnostics)
 
         statusText = findViewById(R.id.bleStatusText)
+        // Long-press to toggle NothingCameraBridge as MainActivity's jewel
+        // capture source, instead of this app's own CameraX pipeline --
+        // deliberately hidden here (debug-only screen), not on the live
+        // capture UI, while this path is still being validated against
+        // real capture volume. Defaults to false (existing CameraX
+        // behavior) on every fresh app install; persists across app
+        // restarts via SharedPreferences so it doesn't need re-enabling
+        // every launch once a device is confirmed working with it.
+        statusText.setOnLongClickListener {
+            val prefs = getSharedPreferences("capturecam_debug", MODE_PRIVATE)
+            val next = !prefs.getBoolean("use_nothing_camera", false)
+            prefs.edit().putBoolean("use_nothing_camera", next).apply()
+            Toast.makeText(
+                this,
+                if (next) "Nothing Camera capture: ON (needs Settings > Accessibility enabled)"
+                else "Nothing Camera capture: OFF (using CaptureCam's own camera)",
+                Toast.LENGTH_LONG
+            ).show()
+            true
+        }
         logText = findViewById(R.id.logText)
         logScroll = findViewById(R.id.logScroll)
         deviceListContainer = findViewById(R.id.deviceListContainer)

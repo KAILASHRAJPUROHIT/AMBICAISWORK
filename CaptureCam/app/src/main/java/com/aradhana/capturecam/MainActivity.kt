@@ -2813,8 +2813,21 @@ class MainActivity : AppCompatActivity() {
 
     // ---------------------------------------------------------------- Capture + upload
 
+    /** Opt-in only: defaults to false, so behavior is completely unchanged
+     * unless explicitly enabled via BleDiagnosticsActivity's debug toggle
+     * (never exposed on the live capture screen -- this is a testing path
+     * while NothingCameraBridge is being validated against real capture
+     * volume, not a default-flow replacement). */
+    private fun useNothingCameraForCapture(): Boolean =
+        getSharedPreferences("capturecam_debug", MODE_PRIVATE).getBoolean("use_nothing_camera", false)
+
     private fun captureJewel() {
-        captureFullRes { bytes ->
+        val captureFn: ((ByteArray?) -> Unit) -> Unit = if (useNothingCameraForCapture()) {
+            { cb -> NothingCameraBridge.captureViaNothingCamera(this, cb) }
+        } else {
+            ::captureFullRes
+        }
+        captureFn { bytes ->
             if (bytes == null) {
                 setStatus("Capture failed — retrying", ready = false)
                 return@captureFullRes
