@@ -43,7 +43,6 @@ from rembg import new_session, remove
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import jewelry_policy_shim_placeholder if False else None  # noqa
 import color_standardize  # noqa: E402
 import jewellery_image_policy as policy  # noqa: E402
 

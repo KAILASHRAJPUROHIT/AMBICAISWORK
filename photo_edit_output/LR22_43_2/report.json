@@ -3,19 +3,25 @@
   "edited": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\photo_edit_output\\LR22_43_2\\edited.jpg",
   "tilt_measured_deg": 2.659,
   "rotation_applied_deg": 2.659,
-  "crop_box_xyxy": [
-    464,
-    471,
-    1516,
-    1073
-  ],
-  "input_size_wh": [
-    1920,
-    1440
-  ],
   "output_size_wh": [
-    1210,
-    1210
+    1106,
+    1106
   ],
-  "seconds": 0.792
+  "frame_check": {
+    "ok": true,
+    "verified": true,
+    "bbox": [
+      83,
+      308,
+      1023,
+      798
+    ],
+    "width_fill": 0.8499,
+    "height_fill": 0.443,
+    "dominant_fill": 0.8499,
+    "touches_edge": false,
+    "reason": "Studio framing is within 75\u201390%"
+  },
+  "seconds": 1.191,
+  "delivery": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\photo_edit_output\\LR22_43_2\\delivery_2400.jpg"
 }

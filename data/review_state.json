@@ -3256,5 +3256,11 @@
   "reason": null,
   "note": null,
   "reviewed_at": 1787142459.3358324
+ },
+ "ring": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1787315089.756063
  }
 }
