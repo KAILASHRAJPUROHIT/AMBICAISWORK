@@ -965,6 +965,8 @@ _HANGS_VERTICAL_CATEGORIES = frozenset({
     "bali_18", "bali_22", "tops_18", "tops_22", "dull_22",
     "earring_22", "jhumka_22", "kaan_chain_22", "moti_nath_18", "nath_22", "tikka_22",
     "wati_22",
+    # Owner-corrected 2026-08-21, same "bail at top, body hangs down" reasoning as WATI.
+    "locket_18", "locket_22", "pendent_18", "pendent_22", "pendent_set_18", "pendent_set_22",
 })
 
 
