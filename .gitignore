@@ -146,3 +146,11 @@ config/azure_flux2_pro_key.dpapi
 config/azure_flux2_pro_key.clixml
 config/cloudflare_tunnel_token.dpapi
 config/email_2fa_smtp.dpapi
+
+# ── Capture server's own TLS material (regenerated per machine) ───────────────
+# Untracked 2026-08-21: this is a live private key, was being committed and
+# re-committed by auto-save. The running server keeps using its current file
+# on disk unchanged -- this only stops git from tracking it going forward.
+data/capture_https_key.pem
+data/capture_https_cert.pem
+data/capture_https_meta.json
