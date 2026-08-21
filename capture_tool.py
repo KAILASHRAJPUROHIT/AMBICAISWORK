@@ -63,6 +63,9 @@ TAG_ARCHIVE_DIRNAME = "_tag_archive"
 # which just cost one confirm tap, over false negatives that let a genuinely
 # blurry catalogue photo through) — tune BLUR_VARIANCE_THRESHOLD up/down if
 # the team finds it's too trigger-happy or too lax in real use.
+# Raised from 60->80 on 2026-08-21: a backlog quality audit found real
+# soft/out-of-focus shots scoring in the 60-80 range that the old threshold
+# let through (confirmed by eye against the actual images, not just score).
 BLUR_MAX_DIM = 1000
 BLUR_VARIANCE_THRESHOLD = 80.0
 
