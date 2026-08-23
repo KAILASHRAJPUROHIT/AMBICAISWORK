@@ -217,6 +217,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:hint="camera IP (read off camera's WLAN Info screen)"
+        android:text="192.168.0.14"
         android:textColor="@color/white"
         android:textColorHint="#888888"
         android:inputType="text" />
@@ -242,6 +243,7 @@
             android:layout_weight="1"
             android:layout_marginEnd="4dp"
             android:hint="User"
+            android:text="pkANY7"
             android:textColor="@color/white"
             android:textColorHint="#888888"
             android:inputType="text" />
@@ -252,6 +254,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:hint="Password"
+            android:text="z89TgzTY"
             android:textColor="@color/white"
             android:textColorHint="#888888"
             android:inputType="textPassword" />
