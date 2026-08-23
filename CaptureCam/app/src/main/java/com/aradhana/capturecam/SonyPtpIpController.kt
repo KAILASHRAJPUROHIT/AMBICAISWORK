@@ -106,7 +106,15 @@ class SonyPtpIpController {
     private var controlOut: OutputStream? = null
     private var controlIn: InputStream? = null
     private var eventIn: InputStream? = null
-    private val transactionId = AtomicInteger(1)
+    // PTP spec reserves TransactionID 0 for the session-less OpenSession
+    // call -- starting at 1 (as an earlier version of this file did) sent
+    // OpenSession itself with txId=1, shifting every subsequent call's
+    // txId by one. Confirmed live: the first real call after OpenSession
+    // always succeeded regardless of which operation it was, but every
+    // call after THAT consistently failed with SessionNotOpen -- exactly
+    // the signature of a transaction-ID-sequencing mismatch the device
+    // tolerates loosely at first and then rejects.
+    private val transactionId = AtomicInteger(0)
     private val eventQueue = LinkedBlockingQueue<ByteArray>()
     @Volatile private var eventThreadRunning = false
 
@@ -180,16 +188,11 @@ class SonyPtpIpController {
             // its own connection writeup separately documents OpenSession
             // as its own step BEFORE those init_table substeps run.
             Log.i(TAG, "OpenSession result: ${operationNoData(PTP_OC_OpenSession, intArrayOf(1))}")
+            Log.i(TAG, "GetDeviceInfo result: ${operationNoData(PTP_OC_GetDeviceInfo, intArrayOf())}")
+            Log.i(TAG, "GetStorageIDs result: ${operationNoData(PTP_OC_GetStorageIDs, intArrayOf())}")
 
-            // Reordered -- confirmed live: GetDeviceInfo succeeds right
-            // after OpenSession, but the NEXT call (GetStorageIDs) then
-            // fails with SessionNotOpen even though nothing about the
-            // session changed. Since GetDeviceInfo's own multi-packet data
-            // phase drained and completed cleanly (proving the framing
-            // code itself is correct), this looks like a genuine Sony
-            // quirk rather than a bug: SDIOConnect needs to run
-              // immediately after OpenSession, before any other standard
-            // PTP calls. Testing that ordering here.
+            // Sony SDIO 3-phase handshake -- confirmed sequence against
+            // alpha-fairy's real-device-tested init_table (see class doc).
             if (!operationNoData(OC_SDIOConnect, intArrayOf(1, 0, 0))) {
                 Log.w(TAG, "SDIOConnect phase 1 failed"); return false
             }
@@ -201,8 +204,6 @@ class SonyPtpIpController {
                 Log.w(TAG, "SDIOConnect phase 3 failed"); return false
             }
             operationNoData(OC_SDIOGetExtDeviceInfo, intArrayOf(SDI_VERSION_V3, 0, 0))
-            Log.i(TAG, "GetDeviceInfo result: ${operationNoData(PTP_OC_GetDeviceInfo, intArrayOf())}")
-            Log.i(TAG, "GetStorageIDs result: ${operationNoData(PTP_OC_GetStorageIDs, intArrayOf())}")
 
             isConnected = true
             Log.i(TAG, "Sony PTP-IP-over-SSH handshake complete")
