@@ -1,6 +1,10 @@
 package com.aradhana.capturecam
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
+import android.graphics.Path
+import android.graphics.Point
+import android.graphics.Rect
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.util.Log
@@ -35,6 +39,8 @@ class NothingCameraAccessibilityService : AccessibilityService() {
         const val PACKAGE_NAME = "com.nothing.camera"
         private const val SHUTTER_RESOURCE_ID = "com.nothing.camera:id/photo_shutter_button_photo"
         private const val ZOOM_RESOURCE_ID = "com.nothing.camera:id/zoom_indicator_text_view"
+        private const val PREVIEW_RESOURCE_ID = "com.nothing.camera:id/camera_preview_surface"
+        private const val TAP_DURATION_MS = 60L
 
         // Set by the running service instance so MainActivity can reach it
         // without a bound-service/Messenger round trip -- this service and
@@ -73,23 +79,63 @@ class NothingCameraAccessibilityService : AccessibilityService() {
      * launching the app, instead of a fixed guessed delay. */
     fun isShutterReady(): Boolean = findNodeByResourceId(SHUTTER_RESOURCE_ID) != null
 
-    /** Taps the given zoom preset (e.g. "3.5") if that exact preset is
-     * currently visible in the zoom indicator row. Returns false (does
-     * nothing) if it isn't found -- callers should treat that as "zoom
-     * unavailable right now", not retry-forever, since the row's visible
-     * presets can change with camera state. */
-    fun setZoom(label: String): Boolean {
-        val root = rootInActiveWindow ?: return false
-        val nodes = root.findAccessibilityNodeInfosByViewId(ZOOM_RESOURCE_ID) ?: return false
+    /** Screen-space center of the HIGHEST zoom preset currently visible in
+     * the zoom indicator row (e.g. "7" when the row shows 0.6/1/2/3.5/7),
+     * paired with that preset's numeric value -- confirmed live
+     * (2026-08-23 uiautomator dump) that these preset TextViews report
+     * clickable="false", so ACTION_CLICK on them is not a reliable way to
+     * select one; dispatchTap() below sends a real synthetic touch instead,
+     * which works regardless of the node's reported clickable flag. Returns
+     * null if the row can't be read right now. */
+    fun maxZoomPresetCenter(): Pair<Float, Point>? {
+        val root = rootInActiveWindow ?: return null
+        val nodes = root.findAccessibilityNodeInfosByViewId(ZOOM_RESOURCE_ID) ?: return null
+        var best: Pair<Float, Point>? = null
         for (node in nodes) {
-            if (node.text?.toString()?.trim()?.trimEnd('x', 'X', '×') == label) {
-                val clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                node.recycle()
-                return clicked
+            val value = node.text?.toString()?.trim()?.trimEnd('x', 'X', '×')?.toFloatOrNull()
+            if (value != null && (best == null || value > best!!.first)) {
+                val bounds = Rect()
+                node.getBoundsInScreen(bounds)
+                best = value to Point(bounds.centerX(), bounds.centerY())
             }
             node.recycle()
         }
-        return false
+        return best
+    }
+
+    /** Screen-space center of the live camera preview -- used as a
+     * tap-to-focus point right before the shutter tap, since Nothing
+     * Camera's autofocus needs to re-lock after a zoom-level change and
+     * capturing before it does is a direct cause of soft/blurry results. */
+    fun previewCenter(): Point? {
+        val root = rootInActiveWindow ?: return null
+        val nodes = root.findAccessibilityNodeInfosByViewId(PREVIEW_RESOURCE_ID) ?: return null
+        val node = nodes.firstOrNull() ?: return null
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        node.recycle()
+        return Point(bounds.centerX(), bounds.centerY())
+    }
+
+    /** Dispatches a real synthetic single-finger tap at the given screen
+     * coordinates via the accessibility gesture API -- unlike
+     * performAction(ACTION_CLICK), this works on views that only handle raw
+     * touch events (no registered click listener/clickable=false), which is
+     * how Nothing Camera's zoom presets and preview surface behave. */
+    fun dispatchTap(x: Int, y: Int, onComplete: (Boolean) -> Unit) {
+        val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, TAP_DURATION_MS))
+            .build()
+        val dispatched = dispatchGesture(gesture, object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                onComplete(true)
+            }
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                onComplete(false)
+            }
+        }, null)
+        if (!dispatched) onComplete(false)
     }
 
     /** Taps Nothing Camera's shutter via ACTION_CLICK on the node itself --

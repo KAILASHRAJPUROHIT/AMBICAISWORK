@@ -29,10 +29,10 @@ object NothingCameraBridge {
     private const val TAG = "NothingCameraBridge"
     private const val SHUTTER_READY_TIMEOUT_MS = 5_000L
     private const val SHUTTER_READY_POLL_MS = 150L
-    private const val ZOOM_SETTLE_MS = 500L
+    private const val ZOOM_SETTLE_MS = 900L
+    private const val FOCUS_SETTLE_MS = 900L
     private const val PHOTO_APPEAR_TIMEOUT_MS = 4_000L
     private const val PHOTO_APPEAR_POLL_MS = 200L
-    private const val TELEMACRO_ZOOM_LABEL = "3.5"
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -118,36 +118,78 @@ object NothingCameraBridge {
                 return@waitForShutterReady
             }
 
-            // Best-effort: if the 3.5x preset isn't visible for whatever
-            // reason, still proceed with the shutter tap rather than
-            // failing the whole capture over an optional detail step.
-            val zoomed = service.setZoom(TELEMACRO_ZOOM_LABEL)
-            Log.i(TAG, "Telemacro zoom set: $zoomed")
+            // Best-effort: if the zoom row can't be read right now, still
+            // proceed with a focus tap + shutter at whatever zoom level
+            // Nothing Camera is already at, rather than failing the whole
+            // capture over an optional detail step.
+            val zoomTarget = service.maxZoomPresetCenter()
+            if (zoomTarget == null) {
+                Log.w(TAG, "No zoom presets found -- capturing at current zoom")
+                focusThenShutter(activity, baselineNewestId, wrappedResult)
+                return@waitForShutterReady
+            }
+            val (zoomValue, zoomPoint) = zoomTarget
+            Log.i(TAG, "Tapping max zoom preset ${zoomValue}x at $zoomPoint")
+            service.dispatchTap(zoomPoint.x, zoomPoint.y) { tapped ->
+                Log.i(TAG, "Zoom tap dispatched: $tapped")
+                handler.postDelayed({
+                    focusThenShutter(activity, baselineNewestId, wrappedResult)
+                }, ZOOM_SETTLE_MS)
+            }
+        }
+    }
 
+    /** Taps the live preview to force autofocus to re-lock at the current
+     * zoom level, waits for it to settle, then fires the shutter. Doing
+     * this unconditionally (not just on the first attempt) is what actually
+     * fixes soft/blurry captures -- Nothing Camera's AF needs to refocus
+     * after a zoom-level change, and firing the shutter immediately after
+     * the zoom tap (the old flow) reliably beat it to the punch. */
+    private fun focusThenShutter(activity: Activity, baselineNewestId: Long, wrappedResult: (ByteArray?) -> Unit) {
+        val service = NothingCameraAccessibilityService.instance
+        if (service == null) {
+            Log.w(TAG, "Service disconnected before focus/shutter step")
+            returnToCaptureCam(activity)
+            wrappedResult(null)
+            return
+        }
+        val previewPoint = service.previewCenter()
+        if (previewPoint == null) {
+            Log.w(TAG, "No preview node found -- skipping focus tap")
+            tapShutterAndWait(activity, baselineNewestId, wrappedResult)
+            return
+        }
+        service.dispatchTap(previewPoint.x, previewPoint.y) { tapped ->
+            Log.i(TAG, "Focus tap dispatched: $tapped")
             handler.postDelayed({
-                val tapped = service.tapShutter()
-                if (!tapped) {
-                    Log.e(TAG, "Shutter tap failed")
-                    returnToCaptureCam(activity)
-                    wrappedResult(null)
-                    return@postDelayed
-                }
-                waitForNewPhoto(activity, baselineNewestId, startedAt = System.currentTimeMillis()) { uri ->
-                    returnToCaptureCam(activity)
-                    if (uri == null) {
-                        Log.e(TAG, "No new photo appeared in MediaStore after shutter tap")
-                        wrappedResult(null)
-                        return@waitForNewPhoto
-                    }
-                    val bytes = try {
-                        activity.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed reading captured photo bytes", e)
-                        null
-                    }
-                    wrappedResult(bytes)
-                }
-            }, ZOOM_SETTLE_MS)
+                tapShutterAndWait(activity, baselineNewestId, wrappedResult)
+            }, FOCUS_SETTLE_MS)
+        }
+    }
+
+    private fun tapShutterAndWait(activity: Activity, baselineNewestId: Long, wrappedResult: (ByteArray?) -> Unit) {
+        val service = NothingCameraAccessibilityService.instance
+        val tapped = service?.tapShutter() ?: false
+        if (!tapped) {
+            Log.e(TAG, "Shutter tap failed")
+            returnToCaptureCam(activity)
+            wrappedResult(null)
+            return
+        }
+        waitForNewPhoto(activity, baselineNewestId, startedAt = System.currentTimeMillis()) { uri ->
+            returnToCaptureCam(activity)
+            if (uri == null) {
+                Log.e(TAG, "No new photo appeared in MediaStore after shutter tap")
+                wrappedResult(null)
+                return@waitForNewPhoto
+            }
+            val bytes = try {
+                activity.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed reading captured photo bytes", e)
+                null
+            }
+            wrappedResult(bytes)
         }
     }
 
