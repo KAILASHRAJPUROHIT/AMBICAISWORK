@@ -133,7 +133,13 @@ class SonyPtpIpController {
      * Blocking connect -- run this off the main thread (a background
      * Handler/thread), NOT on the UI thread. Tries each candidate IP in
      * turn since the actual AP gateway address for this exact camera/app
-     * generation isn't confirmed yet (see CANDIDATE_CAMERA_IPS doc).
+     * generation isn't confirmed yet (see CANDIDATE_CAMERA_IPS doc). Use
+     * connectBlockingToIp() instead when the camera's real IP is already
+     * known (e.g. read off its own WLAN Info screen when it's joined an
+     * existing shop WiFi network rather than hosting its own AP -- that's
+     * the simpler setup confirmed live 2026-08-23, since it needs no
+     * SonyWifiConnectionManager network-join dance at all: the controller
+     * device is already on the same LAN as the camera).
      * Returns true once the full SDIO handshake (GetDeviceInfo ->
      * GetStorageIDs -> SDIOConnect x3 phases -> GetExtDeviceInfo) has
      * completed successfully.
@@ -147,6 +153,19 @@ class SonyPtpIpController {
             }
             disconnect()
         }
+        return false
+    }
+
+    /** Same handshake as connectBlocking(), but against one known IP
+     * (e.g. the camera's own WLAN Info screen when it's on the same LAN)
+     * instead of guessing camera-as-AP gateway addresses. */
+    fun connectBlockingToIp(ip: String, friendlyName: String = "CaptureCam", timeoutMs: Int = 4000): Boolean {
+        Log.i(TAG, "Connecting to camera at $ip:$PTPIP_PORT")
+        if (tryConnectTo(ip, friendlyName, timeoutMs)) {
+            connectedIp = ip
+            return true
+        }
+        disconnect()
         return false
     }
 

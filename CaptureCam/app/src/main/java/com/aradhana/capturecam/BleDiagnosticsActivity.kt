@@ -150,14 +150,40 @@ class BleDiagnosticsActivity : AppCompatActivity() {
 
     private fun setupSonyTestPanel() {
         sonyStatusText = findViewById(R.id.sonyStatusText)
+        val ipInput = findViewById<EditText>(R.id.sonyIpInput)
         val ssidInput = findViewById<EditText>(R.id.sonySsidInput)
         val passwordInput = findViewById<EditText>(R.id.sonyPasswordInput)
 
         findViewById<Button>(R.id.sonyConnectButton).setOnClickListener {
+            val ip = ipInput.text.toString().trim()
+            if (ip.isNotEmpty()) {
+                // Same-LAN mode -- camera joined the shop's existing WiFi
+                // (confirmed live 2026-08-23) rather than hosting its own
+                // AP, so this device is already on the right network and
+                // needs no SonyWifiConnectionManager join/bind at all.
+                sonyStatusText.text = "Connecting to $ip..."
+                log("Sony: connecting directly to $ip (same-LAN mode, no WiFi join needed)")
+                Thread {
+                    val controller = SonyPtpIpController()
+                    val ok = controller.connectBlockingToIp(ip)
+                    handler.post {
+                        if (ok) {
+                            sonyController = controller
+                            sonyStatusText.text = "Connected -- ${controller.connectedIp}"
+                            log("Sony: PTP-IP handshake succeeded on ${controller.connectedIp}")
+                        } else {
+                            sonyStatusText.text = "PTP-IP handshake failed"
+                            log("Sony: could not reach/handshake with $ip -- see logcat tag SonyPtpIp for which step")
+                        }
+                    }
+                }.start()
+                return@setOnClickListener
+            }
+
             val ssid = ssidInput.text.toString().trim()
             val password = passwordInput.text.toString()
             if (ssid.isEmpty()) {
-                log("Sony: enter the SSID shown on the camera's screen first")
+                log("Sony: enter either the camera's IP, or the SSID shown on its screen")
                 return@setOnClickListener
             }
             sonyStatusText.text = "Joining $ssid..."
