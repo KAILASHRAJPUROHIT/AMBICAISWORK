@@ -173,10 +173,15 @@ class SonyPtpIpController {
 
             startEventReaderThread()
 
-            if (!operationNoData(PTP_OC_OpenSession, intArrayOf(1))) {
-                Log.w(TAG, "OpenSession failed")
-                return false
-            }
+            // Deliberately NO OpenSession call here -- alpha-fairy's real,
+            // device-tested init_table for Sony bodies goes straight from
+            // the Init handshake to GetDeviceInfo/GetStorageIDs/SDIOConnect
+            // with no explicit PTP OpenSession at all. Confirmed live
+            // 2026-08-23: adding one (matching plain/non-Sony PTP-IP
+            // convention) made GetDeviceInfo and SDIOConnect both fail
+            // with PTP_RC_SessionNotOpen (0x2003) -- Sony's SDIO variant
+            // evidently manages session state itself once SDIOConnect
+            // runs, and a standard OpenSession beforehand actively breaks it.
             operationNoData(PTP_OC_GetDeviceInfo, intArrayOf())
             operationNoData(PTP_OC_GetStorageIDs, intArrayOf())
 
