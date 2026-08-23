@@ -131,7 +131,100 @@ class BleDiagnosticsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.sendCustomRepeatButton).setOnClickListener { sendCustomJoystickFrame(repeat = true) }
         findViewById<Button>(R.id.sendNeutralButton).setOnClickListener { sendNeutral() }
 
+        setupSonyTestPanel()
+
         log("Ready. Turn on the RSC 2, put it in Bluetooth pairing mode (per its manual), then tap Scan.")
+    }
+
+    // --- Sony ZV-E10 II PTP-IP test panel -----------------------------
+    // Same "manual proof-of-concept, human confirms real hardware motion"
+    // philosophy as the RSC 2 section above -- SonyPtpIpController is a
+    // first-draft reverse-engineered implementation (see its own doc
+    // comment for sourcing), unverified against a real ZV-E10 II until run
+    // from here. Set the camera to remote-control/PC-Remote mode first --
+    // it displays its own SSID+password on its screen.
+
+    private val sonyWifi by lazy { SonyWifiConnectionManager(this) }
+    private var sonyController: SonyPtpIpController? = null
+    private lateinit var sonyStatusText: TextView
+
+    private fun setupSonyTestPanel() {
+        sonyStatusText = findViewById(R.id.sonyStatusText)
+        val ssidInput = findViewById<EditText>(R.id.sonySsidInput)
+        val passwordInput = findViewById<EditText>(R.id.sonyPasswordInput)
+
+        findViewById<Button>(R.id.sonyConnectButton).setOnClickListener {
+            val ssid = ssidInput.text.toString().trim()
+            val password = passwordInput.text.toString()
+            if (ssid.isEmpty()) {
+                log("Sony: enter the SSID shown on the camera's screen first")
+                return@setOnClickListener
+            }
+            sonyStatusText.text = "Joining $ssid..."
+            log("Sony: requesting WiFi join for $ssid")
+            sonyWifi.connect(ssid, password, timeoutMs = 15_000) { joined ->
+                if (!joined) {
+                    handler.post {
+                        sonyStatusText.text = "WiFi join failed"
+                        log("Sony: could not join $ssid -- wrong password, camera not in remote mode, or out of range")
+                    }
+                    return@connect
+                }
+                log("Sony: WiFi joined, starting PTP-IP handshake...")
+                Thread {
+                    val controller = SonyPtpIpController()
+                    val ok = controller.connectBlocking()
+                    handler.post {
+                        if (ok) {
+                            sonyController = controller
+                            sonyStatusText.text = "Connected -- ${controller.connectedIp}"
+                            log("Sony: PTP-IP handshake succeeded on ${controller.connectedIp}")
+                        } else {
+                            sonyStatusText.text = "PTP-IP handshake failed"
+                            log("Sony: WiFi joined but PTP-IP handshake failed -- see logcat tag SonyPtpIp for which step")
+                            sonyWifi.unbind()
+                        }
+                    }
+                }.start()
+            }
+        }
+
+        findViewById<Button>(R.id.sonyShutterButton).setOnClickListener {
+            val controller = sonyController
+            if (controller == null) { log("Sony: not connected"); return@setOnClickListener }
+            log("Sony: triggering shutter...")
+            Thread {
+                val ok = controller.triggerShutter()
+                handler.post { log("Sony: shutter trigger ${if (ok) "sent" else "FAILED"}") }
+            }.start()
+        }
+
+        findViewById<Button>(R.id.sonyZoomTeleButton).setOnClickListener {
+            val controller = sonyController
+            if (controller == null) { log("Sony: not connected"); return@setOnClickListener }
+            log("Sony: zooming tele for 600ms...")
+            Thread { controller.driveZoom(tele = true, durationMs = 600L) }.start()
+        }
+
+        findViewById<Button>(R.id.sonyZoomWideButton).setOnClickListener {
+            val controller = sonyController
+            if (controller == null) { log("Sony: not connected"); return@setOnClickListener }
+            log("Sony: zooming wide for 600ms...")
+            Thread { controller.driveZoom(tele = false, durationMs = 600L) }.start()
+        }
+
+        findViewById<Button>(R.id.sonyLiveViewButton).setOnClickListener {
+            val controller = sonyController
+            if (controller == null) { log("Sony: not connected"); return@setOnClickListener }
+            log("Sony: fetching one live-view frame...")
+            Thread {
+                val frame = controller.fetchLiveViewFrameRaw()
+                handler.post {
+                    log(if (frame != null) "Sony: got ${frame.size} bytes (format not yet verified -- check if it decodes as JPEG)"
+                        else "Sony: live-view fetch FAILED")
+                }
+            }.start()
+        }
     }
 
     private fun requestPermissionsThenScan() {
@@ -505,5 +598,11 @@ class BleDiagnosticsActivity : AppCompatActivity() {
             gatt?.disconnect()
             gatt?.close()
         } catch (_: SecurityException) {}
+        // Unbind the process's network binding to the camera's WiFi AP --
+        // otherwise every other network call in this app (uploads, LAN
+        // traffic) keeps trying to route over a network this screen no
+        // longer needs, after the operator navigates away.
+        sonyController?.disconnect()
+        sonyWifi.unbind()
     }
 }

@@ -198,6 +198,94 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="Sony ZV-E10 II PTP-IP (reverse engineered, unverified):"
+        android:textColor="@color/white"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/sonyStatusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Not connected"
+        android:textColor="@color/white"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/sonySsidInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:hint="camera SSID"
+            android:textColor="@color/white"
+            android:textColorHint="#888888"
+            android:inputType="text" />
+
+        <EditText
+            android:id="@+id/sonyPasswordInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="camera WiFi password"
+            android:textColor="@color/white"
+            android:textColorHint="#888888"
+            android:inputType="textPassword" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/sonyConnectButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Connect to Sony camera" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/sonyShutterButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="Shutter" />
+
+        <Button
+            android:id="@+id/sonyZoomTeleButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="Zoom Tele" />
+
+        <Button
+            android:id="@+id/sonyZoomWideButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Zoom Wide" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/sonyLiveViewButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Fetch one live-view frame" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:text="Log:"
         android:textColor="@color/white" />

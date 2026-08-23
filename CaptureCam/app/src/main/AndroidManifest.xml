@@ -5,6 +5,14 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Sony ZV-E10 II PTP-IP control (SonyPtpIpController/
+         SonyWifiConnectionManager): the camera runs its own WiFi access
+         point in remote-control mode; ACCESS_WIFI_STATE/CHANGE_WIFI_STATE
+         are needed to join it via WifiNetworkSpecifier without disturbing
+         the phone's main WiFi connection used for uploads. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+
     <!-- RSC 2 BLE proof-of-concept only (BleDiagnosticsActivity). DJI
          publishes no developer SDK for the RSC 2 (confirmed: R SDK covers
          RS 2/RS 3 Pro/RS 4/RS 4 Pro/RS 5, not RSC 2), so this is a
