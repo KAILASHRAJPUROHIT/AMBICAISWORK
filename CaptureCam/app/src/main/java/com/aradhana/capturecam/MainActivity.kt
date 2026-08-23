@@ -811,6 +811,18 @@ class MainActivity : AppCompatActivity() {
         }
         setupManualControls()
 
+        // See RSC2Controller.onUnexpectedDisconnect's doc comment: without
+        // this, a mid-session BLE drop (range/interference/OS hiccup --
+        // normal for any BLE peripheral) never got retried until the
+        // Activity happened to pause/resume for some unrelated reason,
+        // which read as the gimbal being permanently dead until an app
+        // restart. This routes it back into the same self-heal loop the
+        // initial connect uses.
+        rsc2.onUnexpectedDisconnect = {
+            Log.w(TAG, "RSC 2 disconnected unexpectedly -- resuming self-heal retry loop")
+            scheduleGimbalRetry(immediate = true)
+        }
+
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
         ) {

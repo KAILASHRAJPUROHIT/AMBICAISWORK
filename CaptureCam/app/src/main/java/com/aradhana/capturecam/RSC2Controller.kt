@@ -57,6 +57,23 @@ class RSC2Controller {
 
     val isReady: Boolean get() = commandCharacteristic != null && gatt != null
 
+    /**
+     * Fires when the gimbal disconnects AFTER a successful connect() --
+     * i.e. mid-session, not a failed initial connection attempt (that path
+     * already reports through connect()'s own onResult(false)). Confirmed
+     * live (2026-08-23): once connect() has succeeded once, MainActivity's
+     * self-heal retry loop (scheduleGimbalRetry/attemptGimbalConnect)
+     * terminates permanently -- it only re-triggers on onCreate/onResume/
+     * onNewIntent, never from inside a long-running foreground session. A
+     * later real BLE drop (range, RF interference, OS stack hiccup -- all
+     * normal for a BLE peripheral) was therefore never retried until the
+     * Activity happened to pause/resume for some unrelated reason (e.g.
+     * navigating to BLE Diagnostics and back), which read from the
+     * operator's side as the gimbal being permanently dead until an app
+     * restart. Set this to route unexpected disconnects back into the same
+     * retry loop the initial connect uses. */
+    var onUnexpectedDisconnect: (() -> Unit)? = null
+
     /** True while a moveOut()/returnHome() burst is actively streaming
      * frames (i.e. the gimbal is physically in motion or settling from
      * one) -- false once its onDone/onArrived/onReturned callback fires.
@@ -188,9 +205,22 @@ class RSC2Controller {
                     try { g.discoverServices() } catch (e: SecurityException) { finish(false) }
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.w(TAG, "RSC 2 disconnected (status=$status)")
+                    // Always close/clear the GATT client here, not just on
+                    // an explicit disconnect() call -- otherwise every
+                    // unexpected drop-and-reconnect cycle leaks a stale
+                    // BluetoothGatt object (connectGatt() is called again
+                    // on the next attempt without this one ever being
+                    // closed), which can exhaust the OS BLE stack's
+                    // connection slots over a long session.
+                    try { g.close() } catch (_: SecurityException) {}
+                    if (gatt === g) gatt = null
                     commandCharacteristic = null
                     stopHeartbeat()
-                    if (!resolved) finish(false)
+                    if (!resolved) {
+                        finish(false)
+                    } else {
+                        onUnexpectedDisconnect?.invoke()
+                    }
                 }
             }
 
