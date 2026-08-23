@@ -233,6 +233,106 @@
                 font-size: 16px;
             }
         }
+
+        /* Live Gold Rate */
+        .rate-card {
+            width: 100%;
+            background-color: var(--ivory);
+            color: var(--primary-blue);
+            border-radius: 6px;
+            border: 1px solid var(--secondary-gold);
+            padding: 18px 22px;
+            margin-bottom: 20px;
+            text-decoration: none;
+            display: block;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .rate-card:hover, .rate-card:active {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .rate-card-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .rate-label {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--secondary-gold);
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .rate-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #4ade80;
+            flex: none;
+            box-shadow: 0 0 0 0 rgba(74, 222, 128, .6);
+            animation: rate-pulse 2s infinite;
+        }
+        .rate-dot.stale { background: #d9534f; animation: none; }
+
+        @keyframes rate-pulse {
+            0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, .55); }
+            70%  { box-shadow: 0 0 0 7px rgba(74, 222, 128, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+        }
+
+        .rate-updated {
+            font-size: 10.5px;
+            color: rgba(35, 81, 157, 0.55);
+            font-weight: 500;
+        }
+
+        .rate-body {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .rate-main {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .rate-main-label {
+            font-size: 11.5px;
+            color: rgba(35, 81, 157, 0.7);
+            font-weight: 500;
+            margin-bottom: 3px;
+        }
+
+        .rate-value {
+            font-family: 'Cinzel', serif;
+            font-weight: 700;
+            font-size: 26px;
+            letter-spacing: 0.3px;
+        }
+
+        .rate-999 {
+            text-align: right;
+            font-size: 12.5px;
+            color: rgba(35, 81, 157, 0.75);
+        }
+
+        .rate-999 b {
+            color: var(--primary-blue);
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -251,6 +351,21 @@
             
             <div class="gold-divider"></div>
         </header>
+
+        <!-- Live Gold Rate -->
+        <a href="https://live.aradhanajewellers.com" target="_blank" class="rate-card" id="rateCard">
+            <div class="rate-card-top">
+                <span class="rate-label"><span class="rate-dot" id="rateDot"></span>Live Gold Rate</span>
+                <span class="rate-updated" id="rateUpdated">Loading…</span>
+            </div>
+            <div class="rate-body">
+                <div class="rate-main">
+                    <span class="rate-main-label">22KT · without GST · per 10g</span>
+                    <span class="rate-value" id="rateValue">—</span>
+                </div>
+                <div class="rate-999">999 Fine: <b id="rate999">—</b></div>
+            </div>
+        </a>
 
         <!-- 2. Action Section -->
         <main class="action-section">
@@ -299,5 +414,54 @@
             <a href="https://print.aradhanajewellers.com" target="_blank" class="footer-link"><i class="fas fa-globe" style="margin-right: 8px;"></i>print.aradhanajewellers.com</a>
         </div>
     </footer>
+
+    <script>
+        (function () {
+            var RATE_URL = 'https://live.aradhanajewellers.com/api/rate/simple';
+            var dot = document.getElementById('rateDot');
+            var value = document.getElementById('rateValue');
+            var r999 = document.getElementById('rate999');
+            var updated = document.getElementById('rateUpdated');
+
+            function inr(n) {
+                if (n == null) return '—';
+                var num = Number(n);
+                var hasFraction = Math.abs(num % 1) > 1e-9;
+                return num.toLocaleString('en-IN', {
+                    minimumFractionDigits: hasFraction ? 2 : 0,
+                    maximumFractionDigits: 2
+                });
+            }
+
+            function timeAgo(ms) {
+                var s = Math.round((Date.now() - ms) / 1000);
+                if (s < 60) return s + 's ago';
+                var m = Math.round(s / 60);
+                if (m < 60) return m + 'm ago';
+                return Math.round(m / 60) + 'h ago';
+            }
+
+            function fail() {
+                dot.classList.add('stale');
+                updated.textContent = 'Unavailable';
+            }
+
+            function refresh() {
+                fetch(RATE_URL, { cache: 'no-store' })
+                    .then(function (res) { if (!res.ok) throw new Error('bad response'); return res.json(); })
+                    .then(function (d) {
+                        if (!d.ok) throw new Error('no rate');
+                        value.textContent = '₹ ' + inr(d.rate_22kt);
+                        r999.textContent = '₹ ' + inr(d.rate_999);
+                        dot.classList.toggle('stale', d.status === 'BLOCKED');
+                        updated.textContent = timeAgo(d.updated_at);
+                    })
+                    .catch(fail);
+            }
+
+            refresh();
+            setInterval(refresh, 1000);
+        })();
+    </script>
 </body>
 </html>
