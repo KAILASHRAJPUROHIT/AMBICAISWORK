@@ -386,6 +386,7 @@ class SonyPtpIpController {
             when (type) {
                 PKT_OPERATION_RESPONSE -> {
                     val code = ByteBuffer.wrap(body, 0, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xFFFF
+                    if (code != 0x2001) Log.w(TAG, "Operation response code: 0x${code.toString(16)} (not OK)")
                     return code == 0x2001 // PTP_RC_OK
                 }
                 PKT_START_DATA_PACKET, PKT_DATA_PACKET, PKT_END_DATA_PACKET -> { /* drain, no data expected here */ }
