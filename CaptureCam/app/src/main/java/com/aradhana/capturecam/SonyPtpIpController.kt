@@ -331,7 +331,12 @@ class SonyPtpIpController {
 
     private fun sendOperationRequest(opcode: Int, params: IntArray) {
         val txId = transactionId.getAndIncrement()
-        val body = ByteBuffer.allocate(8 + params.size * 4).order(ByteOrder.LITTLE_ENDIAN)
+        // dataphase(4) + opcode(2) + reserved(2) + txId(4) = 12 fixed bytes,
+        // not 8 -- an earlier undersized allocation here threw
+        // BufferOverflowException on the very first real operation request
+        // (OpenSession) once the handshake up to this point started
+        // working for real against the camera.
+        val body = ByteBuffer.allocate(12 + params.size * 4).order(ByteOrder.LITTLE_ENDIAN)
         body.putInt(0)
         body.putShort(opcode.toShort()); body.putShort(0)
         body.putInt(txId)
