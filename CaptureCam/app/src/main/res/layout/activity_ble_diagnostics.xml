@@ -216,7 +216,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:hint="camera IP (same-LAN mode -- read off camera's WLAN Info screen)"
+        android:hint="camera IP (read off camera's WLAN Info screen)"
         android:textColor="@color/white"
         android:textColorHint="#888888"
         android:inputType="text" />
@@ -225,7 +225,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:text="-- OR, if camera hosts its own hotspot instead --"
+        android:text="Access Authentication (camera's Network Option -&gt; Access Authen. Info):"
         android:textColor="#888888"
         android:textSize="11sp" />
 
@@ -236,22 +236,22 @@
         android:orientation="horizontal">
 
         <EditText
-            android:id="@+id/sonySsidInput"
+            android:id="@+id/sonySshUserInput"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginEnd="4dp"
-            android:hint="camera SSID"
+            android:hint="User"
             android:textColor="@color/white"
             android:textColorHint="#888888"
             android:inputType="text" />
 
         <EditText
-            android:id="@+id/sonyPasswordInput"
+            android:id="@+id/sonySshPasswordInput"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:hint="camera WiFi password"
+            android:hint="Password"
             android:textColor="@color/white"
             android:textColorHint="#888888"
             android:inputType="textPassword" />

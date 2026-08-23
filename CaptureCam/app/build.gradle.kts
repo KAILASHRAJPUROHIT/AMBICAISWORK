@@ -45,6 +45,16 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
+    // SonyPtpIpController: the ZV-E10 II (and other Access-Authentication-
+    // capable Sony bodies) tunnels its PTP-IP control channel through SSH
+    // rather than exposing it on a plain TCP port -- confirmed live
+    // 2026-08-23 (Sony's own docs: "communication data can be encrypted
+    // over an SSH connection" for cameras with access authentication).
+    // mwiede's fork, not the original com.jcraft:jsch -- the original is
+    // unmaintained and fails modern SSH key-exchange/cipher negotiation
+    // against newer OpenSSH servers (this camera runs OpenSSH_7.9).
+    implementation("com.github.mwiede:jsch:0.2.17")
+
     // Official OpenCV Android AAR (Maven Central since 4.9.0 -- normal
     // Gradle dependency, no manual SDK download/import needed). 4.12.0
     // specifically: fixes the 16KB-page-size Android packaging issue that

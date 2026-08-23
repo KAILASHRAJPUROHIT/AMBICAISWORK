@@ -151,68 +151,38 @@ class BleDiagnosticsActivity : AppCompatActivity() {
     private fun setupSonyTestPanel() {
         sonyStatusText = findViewById(R.id.sonyStatusText)
         val ipInput = findViewById<EditText>(R.id.sonyIpInput)
-        val ssidInput = findViewById<EditText>(R.id.sonySsidInput)
-        val passwordInput = findViewById<EditText>(R.id.sonyPasswordInput)
+        val sshUserInput = findViewById<EditText>(R.id.sonySshUserInput)
+        val sshPasswordInput = findViewById<EditText>(R.id.sonySshPasswordInput)
 
         findViewById<Button>(R.id.sonyConnectButton).setOnClickListener {
             val ip = ipInput.text.toString().trim()
-            if (ip.isNotEmpty()) {
-                // Same-LAN mode -- camera joined the shop's existing WiFi
-                // (confirmed live 2026-08-23) rather than hosting its own
-                // AP, so this device is already on the right network and
-                // needs no SonyWifiConnectionManager join/bind at all.
-                sonyStatusText.text = "Connecting to $ip..."
-                log("Sony: connecting directly to $ip (same-LAN mode, no WiFi join needed)")
-                Thread {
-                    val controller = SonyPtpIpController()
-                    val ok = controller.connectBlockingToIp(ip)
-                    handler.post {
-                        if (ok) {
-                            sonyController = controller
-                            sonyStatusText.text = "Connected -- ${controller.connectedIp}"
-                            log("Sony: PTP-IP handshake succeeded on ${controller.connectedIp}")
-                        } else {
-                            sonyStatusText.text = "PTP-IP handshake failed"
-                            log("Sony: could not reach/handshake with $ip -- see logcat tag SonyPtpIp for which step")
-                        }
-                    }
-                }.start()
+            val sshUser = sshUserInput.text.toString().trim()
+            val sshPassword = sshPasswordInput.text.toString()
+            if (ip.isEmpty() || sshUser.isEmpty()) {
+                log("Sony: enter the camera IP and the User/Password from its Access Authen. Info screen")
                 return@setOnClickListener
             }
-
-            val ssid = ssidInput.text.toString().trim()
-            val password = passwordInput.text.toString()
-            if (ssid.isEmpty()) {
-                log("Sony: enter either the camera's IP, or the SSID shown on its screen")
-                return@setOnClickListener
-            }
-            sonyStatusText.text = "Joining $ssid..."
-            log("Sony: requesting WiFi join for $ssid")
-            sonyWifi.connect(ssid, password, timeoutMs = 15_000) { joined ->
-                if (!joined) {
-                    handler.post {
-                        sonyStatusText.text = "WiFi join failed"
-                        log("Sony: could not join $ssid -- wrong password, camera not in remote mode, or out of range")
+            // Confirmed live 2026-08-23: this camera generation tunnels
+            // PTP-IP through SSH (Access Authentication) rather than
+            // exposing it on a plain port -- see SonyPtpIpController's doc
+            // comment. No WiFi-join step needed here: camera and tablet
+            // are both already on the shop LAN.
+            sonyStatusText.text = "Connecting to $ip..."
+            log("Sony: authenticating SSH to $ip as $sshUser")
+            Thread {
+                val controller = SonyPtpIpController()
+                val ok = controller.connectBlocking(ip, sshUser, sshPassword)
+                handler.post {
+                    if (ok) {
+                        sonyController = controller
+                        sonyStatusText.text = "Connected -- $ip"
+                        log("Sony: PTP-IP-over-SSH handshake succeeded")
+                    } else {
+                        sonyStatusText.text = "Handshake failed"
+                        log("Sony: could not connect/handshake with $ip -- see logcat tag SonyPtpIp for which step")
                     }
-                    return@connect
                 }
-                log("Sony: WiFi joined, starting PTP-IP handshake...")
-                Thread {
-                    val controller = SonyPtpIpController()
-                    val ok = controller.connectBlocking()
-                    handler.post {
-                        if (ok) {
-                            sonyController = controller
-                            sonyStatusText.text = "Connected -- ${controller.connectedIp}"
-                            log("Sony: PTP-IP handshake succeeded on ${controller.connectedIp}")
-                        } else {
-                            sonyStatusText.text = "PTP-IP handshake failed"
-                            log("Sony: WiFi joined but PTP-IP handshake failed -- see logcat tag SonyPtpIp for which step")
-                            sonyWifi.unbind()
-                        }
-                    }
-                }.start()
-            }
+            }.start()
         }
 
         findViewById<Button>(R.id.sonyShutterButton).setOnClickListener {
