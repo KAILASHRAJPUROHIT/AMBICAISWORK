@@ -56,6 +56,21 @@ object NothingCameraBridge {
         activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
 
+    // Confirmed live (2026-08-23): captureJewel() is called from tickJewel(),
+    // a periodic tick loop whose re-fire guard assumes a capture completes
+    // quickly, the way CameraX's captureFullRes does. This bridge's sequence
+    // is much slower (app launch, shutter-ready polling, zoom settle delay,
+    // MediaStore polling) -- without a guard here, the tick loop kept
+    // re-firing captureJewel() DURING an in-flight attempt, piling up many
+    // concurrent captureViaNothingCamera() calls that all fought over the
+    // same Nothing Camera UI state at once. That's what "switched to Nothing
+    // Camera but immediately bounced back without capturing" actually was:
+    // dozens of overlapping launch/fail cycles inside under a second, not
+    // one clean attempt. A capture that's already in flight now makes every
+    // new call fail open immediately instead of piling on.
+    @Volatile
+    private var captureInFlight = false
+
     /**
      * Full capture sequence: launch Nothing Camera, wait for its shutter to
      * be reachable, set telemacro zoom, tap the shutter, then read back
@@ -65,10 +80,21 @@ object NothingCameraBridge {
      * is handled.
      */
     fun captureViaNothingCamera(activity: Activity, onResult: (ByteArray?) -> Unit) {
+        if (captureInFlight) {
+            Log.w(TAG, "captureViaNothingCamera called while an attempt is already in flight -- ignoring")
+            onResult(null)
+            return
+        }
+        captureInFlight = true
+        val wrappedResult: (ByteArray?) -> Unit = { bytes ->
+            captureInFlight = false
+            onResult(bytes)
+        }
+
         val service = NothingCameraAccessibilityService.instance
         if (service == null) {
             Log.w(TAG, "Accessibility service not connected -- is it enabled in Settings?")
-            onResult(null)
+            wrappedResult(null)
             return
         }
 
@@ -78,7 +104,7 @@ object NothingCameraBridge {
             .getLaunchIntentForPackage(NothingCameraAccessibilityService.PACKAGE_NAME)
         if (launchIntent == null) {
             Log.e(TAG, "Nothing Camera not installed/launchable")
-            onResult(null)
+            wrappedResult(null)
             return
         }
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -88,7 +114,7 @@ object NothingCameraBridge {
             if (!ready) {
                 Log.w(TAG, "Nothing Camera shutter never became reachable")
                 returnToCaptureCam(activity)
-                onResult(null)
+                wrappedResult(null)
                 return@waitForShutterReady
             }
 
@@ -103,14 +129,14 @@ object NothingCameraBridge {
                 if (!tapped) {
                     Log.e(TAG, "Shutter tap failed")
                     returnToCaptureCam(activity)
-                    onResult(null)
+                    wrappedResult(null)
                     return@postDelayed
                 }
                 waitForNewPhoto(activity, baselineNewestId, startedAt = System.currentTimeMillis()) { uri ->
                     returnToCaptureCam(activity)
                     if (uri == null) {
                         Log.e(TAG, "No new photo appeared in MediaStore after shutter tap")
-                        onResult(null)
+                        wrappedResult(null)
                         return@waitForNewPhoto
                     }
                     val bytes = try {
@@ -119,7 +145,7 @@ object NothingCameraBridge {
                         Log.e(TAG, "Failed reading captured photo bytes", e)
                         null
                     }
-                    onResult(bytes)
+                    wrappedResult(bytes)
                 }
             }, ZOOM_SETTLE_MS)
         }
