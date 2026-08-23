@@ -29,7 +29,7 @@ import kotlin.concurrent.thread
  * and the exact SDIOConnect 3-phase handshake sequence. Source for those:
  * cross-referenced from two independent, real-device-verified open source
  * projects rather than guessed --
- *   - frank26080115/alpha-fairy (arduino_workspace/libraries/PtpIpCamera/*)
+ *   - frank26080115/alpha-fairy (arduino_workspace/libraries/PtpIpCamera folder)
  *     -- built by Wireshark-capturing Sony's own Imaging Edge Remote app
  *   - olkham/pysonycam (constants.py) -- independent USB-PTP implementation
  * Both agree on the opcode/property table, which is why this is a real
