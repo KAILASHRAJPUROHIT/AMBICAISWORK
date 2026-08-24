@@ -168,7 +168,10 @@ const inr = (n) => {
 };
 const setRs = (el, value) => { el.innerHTML = '<span class="rs">₹</span>' + inr(value); };
 
-// ---- layout picker: persisted in localStorage, applied instantly ----
+// ---- layout picker: local pick applies instantly, then pushes to the
+// server so every other board follows within one poll (~1s). Server state
+// is authoritative - applyServerControl() below reconciles it every tick,
+// which also covers a board that was off when the layout last changed. ----
 const LAYOUT_KEY = 'aradhana-board-layout';
 const select = $('layoutSelect');
 const saved = localStorage.getItem(LAYOUT_KEY);
@@ -176,10 +179,30 @@ if (saved && ['ledger', 'grid', 'hero'].includes(saved)) {
   document.body.setAttribute('data-layout', saved);
   select.value = saved;
 }
+function applyLayout(layout) {
+  document.body.setAttribute('data-layout', layout);
+  select.value = layout;
+  localStorage.setItem(LAYOUT_KEY, layout);
+}
 select.addEventListener('change', () => {
-  document.body.setAttribute('data-layout', select.value);
-  localStorage.setItem(LAYOUT_KEY, select.value);
+  applyLayout(select.value);
+  fetch('/api/board-control', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layout: select.value }),
+  }).catch(() => {});
 });
+
+let lastRefreshToken = null;
+function applyServerControl(boardControl) {
+  if (!boardControl) return;
+  if (boardControl.layout && boardControl.layout !== select.value) applyLayout(boardControl.layout);
+  if (lastRefreshToken === null) {
+    lastRefreshToken = boardControl.refreshToken;
+  } else if (boardControl.refreshToken !== lastRefreshToken) {
+    location.reload();
+  }
+}
 
 function render(s) {
   const live = s.live;
@@ -204,6 +227,8 @@ function render(s) {
     setRs($('l-sp'), sil.pure); setRs($('g-sp'), sil.pure); setRs($('h-sp'), sil.pure);
     setRs($('l-so'), sil.ornament); setRs($('g-so'), sil.ornament); setRs($('h-so'), sil.ornament);
   }
+
+  applyServerControl(s.boardControl);
 }
 
 // Plain 1-second polling instead of SSE. The iPad Mini 2 is stuck on iOS 12,

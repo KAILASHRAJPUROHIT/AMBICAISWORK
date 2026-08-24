@@ -139,7 +139,51 @@ export class Store {
     this._csvSilverDay = null;
     this._csvSilverStream = null;
 
+    /** Central board-display control: which layout every /board.html client
+     * shows, and a token that bumps to force them all to reload. Persisted
+     * so a restart doesn't reset every kiosk back to the default layout. */
+    this.boardControl = { layout: 'grid', refreshToken: Date.now() };
+    this._loadBoardControl();
+
     this._loadHistory();
+  }
+
+  get _boardControlFile() {
+    return path.join(this.dataDir, 'board-control.json');
+  }
+
+  _loadBoardControl() {
+    try {
+      const raw = fs.readFileSync(this._boardControlFile, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.layout === 'string') {
+        this.boardControl = { layout: parsed.layout, refreshToken: parsed.refreshToken || Date.now() };
+      }
+    } catch {
+      // no persisted control state yet - defaults above stand.
+    }
+  }
+
+  _saveBoardControl() {
+    try {
+      fs.writeFileSync(this._boardControlFile, JSON.stringify(this.boardControl));
+    } catch (err) {
+      console.error('[store] could not persist board control:', err.message);
+    }
+  }
+
+  /** Sets the layout every board client shows on its next poll (~1s). */
+  setBoardLayout(layout) {
+    this.boardControl = { ...this.boardControl, layout };
+    this._saveBoardControl();
+    this.broadcast();
+  }
+
+  /** Bumps the refresh token, causing every board client to reload on its next poll. */
+  forceBoardRefresh() {
+    this.boardControl = { ...this.boardControl, refreshToken: Date.now() };
+    this._saveBoardControl();
+    this.broadcast();
   }
 
   /* ------------------------------------------------------------ persistence */
@@ -393,6 +437,7 @@ export class Store {
       stats: this.stats,
       history: this.history.slice(-720),
       silver: this._silverPublicState(),
+      boardControl: this.boardControl,
       server: {
         domain: this.cfg.server.publicDomain,
         business: this.cfg.whatsapp.businessName,

@@ -88,6 +88,34 @@ export function createServer(cfg, store, ctx, log) {
     }
   });
 
+  /** Which layout every /board.html client should show, plus the refresh
+   * token they poll for. Read by every board every ~1s via /api/rate's
+   * boardControl field (below), so no separate endpoint is needed for that. */
+  const VALID_LAYOUTS = ['ledger', 'grid', 'hero'];
+  const checkAdminToken = (req, res) => {
+    const required = process.env.ADMIN_TOKEN;
+    if (required && req.get('x-admin-token') !== required) {
+      res.status(401).json({ ok: false, error: 'unauthorized' });
+      return false;
+    }
+    return true;
+  };
+
+  app.post('/api/board-control', (req, res) => {
+    if (!checkAdminToken(req, res)) return;
+    const { layout, forceRefresh } = req.body || {};
+
+    if (layout !== undefined) {
+      if (!VALID_LAYOUTS.includes(layout)) {
+        return res.status(400).json({ ok: false, error: `layout must be one of ${VALID_LAYOUTS.join(', ')}` });
+      }
+      store.setBoardLayout(layout);
+    }
+    if (forceRefresh) store.forceBoardRefresh();
+
+    res.json({ ok: true, boardControl: store.boardControl });
+  });
+
   const server = app.listen(cfg.server.port, cfg.server.host, () => {
     log(`[server] listening on http://${cfg.server.host}:${cfg.server.port}`);
     log(`[server] live page  -> http://localhost:${cfg.server.port}/`);
