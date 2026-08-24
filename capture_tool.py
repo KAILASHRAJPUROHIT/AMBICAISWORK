@@ -726,22 +726,18 @@ def _segment_paths_async(paths: list, category: str | None = None) -> None:
 # Composite layout constants (matches the approved reference layout: full-
 # width MAIN VIEW on top, LEFT ANGLE / RIGHT ANGLE side-by-side below, bold
 # uppercase caption under each panel, thin light-grey dividers, white
-# background). Sized for catalogue/web use, not print.
+# background).
 # Explicit 60/20/20 split (2026-08-19, explicit request): MAIN VIEW is 60%
 # of the total photo AREA; LEFT ANGLE and RIGHT ANGLE each get 20% of that
 # same total area, sitting side by side in one bottom row. Since the two
 # side panels each span only half the canvas WIDTH, their combined ROW
 # HEIGHT is 40% of the total (20% area / 50% width = 40% height each,
 # and they share that row rather than stacking). MAIN_H stays at the
-# 1200px this business already asked for ("main image should be bigger",
-# earlier the same day); SIDE_H is DERIVED from the ratio (1200 * 40/60)
-# rather than picked separately, so the two constants can't silently
-# drift out of the requested 60/20/20 proportion if MAIN_H ever changes.
-_STITCH_PANEL_W = 900
-_STITCH_MAIN_H = 1200
-_STITCH_SIDE_H = round(_STITCH_MAIN_H * (40 / 60))
-_STITCH_PAD = 24
-_STITCH_LABEL_H = 60
+# No fixed output dimensions: the previous 1200px/800px panel heights
+# destroyed detail from Sony's 6192x4128 originals. Panel areas are now
+# derived from the source pixels. No source panel is ever downscaled.
+_STITCH_PAD = 48
+_STITCH_LABEL_H = 90
 _STITCH_BG = (255, 255, 255)
 _STITCH_DIVIDER = (225, 225, 225)
 _STITCH_TEXT = (30, 30, 30)
@@ -757,30 +753,28 @@ def _stitch_font(size):
     return ImageFont.load_default()
 
 
-def _stitch_fit_height(img, target_h, max_w):
-    """Scale to an EXACT target height, natural (unpadded) width -- no
-    letterbox whitespace. Confirmed live (2026-08-19, tag WT22/1): the old
-    letterbox-into-a-fixed-PORTRAIT-box approach assumed every crop was
-    taller than wide (true for most single vertical-hang pieces), but a
-    flat-lying category like WATI produces a genuinely wide/landscape
-    crop -- fit into that same tall box left the actual photo tiny with
-    huge wasted white margins above and below it, which read as "only
-    half the image is shown." Scaling to a fixed HEIGHT with natural width
-    fills the row exactly regardless of the crop's own aspect ratio.
-    max_w only guards against a pathologically wide/panoramic source
-    (never expected in practice) blowing the canvas out unboundedly --
-    still fits by height up to that width, then falls back to fitting by
-    width instead so nothing overflows."""
+def _stitch_scale_to_area(img, target_area):
+    """Scale a panel UP to target_area while preserving aspect ratio.
+
+    target_area is always at least the source area. This is the hardwall
+    that prevents the compositor from throwing away source pixels. The
+    hero receives 3x either side panel's displayed area, producing the
+    required 60/20/20 content split.
+    """
+    import math
     from PIL import Image
-    scale = target_h / img.height
-    new_w, new_h = max(1, int(img.width * scale)), target_h
-    if new_w > max_w:
-        scale = max_w / img.width
-        new_w, new_h = max_w, max(1, int(img.height * scale))
-    return img.resize((new_w, new_h), Image.LANCZOS)
+    source_area = img.width * img.height
+    if source_area <= 0:
+        raise ValueError("empty stitch panel")
+    scale = max(1.0, math.sqrt(float(target_area) / float(source_area)))
+    new_w = max(img.width, int(math.ceil(img.width * scale)))
+    new_h = max(img.height, int(math.ceil(img.height * scale)))
+    if (new_w, new_h) == img.size:
+        return img.copy()
+    return img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
 
-def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: str) -> None:
+def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: str) -> bool:
     """Composes MAIN/ANGLE_1/ANGLE_2 into one labeled reference-style image:
     full-width MAIN VIEW on top, LEFT ANGLE + RIGHT ANGLE side-by-side below.
     angle1 -> LEFT ANGLE, angle2 -> RIGHT ANGLE, matching this tool's own
@@ -790,13 +784,9 @@ def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: 
     error here must never block or corrupt the underlying save_multi()
     result, which has already succeeded by the time this runs.
 
-    Canvas WIDTH is derived from the actual panel sizes (2026-08-19, fixes
-    the landscape-crop letterboxing described in _stitch_fit_height's own
-    doc comment) rather than fixed at _STITCH_PANEL_W -- each panel is
-    scaled to its fixed HEIGHT budget (60/20/20 split, see the constants
-    above) with natural width, then the canvas is sized to whichever row
-    (MAIN, or LEFT+RIGHT together) ends up wider, and everything is
-    centered within that.
+    The panel areas are 60/20/20 and no source panel is downscaled. The
+    final JPG is encoded once at quality=100 with 4:4:4 chroma, verified,
+    and atomically published so no watcher can see a partial composite.
     """
     from PIL import Image, ImageDraw
     log = logging.getLogger("capture_tool")
@@ -805,45 +795,68 @@ def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: 
         angle1_img = Image.open(angle1_path).convert("RGB")
         angle2_img = Image.open(angle2_path).convert("RGB")
 
-        max_panel_w = _STITCH_PANEL_W * 3  # generous cap, see _stitch_fit_height
-        main_panel = _stitch_fit_height(main_img, _STITCH_MAIN_H, max_panel_w)
-        left_panel = _stitch_fit_height(angle1_img, _STITCH_SIDE_H, max_panel_w)
-        right_panel = _stitch_fit_height(angle2_img, _STITCH_SIDE_H, max_panel_w)
+        main_area = main_img.width * main_img.height
+        left_area = angle1_img.width * angle1_img.height
+        right_area = angle2_img.width * angle2_img.height
+        # Each side gets one area unit and MAIN gets three: 3/(3+1+1)=60%.
+        # Include main_area/3 in the floor so MAIN is never downscaled either.
+        side_target_area = max(left_area, right_area, (main_area + 2) // 3)
+        main_panel = _stitch_scale_to_area(main_img, side_target_area * 3)
+        left_panel = _stitch_scale_to_area(angle1_img, side_target_area)
+        right_panel = _stitch_scale_to_area(angle2_img, side_target_area)
+
+        assert main_panel.width >= main_img.width and main_panel.height >= main_img.height
+        assert left_panel.width >= angle1_img.width and left_panel.height >= angle1_img.height
+        assert right_panel.width >= angle2_img.width and right_panel.height >= angle2_img.height
 
         side_row_w = left_panel.width + _STITCH_PAD + right_panel.width
         content_w = max(main_panel.width, side_row_w)
         canvas_w = content_w + _STITCH_PAD * 2
-        canvas_h = (_STITCH_PAD * 3 + _STITCH_MAIN_H + _STITCH_LABEL_H
-                    + _STITCH_SIDE_H + _STITCH_LABEL_H)
+        side_row_h = max(left_panel.height, right_panel.height)
+        canvas_h = (_STITCH_PAD * 3 + main_panel.height + _STITCH_LABEL_H
+                    + side_row_h + _STITCH_LABEL_H)
         canvas = Image.new("RGB", (canvas_w, canvas_h), _STITCH_BG)
         draw = ImageDraw.Draw(canvas)
-        label_font = _stitch_font(28)
+        label_font = _stitch_font(42)
 
-        def _panel_with_label(panel, x, y, box_w, label):
-            canvas.paste(panel, (x + (box_w - panel.width) // 2, y))
+        def _panel_with_label(panel, x, y, box_w, row_h, label):
+            panel_y = y + (row_h - panel.height) // 2
+            canvas.paste(panel, (x + (box_w - panel.width) // 2, panel_y))
             bbox = draw.textbbox((0, 0), label, font=label_font)
             tw = bbox[2] - bbox[0]
-            draw.text((x + (box_w - tw) // 2, y + panel.height + 16), label,
+            draw.text((x + (box_w - tw) // 2, y + row_h + 20), label,
                        font=label_font, fill=_STITCH_TEXT)
 
         x0 = _STITCH_PAD
         y0 = _STITCH_PAD
-        _panel_with_label(main_panel, x0, y0, content_w, "MAIN VIEW")
+        _panel_with_label(main_panel, x0, y0, content_w, main_panel.height, "MAIN VIEW")
 
-        divider_y = y0 + _STITCH_MAIN_H + _STITCH_LABEL_H
+        divider_y = y0 + main_panel.height + _STITCH_LABEL_H
         draw.line([(x0, divider_y), (x0 + content_w, divider_y)], fill=_STITCH_DIVIDER, width=2)
 
         y1 = divider_y + _STITCH_PAD
         row_x0 = x0 + (content_w - side_row_w) // 2
-        _panel_with_label(left_panel, row_x0, y1, left_panel.width, "LEFT ANGLE")
+        _panel_with_label(left_panel, row_x0, y1, left_panel.width, side_row_h, "LEFT ANGLE")
         _panel_with_label(right_panel, row_x0 + left_panel.width + _STITCH_PAD, y1,
-                          right_panel.width, "RIGHT ANGLE")
+                          right_panel.width, side_row_h, "RIGHT ANGLE")
 
-        canvas.save(out_path, quality=92)
+        temporary = f"{out_path}.composite.tmp.jpg"
+        canvas.save(temporary, format="JPEG", quality=100, subsampling=0, optimize=True)
+        with Image.open(temporary) as verified:
+            verified.load()
+            if verified.width != canvas.width or verified.height != canvas.height:
+                raise ValueError("composite verification dimensions changed")
+        os.replace(temporary, out_path)
         log.info("stitch_angles wrote %s", out_path)
+        return True
     except Exception:
         log.exception("stitch_angles FAILED for %s/%s/%s -> %s",
                        main_path, angle1_path, angle2_path, out_path)
+        try:
+            os.remove(f"{out_path}.composite.tmp.jpg")
+        except OSError:
+            pass
+        return False
 
 
 def _backup_raw(path: str) -> None:
@@ -909,12 +922,15 @@ def _prefer_vertical_for_category(category: str | None) -> bool:
     return guide.orientation == category_orientation.OrientationType.HANGS_VERTICAL
 
 
-def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str, stitched_path: str,
-                              category: str | None = None) -> None:
-    """save_multi's version of _segment_paths_async: crops all three poses
-    (SAM2/DINO), THEN stitches the composite from the cropped results.
-    Order matters: stitching before cropping would bake the raw, uncropped
-    gimbal framing into the permanent composite.
+def _segment_and_stitch(main_path: str, angle1_path: str, angle2_path: str, final_path: str,
+                        category: str | None = None) -> bool:
+    """Locally crop three hidden source poses and publish one composite.
+
+    Processing is synchronous and final publication is atomic. The API must
+    never report success while only a hero-only placeholder exists or while
+    the composite worker can still fail in the background. Source JPEGs are
+    preserved unchanged. SAM output uses temporary PNG files, avoiding an
+    extra lossy JPEG generation before the one required final JPG encoding.
 
     RMBG-2.0 background removal used to run here as a second pass after
     tight_crop -- removed 2026-08-19 (the RMBG re-processing was contributing
@@ -927,71 +943,54 @@ def _segment_and_stitch_async(main_path: str, angle1_path: str, angle2_path: str
     for two separate pieces), so main_tilt sharing is correctly skipped for
     those without any extra branching here; tight_crop's own info dict
     simply won't have a 'tilt' key for the pair path."""
-    if not sam_locate.available():
-        logging.getLogger("capture_tool").warning(
-            "sam_locate.available() is False -- skipping segmentation+stitch for %s", stitched_path
-        )
-        return
+    log = logging.getLogger("capture_tool")
+    source_paths = (main_path, angle1_path, angle2_path)
+    work_paths = tuple(f"{path}.work.png" for path in source_paths)
+    selected_paths = list(source_paths)
+    segmentation_available = sam_locate.available()
+    if not segmentation_available:
+        log.warning("sam_locate unavailable -- stitching preserved full-resolution sources for %s",
+                    final_path)
 
-    def _run():
-        log = logging.getLogger("capture_tool")
-        for path in (main_path, angle1_path, angle2_path):
-            _backup_raw(path)
-        try:
-            # MAIN goes first and straightens to ITS OWN mask -- that tilt
-            # then becomes the shared reference for angle1/angle2, instead
-            # of each of the 3 shots straightening to their own mask
-            # independently. Requested live (2026-08-19): the three panels
-            # need to read as one consistent triptych, not three separately
-            # "corrected" (and sometimes disagreeing) angles. MAIN also
-            # gets a tighter margin -- "more zoomed in" -- since it's the
-            # hero shot; angle1/angle2 keep the wider default so the
-            # shared rotation still has enough frame to land inside without
-            # a corner clipping off.
-            expect = _expect_for_category(category)
-            prefer_vertical = _prefer_vertical_for_category(category)
-            main_tilt = None
+    try:
+        if segmentation_available:
             try:
-                _, info = sam_locate.tight_crop(main_path, main_path, expect=expect,
-                                                straighten=True, margin=0.04, category=category,
-                                                prefer_vertical=prefer_vertical)
-                log.info("sam_locate.tight_crop done for %s (angle=%s)", main_path, info)
+                # MAIN establishes the shared straightening angle. Working
+                # PNGs preserve decoded pixels; raw Sony JPGs remain intact.
+                expect = _expect_for_category(category)
+                prefer_vertical = _prefer_vertical_for_category(category)
+                main_result, info = sam_locate.tight_crop(
+                    main_path, work_paths[0], expect=expect, straighten=True,
+                    margin=0.04, category=category, prefer_vertical=prefer_vertical
+                )
+                selected_paths[0] = main_result
+                log.info("sam_locate.tight_crop done for %s (info=%s)", main_path, info)
+                main_tilt = None
                 if info:
                     main_tilt = info.get("tilt")
-            except Exception:
-                log.exception("sam_locate.tight_crop FAILED for %s", main_path)
-
-            for path in (angle1_path, angle2_path):
-                try:
+                for index, path in enumerate((angle1_path, angle2_path), start=1):
                     result_path, angle = sam_locate.tight_crop(
-                        path, path, expect=expect, straighten=True, fixed_angle=main_tilt,
+                        path, work_paths[index], expect=expect, straighten=True,
+                        fixed_angle=main_tilt,
                         category=category, prefer_vertical=prefer_vertical
                     )
+                    selected_paths[index] = result_path
                     log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
-                except Exception:
-                    log.exception("sam_locate.tight_crop FAILED for %s", path)
-        finally:
-            sam_locate.release()
-        # RMBG-2.0's separate pass (_remove_background) used to run here for
-        # single-piece items ("expect == 1") on top of whatever tight_crop()
-        # above already produced. Confirmed live (2026-08-19, tag GR22/127
-        # reshoot): tight_crop() now does a full, clean crop+background-
-        # removal itself (SAM3 primary, SAM2 fallback, quality-gated --
-        # see sam_locate.py), so this second pass was running a DIFFERENT
-        # background-removal model again on an already-processed image,
-        # stacking degradation on top of an already-correct result -- the
-        # posterized/waxy look the owner flagged was RMBG re-processing (and
-        # likely internally downsampling/upsampling) a file that didn't need
-        # touching a second time at all. This was always somewhat redundant
-        # (pairs were already exempted for a related but distinct reason,
-        # see git history) but went unnoticed for singles while SAM2's own
-        # masks were still mediocre enough that RMBG's extra smoothing
-        # wasn't the dominant visible defect. Removed entirely -- tight_crop()
-        # is now the only background-removal pass, for both single and
-        # paired items.
-        stitch_angles(main_path, angle1_path, angle2_path, stitched_path)
+            except Exception:
+                # Crop failure is fail-open: the unmodified, full-resolution
+                # Sony sources still make a valid composite.
+                log.exception("local segmentation failed; using preserved sources for %s", final_path)
+                selected_paths = list(source_paths)
 
-    threading.Thread(target=_run, daemon=True).start()
+        return stitch_angles(selected_paths[0], selected_paths[1], selected_paths[2], final_path)
+    finally:
+        if segmentation_available:
+            sam_locate.release()
+        for path in work_paths:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
 
 @_stock_write_guard
@@ -1094,20 +1093,11 @@ def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_byt
     (The phone-side staging/delete-after-verify described in the handover
     spec is a client-side concern over the phone's own local temp files.)
 
-    Final names, matching the spec exactly:
-      MAIN   -> <tag>.jpg     (the hero/primary catalogue image)
-      ANGLE1 -> <tag>_1.jpg
-      ANGLE2 -> <tag>_2.jpg
-
-    All three are staged and decode-verified BEFORE any is placed under its
-    final name, and the rename is all-three-or-none -- nothing downstream
-    (this tool's own tray view, or anything else watching capture_intake)
-    can ever observe a partial 1-of-3 or 2-of-3 item.
-
-    Returns the same shape as save_pair on success, plus angle1_filename/
-    angle2_filename, or an {"ok": False, ...} error dict (duplicate / blurry
-    / not_clearly_visible / corrupt_capture) matching save_pair's existing
-    error contract so callers can reuse the same handling.
+    The one visible deliverable is <tag>.jpg: a 60/20/20 MAIN/LEFT/RIGHT
+    composite. The three original Sony captures live only in the hidden
+    .multi_angle_sources archive for recovery. They are staged and decode-
+    verified first; the composite is then built locally and atomically
+    published. Nothing downstream can observe a hero-only or partial item.
     """
     with _lock:
         is_test = category == TEST_CATEGORY
@@ -1146,8 +1136,6 @@ def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_byt
             # before any delivered catalogue file is ever named.
             safe_name = f"{safe_name}_stud"
         main_path = os.path.join(tray_dir, f"{safe_name}.jpg")
-        angle1_path = os.path.join(tray_dir, f"{safe_name}_1.jpg")
-        angle2_path = os.path.join(tray_dir, f"{safe_name}_2.jpg")
 
         # Duplicate-tag protection (spec rule 8): if the final name already
         # exists, this must NEVER silently create "(1)"/"_3" -- that breaks
@@ -1159,7 +1147,9 @@ def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_byt
             return {"ok": False, "error": "duplicate",
                     "prior": {"folder": tray["folder"], "filename": f"{safe_name}.jpg"}}
 
-        staging_dir = os.path.join(tray_dir, ".staging", f"{safe_name}_{int(time.time() * 1000)}")
+        capture_id = str(int(time.time() * 1000))
+        staging_dir = os.path.join(tray_dir, ".staging", f"{safe_name}_{capture_id}")
+        source_dir = os.path.join(tray_dir, ".multi_angle_sources", safe_name, capture_id)
         os.makedirs(staging_dir, exist_ok=True)
         staged = {
             "main": os.path.join(staging_dir, "main.jpg"),
@@ -1178,9 +1168,15 @@ def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_byt
                 if img is None or img.size == 0:
                     return {"ok": False, "error": "corrupt_capture", "slot": slot}
 
-            os.replace(staged["main"], main_path)
-            os.replace(staged["angle1"], angle1_path)
-            os.replace(staged["angle2"], angle2_path)
+            os.makedirs(source_dir, exist_ok=True)
+            source_paths = {
+                "main": os.path.join(source_dir, "main.jpg"),
+                "angle1": os.path.join(source_dir, "angle1.jpg"),
+                "angle2": os.path.join(source_dir, "angle2.jpg"),
+            }
+            os.replace(staged["main"], source_paths["main"])
+            os.replace(staged["angle1"], source_paths["angle1"])
+            os.replace(staged["angle2"], source_paths["angle2"])
         finally:
             for path in staged.values():
                 if os.path.exists(path):
@@ -1193,15 +1189,14 @@ def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_byt
             except OSError:
                 pass
 
+        # All three poses are processed locally from the preserved hidden
+        # originals. Only one final, tag-named composite becomes visible.
+        if not _segment_and_stitch(
+            source_paths["main"], source_paths["angle1"], source_paths["angle2"],
+            main_path, category=category
+        ):
+            return {"ok": False, "error": "composite_failed", "source_archive": source_dir}
         _embed_tag_metadata(main_path, tag_code=tag_code, category=category, staff_name=staff_name)
-        # All three poses get the same tight segmentation crop, not just
-        # MAIN -- the catalogue's 3-shot layout expects ANGLE_1/ANGLE_2 to be
-        # clean ornament-only crops too, not a raw gimbal-framed plate. Then
-        # stitches the cropped MAIN/ANGLE_1/ANGLE_2 into one labeled
-        # composite image (<tag>_stitched.jpg), matching the approved
-        # reference layout.
-        stitched_path = os.path.join(tray_dir, f"{safe_name}_stitched.jpg")
-        _segment_and_stitch_async(main_path, angle1_path, angle2_path, stitched_path, category=category)
 
         if tag_code and not is_test:
             dedup = _load_dedup()
@@ -1215,19 +1210,17 @@ def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_byt
         return {
             "ok": True, "folder": tray["folder"], "tray_number": tray["tray_number"],
             "filename": f"{safe_name}.jpg",
-            "angle1_filename": f"{safe_name}_1.jpg",
-            "angle2_filename": f"{safe_name}_2.jpg",
             "tray_captured": tray_captured,
             "blur_scores": blur_scores,
+            "source_archive": source_dir,
         }
 
 
 def _count_tray_items(tray_dir: str) -> int:
     if not os.path.isdir(tray_dir):
         return 0
-    # _1.jpg/_2.jpg are save_multi()'s ANGLE_1/ANGLE_2 sidecars for the same
-    # item as <tag>.jpg -- without excluding them here, every multi-angle
-    # item would count as 3 instead of 1.
+    # _1.jpg/_2.jpg remain legacy sidecars from captures made before the
+    # one-composite contract. New captures expose only <tag>.jpg.
     sidecar_suffixes = ("_studs.jpg", "_detail.jpg", "_tag.jpg", "_1.jpg", "_2.jpg")
     return len([
         f for f in os.listdir(tray_dir)
