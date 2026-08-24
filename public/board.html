@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rate Board — Aradhana Jewellers</title>
+<meta name="description" content="Gold 24/22/18 and Silver Pure/Ornament, corner to corner.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@500;600;700&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden}
+  body{
+    --blue:#23519d; --blue-deep:#122c5c;
+    --gold:#cca137; --gold-lite:#f7ca5b;
+    --white:#ffffff; --ok:#28b06a; --warn:#fbbf24; --bad:#f87171;
+    font-family:Inter,system-ui,sans-serif;
+    background:
+      radial-gradient(900px 500px at 50% -8%, rgba(247,202,91,.16), transparent 60%),
+      linear-gradient(165deg,var(--blue) 0%,var(--blue-deep) 100%);
+    color:var(--white);
+  }
+  .num{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+  .label{font-family:Inter,sans-serif;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--gold-lite)}
+  .rs{color:var(--gold-lite);vertical-align:.18em}
+
+  .status{
+    position:fixed;top:16px;right:20px;display:flex;align-items:center;gap:7px;z-index:5;
+    font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.78);
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none}
+  .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
+  .brandmark{
+    position:fixed;bottom:14px;left:20px;z-index:5;
+    font-family:'Cormorant Garamond',serif;font-weight:700;font-size:13px;
+    letter-spacing:.16em;color:var(--gold-lite);text-transform:uppercase;
+  }
+
+  /* layout picker - small, unobtrusive, top-left */
+  #picker{
+    position:fixed;top:14px;left:18px;z-index:6;
+    font-size:11px;color:rgba(255,255,255,.55);background:rgba(0,0,0,.22);
+    border:1px solid rgba(247,202,91,.3);border-radius:8px;padding:3px 8px;
+    display:flex;align-items:center;gap:6px;
+  }
+  #picker select{
+    background:transparent;color:rgba(255,255,255,.85);border:none;font-size:11px;
+    font-family:Inter,sans-serif;letter-spacing:.04em;outline:none;
+  }
+  #picker select option{background:#173a75;color:#fff}
+
+  .board{position:absolute;inset:0;display:none;width:100%;height:100%}
+  body[data-layout="ledger"] #board-ledger{display:flex}
+  body[data-layout="grid"] #board-grid{display:flex;flex-direction:column;padding:34px 20px 30px}
+  body[data-layout="hero"] #board-hero{display:flex;flex-direction:column}
+
+  /* ---------------- Layout: Split Ledger ---------------- */
+  #board-ledger .col{display:flex;flex-direction:column;justify-content:center;min-width:0}
+  #board-ledger .col-gold{flex:1.55;padding:0 0 0 56px}
+  #board-ledger .col-silver{flex:1;padding:0 56px 0 44px}
+  #board-ledger .metal-label{font-size:15px;margin-bottom:18px}
+  #board-ledger .gold-row{display:flex;align-items:baseline;gap:22px;padding:14px 0;border-bottom:1px solid rgba(247,202,91,.22);min-width:0}
+  #board-ledger .gold-row:last-child{border-bottom:none}
+  #board-ledger .karat{width:70px;flex:none;font-family:'Cormorant Garamond',serif;font-weight:600;font-size:26px;color:rgba(255,255,255,.62)}
+  #board-ledger .gold-row .num{font-size:56px;line-height:1;min-width:0}
+  #board-ledger .gold-row .num .rs{font-size:.5em}
+  #board-ledger .silver-row{padding:20px 0;border-bottom:1px solid rgba(247,202,91,.22)}
+  #board-ledger .silver-row:last-child{border-bottom:none}
+  #board-ledger .silver-row .cap{font-size:15px;color:rgba(255,255,255,.68);margin-bottom:6px}
+  #board-ledger .silver-row .num{font-size:42px;line-height:1}
+  #board-ledger .silver-row .num .rs{font-size:.5em}
+  #board-ledger .divider{width:1px;flex:none;background:linear-gradient(180deg,transparent,rgba(247,202,91,.5),transparent);margin:64px 0}
+
+  /* ---------------- Layout: Ticker Grid (default) ---------------- */
+  #board-grid .row1{flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+  #board-grid .row2{flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
+  #board-grid .cell{
+    background:rgba(255,255,255,.07);border:1px solid rgba(247,202,91,.35);border-radius:14px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    min-width:0;overflow:hidden;
+  }
+  #board-grid .cell .label{font-size:39px}
+  #board-grid .cell .num{font-size:51px;line-height:1}
+  #board-grid .cell .num .rs{font-size:.48em}
+
+  /* ---------------- Layout: Headline + Strip ---------------- */
+  #board-hero .hero{flex:1.5;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+  #board-hero .hero .label{font-size:17px;letter-spacing:.3em}
+  #board-hero .hero .num{font-size:112px;line-height:1;color:var(--gold-lite);text-shadow:0 0 60px rgba(247,202,91,.35)}
+  #board-hero .hero .num .rs{font-size:.42em}
+  #board-hero .strip{flex:1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid rgba(247,202,91,.3)}
+  #board-hero .strip .cell{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    border-right:1px solid rgba(247,202,91,.18);min-width:0;overflow:hidden;
+  }
+  #board-hero .strip .cell:last-child{border-right:none}
+  #board-hero .strip .label{font-size:14px}
+  #board-hero .strip .num{font-size:32px}
+</style>
+</head>
+<body data-layout="grid">
+
+  <div id="picker">
+    Layout
+    <select id="layoutSelect">
+      <option value="ledger">Split Ledger</option>
+      <option value="grid" selected>Ticker Grid</option>
+      <option value="hero">Headline + Strip</option>
+    </select>
+  </div>
+
+  <div class="status"><span class="dot" id="dot"></span><span id="livetext">Connecting…</span></div>
+  <div class="brandmark">Aradhana Jewellers</div>
+
+  <!-- ============================================================ Split Ledger -->
+  <div class="board" id="board-ledger">
+    <div class="col col-gold">
+      <div class="label metal-label">Gold</div>
+      <div>
+        <div class="gold-row"><div class="karat">24K</div><div class="num" id="l-g24"><span class="rs">₹</span>—</div></div>
+        <div class="gold-row"><div class="karat">22K</div><div class="num" id="l-g22"><span class="rs">₹</span>—</div></div>
+        <div class="gold-row"><div class="karat">18K</div><div class="num" id="l-g18"><span class="rs">₹</span>—</div></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="col col-silver">
+      <div class="label metal-label">Silver</div>
+      <div>
+        <div class="silver-row"><div class="cap">Pure</div><div class="num" id="l-sp"><span class="rs">₹</span>—</div></div>
+        <div class="silver-row"><div class="cap">Ornament</div><div class="num" id="l-so"><span class="rs">₹</span>—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ Ticker Grid -->
+  <div class="board" id="board-grid">
+    <div class="row1">
+      <div class="cell"><div class="label">Gold 24K</div><div class="num" id="g-g24"><span class="rs">₹</span>—</div></div>
+      <div class="cell"><div class="label">Gold 22K</div><div class="num" id="g-g22"><span class="rs">₹</span>—</div></div>
+      <div class="cell"><div class="label">Gold 18K</div><div class="num" id="g-g18"><span class="rs">₹</span>—</div></div>
+    </div>
+    <div class="row2">
+      <div class="cell"><div class="label">Silver Pure</div><div class="num" id="g-sp"><span class="rs">₹</span>—</div></div>
+      <div class="cell"><div class="label">Silver Ornament</div><div class="num" id="g-so"><span class="rs">₹</span>—</div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ Headline + Strip -->
+  <div class="board" id="board-hero">
+    <div class="hero">
+      <div class="label">Gold 22K</div>
+      <div class="num" id="h-g22"><span class="rs">₹</span>—</div>
+    </div>
+    <div class="strip">
+      <div class="cell"><div class="label">Gold 24K</div><div class="num" id="h-g24">—</div></div>
+      <div class="cell"><div class="label">Gold 18K</div><div class="num" id="h-g18">—</div></div>
+      <div class="cell"><div class="label">Silver Pure</div><div class="num" id="h-sp">—</div></div>
+      <div class="cell"><div class="label">Silver Ornament</div><div class="num" id="h-so">—</div></div>
+    </div>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const inr = (n) => {
+  if (n == null) return '—';
+  return Math.round(Number(n)).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+};
+const setRs = (el, value) => { el.innerHTML = '<span class="rs">₹</span>' + inr(value); };
+
+// ---- layout picker: persisted in localStorage, applied instantly ----
+const LAYOUT_KEY = 'aradhana-board-layout';
+const select = $('layoutSelect');
+const saved = localStorage.getItem(LAYOUT_KEY);
+if (saved && ['ledger', 'grid', 'hero'].includes(saved)) {
+  document.body.setAttribute('data-layout', saved);
+  select.value = saved;
+}
+select.addEventListener('change', () => {
+  document.body.setAttribute('data-layout', select.value);
+  localStorage.setItem(LAYOUT_KEY, select.value);
+});
+
+function render(s) {
+  const live = s.live;
+  const status = live ? live.status : 'STARTING';
+  const dot = $('dot');
+  dot.className = 'dot' + (status === 'BLOCKED' ? ' bad' : status === 'VERIFIED_WITH_WARNINGS' ? ' warn' : '');
+  $('livetext').textContent =
+    status === 'BLOCKED' ? 'Held' : status === 'VERIFIED' ? 'Live' : status === 'VERIFIED_WITH_WARNINGS' ? 'Live' : 'Connecting…';
+
+  const p = s.published;
+  if (p) {
+    const g18 = (p.variants || []).find((v) => v.key === '18kt');
+    const g18Rate = g18 ? g18.rate : null;
+
+    setRs($('l-g24'), p.rate24kt); setRs($('g-g24'), p.rate24kt); setRs($('h-g24'), p.rate24kt);
+    setRs($('l-g22'), p.rate22kt); setRs($('g-g22'), p.rate22kt); setRs($('h-g22'), p.rate22kt);
+    setRs($('l-g18'), g18Rate);    setRs($('g-g18'), g18Rate);    setRs($('h-g18'), g18Rate);
+  }
+
+  const sil = s.silver && s.silver.published;
+  if (sil) {
+    setRs($('l-sp'), sil.pure); setRs($('g-sp'), sil.pure); setRs($('h-sp'), sil.pure);
+    setRs($('l-so'), sil.ornament); setRs($('g-so'), sil.ornament); setRs($('h-so'), sil.ornament);
+  }
+}
+
+let es = null, retry = 0;
+function connect() {
+  es = new EventSource('/api/stream');
+  es.onmessage = (e) => {
+    retry = 0;
+    try { render(JSON.parse(e.data)); } catch (_) {}
+  };
+  es.onerror = () => {
+    es.close();
+    retry = Math.min(retry + 1, 6);
+    $('dot').className = 'dot bad';
+    $('livetext').textContent = 'Reconnecting…';
+    setTimeout(connect, 500 * Math.pow(2, retry));
+  };
+}
+fetch('/api/rate').then((r) => r.json()).then(render).catch(() => {});
+connect();
+</script>
+</body>
+</html>
