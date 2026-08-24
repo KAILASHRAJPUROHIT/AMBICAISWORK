@@ -1,5 +1,6 @@
 package com.aradhana.capturecam
 
+import android.graphics.Bitmap
 import androidx.camera.core.ImageProxy
 import java.nio.ByteBuffer
 import kotlin.math.max
@@ -17,6 +18,13 @@ import kotlin.math.min
  * matching the web worker's own `step` stride sampling.
  */
 object MaterialDetector {
+
+    // Sony Live View arrives as JPEG -> Bitmap rather than CameraX's
+    // YUV_420_888 ImageProxy. Reuse one ARGB readback buffer so the
+    // continuous preview does not allocate a multi-megabyte IntArray on
+    // every frame. The Bitmap overload below is synchronized because this
+    // singleton owns that reusable buffer.
+    private var bitmapArgbBuffer = IntArray(0)
 
     data class Bounds(val x0: Float, val y0: Float, val x1: Float, val y1: Float) {
         fun area(): Float = max(0f, x1 - x0) * max(0f, y1 - y0)
@@ -538,6 +546,212 @@ object MaterialDetector {
             highlightClipFraction = highlightClipFraction,
             sceneClipFraction = sceneClipFraction,
             danglerBlobs = danglerBlobs
+        )
+    }
+
+    /**
+     * Gold-only analysis for decoded Sony Live View JPEGs. This uses the
+     * same RGB gold classifier, local-texture gate, guide/full-frame
+     * geometry, component selection, pair union, and material thresholds
+     * as [analyse] does for CameraX YUV frames. Silver/sparkle sampling is
+     * intentionally omitted: Sony auto-steering must never redirect the
+     * physical gimbal toward a neutral background highlight.
+     */
+    @Synchronized
+    fun analyse(bitmap: Bitmap, step: Int = 6, fullFrame: Boolean = false): Result {
+        val width = bitmap.width
+        val height = bitmap.height
+        if (width <= 0 || height <= 0) return Result(false, null, 0f, 0f, 0f, 0f)
+
+        val pixelCount = width * height
+        if (bitmapArgbBuffer.size < pixelCount) bitmapArgbBuffer = IntArray(pixelCount)
+        bitmap.getPixels(bitmapArgbBuffer, 0, width, 0, 0, width, height)
+
+        val startX = if (fullFrame) 0 else (width * 0.18).toInt()
+        val endX = if (fullFrame) width else (width * 0.82).toInt()
+        val startY = if (fullFrame) 0 else (height * 0.16).toInt()
+        val endY = if (fullFrame) height else (height * 0.84).toInt()
+        val cols = max(1, (endX - startX) / step)
+        val rows = max(1, (endY - startY) / step)
+        val goldMask = BooleanArray(cols * rows)
+        var goldSamples = 0
+        var goldClipped = 0
+        var sceneSamples = 0
+        var sceneClipped = 0
+
+        fun rgbAt(x: Int, y: Int): Int = bitmapArgbBuffer[y * width + x]
+        fun luma(pixel: Int): Int {
+            val r = pixel ushr 16 and 0xFF
+            val g = pixel ushr 8 and 0xFF
+            val b = pixel and 0xFF
+            return (0.299f * r + 0.587f * g + 0.114f * b).toInt()
+        }
+        fun locallyTextured(cx: Int, cy: Int): Boolean {
+            var sum = 0
+            var sumSq = 0
+            var count = 0
+            var yy = cy - LOCAL_CONTRAST_RADIUS
+            while (yy <= cy + LOCAL_CONTRAST_RADIUS) {
+                if (yy in 0 until height) {
+                    var xx = cx - LOCAL_CONTRAST_RADIUS
+                    while (xx <= cx + LOCAL_CONTRAST_RADIUS) {
+                        if (xx in 0 until width) {
+                            val value = luma(rgbAt(xx, yy))
+                            sum += value
+                            sumSq += value * value
+                            count += 1
+                        }
+                        xx += 2
+                    }
+                }
+                yy += 2
+            }
+            if (count < 4) return false
+            val mean = sum.toFloat() / count
+            return (sumSq.toFloat() / count) - mean * mean >= MIN_LOCAL_VARIANCE
+        }
+
+        for (row in 0 until rows) {
+            for (col in 0 until cols) {
+                val x = min(width - 1, startX + col * step)
+                val y = min(height - 1, startY + row * step)
+                val pixel = rgbAt(x, y)
+                val r = pixel ushr 16 and 0xFF
+                val g = pixel ushr 8 and 0xFF
+                val b = pixel and 0xFF
+                val yLuma = luma(pixel)
+                sceneSamples += 1
+                if (yLuma >= 200) sceneClipped += 1
+                if (looksLikeGold(r, g, b) && locallyTextured(x, y)) {
+                    goldMask[row * cols + col] = true
+                    goldSamples += 1
+                    if (yLuma >= 240) goldClipped += 1
+                }
+            }
+        }
+
+        val points = ArrayList<Point>(goldSamples)
+        for (row in 0 until rows) {
+            for (col in 0 until cols) {
+                if (!goldMask[row * cols + col]) continue
+                val x = min(width - 1, startX + col * step)
+                val y = min(height - 1, startY + row * step)
+                points.add(Point(x.toFloat() / width, y.toFloat() / height, gold = true))
+            }
+        }
+        val highlightClip = if (goldSamples > 0) goldClipped.toFloat() / goldSamples else 0f
+        val sceneClip = if (sceneSamples > 0) sceneClipped.toFloat() / sceneSamples else 0f
+        if (goldSamples == 0) return Result(false, null, 0f, 0f, 0f, 0f, points, highlightClip, sceneClip)
+
+        data class BitmapComponent(
+            val size: Int,
+            val minCol: Int,
+            val minRow: Int,
+            val maxCol: Int,
+            val maxRow: Int
+        )
+
+        val visited = BooleanArray(goldMask.size)
+        val components = mutableListOf<BitmapComponent>()
+        val stack = ArrayDeque<Int>()
+        for (start in goldMask.indices) {
+            if (!goldMask[start] || visited[start]) continue
+            var size = 0
+            var minCol = cols
+            var minRow = rows
+            var maxCol = -1
+            var maxRow = -1
+            stack.clear()
+            stack.addLast(start)
+            visited[start] = true
+            while (stack.isNotEmpty()) {
+                val current = stack.removeLast()
+                size += 1
+                val row = current / cols
+                val col = current % cols
+                minCol = min(minCol, col)
+                minRow = min(minRow, row)
+                maxCol = max(maxCol, col)
+                maxRow = max(maxRow, row)
+                for (dy in -1..1) for (dx in -1..1) {
+                    if (dx == 0 && dy == 0) continue
+                    val nr = row + dy
+                    val nc = col + dx
+                    if (nr !in 0 until rows || nc !in 0 until cols) continue
+                    val next = nr * cols + nc
+                    if (goldMask[next] && !visited[next]) {
+                        visited[next] = true
+                        stack.addLast(next)
+                    }
+                }
+            }
+            components.add(BitmapComponent(size, minCol, minRow, maxCol, maxRow))
+        }
+        if (components.isEmpty()) return Result(false, null, 0f, 0f, 0f, 0f, points, highlightClip, sceneClip)
+
+        fun fillRatio(c: BitmapComponent): Float {
+            val boxCells = (c.maxCol - c.minCol + 1) * (c.maxRow - c.minRow + 1)
+            return c.size.toFloat() / max(1, boxCells)
+        }
+        fun edgesTouched(c: BitmapComponent): Int {
+            var count = 0
+            if (c.minCol <= 1) count += 1
+            if (c.maxCol >= cols - 2) count += 1
+            if (c.minRow <= 1) count += 1
+            if (c.maxRow >= rows - 2) count += 1
+            return count
+        }
+
+        val real = components.filter { fillRatio(it) >= 0.28f || edgesTouched(it) < 2 }
+        val primary = real.maxByOrNull { it.size } ?: components.maxByOrNull { it.size }!!
+        var bestMinCol = primary.minCol
+        var bestMinRow = primary.minRow
+        var bestMaxCol = primary.maxCol
+        var bestMaxRow = primary.maxRow
+        var bestSize = primary.size
+        for (component in real) {
+            if (component === primary || component.size < primary.size * 0.25f) continue
+            bestMinCol = min(bestMinCol, component.minCol)
+            bestMinRow = min(bestMinRow, component.minRow)
+            bestMaxCol = max(bestMaxCol, component.maxCol)
+            bestMaxRow = max(bestMaxRow, component.maxRow)
+            bestSize += component.size
+        }
+
+        val bounds = Bounds(
+            (startX + bestMinCol * step).toFloat() / width,
+            (startY + bestMinRow * step).toFloat() / height,
+            (startX + (bestMaxCol + 1) * step).toFloat() / width,
+            (startY + (bestMaxRow + 1) * step).toFloat() / height
+        )
+        val danglerThreshold = bestMinRow + ((bestMaxRow - bestMinRow) * 0.55f).toInt()
+        val danglers = real.filter {
+            it !== primary && it.size < primary.size * 0.15f && it.minRow >= danglerThreshold
+        }.map {
+            Bounds(
+                (startX + it.minCol * step).toFloat() / width,
+                (startY + it.minRow * step).toFloat() / height,
+                (startX + (it.maxCol + 1) * step).toFloat() / width,
+                (startY + (it.maxRow + 1) * step).toFloat() / height
+            )
+        }
+
+        val warmCoverage = bestSize.toFloat() / goldMask.size
+        val scannedFraction = ((endX - startX).toFloat() / width) * ((endY - startY).toFloat() / height)
+        val fullFrameGoldCoverage = warmCoverage * scannedFraction
+        val goldBoxArea = bounds.area()
+        val material = warmCoverage >= 0.06f || fullFrameGoldCoverage >= 0.012f || goldBoxArea >= 0.035f
+        return Result(
+            material,
+            bounds,
+            goldBoxArea,
+            warmCoverage,
+            fullFrameGoldCoverage,
+            goldBoxArea,
+            points,
+            highlightClip,
+            sceneClip,
+            danglers
         )
     }
 }

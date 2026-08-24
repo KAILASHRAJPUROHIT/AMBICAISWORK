@@ -10,6 +10,18 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Primary production source. Hidden until a decoded Sony Live View
+         frame proves the remote session healthy; CameraX remains visible
+         underneath as the automatic fallback. -->
+    <ImageView
+        android:id="@+id/sonyPreviewView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/black"
+        android:contentDescription="Sony camera live view"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
     <com.aradhana.capturecam.BoundsOverlayView
         android:id="@+id/boundsOverlay"
         android:layout_width="match_parent"

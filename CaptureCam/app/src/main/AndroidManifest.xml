@@ -21,6 +21,7 @@
          calibration/motion-controller architecture is built on top of it. -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
 
     <!-- Reads back the photo Nothing Camera just saved (NothingCameraBridge):
@@ -50,9 +51,10 @@
         android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="portrait"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.CaptureCam">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -76,7 +78,7 @@
             android:name=".BleDiagnosticsActivity"
             android:exported="true"
             android:label="RSC2 BLE Diagnostics"
-            android:screenOrientation="portrait"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.CaptureCam" />
 
         <!-- Drives Nothing Camera's own shutter via its Accessibility node

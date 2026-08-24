@@ -52,8 +52,9 @@ class RSC2Controller {
     private var gatt: BluetoothGatt? = null
     private var commandCharacteristic: BluetoothGattCharacteristic? = null
     private var seq = 1
-    private var activeMoveRunnable: Runnable? = null
+    @Volatile private var activeMoveRunnable: Runnable? = null
     private var heartbeatRunnable: Runnable? = null
+    @Volatile private var connectInFlight = false
 
     val isReady: Boolean get() = commandCharacteristic != null && gatt != null
 
@@ -141,14 +142,25 @@ class RSC2Controller {
      * present (spec rule 61).
      */
     fun connect(context: Context, scanTimeoutMs: Long = 10_000L, onResult: (Boolean) -> Unit) {
+        if (isReady) {
+            onResult(true)
+            return
+        }
+        if (connectInFlight) {
+            Log.d(TAG, "RSC 2 connect already in flight")
+            return
+        }
+        connectInFlight = true
         if (!hasBlePermissions(context)) {
             Log.w(TAG, "Missing BLE permissions -- cannot connect to RSC 2")
+            connectInFlight = false
             onResult(false)
             return
         }
         val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
         if (adapter == null || !adapter.isEnabled) {
             Log.w(TAG, "Bluetooth unavailable or off")
+            connectInFlight = false
             onResult(false)
             return
         }
@@ -157,13 +169,17 @@ class RSC2Controller {
         fun finish(success: Boolean) {
             if (resolved) return
             resolved = true
+            connectInFlight = false
             onResult(success)
         }
 
+        var deviceConnectStarted = false
         val scanCallback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
+                if (deviceConnectStarted) return
                 val name = try { result.device.name } catch (e: SecurityException) { null } ?: return
                 if (!name.contains("RSC", ignoreCase = true) && !name.contains("Ronin", ignoreCase = true)) return
+                deviceConnectStarted = true
                 try {
                     adapter.bluetoothLeScanner?.stopScan(this)
                 } catch (_: SecurityException) {}
@@ -234,6 +250,19 @@ class RSC2Controller {
                 }
                 finish(char != null)
             }
+
+            override fun onCharacteristicWrite(
+                g: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int
+            ) {
+                if (characteristic.uuid != COMMAND_CHAR_UUID) return
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    Log.d(TAG, "RSC 2 write confirmed")
+                } else {
+                    Log.w(TAG, "RSC 2 write callback failed status=$status")
+                }
+            }
         }
         try {
             gatt = device.connectGatt(context, false, callback)
@@ -267,7 +296,11 @@ class RSC2Controller {
                 char.value = frame
                 g.writeCharacteristic(char)
             }
-            if (!ok) Log.w(TAG, "writeCharacteristic() failed (sdk=${Build.VERSION.SDK_INT})")
+            // This tablet's Android 16 vendor stack has returned a non-zero
+            // queue result while still delivering onCharacteristicWrite(0).
+            // Treat the callback as authoritative; keep this as diagnostic
+            // detail instead of a false production failure every 900 ms.
+            if (!ok) Log.d(TAG, "RSC 2 write queue returned non-success (sdk=${Build.VERSION.SDK_INT})")
         } catch (e: SecurityException) {
             Log.w(TAG, "Missing permission to write: ${e.message}")
         }

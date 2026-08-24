@@ -1,7 +1,18 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+val captureCamLocalProperties = Properties().apply {
+    val localFile = rootProject.file("local.properties")
+    if (localFile.isFile) localFile.inputStream().use(::load)
+}
+val sonySshPassword = (
+    providers.gradleProperty("SONY_SSH_PASSWORD").orNull
+        ?: captureCamLocalProperties.getProperty("sony.ssh.password", "")
+).replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "com.aradhana.capturecam"
@@ -13,6 +24,9 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+        // Machine-bound camera credential. Supplied by ignored
+        // local.properties or -PSONY_SSH_PASSWORD; never committed.
+        buildConfigField("String", "SONY_SSH_PASSWORD", "\"$sonySshPassword\"")
     }
 
     buildTypes {
@@ -29,6 +43,7 @@ android {
     }
     buildFeatures {
         viewBinding = true
+        buildConfig = true
     }
 }
 

@@ -3,7 +3,9 @@ package com.aradhana.capturecam
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
+import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.View
 import kotlin.math.max
@@ -29,6 +31,9 @@ class BoundsOverlayView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     private var displayPoints: List<FloatArray> = emptyList() // each [x,y] normalized in DISPLAY space
+    private var displayTarget: RectF? = null
+    private var displayGuide: RectF? = null
+    private var targetConfirmed = false
     private var sourceAspect: Float = 1f
 
     private val paint = Paint().apply {
@@ -37,10 +42,26 @@ class BoundsOverlayView @JvmOverloads constructor(
         isAntiAlias = true
     }
     private val dotRadiusPx = 5f
+    private val targetPaint = Paint().apply {
+        color = Color.YELLOW
+        style = Paint.Style.STROKE
+        strokeWidth = 5f
+        isAntiAlias = true
+    }
+    private val guidePaint = Paint().apply {
+        color = Color.CYAN
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+        pathEffect = DashPathEffect(floatArrayOf(14f, 10f), 0f)
+        isAntiAlias = true
+    }
 
     /** [points] and [rotationDegrees] straight from MaterialDetector.Result
      * and the ImageProxy that produced it. Pass an empty list to clear. */
     fun update(points: List<MaterialDetector.Point>, sourceWidth: Int, sourceHeight: Int, rotationDegrees: Int) {
+        displayTarget = null
+        displayGuide = null
+        targetConfirmed = false
         if (points.isEmpty() || sourceWidth <= 0 || sourceHeight <= 0) {
             displayPoints = emptyList()
             invalidate()
@@ -70,9 +91,59 @@ class BoundsOverlayView @JvmOverloads constructor(
         invalidate()
     }
 
+    /** Sony deterministic tracking overlay: central acquisition guide,
+     * one selected component, and only that component's strict-gold dots. */
+    fun updateTarget(
+        points: List<MaterialDetector.Point>,
+        target: MaterialDetector.Bounds?,
+        guide: MaterialDetector.Bounds?,
+        sourceWidth: Int,
+        sourceHeight: Int,
+        rotationDegrees: Int,
+        confirmed: Boolean
+    ) {
+        targetConfirmed = confirmed
+        if (sourceWidth <= 0 || sourceHeight <= 0) {
+            displayPoints = emptyList()
+            displayTarget = null
+            displayGuide = null
+            invalidate()
+            return
+        }
+        displayPoints = points.map { point -> rotatePoint(point.x, point.y, rotationDegrees) }
+        displayTarget = target?.let { rotateBounds(it, rotationDegrees) }
+        displayGuide = guide?.let { rotateBounds(it, rotationDegrees) }
+        sourceAspect = if (rotationDegrees == 90 || rotationDegrees == 270) {
+            sourceHeight.toFloat() / sourceWidth.toFloat()
+        } else {
+            sourceWidth.toFloat() / sourceHeight.toFloat()
+        }
+        invalidate()
+    }
+
+    private fun rotatePoint(x: Float, y: Float, rotationDegrees: Int): FloatArray =
+        when (rotationDegrees) {
+            90 -> floatArrayOf(1f - y, x)
+            180 -> floatArrayOf(1f - x, 1f - y)
+            270 -> floatArrayOf(y, 1f - x)
+            else -> floatArrayOf(x, y)
+        }
+
+    private fun rotateBounds(bounds: MaterialDetector.Bounds, rotationDegrees: Int): RectF {
+        val corners = arrayOf(
+            rotatePoint(bounds.x0, bounds.y0, rotationDegrees),
+            rotatePoint(bounds.x1, bounds.y0, rotationDegrees),
+            rotatePoint(bounds.x0, bounds.y1, rotationDegrees),
+            rotatePoint(bounds.x1, bounds.y1, rotationDegrees)
+        )
+        return RectF(
+            corners.minOf { it[0] }, corners.minOf { it[1] },
+            corners.maxOf { it[0] }, corners.maxOf { it[1] }
+        )
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        if (displayPoints.isEmpty()) return
         val vw = width.toFloat()
         val vh = height.toFloat()
         if (vw <= 0f || vh <= 0f) return
@@ -92,6 +163,18 @@ class BoundsOverlayView @JvmOverloads constructor(
         }
         val cropX = (renderedWidth - vw) / 2f
         val cropY = (renderedHeight - vh) / 2f
+
+        fun screenRect(normalized: RectF): RectF = RectF(
+            normalized.left * renderedWidth - cropX,
+            normalized.top * renderedHeight - cropY,
+            normalized.right * renderedWidth - cropX,
+            normalized.bottom * renderedHeight - cropY
+        )
+        displayGuide?.let { canvas.drawRect(screenRect(it), guidePaint) }
+        displayTarget?.let {
+            targetPaint.color = if (targetConfirmed) Color.GREEN else Color.YELLOW
+            canvas.drawRect(screenRect(it), targetPaint)
+        }
 
         for (p in displayPoints) {
             val screenX = p[0] * renderedWidth - cropX

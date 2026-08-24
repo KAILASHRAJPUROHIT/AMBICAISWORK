@@ -12,13 +12,17 @@ import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -26,6 +30,9 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
 
 /**
  * RSC 2 BLE hardware-validation harness -- deliberately NOT part of the
@@ -86,11 +93,22 @@ class BleDiagnosticsActivity : AppCompatActivity() {
     private val requestPermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        if (results.values.all { it }) startScan() else log("Permissions denied -- cannot scan.")
+        if (results.values.all { it }) {
+            if (pendingSonyGimbalConnect) {
+                pendingSonyGimbalConnect = false
+                connectSonyTrackingGimbal()
+            } else {
+                startScan()
+            }
+        } else {
+            pendingSonyGimbalConnect = false
+            log("Permissions denied -- cannot connect to the gimbal.")
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_ble_diagnostics)
 
         statusText = findViewById(R.id.bleStatusText)
@@ -147,12 +165,88 @@ class BleDiagnosticsActivity : AppCompatActivity() {
     private val sonyWifi by lazy { SonyWifiConnectionManager(this) }
     private var sonyController: SonyPtpIpController? = null
     private lateinit var sonyStatusText: TextView
+    private lateinit var sonyLiveViewContainer: View
+    private lateinit var sonyLiveViewImage: ImageView
+    private lateinit var sonyGoldOverlay: BoundsOverlayView
+    private lateinit var sonyTrackingStatusText: TextView
+    private lateinit var sonyLiveStreamButton: Button
+    private lateinit var sonyAutoTrackButton: Button
+    private val sonyTrackingGimbal = RSC2Controller()
+    private val sonyGoldServo = SonyGoldServoController()
+    private val sonyGoldTargetDetector = SonyGoldTargetDetector()
+    @Volatile private var sonyLiveRunning = false
+    @Volatile private var sonyAutoTracking = false
+    private var sonyLiveThread: Thread? = null
+    @Volatile private var sonyLiveGeneration = 0L
+    private var pendingSonyGimbalConnect = false
+    @Volatile private var sonyGimbalConnecting = false
+    private var sonyFrameCount = 0L
+    private var sonyAnalysisFrameId = 0L
+    private var sonyFrameWindowStarted = 0L
+    private var sonyLastFrameLogAt = 0L
+    private data class SonyUiFrame(
+        val generation: Long,
+        val bitmap: Bitmap,
+        val goldPoints: List<MaterialDetector.Point>,
+        val target: SonyGoldTargetDetector.Target?,
+        val decision: SonyGoldServoController.Decision,
+        val candidateCount: Int,
+        val fps: Float,
+        val networkMs: Long,
+        val decodeMs: Long,
+        val analysisMs: Long
+    )
+    private val sonyLatestUiFrame = AtomicReference<SonyUiFrame?>(null)
+    private val sonyUiUpdatePending = AtomicBoolean(false)
+    private val sonyUiDrainRunnable = object : Runnable {
+        override fun run() {
+            val frame = sonyLatestUiFrame.getAndSet(null)
+            if (frame != null && sonyLiveRunning && frame.generation == sonyLiveGeneration) {
+                renderSonyUiFrame(frame)
+            }
+            sonyUiUpdatePending.set(false)
+            // A newer frame may have arrived between getAndSet() and the
+            // pending reset. Schedule exactly one more render; intermediate
+            // frames remain intentionally dropped so preview never queues.
+            if (sonyLatestUiFrame.get() != null &&
+                sonyUiUpdatePending.compareAndSet(false, true)
+            ) {
+                handler.post(this)
+            }
+        }
+    }
+    @Volatile private var sonyLiveDesired = false
+    @Volatile private var sonyRecoveryEnabled = true
+    @Volatile private var sonyConnectInFlight = false
+    private var sonyConnectionGeneration = 0L
+    private var sonyReconnectAttempt = 0
+    private var sonyReconnectRunnable: Runnable? = null
+    private var sonyConnectionSpec: SonyConnectionSpec? = null
+
+    private data class SonyConnectionSpec(
+        val ip: String,
+        val sshUser: String,
+        val sshPassword: String
+    )
 
     private fun setupSonyTestPanel() {
         sonyStatusText = findViewById(R.id.sonyStatusText)
+        sonyLiveViewContainer = findViewById(R.id.sonyLiveViewContainer)
+        sonyLiveViewImage = findViewById(R.id.sonyLiveViewImage)
+        sonyGoldOverlay = findViewById(R.id.sonyGoldOverlay)
+        sonyTrackingStatusText = findViewById(R.id.sonyTrackingStatusText)
+        sonyLiveStreamButton = findViewById(R.id.sonyLiveStreamButton)
+        sonyAutoTrackButton = findViewById(R.id.sonyAutoTrackButton)
         val ipInput = findViewById<EditText>(R.id.sonyIpInput)
         val sshUserInput = findViewById<EditText>(R.id.sonySshUserInput)
         val sshPasswordInput = findViewById<EditText>(R.id.sonySshPasswordInput)
+
+        sonyTrackingGimbal.onUnexpectedDisconnect = {
+            handler.post {
+                log("Sony tracking: gimbal disconnected; reconnecting…")
+                if (sonyAutoTracking) connectSonyTrackingGimbal()
+            }
+        }
 
         findViewById<Button>(R.id.sonyConnectButton).setOnClickListener {
             val ip = ipInput.text.toString().trim()
@@ -162,27 +256,17 @@ class BleDiagnosticsActivity : AppCompatActivity() {
                 log("Sony: enter the camera IP and the User/Password from its Access Authen. Info screen")
                 return@setOnClickListener
             }
-            // Confirmed live 2026-08-23: this camera generation tunnels
-            // PTP-IP through SSH (Access Authentication) rather than
-            // exposing it on a plain port -- see SonyPtpIpController's doc
-            // comment. No WiFi-join step needed here: camera and tablet
-            // are both already on the shop LAN.
-            sonyStatusText.text = "Connecting to $ip..."
-            log("Sony: authenticating SSH to $ip as $sshUser")
-            Thread {
-                val controller = SonyPtpIpController()
-                val ok = controller.connectBlocking(ip, sshUser, sshPassword)
-                handler.post {
-                    if (ok) {
-                        sonyController = controller
-                        sonyStatusText.text = "Connected -- $ip"
-                        log("Sony: PTP-IP-over-SSH handshake succeeded")
-                    } else {
-                        sonyStatusText.text = "Handshake failed"
-                        log("Sony: could not connect/handshake with $ip -- see logcat tag SonyPtpIp for which step")
-                    }
-                }
-            }.start()
+            // A manual connection refresh must not force a failing Live View
+            // request into the new command session. Preserve an already
+            // requested preview, but keep a connection-only session stable
+            // until the operator explicitly starts the stream.
+            stopSonyLiveView(userRequested = false)
+            sonyRecoveryEnabled = true
+            sonyConnectionSpec = SonyConnectionSpec(ip, sshUser, sshPassword)
+            sonyConnectionGeneration += 1L
+            sonyReconnectAttempt = 0
+            cancelSonyReconnect()
+            connectSonyOnce(sonyConnectionGeneration)
         }
 
         findViewById<Button>(R.id.sonyShutterButton).setOnClickListener {
@@ -212,15 +296,408 @@ class BleDiagnosticsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.sonyLiveViewButton).setOnClickListener {
             val controller = sonyController
             if (controller == null) { log("Sony: not connected"); return@setOnClickListener }
-            log("Sony: fetching one live-view frame...")
+            log("Sony: probing one PTP virtual-object live-view frame...")
             Thread {
                 val frame = controller.fetchLiveViewFrameRaw()
+                val bitmap = frame?.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
                 handler.post {
-                    log(if (frame != null) "Sony: got ${frame.size} bytes (format not yet verified -- check if it decodes as JPEG)"
-                        else "Sony: live-view fetch FAILED")
+                    if (frame != null && bitmap != null) {
+                        sonyLiveViewContainer.visibility = View.VISIBLE
+                        sonyLiveViewImage.setImageBitmap(bitmap)
+                        sonyTrackingStatusText.text = "Sony Live View ${bitmap.width}×${bitmap.height} — ${frame.size} bytes"
+                        log("Sony: decoded PTP Live View JPEG ${bitmap.width}x${bitmap.height}, ${frame.size} bytes")
+                        log("Sony: ${controller.lastLiveViewDiagnostic}")
+                    } else {
+                        log("Sony: PTP live-view probe FAILED — ${controller.lastLiveViewDiagnostic}")
+                    }
                 }
             }.start()
         }
+
+        sonyLiveStreamButton.setOnClickListener {
+            if (sonyLiveDesired || sonyLiveRunning) {
+                stopSonyLiveView(userRequested = true)
+            } else {
+                sonyLiveDesired = true
+                startSonyLiveView()
+            }
+        }
+        sonyAutoTrackButton.setOnClickListener {
+            setSonyAutoTracking(!sonyAutoTracking)
+        }
+
+        // Cold-start self-heal: credentials are already provisioned on this
+        // dedicated capture tablet. Restore the Sony control session without
+        // consuming its single command channel with a preview request before
+        // the camera is confirmed on its shooting screen. Physical motion and
+        // Live View remain explicitly gated and default OFF.
+        val provisionedIp = ipInput.text.toString().trim()
+        val provisionedUser = sshUserInput.text.toString().trim()
+        val provisionedPassword = sshPasswordInput.text.toString()
+        if (provisionedIp.isNotEmpty() && provisionedUser.isNotEmpty() && provisionedPassword.isNotEmpty()) {
+            sonyConnectionSpec = SonyConnectionSpec(
+                provisionedIp, provisionedUser, provisionedPassword
+            )
+            sonyLiveDesired = false
+            sonyConnectionGeneration += 1L
+            val generation = sonyConnectionGeneration
+            handler.postDelayed({ connectSonyOnce(generation) }, 500L)
+        }
+    }
+
+    /** One connection attempt. Every failure is fully closed inside
+     * SonyPtpIpController, then retried with bounded exponential backoff. */
+    private fun connectSonyOnce(generation: Long) {
+        val spec = sonyConnectionSpec ?: return
+        if (!sonyRecoveryEnabled || generation != sonyConnectionGeneration || sonyConnectInFlight) return
+        cancelSonyReconnect()
+        sonyConnectInFlight = true
+        sonyController?.disconnect()
+        sonyController = null
+        sonyStatusText.text = "Connecting to ${spec.ip}..."
+        log("Sony: authenticating SSH to ${spec.ip} as ${spec.sshUser}")
+        thread(name = "SonyReconnect") {
+            val controller = SonyPtpIpController()
+            val ok = controller.connectBlocking(spec.ip, spec.sshUser, spec.sshPassword)
+            handler.post {
+                sonyConnectInFlight = false
+                if (!sonyRecoveryEnabled || generation != sonyConnectionGeneration) {
+                    controller.disconnect()
+                    return@post
+                }
+                if (ok) {
+                    sonyController = controller
+                    sonyStatusText.text = "Connected -- ${spec.ip}"
+                    log("Sony: PTP-IP-over-SSH handshake succeeded")
+                    if (sonyLiveDesired) startSonyLiveView()
+                } else {
+                    controller.disconnect()
+                    sonyStatusText.text = "Camera unavailable — recovering"
+                    scheduleSonyReconnect("handshake failed")
+                }
+            }
+        }
+    }
+
+    private fun scheduleSonyReconnect(reason: String) {
+        if (!sonyRecoveryEnabled || sonyConnectionSpec == null) return
+        if (sonyReconnectRunnable != null || sonyConnectInFlight) return
+        sonyTrackingGimbal.stopAndReturnToCenter()
+        sonyController?.disconnect()
+        sonyController = null
+        val generation = sonyConnectionGeneration
+        val delayMs = minOf(15_000L, 1_000L * (1L shl minOf(sonyReconnectAttempt, 4)))
+        sonyReconnectAttempt += 1
+        sonyStatusText.text = "Recovering Sony in ${delayMs / 1_000}s"
+        log("Sony: $reason; automatic reconnect in ${delayMs}ms")
+        val runnable = Runnable {
+            sonyReconnectRunnable = null
+            connectSonyOnce(generation)
+        }
+        sonyReconnectRunnable = runnable
+        handler.postDelayed(runnable, delayMs)
+    }
+
+    private fun cancelSonyReconnect() {
+        sonyReconnectRunnable?.let(handler::removeCallbacks)
+        sonyReconnectRunnable = null
+    }
+
+    private fun startSonyLiveView() {
+        val controller = sonyController
+        if (controller == null || !controller.isConnected) {
+            sonyLiveDesired = true
+            scheduleSonyReconnect("Live View requested while disconnected")
+            return
+        }
+        if (sonyLiveRunning) return
+        sonyLiveDesired = true
+        controller.setLiveViewStreaming(true)
+        val generation = sonyLiveGeneration + 1L
+        sonyLiveGeneration = generation
+        sonyLiveRunning = true
+        sonyGoldServo.reset()
+        sonyGoldTargetDetector.reset()
+        sonyFrameCount = 0
+        sonyAnalysisFrameId = 0L
+        sonyFrameWindowStarted = SystemClock.elapsedRealtime()
+        sonyLastFrameLogAt = 0
+        sonyLiveViewContainer.visibility = View.VISIBLE
+        sonyLiveStreamButton.text = "Stop live view"
+        sonyTrackingStatusText.text = "Starting Sony Live View…"
+        if (sonyAutoTracking) ensureSonyTrackingGimbal()
+
+        sonyLiveThread = thread(start = true, name = "SonyLiveView") {
+            var consecutiveFailures = 0
+            while (sonyLiveRunning && generation == sonyLiveGeneration &&
+                controller === sonyController && controller.isConnected
+            ) {
+                val frameStarted = SystemClock.elapsedRealtime()
+                try {
+                    val jpeg = controller.fetchLiveViewJpeg()
+                    val fetchedAt = SystemClock.elapsedRealtime()
+                    if (jpeg == null) {
+                        consecutiveFailures += 1
+                        if (consecutiveFailures == 5) log("Sony Live View: 5 consecutive frame failures")
+                        if (consecutiveFailures >= SONY_LIVE_FAILURES_BEFORE_RECONNECT) {
+                            log("Sony Live View: frame source unhealthy; rebuilding camera session")
+                            controller.disconnect()
+                            break
+                        }
+                        Thread.sleep(40L)
+                        continue
+                    }
+                    val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
+                    val decodedAt = SystemClock.elapsedRealtime()
+                    if (bitmap == null) {
+                        consecutiveFailures += 1
+                        Thread.sleep(40L)
+                        continue
+                    }
+                    // A completed handshake alone is not a healthy camera
+                    // path. Reset the recovery backoff only after the first
+                    // decodable Live View frame arrives.
+                    sonyReconnectAttempt = 0
+                    consecutiveFailures = 0
+                    val analysis = sonyGoldTargetDetector.analyse(bitmap)
+                    val analysedAt = SystemClock.elapsedRealtime()
+                    val target = analysis.target
+                    sonyAnalysisFrameId += 1L
+                    val observation = target?.let {
+                        SonyGoldServoController.Observation(
+                            frameId = sonyAnalysisFrameId,
+                            bounds = it.bounds,
+                            pointCount = it.points.size,
+                            scale = it.scale,
+                            sharpness = it.sharpness
+                        )
+                    }
+                    val now = SystemClock.elapsedRealtime()
+                    val decision = if (sonyAutoTracking) {
+                        sonyGoldServo.onFrame(
+                            observation,
+                            now,
+                            sonyTrackingGimbal.isReady,
+                            sonyTrackingGimbal.isMoving
+                        )
+                    } else {
+                        SonyGoldServoController.Decision(
+                            command = null,
+                            status = if (target != null) {
+                                "Isolated gold ready — auto tracking off"
+                            } else {
+                                "Place one gold item inside cyan guide"
+                            },
+                            centerX = target?.bounds?.let { (it.x0 + it.x1) / 2f },
+                            centerY = target?.bounds?.let { (it.y0 + it.y1) / 2f },
+                            coverage = target?.scale ?: 0f,
+                            detectionStable = target != null
+                        )
+                    }
+
+                    applySonyTrackingCommand(controller, decision.command)
+                    sonyFrameCount += 1
+                    val elapsedWindow = (now - sonyFrameWindowStarted).coerceAtLeast(1L)
+                    val fps = sonyFrameCount * 1000f / elapsedWindow
+                    val goldPoints = target?.points ?: emptyList()
+                    enqueueSonyUiFrame(
+                        SonyUiFrame(
+                            generation = generation,
+                            bitmap = bitmap,
+                            goldPoints = goldPoints,
+                            target = target,
+                            decision = decision,
+                            candidateCount = analysis.candidateCount,
+                            fps = fps,
+                            networkMs = fetchedAt - frameStarted,
+                            decodeMs = decodedAt - fetchedAt,
+                            analysisMs = analysedAt - decodedAt
+                        )
+                    )
+
+                    if (now - sonyLastFrameLogAt >= 2_000L) {
+                        sonyLastFrameLogAt = now
+                        log(
+                            "Sony Live View: ${bitmap.width}x${bitmap.height} ${"%.1f".format(fps)}fps strictGold=${goldPoints.size} " +
+                                "scale=${"%.3f".format(decision.coverage)} " +
+                                "sharp=${"%.4f".format(target?.sharpness ?: 0f)} " +
+                                "candidates=${analysis.candidateCount} status=${decision.status}"
+                        )
+                    }
+                    if (elapsedWindow >= 5_000L) {
+                        sonyFrameCount = 0
+                        sonyFrameWindowStarted = now
+                    }
+
+                    // No pacing sleep: fetchLiveViewJpeg() now blocks until the
+                    // pump has a genuinely NEW frame, so this loop self-paces
+                    // to the camera's real cadence instead of capping itself.
+                } catch (_: InterruptedException) {
+                    break
+                } catch (e: Exception) {
+                    consecutiveFailures += 1
+                    log("Sony Live View frame failed: ${e.message}")
+                    try { Thread.sleep(150L) } catch (_: InterruptedException) { break }
+                }
+            }
+            handler.post {
+                if (generation == sonyLiveGeneration) sonyLiveThread = null
+                if (generation == sonyLiveGeneration && sonyLiveRunning && !controller.isConnected) {
+                    sonyLiveRunning = false
+                    sonyLiveStreamButton.text = "Start live view"
+                    sonyTrackingStatusText.text = "Sony connection lost — recovering"
+                    scheduleSonyReconnect("Live View connection lost")
+                }
+            }
+        }
+        log("Sony Live View started")
+    }
+
+    private fun stopSonyLiveView(userRequested: Boolean = true) {
+        sonyLiveRunning = false
+        if (userRequested) sonyLiveDesired = false
+        sonyController?.setLiveViewStreaming(false)
+        sonyLiveGeneration += 1L
+        sonyLiveThread?.interrupt()
+        sonyLiveThread = null
+        sonyLatestUiFrame.set(null)
+        sonyGoldServo.reset()
+        sonyGoldTargetDetector.reset()
+        sonyGoldOverlay.updateTarget(
+            emptyList(), null, SONY_ACQUISITION_GUIDE,
+            1, 1, 0, confirmed = false
+        )
+        if (::sonyLiveStreamButton.isInitialized) sonyLiveStreamButton.text = "Start live view"
+        if (::sonyTrackingStatusText.isInitialized) sonyTrackingStatusText.text = "Sony Live View stopped"
+        log("Sony Live View stopped")
+    }
+
+    private fun enqueueSonyUiFrame(frame: SonyUiFrame) {
+        sonyLatestUiFrame.set(frame)
+        if (sonyUiUpdatePending.compareAndSet(false, true)) {
+            handler.post(sonyUiDrainRunnable)
+        }
+    }
+
+    private fun renderSonyUiFrame(frame: SonyUiFrame) {
+        val bitmap = frame.bitmap
+        val target = frame.target
+        val decision = frame.decision
+        sonyLiveViewImage.setImageBitmap(bitmap)
+        sonyGoldOverlay.updateTarget(
+            points = frame.goldPoints,
+            target = target?.bounds,
+            guide = SONY_ACQUISITION_GUIDE,
+            sourceWidth = bitmap.width,
+            sourceHeight = bitmap.height,
+            rotationDegrees = 0,
+            confirmed = decision.detectionStable
+        )
+        val center = if (decision.centerX != null && decision.centerY != null) {
+            " center=%.2f,%.2f".format(decision.centerX, decision.centerY)
+        } else ""
+        val detail = target?.let {
+            " sharp=%.4f dark=%.2f highlight=%.2f".format(
+                it.sharpness, it.darkSurroundFraction, it.highlightFraction
+            )
+        } ?: ""
+        sonyTrackingStatusText.text =
+            "${decision.status}\n${bitmap.width}×${bitmap.height}  %.1f fps  net=%dms decode=%dms analyse=%dms  strictGold=%d  scale=%.3f%s%s  candidates=%d  gimbal=%s".format(
+                frame.fps,
+                frame.networkMs,
+                frame.decodeMs,
+                frame.analysisMs,
+                frame.goldPoints.size,
+                decision.coverage,
+                center,
+                detail,
+                frame.candidateCount,
+                if (sonyTrackingGimbal.isReady) "ready" else "not connected"
+            )
+    }
+
+    private fun setSonyAutoTracking(enabled: Boolean) {
+        sonyAutoTracking = enabled
+        sonyGoldServo.reset()
+        sonyAutoTrackButton.text = if (enabled) "Auto gold track: ON" else "Auto gold track: off"
+        if (enabled) {
+            if (!sonyLiveRunning) startSonyLiveView()
+            ensureSonyTrackingGimbal()
+            log("Sony auto gold tracking enabled: steer first, optical zoom only after centering")
+        } else {
+            sonyTrackingGimbal.stopAndReturnToCenter()
+            log("Sony auto gold tracking disabled")
+        }
+    }
+
+    private fun applySonyTrackingCommand(
+        controller: SonyPtpIpController,
+        command: SonyGoldServoController.Command?
+    ) {
+        if (!sonyAutoTracking || command == null) return
+        when (command) {
+            is SonyGoldServoController.Command.Pan -> handler.post {
+                if (!sonyAutoTracking || !sonyTrackingGimbal.isReady || sonyTrackingGimbal.isMoving) return@post
+                val axis = DumlProtocol.AXIS_CENTER + command.sign * SONY_GIMBAL_DEFLECTION
+                sonyTrackingGimbal.moveOut(axis3 = axis, durationMs = command.durationMs) {}
+            }
+            is SonyGoldServoController.Command.Tilt -> handler.post {
+                if (!sonyAutoTracking || !sonyTrackingGimbal.isReady || sonyTrackingGimbal.isMoving) return@post
+                val axis = DumlProtocol.AXIS_CENTER + command.sign * SONY_GIMBAL_DEFLECTION
+                sonyTrackingGimbal.moveOut(axis1 = axis, durationMs = command.durationMs) {}
+            }
+            is SonyGoldServoController.Command.Zoom -> {
+                // Same PTP worker as frame fetching: no concurrent camera
+                // transaction, and the next frame measures the real result.
+                controller.driveZoom(command.tele, command.durationMs)
+            }
+            is SonyGoldServoController.Command.Focus -> {
+                // S1/half-press only. SonyPtpIpController guarantees that
+                // this path never sends the capture/S2 property.
+                val ok = controller.driveAutoFocus(command.durationMs)
+                if (!ok) log("Sony autofocus command was not acknowledged")
+            }
+        }
+    }
+
+    private fun ensureSonyTrackingGimbal() {
+        if (sonyTrackingGimbal.isReady || sonyGimbalConnecting) return
+        val permissions = if (Build.VERSION.SDK_INT >= 31) {
+            arrayOf(Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        val missing = permissions.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) {
+            pendingSonyGimbalConnect = true
+            requestPermissions.launch(missing.toTypedArray())
+            return
+        }
+        connectSonyTrackingGimbal()
+    }
+
+    private fun connectSonyTrackingGimbal() {
+        if (sonyTrackingGimbal.isReady || sonyGimbalConnecting) return
+        sonyGimbalConnecting = true
+        log("Sony tracking: connecting to RSC 2 gimbal…")
+        sonyTrackingGimbal.connect(this) { success ->
+            sonyGimbalConnecting = false
+            log(if (success) "Sony tracking: RSC 2 ready" else "Sony tracking: RSC 2 connection failed")
+        }
+    }
+
+    companion object {
+        private const val SONY_LIVE_FRAME_INTERVAL_MS = 33L
+        private const val SONY_LIVE_FAILURES_BEFORE_RECONNECT = 12
+        private const val SONY_GIMBAL_DEFLECTION = 120
+        private val SONY_ACQUISITION_GUIDE = MaterialDetector.Bounds(
+            SonyGoldTargetDetector.ACQUIRE_LEFT,
+            SonyGoldTargetDetector.ACQUIRE_TOP,
+            SonyGoldTargetDetector.ACQUIRE_RIGHT,
+            SonyGoldTargetDetector.ACQUIRE_BOTTOM
+        )
     }
 
     private fun requestPermissionsThenScan() {
@@ -583,6 +1060,11 @@ class BleDiagnosticsActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        sonyRecoveryEnabled = false
+        sonyConnectionGeneration += 1L
+        cancelSonyReconnect()
+        stopSonyLiveView()
+        sonyTrackingGimbal.disconnect()
         super.onDestroy()
         try {
             if (scanning) bluetoothAdapter.bluetoothLeScanner?.stopScan(scanCallback)
@@ -599,6 +1081,7 @@ class BleDiagnosticsActivity : AppCompatActivity() {
         // traffic) keeps trying to route over a network this screen no
         // longer needs, after the operator navigates away.
         sonyController?.disconnect()
+        sonyController = null
         sonyWifi.unbind()
     }
 }

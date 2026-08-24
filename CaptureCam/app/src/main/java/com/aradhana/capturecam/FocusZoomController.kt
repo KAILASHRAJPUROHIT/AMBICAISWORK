@@ -3,6 +3,7 @@ package com.aradhana.capturecam
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
+import android.os.Build
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
@@ -13,6 +14,7 @@ import android.hardware.camera2.params.MeteringRectangle
 import android.util.Log
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.camera2.interop.CaptureRequestOptions
 import androidx.camera.core.Camera
@@ -44,6 +46,7 @@ import kotlin.math.min
  *    retake or once the next item is armed) rather than assuming continuous
  *    AF is still active post-capture.
  */
+@androidx.annotation.OptIn(markerClass = [ExperimentalCamera2Interop::class])
 class FocusZoomController {
     private var camera: Camera? = null
     private var camera2Control: Camera2CameraControl? = null
@@ -109,7 +112,9 @@ class FocusZoomController {
                 // physId=3), far past typical jewellery shooting distance,
                 // so a crossover mid-shoot would explain a soft/blurred
                 // capture with no other symptom.
-                val activeId = result.get(CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+                val activeId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    result.get(CaptureResult.LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID)
+                } else null
                 if (activeId != null && activeId != lastLoggedPhysicalId) {
                     lastLoggedPhysicalId = activeId
                     val zoom = camera?.cameraInfo?.zoomState?.value?.zoomRatio

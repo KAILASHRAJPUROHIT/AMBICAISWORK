@@ -14,6 +14,7 @@ import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
+import java.util.concurrent.TimeUnit
 
 /**
  * Talks to capture_server.py's existing /api/capture/save -- the SAME
@@ -53,6 +54,14 @@ object UploadClient {
         OkHttpClient.Builder()
             .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
             .hostnameVerifier(HostnameVerifier { _, _ -> true })
+            // Three full-resolution Sony JPEGs can exceed 40 MB, followed
+            // by synchronous local SAM segmentation and full-detail
+            // compositing. OkHttp's 10-second defaults would report a false
+            // upload failure while the laptop was correctly still working.
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(3, TimeUnit.MINUTES)
+            .readTimeout(5, TimeUnit.MINUTES)
+            .callTimeout(8, TimeUnit.MINUTES)
             .build()
     }
 
@@ -177,11 +186,10 @@ object UploadClient {
         }
     }
 
-    /** RSC 2 3-angle workflow -- posts to capture_server.py's
-     * /api/capture/save_multi (capture_tool.save_multi): MAIN/ANGLE_1/
-     * ANGLE_2 -> <tag>.jpg/<tag>_1.jpg/<tag>_2.jpg. No separate tag image
-     * upload -- same as save_pair, only the already-decoded tag_code
-     * crosses the wire. */
+    /** RSC 2 3-angle workflow -- posts MAIN/ANGLE_1/ANGLE_2 to the laptop.
+     * capture_tool.save_multi preserves the sources in a hidden recovery
+     * archive and atomically publishes one 60/20/20 composite as <tag>.jpg.
+     * Only the decoded tag_code crosses the wire; no tag photo is archived. */
     suspend fun saveMulti(
         baseUrl: String,
         tagCode: String,
