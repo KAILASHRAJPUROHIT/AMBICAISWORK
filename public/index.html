@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Live Gold Rate — Aradhana Jewellers</title>
+<meta name="description" content="Live 22KT and 999 fine gold rates, cross-verified every second.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --blue:#23519d; --blue-deep:#173a75; --blue-pale:#5678ad;
+    --gold:#cca137; --gold-lite:#f7ca5b; --gold-dim:#a5822a;
+    --ivory:#fff8e7; --white:#ffffff;
+    --ink:#1c3a6e; --muted:#5b6b8c; --muted2:#8b96ab; --line:#e9dfc0;
+    --ok:#1f9d55; --warn:#b8790a; --bad:#c23a3a;
+    --mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{
+    /* The whole page scales off viewport HEIGHT, not width - so it always
+       fills exactly one screen with no scrolling, and reads bigger on a
+       shop display than on a phone, automatically. */
+    font-size:clamp(11px, 2vh, 26px);
+  }
+  body{
+    background:
+      radial-gradient(1000px 560px at 50% -10%, rgba(247,202,91,.16) 0%, transparent 60%),
+      linear-gradient(180deg,var(--blue) 0%, var(--blue-deep) 100%);
+    color:var(--white); font-family:Inter,system-ui,sans-serif;
+    height:100dvh; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+    padding:1.4rem 1.1rem;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{
+    width:100%; max-width:52rem; height:100%; max-height:100%;
+    display:flex; flex-direction:column; justify-content:center; gap:.55rem;
+  }
+
+  header{text-align:center;flex:none}
+  .logo{
+    width:5.4rem;height:auto;display:block;margin:0 auto .15rem;
+    filter:drop-shadow(0 .3rem .9rem rgba(0,0,0,.28));
+  }
+  .tagline{color:rgba(255,255,255,.72);font-size:.62rem;letter-spacing:.3em;text-transform:uppercase;margin-top:.1rem}
+
+  .livebar{
+    display:inline-flex;align-items:center;gap:.4rem;margin-top:.4rem;
+    padding:.25rem .7rem;border:1px solid rgba(247,202,91,.35);border-radius:999px;
+    background:rgba(255,255,255,.08);font-size:.6rem;color:var(--gold-lite);
+    letter-spacing:.11em;text-transform:uppercase;
+  }
+  .dot{width:.4rem;height:.4rem;border-radius:50%;background:#4ade80;box-shadow:0 0 0 0 rgba(74,222,128,.7)}
+  .dot.beat{animation:beat 1s ease-out}
+  @keyframes beat{0%{box-shadow:0 0 0 0 rgba(74,222,128,.65)}100%{box-shadow:0 0 0 9px rgba(74,222,128,0)}}
+  .dot.warn{background:#fbbf24} .dot.bad{background:#f87171}
+
+  .card{
+    background:var(--ivory);
+    border:1px solid var(--gold); border-radius:.85rem; padding:.85rem 1rem;
+    box-shadow:0 .7rem 1.6rem rgba(10,20,50,.24);
+  }
+  .hero{text-align:center;position:relative;overflow:hidden;flex:1.15;display:flex;flex-direction:column;justify-content:center;min-height:0}
+  .hero::before{
+    content:'';position:absolute;inset:0;
+    background:radial-gradient(420px 180px at 50% 0%,rgba(204,161,55,.14),transparent 70%);
+    pointer-events:none;
+  }
+  .hero .lbl{
+    color:var(--gold-dim);font-size:.6rem;letter-spacing:.22em;text-transform:uppercase;
+    font-weight:700;margin-bottom:.2rem;
+  }
+  .price{
+    font-family:var(--mono);font-weight:700;
+    font-size:3.2rem;line-height:1;letter-spacing:-.02em;
+    color:var(--blue); transition:color .35s ease;
+  }
+  .price.up{color:#178a49} .price.down{color:#b03434}
+  .price .rs{font-size:.5em;color:var(--gold-dim);margin-right:.1em;vertical-align:.12em}
+  .unit{color:var(--muted);font-size:.68rem;margin-top:.1rem;letter-spacing:.08em}
+  .basis{
+    color:var(--muted);font-size:.62rem;margin-top:.35rem;padding-top:.35rem;
+    border-top:1px solid var(--line);line-height:1.45;
+  }
+  .basis b{color:var(--ink);font-weight:600}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;flex:.6;min-height:0}
+  .tile{
+    background:var(--white);border:1px solid var(--line);
+    border-radius:.65rem;padding:.5rem .55rem;
+    display:flex;flex-direction:column;justify-content:center;min-height:0;
+  }
+  .tile .t{color:var(--muted);font-size:.52rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:.2rem}
+  .tile .v{font-family:var(--mono);font-size:1.05rem;font-weight:700;color:var(--blue);line-height:1.1}
+  .tile .s{color:var(--muted2);font-size:.5rem;margin-top:.15rem}
+
+  .silver-hero{flex:.75}
+  .silver-hero .grid{margin-top:.3rem;grid-template-columns:1fr 1fr}
+  .silver-hero .tile .v{font-size:1.3rem}
+
+  .verify{flex:1.1;display:flex;flex-direction:column;min-height:0}
+  .verify .vh{
+    display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+    margin-bottom:.5rem;padding-bottom:.4rem;border-bottom:1px solid var(--line);flex:none;
+  }
+  .vtitle{font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .badge{
+    display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .55rem;border-radius:999px;
+    font-size:.62rem;font-weight:700;letter-spacing:.05em;
+    background:rgba(31,157,85,.12);color:var(--ok);border:1px solid rgba(31,157,85,.3);
+  }
+  .badge.warn{background:rgba(184,121,10,.12);color:var(--warn);border-color:rgba(184,121,10,.32)}
+  .badge.bad{background:rgba(194,58,58,.12);color:var(--bad);border-color:rgba(194,58,58,.32)}
+
+  .checks{display:flex;flex-direction:column;justify-content:space-between;gap:.35rem;flex:1;min-height:0}
+  .chk{display:flex;align-items:center;gap:.5rem;font-size:.68rem}
+  .chk .n{color:var(--ink);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chk .r{font-family:var(--mono);font-size:.62rem;color:var(--muted);text-align:right;flex:none;white-space:nowrap}
+  .pill{width:.4rem;height:.4rem;border-radius:50%;background:var(--ok);flex:none}
+  .pill.warn{background:var(--warn)} .pill.bad{background:var(--bad)}
+
+  .bar{height:.22rem;border-radius:.15rem;background:var(--line);overflow:hidden;margin-top:.5rem;flex:none}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--gold-dim),var(--gold-lite));transition:width .5s ease}
+
+  footer{text-align:center;color:rgba(255,255,255,.75);font-size:.6rem;line-height:1.5;flex:none}
+  footer a{color:var(--gold-lite);text-decoration:none}
+  .stamp{font-family:var(--mono);color:var(--gold-lite);font-size:.65rem}
+  .note{
+    margin-top:.5rem;padding:.5rem .6rem;border-radius:.55rem;font-size:.6rem;line-height:1.4;
+    background:rgba(194,58,58,.08);border:1px solid rgba(194,58,58,.28);color:#8a2b2b;display:none;flex:none;
+  }
+  .note.show{display:block}
+
+  /* Portrait phones: taller than wide - relax the fixed one-screen layout
+     so it becomes an ordinary scrolling page instead of squashing content. */
+  @media(max-aspect-ratio:4/5){
+    html{font-size:clamp(13px, 2.4vw, 19px)}
+    body{height:auto;min-height:100dvh;overflow:visible;display:block;padding:1rem .8rem 1.4rem}
+    .wrap{height:auto;display:block;gap:0}
+    header{margin-bottom:.65rem}
+    .logo{margin-bottom:.1rem}
+    .card{margin-bottom:.55rem;padding:.7rem .85rem}
+    .grid{grid-template-columns:1fr 1fr;margin-bottom:.55rem;gap:.4rem}
+    .price{font-size:clamp(2.2rem,10vw,3.6rem)}
+    .checks{gap:.3rem}
+  }
+  @media(max-aspect-ratio:4/5) and (max-width:400px){
+    .grid{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <img src="/img/logo.png" alt="Aradhana Jewellers" class="logo">
+    <div class="tagline">Live Bullion Rate</div>
+    <div class="livebar"><span class="dot" id="dot"></span><span id="livetext">Connecting…</span></div>
+  </header>
+
+  <div class="card hero">
+    <div class="lbl" id="heroLabel">22KT</div>
+    <div class="price" id="price"><span class="rs">₹</span>—</div>
+    <div class="unit" id="unit">per 10 grams</div>
+    <div class="basis" id="basis">Awaiting first verified rate…</div>
+  </div>
+
+  <div class="grid">
+    <div class="tile">
+      <div class="t">24KT</div>
+      <div class="v" id="r999">—</div>
+      <div class="s">per 10 grams</div>
+    </div>
+    <div class="tile" id="tile18kt">
+      <div class="t">18KT</div>
+      <div class="v" id="r18kt">—</div>
+      <div class="s">per 10 grams</div>
+    </div>
+  </div>
+
+  <div class="card hero silver-hero">
+    <div class="lbl">Silver — Live Rate</div>
+    <div class="grid" style="margin-top:6px">
+      <div class="tile">
+        <div class="t" id="silverPureLabel">Silver Pure</div>
+        <div class="v" id="silverPure">—</div>
+        <div class="s">per kg</div>
+      </div>
+      <div class="tile">
+        <div class="t" id="silverOrnamentLabel">Silver Ornament</div>
+        <div class="v" id="silverOrnament">—</div>
+        <div class="s">per kg</div>
+      </div>
+    </div>
+    <div class="basis" id="silverBasis" style="text-align:left">Awaiting first verified silver rate…</div>
+  </div>
+
+  <div class="card verify">
+    <div class="vh">
+      <span class="vtitle">Accuracy Verification</span>
+      <span class="badge" id="badge">—</span>
+    </div>
+    <div class="checks" id="checks"></div>
+    <div class="bar"><i id="bar" style="width:0%"></i></div>
+    <div class="note" id="note"></div>
+  </div>
+
+  <footer>
+    <div class="stamp" id="stamp">—</div>
+    <div style="margin-top:9px">
+      Primary source: Safari Bullions · Cross-verified against Kaka Gold<br>
+      <span id="domain">live.aradhanajewellers.com</span>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const inr = (n, d = 2) => {
+  if (n == null) return '—';
+  const num = Number(n);
+  const hasFraction = d > 0 && Math.abs(num % 1) > 1e-9;
+  return num.toLocaleString('en-IN', {
+    minimumFractionDigits: hasFraction ? 2 : 0,
+    maximumFractionDigits: d,
+  });
+};
+
+let lastPrice = null;
+
+function render(s) {
+  // ---- connection / status pill
+  const live = s.live;
+  const status = live ? live.status : 'STARTING';
+  const dot = $('dot');
+  dot.className = 'dot beat' + (status === 'BLOCKED' ? ' bad' : status === 'VERIFIED_WITH_WARNINGS' ? ' warn' : '');
+  setTimeout(() => dot.classList.remove('beat'), 950);
+  $('livetext').textContent =
+    status === 'BLOCKED' ? 'Rate held — check failed'
+    : status === 'VERIFIED' ? 'Live · verified every second'
+    : status === 'VERIFIED_WITH_WARNINGS' ? 'Live · minor warnings'
+    : 'Connecting…';
+
+  const p = s.published;
+  if (p) {
+    $('heroLabel').textContent = p.label.replace(/\s*\(without GST\)/i, '');
+    const el = $('price');
+    el.innerHTML = '<span class="rs">₹</span>' + inr(p.rate22kt);
+    if (lastPrice != null && p.rate22kt !== lastPrice) {
+      el.classList.remove('up', 'down');
+      void el.offsetWidth;
+      el.classList.add(p.rate22kt > lastPrice ? 'up' : 'down');
+      setTimeout(() => el.classList.remove('up', 'down'), 1400);
+    }
+    lastPrice = p.rate22kt;
+
+    $('unit').textContent = p.unit;
+    $('basis').innerHTML = `Session high <b>₹${inr(p.high)}</b> · low <b>₹${inr(p.low)}</b>`;
+    $('r999').textContent = '₹ ' + inr(p.rate24kt);
+    $('stamp').textContent = 'Updated ' + p.atIst + ' IST';
+
+    const v18 = (p.variants || []).find((x) => x.key === '18kt');
+    if (v18) {
+      $('tile18kt').style.display = '';
+      $('r18kt').textContent = '₹ ' + inr(v18.rate);
+    } else {
+      $('tile18kt').style.display = 'none';
+    }
+  }
+
+  // ---- silver
+  const sil = s.silver;
+  if (sil && sil.published) {
+    const sp = sil.published;
+    $('silverPureLabel').textContent = sp.pureLabel;
+    $('silverOrnamentLabel').textContent = sp.ornamentLabel;
+    $('silverPure').textContent = '₹ ' + inr(sp.pure);
+    $('silverOrnament').textContent = '₹ ' + inr(sp.ornament);
+    const sColor = sp.status === 'BLOCKED' ? '#c23a3a' : sp.status === 'VERIFIED' ? '#1f9d55' : '#b8790a';
+    $('silverBasis').innerHTML =
+      `<span style="color:${sColor}">●</span> ${sp.status.replace(/_/g, ' ')} · ${sp.confidence}% checks passed · Updated ${sp.atIst}`;
+  }
+
+  // ---- verification panel
+  const badge = $('badge');
+  badge.className = 'badge' + (status === 'BLOCKED' ? ' bad' : status === 'VERIFIED_WITH_WARNINGS' ? ' warn' : '');
+  badge.textContent = live ? `${live.confidence}% · ${status.replace(/_/g, ' ')}` : '—';
+  $('bar').style.width = (live ? live.confidence : 0) + '%';
+
+  const g = (live && live.groups) || {};
+  const kaka = s.references && s.references.kaka;
+  const par = s.references && s.references.parity;
+  const row = (name, res, ok) =>
+    `<div class="chk"><span class="pill${ok === 2 ? '' : ok === 1 ? ' warn' : ' bad'}"></span>` +
+    `<span class="n">${name}</span><span class="r">${res}</span></div>`;
+
+  const gs = (k) => g[k] ? `${g[k].passed}/${g[k].total}` : '—';
+  const gok = (k) => !g[k] ? 0 : g[k].passed === g[k].total ? 2 : 1;
+
+  $('checks').innerHTML = [
+    row('Feed structure &amp; GST invariant', gs('internal'), gok('internal')),
+    row(
+      kaka && kaka.ok ? `Cross-check · ${kaka.label} ₹${inr(kaka.value, 0)}` : 'Cross-check · Kaka Gold',
+      kaka && kaka.ok ? `${kaka.deltaPct}% apart` : 'unavailable',
+      kaka && kaka.ok ? (kaka.deltaPct <= 0.35 ? 2 : 1) : 0
+    ),
+    row(
+      par && par.ok ? `International parity · $${Number(par.xau).toFixed(2)}/oz` : 'International parity',
+      gs('parity'), gok('parity')
+    ),
+    row('Spike &amp; staleness guard', gs('temporal'), gok('temporal')),
+  ].join('');
+
+  const note = $('note');
+  if (live && live.blocking && live.blocking.length) {
+    note.className = 'note show';
+    note.innerHTML = '<b>Publishing paused.</b> ' + live.blocking.map((b) => b.detail).join(' · ') +
+      '<br>The last verified rate above is being held.';
+  } else {
+    note.className = 'note';
+  }
+
+  if (s.server && s.server.domain) $('domain').textContent = s.server.domain;
+}
+
+// ---- live stream with auto-reconnect ------------------------------------
+let es = null, retry = 0;
+function connect() {
+  es = new EventSource('/api/stream');
+  es.onmessage = (e) => {
+    retry = 0;
+    try { render(JSON.parse(e.data)); } catch (_) {}
+  };
+  es.onerror = () => {
+    es.close();
+    retry = Math.min(retry + 1, 6);
+    $('dot').className = 'dot bad';
+    $('livetext').textContent = 'Reconnecting…';
+    setTimeout(connect, 500 * Math.pow(2, retry));
+  };
+}
+fetch('/api/rate').then((r) => r.json()).then(render).catch(() => {});
+connect();
+</script>
+</body>
+</html>
