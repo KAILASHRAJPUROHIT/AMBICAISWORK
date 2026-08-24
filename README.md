@@ -193,9 +193,14 @@ Repo: `AradhanaJewellers/aradhana-gold-monitor` on GitHub.
 2. Build command: `npm install`
 3. Start command: `npm run monitor` (this is `node src/index.js --no-whatsapp` — no WhatsApp,
    no QR prompt, nothing that needs a person present)
-4. Plan: **Free** is enough — this is a plain Express server + a 1-second `fetch()` poll, no
-   heavy dependencies once WhatsApp is excluded.
-5. Once deployed, point a DNS **CNAME** for `live` at the Render URL Render gives you
+4. **Environment → Add Environment Variable**: `PUPPETEER_SKIP_DOWNLOAD` = `true`. This service
+   never launches Chromium (WhatsApp is excluded via the start command above), but `npm install`
+   would otherwise still download a ~300MB Chromium binary as part of the `whatsapp-web.js`
+   dependency. This variable is scoped to this Render service only — it does **not** go in
+   `.npmrc` or anywhere else in the repo, because that would also skip the download on your
+   local machine, where WhatsApp genuinely needs that Chromium install.
+5. Plan: **Free** is enough — this is a plain Express server + a 1-second `fetch()` poll.
+6. Once deployed, point a DNS **CNAME** for `live` at the Render URL Render gives you
    (`*.onrender.com`), or add a custom domain in Render's dashboard settings for the service.
 
 **Free-tier caveats to know about:**
