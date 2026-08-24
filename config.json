@@ -141,7 +141,7 @@
   "server": {
     "port": 8080,
     "host": "0.0.0.0",
-    "publicDomain": "live.aradhanajewellers.com"
+    "publicDomain": "aradhana-gold-monitor.onrender.com"
   },
   "storage": {
     "historyPoints": 2880,

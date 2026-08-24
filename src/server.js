@@ -1,4 +1,4 @@
-/** HTTP API + live page for live.aradhanajewellers.com */
+/** HTTP API + live page - internal-only, unlisted URL (see README). */
 
 import express from 'express';
 import path from 'node:path';

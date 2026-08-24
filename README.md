@@ -174,7 +174,15 @@ an `x-admin-token` header.
 
 ---
 
-## Publishing live.aradhanajewellers.com
+## Internal live monitor (Render)
+
+**This is deliberately internal-only — no `live.aradhanajewellers.com`, no custom domain.**
+The service is reachable at whatever `*.onrender.com` URL Render assigned it (currently
+`https://aradhana-gold-monitor.onrender.com`), which is not linked from the public website and
+not advertised anywhere. That URL is not access-restricted (Render's free tier has no
+built-in auth), so treat it as "unlisted," not "private" — anyone who has the exact link can
+open it. If real access control is ever needed, a shared password/token gate can be added to
+`src/server.js` at that point; nothing about the current setup blocks doing that later.
 
 **Architecture: the poller + live page + API run in the cloud (Render), independent of this
 PC. WhatsApp keeps running here on your laptop**, because it needs a phone-linked browser
@@ -186,22 +194,19 @@ live page and API keep working; if Render has an outage, WhatsApp still sends fr
 
 ### Cloud (Render) — poller, live page, API
 
-Repo: `AradhanaJewellers/aradhana-gold-monitor` on GitHub.
+Repo: `AradhanaJewellers/aradhana-gold-monitor` on GitHub. Deployed via `render.yaml` (Blueprint)
+at the repo root — build/start commands and the env var below are defined there, not entered
+by hand in the dashboard.
 
-1. On [render.com](https://dashboard.render.com), **New → Web Service**, connect the
-   `aradhana-gold-monitor` repo.
-2. Build command: `npm install`
-3. Start command: `npm run monitor` (this is `node src/index.js --no-whatsapp` — no WhatsApp,
-   no QR prompt, nothing that needs a person present)
-4. **Environment → Add Environment Variable**: `PUPPETEER_SKIP_DOWNLOAD` = `true`. This service
-   never launches Chromium (WhatsApp is excluded via the start command above), but `npm install`
-   would otherwise still download a ~300MB Chromium binary as part of the `whatsapp-web.js`
-   dependency. This variable is scoped to this Render service only — it does **not** go in
-   `.npmrc` or anywhere else in the repo, because that would also skip the download on your
-   local machine, where WhatsApp genuinely needs that Chromium install.
-5. Plan: **Free** is enough — this is a plain Express server + a 1-second `fetch()` poll.
-6. Once deployed, point a DNS **CNAME** for `live` at the Render URL Render gives you
-   (`*.onrender.com`), or add a custom domain in Render's dashboard settings for the service.
+- Build command: `npm install`
+- Start command: `npm run monitor` (this is `node src/index.js --no-whatsapp` — no WhatsApp,
+  no QR prompt, nothing that needs a person present)
+- `PUPPETEER_SKIP_DOWNLOAD=true`: this service never launches Chromium (WhatsApp is excluded
+  via the start command above), but `npm install` would otherwise still download a ~300MB
+  Chromium binary as part of the `whatsapp-web.js` dependency. This lives in `render.yaml`,
+  scoped to this Render service only — deliberately **not** in `.npmrc` or anywhere else that
+  would also apply locally, where WhatsApp genuinely needs that Chromium install.
+- Plan: **Free** is enough — this is a plain Express server + a 1-second `fetch()` poll.
 
 **Free-tier caveats to know about:**
 - Render's free web services **sleep after ~15 minutes with no HTTP traffic** and take
