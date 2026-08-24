@@ -91,7 +91,7 @@ export function createServer(cfg, store, ctx, log) {
   /** Which layout every /board.html client should show, plus the refresh
    * token they poll for. Read by every board every ~1s via /api/rate's
    * boardControl field (below), so no separate endpoint is needed for that. */
-  const VALID_LAYOUTS = ['ledger', 'grid', 'hero'];
+  const VALID_LAYOUTS = ['fullbleed', 'diagonal', 'medallion', 'bands', 'waterfall'];
   const checkAdminToken = (req, res) => {
     const required = process.env.ADMIN_TOKEN;
     if (required && req.get('x-admin-token') !== required) {

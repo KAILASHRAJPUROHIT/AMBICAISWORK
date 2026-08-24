@@ -4,6 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { istDateKey, istPretty } from './time.js';
 
+/** Keep this in sync with server.js's VALID_LAYOUTS and board.html's picker. */
+const VALID_BOARD_LAYOUTS = ['fullbleed', 'diagonal', 'medallion', 'bands', 'waterfall'];
+
 /**
  * Apply the business formula: (999 SELL + premiumAdd) x purityFactor = 22KT ex-GST.
  * The +premiumAdd is a flat rupee loading on top of the raw Safari 999 rate, applied
@@ -142,7 +145,7 @@ export class Store {
     /** Central board-display control: which layout every /board.html client
      * shows, and a token that bumps to force them all to reload. Persisted
      * so a restart doesn't reset every kiosk back to the default layout. */
-    this.boardControl = { layout: 'grid', refreshToken: Date.now() };
+    this.boardControl = { layout: 'fullbleed', refreshToken: Date.now() };
     this._loadBoardControl();
 
     this._loadHistory();
@@ -156,7 +159,10 @@ export class Store {
     try {
       const raw = fs.readFileSync(this._boardControlFile, 'utf8');
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.layout === 'string') {
+      // Fall back to the default if the persisted value predates a layout
+      // set change (e.g. the old 'grid'/'ledger'/'hero' names) rather than
+      // resurrecting a layout that no longer exists.
+      if (parsed && VALID_BOARD_LAYOUTS.includes(parsed.layout)) {
         this.boardControl = { layout: parsed.layout, refreshToken: parsed.refreshToken || Date.now() };
       }
     } catch {
