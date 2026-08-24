@@ -87,8 +87,14 @@ class MainActivity : AppCompatActivity() {
     private var imageCapture: ImageCapture? = null
     private var camera: Camera? = null
     private enum class ProductionCameraSource { PHONE, SONY }
-    @Volatile private var activeCameraSource = ProductionCameraSource.PHONE
+    private enum class RequestedCameraMode { DSLR, SMARTPHONE }
+    @Volatile private var activeCameraSource = ProductionCameraSource.SONY
     private lateinit var sonyProduction: SonyProductionCamera
+    private var appliedCameraMode: RequestedCameraMode? = null
+    @Volatile private var cameraModeEpoch = 0L
+    private var cameraProviderRequestInFlight = false
+    private var cameraPermissionRequestInFlight = false
+    private var cameraPermissionRequestedThisSession = false
     @Volatile private var sonyZoomRatio = 1f
     @Volatile private var sonyZoomTarget = 1f
     private var sonyManualZoomPendingSteps = 0
@@ -482,8 +488,13 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "CaptureCam"
+        private const val PREF_CAMERA_MODE = "camera_mode_index"
         private const val SONY_CAMERA_IP = "192.168.0.14"
         private const val SONY_SSH_USER = "pkANY7"
+        private val CAMERA_MODE_LABELS = arrayOf(
+            "DSLR — Sony ZV-E10 II",
+            "Smartphone camera"
+        )
         private const val SONY_MIN_ZOOM_RATIO = 1f
         // 16-50mm PZ lens fitted to the deployed ZV-E10 II: 50/16.
         private const val SONY_MAX_ZOOM_RATIO = 3.125f
@@ -869,12 +880,16 @@ class MainActivity : AppCompatActivity() {
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) startCamera() else {
+        cameraPermissionRequestInFlight = false
+        if (granted && requestedCameraMode() == RequestedCameraMode.SMARTPHONE) {
+            startCamera()
+        } else if (!granted && requestedCameraMode() == RequestedCameraMode.SMARTPHONE) {
             Toast.makeText(
                 this,
-                "Phone fallback disabled; Sony production camera will continue",
+                "Camera permission required for Smartphone mode",
                 Toast.LENGTH_LONG
             ).show()
+            setStatus("Smartphone camera permission required", ready = false)
         }
     }
 
@@ -987,7 +1002,7 @@ class MainActivity : AppCompatActivity() {
             onAvailabilityChanged = ::onSonyAvailabilityChanged
         )
         ensurePipelineStarted()
-        startSonyProduction()
+        applyRequestedCameraMode(allowPermissionPrompt = true)
 
         // See RSC2Controller.onUnexpectedDisconnect's doc comment: without
         // this, a mid-session BLE drop (range/interference/OS hiccup --
@@ -1001,13 +1016,6 @@ class MainActivity : AppCompatActivity() {
             scheduleGimbalRetry(immediate = true)
         }
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-            == PackageManager.PERMISSION_GRANTED
-        ) {
-            startCamera()
-        } else {
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
         attemptGimbalConnect()
         connectDetector()
         // EXPORTED (not NOT_EXPORTED) deliberately -- this needs to be
@@ -1079,7 +1087,7 @@ class MainActivity : AppCompatActivity() {
             Log.w(TAG, "onNewIntent ignored reset -- mid-item with unsaved jewel photo(s) in flight")
         }
         attemptGimbalConnect()
-        if (::sonyProduction.isInitialized) startSonyProduction()
+        if (::sonyProduction.isInitialized) applyRequestedCameraMode(allowPermissionPrompt = false)
     }
 
     override fun onResume() {
@@ -1092,20 +1100,7 @@ class MainActivity : AppCompatActivity() {
         // Activity's life. attemptGimbalConnect() already no-ops if already
         // connected, so this is safe to call on every resume.
         attemptGimbalConnect()
-        if (::sonyProduction.isInitialized) startSonyProduction()
-        // Navigating away (e.g. to the BLE diagnostics screen) pauses/stops
-        // this Activity, and CameraX's own lifecycle binding didn't reliably
-        // bring the camera back on its own -- a capture mid-flight during
-        // that window threw "ImageCaptureException: Camera is closed" and
-        // left focus/sharpness tracking permanently stuck afterward (the
-        // Camera2Interop AF-state callback was attached to the now-dead
-        // session). Explicitly rebinding on every resume is the same
-        // "re-verify all resources on resume" fix as the gimbal reconnect
-        // above -- bindUseCases() itself does cameraProvider.unbindAll()
-        // first, so this is safe to call repeatedly.
-        if (::cameraProvider.isInitialized) {
-            startCamera()
-        }
+        if (::sonyProduction.isInitialized) applyRequestedCameraMode(allowPermissionPrompt = false)
     }
 
     override fun onPause() {
@@ -1116,8 +1111,20 @@ class MainActivity : AppCompatActivity() {
     // ---------------------------------------------------------------- Camera setup
 
     private fun startCamera() {
+        if (::cameraProvider.isInitialized) {
+            if (activeCameraSource == ProductionCameraSource.SONY) {
+                suspendPhoneCameraForSony()
+            } else {
+                bindUseCases()
+            }
+            ensurePipelineStarted()
+            return
+        }
+        if (cameraProviderRequestInFlight) return
+        cameraProviderRequestInFlight = true
         val providerFuture = ProcessCameraProvider.getInstance(this)
         providerFuture.addListener({
+            cameraProviderRequestInFlight = false
             cameraProvider = providerFuture.get()
             if (activeCameraSource == ProductionCameraSource.SONY) {
                 suspendPhoneCameraForSony()
@@ -1151,18 +1158,100 @@ class MainActivity : AppCompatActivity() {
         handler.post(tickRunnable)
     }
 
+    private fun requestedCameraMode(): RequestedCameraMode {
+        val modes = RequestedCameraMode.values()
+        return modes[prefs.getInt(PREF_CAMERA_MODE, 0).coerceIn(0, modes.lastIndex)]
+    }
+
+    /**
+     * Hard camera boundary. DSLR mode never starts or falls back to CameraX;
+     * a missing Sony blocks capture while SonyProductionCamera self-heals.
+     * Smartphone mode stops Sony completely and binds CameraX exclusively.
+     */
+    private fun applyRequestedCameraMode(allowPermissionPrompt: Boolean) {
+        val requestedMode = requestedCameraMode()
+        val modeChanged = appliedCameraMode != requestedMode
+        appliedCameraMode = requestedMode
+        when (requestedMode) {
+            RequestedCameraMode.DSLR -> {
+                activeCameraSource = ProductionCameraSource.SONY
+                binding.previewView.visibility = View.GONE
+                if (::cameraProvider.isInitialized) suspendPhoneCameraForSony()
+                if (!sonyProduction.isAvailable) {
+                    binding.sonyPreviewView.visibility = View.GONE
+                    if (phase != Phase.UPLOADING) {
+                        setStatus("Sony camera restoring…", ready = false)
+                    }
+                }
+                startSonyProduction()
+                Log.i(TAG, "Camera mode=DSLR; phone fallback hard-disabled")
+            }
+
+            RequestedCameraMode.SMARTPHONE -> {
+                activeCameraSource = ProductionCameraSource.PHONE
+                // Stop once on entry. Repeated onResume/apply calls must not
+                // generate redundant stop callbacks or transport churn.
+                if (modeChanged) sonyProduction.stop()
+                handler.removeCallbacks(sonyPreviewRenderRunnable)
+                sonyPreviewUpdatePending.set(false)
+                latestSonyPreviewBitmap = null
+                displayedSonyPreviewBitmap = null
+                binding.sonyPreviewView.setImageDrawable(null)
+                binding.sonyPreviewView.visibility = View.GONE
+                binding.previewView.visibility = View.VISIBLE
+                ensurePhoneCameraStarted(allowPermissionPrompt)
+                Log.i(TAG, "Camera mode=SMARTPHONE; Sony transport stopped")
+            }
+        }
+        configureExposureSlider()
+    }
+
+    private fun ensurePhoneCameraStarted(allowPermissionPrompt: Boolean) {
+        if (requestedCameraMode() != RequestedCameraMode.SMARTPHONE) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            startCamera()
+            return
+        }
+        if (allowPermissionPrompt && !cameraPermissionRequestInFlight &&
+            !cameraPermissionRequestedThisSession
+        ) {
+            cameraPermissionRequestInFlight = true
+            cameraPermissionRequestedThisSession = true
+            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+        } else {
+            setStatus("Smartphone camera permission required", ready = false)
+        }
+    }
+
     private fun startSonyProduction() {
+        if (requestedCameraMode() != RequestedCameraMode.DSLR) return
+        val password = prefs.getString("sony_ssh_password", BuildConfig.SONY_SSH_PASSWORD)
+            ?.takeIf { it.isNotBlank() }
+            ?: BuildConfig.SONY_SSH_PASSWORD
+        if (password.isBlank()) {
+            Log.e(TAG, "Sony SSH password is not configured")
+            setStatus("Sony camera credential missing", ready = false)
+            return
+        }
         sonyProduction.start(
             prefs.getString("sony_camera_ip", SONY_CAMERA_IP) ?: SONY_CAMERA_IP,
             prefs.getString("sony_ssh_user", SONY_SSH_USER) ?: SONY_SSH_USER,
-            prefs.getString("sony_ssh_password", BuildConfig.SONY_SSH_PASSWORD)
-                ?: BuildConfig.SONY_SSH_PASSWORD
+            password
         )
     }
 
-    /** Sony becomes primary only after a decoded Live View frame. */
+    /** Availability changes never cross the operator-selected hard boundary. */
     private fun onSonyAvailabilityChanged(available: Boolean, detail: String) {
-        activeCameraSource = if (available) ProductionCameraSource.SONY else ProductionCameraSource.PHONE
+        if (requestedCameraMode() != RequestedCameraMode.DSLR) {
+            activeCameraSource = ProductionCameraSource.PHONE
+            Log.i(TAG, "Ignoring Sony availability in Smartphone mode: $detail")
+            return
+        }
+        // Remain SONY even while reconnecting. This is the hardwall that
+        // prevents one item from silently mixing DSLR and phone frames.
+        activeCameraSource = ProductionCameraSource.SONY
         if (available) {
             sonyZoomRatio = sonyProduction.currentZoomRatio()
             sonyZoomTarget = sonyZoomRatio
@@ -1172,22 +1261,16 @@ class MainActivity : AppCompatActivity() {
         handler.post {
             if (isDestroyed) return@post
             binding.sonyPreviewView.visibility = if (available) View.VISIBLE else View.GONE
-            binding.previewView.visibility = if (available) View.GONE else View.VISIBLE
+            binding.previewView.visibility = View.GONE
+            suspendPhoneCameraForSony()
             if (available) {
-                suspendPhoneCameraForSony()
+                if (phase != Phase.UPLOADING) setStatus("Sony DSLR ready", ready = false)
             } else {
                 handler.removeCallbacks(sonyPreviewRenderRunnable)
                 sonyPreviewUpdatePending.set(false)
-                if (mainScreenActive && ::cameraProvider.isInitialized && imageCapture == null) {
-                    bindUseCases()
-                }
+                if (phase != Phase.UPLOADING) setStatus(detail, ready = false)
             }
             configureExposureSlider()
-            if (!available && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) !=
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                binding.statusText.text = "$detail. Camera permission needed for phone fallback."
-            }
         }
     }
 
@@ -1414,8 +1497,8 @@ class MainActivity : AppCompatActivity() {
      * only hid CameraX's view; its camera, preview surface, analyzer and
      * GPU buffers stayed active. Live measurement: 208 MB graphics and
      * 67% app CPU while Sony itself was delivering healthy fresh frames.
-     * Fully unbind the unused phone camera. A genuine Sony failure calls
-     * bindUseCases() again without resetting capture state. */
+     * Fully unbind the unused phone camera. DSLR mode keeps it unbound even
+     * through Sony reconnects; only an explicit mode switch can bind it. */
     private fun suspendPhoneCameraForSony() {
         if (!::cameraProvider.isInitialized) return
         cameraProvider.unbindAll()
@@ -4446,12 +4529,23 @@ class MainActivity : AppCompatActivity() {
         // frames may drop frame two, but can never silently mix a DSLR and
         // phone image in the same sharpness comparison/capture angle.
         val captureSource = activeCameraSource
+        val captureEpoch = cameraModeEpoch
         captureOneFrame(captureSource) firstFrame@{ first ->
+            if (captureEpoch != cameraModeEpoch || captureSource != activeCameraSource) {
+                Log.w(TAG, "Discarding first frame after camera-mode change")
+                onResult(null)
+                return@firstFrame
+            }
             if (first == null) {
                 onResult(null)
                 return@firstFrame
             }
             captureOneFrame(captureSource) secondFrame@{ second ->
+                if (captureEpoch != cameraModeEpoch || captureSource != activeCameraSource) {
+                    Log.w(TAG, "Discarding second frame after camera-mode change")
+                    onResult(null)
+                    return@secondFrame
+                }
                 if (second == null) {
                     onResult(first)
                     return@secondFrame
@@ -4459,6 +4553,11 @@ class MainActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     val (firstScore, secondScore) = withContext(Dispatchers.Default) {
                         scoreCaptureSharpness(first) to scoreCaptureSharpness(second)
+                    }
+                    if (captureEpoch != cameraModeEpoch || captureSource != activeCameraSource) {
+                        Log.w(TAG, "Discarding scored burst after camera-mode change")
+                        onResult(null)
+                        return@launch
                     }
                     Log.i(TAG, "captureFullRes burst scores: first=$firstScore second=$secondScore")
                     onResult(if (secondScore >= firstScore) second else first)
@@ -5061,9 +5160,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSettingsDialog() {
+        val previousCameraMode = requestedCameraMode()
         val dialogBinding = DialogSettingsBinding.inflate(layoutInflater)
         dialogBinding.serverUrlInput.setText(serverUrl())
         dialogBinding.staffNameInput.setText(prefs.getString("staff_name", ""))
+        bindSonySpinner(
+            dialogBinding.cameraModeSpinner,
+            CAMERA_MODE_LABELS,
+            prefs.getInt(PREF_CAMERA_MODE, 0)
+        )
         bindSonySpinner(
             dialogBinding.sonyProfileSpinner,
             SONY_PROFILE_LABELS,
@@ -5124,6 +5229,7 @@ class MainActivity : AppCompatActivity() {
                 prefs.edit()
                     .putString("server_url", dialogBinding.serverUrlInput.text.toString().trim())
                     .putString("staff_name", dialogBinding.staffNameInput.text.toString().trim())
+                    .putInt(PREF_CAMERA_MODE, dialogBinding.cameraModeSpinner.selectedItemPosition)
                     .putInt("sony_quality_profile", dialogBinding.sonyProfileSpinner.selectedItemPosition)
                     .putInt("sony_iso_index", dialogBinding.sonyIsoSpinner.selectedItemPosition)
                     .putInt(
@@ -5145,7 +5251,28 @@ class MainActivity : AppCompatActivity() {
                     .putInt("sony_dro_index", dialogBinding.sonyDroSpinner.selectedItemPosition)
                     .putInt("sony_creative_look_index", dialogBinding.sonyCreativeLookSpinner.selectedItemPosition)
                     .apply()
-                if (activeCameraSource == ProductionCameraSource.SONY) {
+                // A deliberate switch is the only path allowed to change
+                // camera families. Reset the permission prompt gate so an
+                // operator choosing Smartphone can grant it immediately.
+                val newCameraMode = requestedCameraMode()
+                if (newCameraMode != previousCameraMode) {
+                    cameraModeEpoch += 1L
+                    inAngleSequence = false
+                    hideReadyButton()
+                    rsc2.stopAndReturnToCenter()
+                    jewelJpeg = null
+                    angle1Jpeg = null
+                    angle2Jpeg = null
+                    resetForNewItem(Phase.TAG)
+                    Toast.makeText(
+                        this,
+                        "Camera mode changed; current item reset",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                cameraPermissionRequestedThisSession = false
+                applyRequestedCameraMode(allowPermissionPrompt = true)
+                if (requestedCameraMode() == RequestedCameraMode.DSLR && sonyProduction.isAvailable) {
                     val settings = savedSonyQualitySettings()
                     sonyProduction.applyQualitySettings(settings) { ok ->
                         Toast.makeText(
