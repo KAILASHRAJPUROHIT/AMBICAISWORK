@@ -192,6 +192,40 @@ Safari Bullions and Kaka Gold independently and validate the same way, so they a
 there's no dependency between them, and no single point of failure. If the laptop is off, the
 live page and API keep working; if Render has an outage, WhatsApp still sends from here.
 
+### The counter iPad (`/board.html`) is a special case - it needs the local relay
+
+`public/board.html` is the full-bleed, numbers-only kiosk display. It's served by both
+instances identically, but **the counter iPad (an iPad Mini 2) must use the local URL**
+(`http://<this-PC's-LAN-IP>:8080/board.html`), not the cloud one, and that's not going to
+change without new hardware:
+
+- Render force-redirects all HTTP to HTTPS (confirmed - there's no way to serve the cloud
+  copy over plain HTTP even if we wanted to).
+- The iPad Mini 2 is stuck on iOS 12 (Apple never updated it further), and iOS 12's Safari
+  cannot complete a modern HTTPS handshake with Render's edge - "Safari could not establish a
+  secure connection." This is a hardware/OS ceiling on the iPad itself, not fixable from the
+  app or by changing where it's hosted.
+
+**This does not mean the rate data depends on the laptop.** Local and cloud each poll Safari
+Bullions and Kaka Gold independently - the laptop is acting purely as a plain-HTTP relay for
+this one old device, nothing more. Every other device (phones, a newer tablet, anything with
+normal HTTPS support) should just use the cloud URL directly and is fully laptop-independent.
+
+Because of this, the local instance is set up to survive as much as reasonably possible without
+becoming a second full deployment project:
+- Runs under `pm2` (`pm2 start src/index.js --name gold-monitor -- --no-whatsapp`), which
+  restarts it automatically if it crashes.
+- `pm2-windows-startup` registers a registry `Run` key so `pm2 resurrect` fires at login,
+  bringing it back after a normal reboot. **Caveat:** this fires at user *login*, not raw
+  power-on - if Windows restarts unattended and sits at the lock screen, it stays down until
+  someone logs in. Closing that gap fully would mean enabling Windows auto-login, which trades
+  away the login password, so it's left as a manual choice rather than done silently.
+- Windows sleep is already disabled system-wide (standby idle = never, both AC and battery),
+  so sleep is not a factor here.
+
+If the counter display is ever upgraded to a tablet from roughly the last 6 years, point it at
+the cloud URL instead and this whole local-relay setup becomes unnecessary for it.
+
 ### Cloud (Render) — poller, live page, API
 
 Repo: `AradhanaJewellers/aradhana-gold-monitor` on GitHub. Deployed via `render.yaml` (Blueprint)
