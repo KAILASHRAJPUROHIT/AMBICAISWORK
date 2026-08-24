@@ -338,9 +338,10 @@ class MainActivity : AppCompatActivity() {
     // doesn't leave the NEXT item starting under-exposed.
     private var autoExposureEv = 0f
     private var lastExposureAdjustAt = 0L
-    // Manual-controls override (2026-08-18, explicit request): true the
-    // instant staff touches ANY manual control (zoom +/-, the exposure
-    // slider, tap/long-press-to-focus on the preview). While true,
+    // Manual zoom override: true only after staff uses zoom +/-. Exposure
+    // adjustment and tap/long-press focus are compatible with automatic
+    // capture and must not silently stop it (confirmed live 2026-08-24).
+    // While true,
     // tickJewel()'s entire auto-tracking/zoom-climb/exposure/capture path
     // stands down -- staff is flying the camera by hand, and auto mode
     // fighting that input would be actively harmful (exactly the class of
@@ -498,6 +499,10 @@ class MainActivity : AppCompatActivity() {
         private const val SONY_MIN_ZOOM_RATIO = 1f
         // 16-50mm PZ lens fitted to the deployed ZV-E10 II: 50/16.
         private const val SONY_MAX_ZOOM_RATIO = 3.125f
+        // Measured full 16->50mm power-zoom travel. AUTO must use the same
+        // physical ZoomOperation press/release path as the proven +/- buttons;
+        // ZoomScale can ACK without changing the optical Live View image.
+        private const val SONY_ZOOM_FULL_TRAVEL_MS = 1_650f
         // Short Sony ZoomOperation press/release pulse for each manual tap.
         // About 7% of the 16-50mm lens travel: fine enough for framing while
         // remaining visibly responsive.
@@ -693,8 +698,12 @@ class MainActivity : AppCompatActivity() {
         // sitting at "" forever, so the intended default never took over).
         private const val TICK_INTERVAL_MS = 150L
         private const val SONY_PREVIEW_RENDER_INTERVAL_MS = 40L
+        // 8.3fps keeps the Sony preview at its 25fps target. Live testing at
+        // 80ms reduced preview to 20-21fps; focus, not scan cadence, was the
+        // real tag-lock bottleneck. Two-frame confirmation remains ~240ms.
         private const val SONY_TAG_ANALYSIS_INTERVAL_MS = 120L
         private const val SONY_JEWEL_ANALYSIS_INTERVAL_MS = 80L
+        private const val SONY_TAG_FOCUS_AREA_WIDE = 1
         private const val SHARPNESS_THRESHOLD = 40f
         // physId=4 from logCameraDiagnostics's real dump on this exact
         // phone (2026-08-19): 5.56mm, closestFocus~10cm -- the macro-
@@ -835,6 +844,14 @@ class MainActivity : AppCompatActivity() {
         // its call site in attemptCenteringCorrection() for why (target-jump
         // runaway, 2026-08-18). Same order of magnitude as TILT_MS_LIMIT.
         private const val PAN_MS_LIMIT = 9000
+        // Production safety hardwall (2026-08-24 E2E, BL18/33): a brief
+        // detector miss armed the old targetless DOWN/LEFT/RIGHT sweep after
+        // only 800ms. It spent ~6000ms tilting down before colour detection
+        // recovered even though the ornament was physically in view. The
+        // camera must never move without a verified target. Keep huntStep()
+        // for controlled diagnostics, but production waits stationary for a
+        // real detection; target-guided fine centering remains enabled.
+        private const val AUTONOMOUS_BLIND_HUNT_ENABLED = false
         // Blind search (huntStep()) -- only runs before anything has ever
         // been detected for this item. Bigger, longer steps than fine
         // centering (CENTERING_*) since this is covering ground, not
@@ -2084,7 +2101,9 @@ class MainActivity : AppCompatActivity() {
             // to vision servo the instant a target is found -- it must not
             // move the gimbal once tracking has started.
             if (visionServo.state == VisionState.SEARCHING) {
-                if (!detectedNow() && rsc2.isReady && now >= huntCooldownUntil) {
+                if (AUTONOMOUS_BLIND_HUNT_ENABLED && !detectedNow() &&
+                    rsc2.isReady && now >= huntCooldownUntil
+                ) {
                     if (huntStartedAt == 0L) huntStartedAt = now
                     if (now - huntStartedAt > HUNT_GRACE_MS) huntStep()
                 }
@@ -2101,14 +2120,18 @@ class MainActivity : AppCompatActivity() {
             // Kit's real object box, so a silver piece (weak/no colour
             // signal) still arms the pipeline, not just gold.
             if (!detectedNow()) {
-                if (rsc2.isReady && now >= huntCooldownUntil) {
+                if (AUTONOMOUS_BLIND_HUNT_ENABLED && rsc2.isReady &&
+                    now >= huntCooldownUntil
+                ) {
                     if (huntStartedAt == 0L) huntStartedAt = now
                     if (now - huntStartedAt > HUNT_GRACE_MS) {
                         huntStep()
                         return
                     }
+                } else {
+                    huntStartedAt = 0L
                 }
-                setStatus("Center the ornament, front side up…", ready = false)
+                setStatus("Waiting for a verified ornament target…", ready = false)
                 return
             }
             huntStartedAt = 0L
@@ -2206,7 +2229,12 @@ class MainActivity : AppCompatActivity() {
             } else {
                 if (stallGraceAt == 0L) {
                     stallGraceAt = now
-                    triggerCameraAutoFocus()
+                    val focusBounds = result.bounds
+                    triggerCameraAutoFocus(
+                        physicalSony = activeCameraSource == ProductionCameraSource.SONY,
+                        normalizedX = focusBounds?.let { (it.x0 + it.x1) * 0.5f },
+                        normalizedY = focusBounds?.let { (it.y0 + it.y1) * 0.5f }
+                    )
                     setStatus("Focusing…", ready = false)
                     return
                 }
@@ -2264,7 +2292,6 @@ class MainActivity : AppCompatActivity() {
         // trying every tick, not exhaust a budget meant for a rare
         // one-shot check.
         if (rsc2.isReady) attemptCenteringCorrection(result, maxAttempts = Int.MAX_VALUE)
-        applyAutoExposure(result)
 
         val zoom = cameraZoomRatio()
         val zoomRange = cameraZoomRange()
@@ -2308,6 +2335,12 @@ class MainActivity : AppCompatActivity() {
         val colourOccupancy = result.bounds?.area() ?: result.coverage
         val coverageOk = (if (mlOccupancy != null) mlOccupancy >= CAPTURE_MIN_OCCUPANCY
                           else colourOccupancy >= CAPTURE_MIN_OCCUPANCY) || atZoomCeiling
+        // Sony exposes one serialized PTP control lane. Exposure used to run
+        // before this framing decision and repeatedly occupied that lane,
+        // causing every concurrent zoom request to fail busy while the UI
+        // said "Zooming in" forever at 1.0x. Frame first; exposure correction
+        // starts once coverage is sufficient and no zoom command is needed.
+        if (coverageOk) applyAutoExposure(result)
         val b = result.bounds
         val zoomSettled = now - lastZoomChangeAt >= ZOOM_SETTLE_MS
         val afState = cameraAfState()
@@ -2480,7 +2513,11 @@ class MainActivity : AppCompatActivity() {
             // tick while waiting for its result, that restart-storm was
             // the other half of the hunting complaint.
             focusTriggeredThisLevel = true
-            triggerCameraAutoFocus()
+            triggerCameraAutoFocus(
+                physicalSony = activeCameraSource == ProductionCameraSource.SONY,
+                normalizedX = b?.let { (it.x0 + it.x1) * 0.5f },
+                normalizedY = b?.let { (it.y0 + it.y1) * 0.5f }
+            )
             setStatus("Focusing…", ready = false)
             return
         }
@@ -2852,12 +2889,19 @@ class MainActivity : AppCompatActivity() {
         return isCenteredNow()
     }
 
-    /** Hybrid detection check: true if EITHER signal sees something --
-     * ML Kit's real object box, or MaterialDetector's colour/contrast
-     * heuristic. Using both (not just MaterialDetector alone) is what lets
-     * this arm/hunt correctly for silver, which MaterialDetector's
-     * gold-hue heuristic under-detects. */
-    private fun detectedNow(): Boolean = (latestMaterial?.material == true) || bestObjectBox() != null
+    /** Production arm check. MaterialDetector's [Result.material] is a
+     * size/dominance threshold, not a presence signal: thin real jewellery
+     * can have a stable gold-only [Result.bounds] and many gold samples while
+     * its box area remains below that threshold. The Sony presence/AF path
+     * already treats bounds as presence; keep the motion state machine in
+     * agreement. Require several gold samples so one isolated warm pixel
+     * cannot arm target-guided gimbal movement. Blind movement remains
+     * independently hard-disabled by AUTONOMOUS_BLIND_HUNT_ENABLED. */
+    private fun detectedNow(): Boolean {
+        val material = latestMaterial
+        val boundedGold = material?.bounds != null && material.points.count { it.gold } >= 8
+        return material?.material == true || boundedGold || bestObjectBox() != null
+    }
 
     /** Active gimbal search for MAIN, used only once nothing has been
      * detected at all for HUNT_GRACE_MS -- rather than just waiting
@@ -3273,19 +3317,19 @@ class MainActivity : AppCompatActivity() {
     private fun smoothZoomTo(target: Float, durationMs: Long = 260L, onDone: (() -> Unit)? = null) {
         val start = cameraZoomRatio()
         if (activeCameraSource == ProductionCameraSource.SONY) {
-            // Sony PZ is a velocity-driven optical lens. One bounded hold
-            // is already physically smooth; CameraX's ten absolute-ratio
-            // substeps would instead create competing PTP commands.
+            // Sony PZ is velocity-driven. Completion comes from the actual
+            // ZoomOperation response, never an optimistic timer/target.
             isZooming = true
-            setCameraZoomRatio(target)
-            val physicalMoveMs = (abs(target - start) /
-                (SONY_MAX_ZOOM_RATIO - SONY_MIN_ZOOM_RATIO) * 2_600L)
-                .toLong().coerceIn(90L, 900L)
-            handler.postDelayed({
-                isZooming = false
-                lastZoomChangeAt = System.currentTimeMillis()
-                onDone?.invoke()
-            }, max(physicalMoveMs + 180L, 1_150L))
+            setCameraZoomRatio(target) { ok ->
+                handler.postDelayed({
+                    isZooming = false
+                    lastZoomChangeAt = System.currentTimeMillis()
+                    if (!ok) {
+                        Log.w(TAG, "Sony physical zoom did not move start=$start target=$target")
+                    }
+                    onDone?.invoke()
+                }, 180L)
+            }
             return
         }
         val steps = 10
@@ -3507,7 +3551,12 @@ class MainActivity : AppCompatActivity() {
                 return
             }
         }
-        triggerCameraAutoFocus()
+        val bounds = latestMaterial?.bounds
+        triggerCameraAutoFocus(
+            physicalSony = activeCameraSource == ProductionCameraSource.SONY,
+            normalizedX = bounds?.let { (it.x0 + it.x1) * 0.5f },
+            normalizedY = bounds?.let { (it.y0 + it.y1) * 0.5f }
+        )
         waitForStableFrame("Focusing…") {
             if (!meetsHardCaptureRules()) {
                 // Non-negotiable: still not ≥75% of frame AND centered
@@ -3661,7 +3710,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun captureAngle1() {
         setStatus("Capturing angle 1…", ready = false)
-        triggerCameraAutoFocus()
+        triggerCameraAutoFocus(physicalSony = activeCameraSource == ProductionCameraSource.SONY)
         handler.postDelayed({
             captureFullRes { bytes ->
                 Log.i(TAG, "captureAngle1 result bytes=${bytes?.size}")
@@ -3697,7 +3746,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun captureAngle2() {
         setStatus("Capturing angle 2…", ready = false)
-        triggerCameraAutoFocus()
+        triggerCameraAutoFocus(physicalSony = activeCameraSource == ProductionCameraSource.SONY)
         handler.postDelayed({
             captureFullRes { bytes ->
                 Log.i(TAG, "captureAngle2 result bytes=${bytes?.size}")
@@ -3968,16 +4017,12 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Wires the manual-controls row (zoom +/-, exposure slider, resume-
-     * auto) plus tap-to-focus/long-press-to-lock-focus on the live preview
-     * (2026-08-18, explicit request). Every control here funnels through
-     * engageManual() first, so touching ANY of them consistently hands
-     * control to staff and stands auto mode down -- see manualModeActive's
-     * doc comment. */
+    /** Wires zoom +/-, exposure, and focus controls. Only zoom +/- engages
+     * manual mode. Exposure and focus remain compatible with AUTO. */
     // ---------------------------------------------------------------- Camera-source compatibility
 
     private fun cameraZoomRatio(): Float =
-        if (activeCameraSource == ProductionCameraSource.SONY) sonyZoomTarget
+        if (activeCameraSource == ProductionCameraSource.SONY) sonyZoomRatio
         else focusZoom.currentZoomRatio()
 
     private fun cameraZoomRange(): ClosedFloatingPointRange<Float> =
@@ -3985,24 +4030,35 @@ class MainActivity : AppCompatActivity() {
             SONY_MIN_ZOOM_RATIO..SONY_MAX_ZOOM_RATIO
         } else focusZoom.zoomRatioRange()
 
-    private fun setCameraZoomRatio(requested: Float) {
+    private fun setCameraZoomRatio(requested: Float, onResult: (Boolean) -> Unit = {}) {
         if (activeCameraSource != ProductionCameraSource.SONY) {
             focusZoom.setZoomRatio(requested)
+            onResult(true)
             return
         }
         val target = requested.coerceIn(SONY_MIN_ZOOM_RATIO, SONY_MAX_ZOOM_RATIO)
-        val before = sonyZoomRatio
+        val before = sonyProduction.currentZoomRatio()
+        sonyZoomRatio = before
+        sonyZoomTarget = before
         val delta = target - before
         if (abs(delta) < 0.015f) {
-            sonyZoomTarget = target
+            onResult(true)
             return
         }
-        sonyZoomTarget = target
+        val tele = delta > 0f
+        val holdMs = (abs(delta) /
+            (SONY_MAX_ZOOM_RATIO - SONY_MIN_ZOOM_RATIO) * SONY_ZOOM_FULL_TRAVEL_MS)
+            .toLong().coerceIn(80L, 1_500L)
         lastZoomChangeAt = System.currentTimeMillis()
-        sonyProduction.setZoomRatio(target) { ok ->
+        sonyProduction.driveZoom(tele, holdMs) { ok ->
             if (ok) sonyZoomRatio = sonyProduction.currentZoomRatio()
             sonyZoomTarget = sonyZoomRatio
-            if (!ok) Log.w(TAG, "Sony zoom command failed target=$target before=$before")
+            Log.i(
+                TAG,
+                "Sony physical AUTO zoom tele=$tele holdMs=$holdMs before=$before " +
+                    "requested=$target confirmed=$sonyZoomRatio ok=$ok"
+            )
+            onResult(ok)
         }
     }
 
@@ -4030,18 +4086,16 @@ class MainActivity : AppCompatActivity() {
             focusZoom.triggerAutoFocus()
             return
         }
-        // Automatic Sony operation relies on the body's AF-C/Pre-AF. Live
-        // testing measured state 5 (scan) -> 6 (focused) in 49ms, while a
-        // RemoteTouchOperation consistently stopped the HTTP producer. Keep
-        // remote touch only for an explicit user tap/long-press.
+        // AF-C/Pre-AF remains the non-disruptive baseline. A decisive focus
+        // gate explicitly requests physicalSony=true once per zoom level.
         if (!physicalSony) return
         val now = System.currentTimeMillis()
         if (now - sonyAfRequestedAt < 650L) return
         sonyAfRequestedAt = now
         sonyAfCommandAcknowledged = false
         // Use Creators' App's SDI-310 RemoteTouchOperation on the existing
-        // PTP session. `physicalSony` remains for call-site API compatibility;
-        // both automatic and manual requests use the camera's real AF motor.
+        // PTP session. Automatic and manual decisive requests both use the
+        // camera's real AF motor and the detected/tapped point.
         val bounds = latestMaterial?.bounds
         val focusX = normalizedX?.coerceIn(0f, 1f)
             ?: bounds?.let { (it.x0 + it.x1) * 0.5f } ?: 0.5f
@@ -4192,7 +4246,6 @@ class MainActivity : AppCompatActivity() {
         val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapUp(e: MotionEvent): Boolean {
                 val (cx, cy) = normalizedPreviewTouch(e)
-                engageManual()
                 manualFocusLocked = false
                 updateCameraTrackingRegion(cx, cy)
                 triggerCameraAutoFocus(
@@ -4205,7 +4258,6 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onLongPress(e: MotionEvent) {
                 val (cx, cy) = normalizedPreviewTouch(e)
-                engageManual()
                 updateCameraTrackingRegion(cx, cy)
                 triggerCameraAutoFocus(
                     physicalSony = true,
@@ -4249,9 +4301,7 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    /** Shared by every manual control -- see manualModeActive's doc
-     * comment. Idempotent (checks manualModeActive first) so it's cheap
-     * to call unconditionally from every listener. */
+    /** Enter the explicit manual-zoom override. Called only by zoom +/-. */
     private fun engageManual() {
         if (!manualModeActive) {
             manualModeActive = true
@@ -4284,7 +4334,6 @@ class MainActivity : AppCompatActivity() {
             private var beforeDrag = autoExposureEv
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (!fromUser) return
-                engageManual()
                 val ev = evRange.start + progress / sliderStepsPerEv
                 autoExposureEv = ev
                 // CameraX can accept continuous slider updates. Sony cannot:
@@ -4869,10 +4918,10 @@ class MainActivity : AppCompatActivity() {
         centeringSettledUntil = 0L
         if (manualModeActive) {
             manualModeActive = false
-            manualFocusLocked = false
             binding.manualModeText.text = getString(R.string.auto_tracking)
             binding.resumeAutoButton.visibility = View.GONE
         }
+        manualFocusLocked = false
         if (next == Phase.JEWEL) {
             // Normal completion already undid these via
             // undoCenteringThenAdvance() before calling here -- this is
@@ -4921,6 +4970,7 @@ class MainActivity : AppCompatActivity() {
             angle2Jpeg = null
             setCameraZoomRatio(1f)
         }
+        applySonyFocusAreaForPhase()
         setStatus(if (next == Phase.JEWEL) "Center the ornament, front side up…" else "Show the tag QR/barcode…", ready = false)
     }
 
@@ -5155,8 +5205,26 @@ class MainActivity : AppCompatActivity() {
             val settings = savedSonyQualitySettings()
             sonyProduction.applyQualitySettings(settings) { ok ->
                 Log.i(TAG, "Sony saved quality profile applied ok=$ok settings=$settings")
+                if (ok) applySonyFocusAreaForPhase()
             }
         }, 500L)
+    }
+
+    /** TAG uses AF-C Wide so a foreground label entering anywhere near the
+     * centre is acquired without repeated touch-focus commands. JEWEL
+     * restores the operator's configured focus area. One property write per
+     * phase preserves the 25fps stream; a 900ms touch-focus loop measured
+     * only ~14fps and was removed before production handoff. */
+    private fun applySonyFocusAreaForPhase() {
+        if (activeCameraSource != ProductionCameraSource.SONY || !sonyProduction.isAvailable) return
+        val target = if (phase == Phase.TAG) {
+            SONY_TAG_FOCUS_AREA_WIDE
+        } else {
+            savedSonyQualitySettings().focusArea
+        }
+        sonyProduction.setFocusArea(target) { ok ->
+            Log.i(TAG, "Sony phase focus area phase=$phase value=$target ok=$ok")
+        }
     }
 
     private fun showSettingsDialog() {

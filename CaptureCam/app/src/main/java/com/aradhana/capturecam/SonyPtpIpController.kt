@@ -1009,7 +1009,17 @@ class SonyPtpIpController {
      */
     private fun setZoomPercentWithScale(requestedPercent: Int): Boolean {
         val observed = currentOpticalZoomPercent.coerceIn(0, 100)
-        val steppedPercent = ((requestedPercent.coerceIn(0, 100) + 5) / 10) * 10
+        val requested = requestedPercent.coerceIn(0, 100)
+        // D25C only accepts 10% steps. Nearest rounding made the first
+        // automatic 1.0 -> 1.1x request (~4% travel) round back to 0%, so
+        // the pipeline reported zooming forever without moving the lens.
+        // Quantize in the requested direction so every non-zero request
+        // produces one real optical step.
+        val steppedPercent = when {
+            requested > observed -> (((requested + 9) / 10) * 10).coerceAtMost(100)
+            requested < observed -> ((requested / 10) * 10).coerceAtLeast(0)
+            else -> observed
+        }
         if (steppedPercent == observed && currentZoomScale in 1_000..2_000) return true
         val targetScale = 1_000 + steppedPercent * 10
         // Creators serializes each DevicePropertySetter transaction and does
