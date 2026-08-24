@@ -206,23 +206,29 @@ function render(s) {
   }
 }
 
-let es = null, retry = 0;
-function connect() {
-  es = new EventSource('/api/stream');
-  es.onmessage = (e) => {
-    retry = 0;
-    try { render(JSON.parse(e.data)); } catch (_) {}
-  };
-  es.onerror = () => {
-    es.close();
-    retry = Math.min(retry + 1, 6);
-    $('dot').className = 'dot bad';
-    $('livetext').textContent = 'Reconnecting…';
-    setTimeout(connect, 500 * Math.pow(2, retry));
-  };
+// Plain 1-second polling instead of SSE. The iPad Mini 2 is stuck on iOS 12,
+// whose old Safari does not push EventSource updates reliably (observed
+// refreshing every 5-7s instead of every 1s even though the server and
+// network both deliver on time) - a fetch loop is far more broadly
+// compatible and matches the "fetch every second" requirement directly.
+let consecutiveFailures = 0;
+function poll() {
+  fetch('/api/rate', { cache: 'no-store' })
+    .then((r) => r.json())
+    .then((s) => {
+      consecutiveFailures = 0;
+      render(s);
+    })
+    .catch(() => {
+      consecutiveFailures++;
+      if (consecutiveFailures >= 3) {
+        $('dot').className = 'dot bad';
+        $('livetext').textContent = 'Reconnecting…';
+      }
+    });
 }
-fetch('/api/rate').then((r) => r.json()).then(render).catch(() => {});
-connect();
+poll();
+setInterval(poll, 1000);
 </script>
 </body>
 </html>
