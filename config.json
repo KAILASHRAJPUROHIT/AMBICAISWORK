@@ -71,25 +71,25 @@
       "label": "Kaka Gold",
       "url": "https://bcast.kakagold.xyz/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/kaka",
       "target": {
-        "code": "4620",
-        "namePattern": "^GOLD\\s+999\\s+BIS\\s+APPROVED",
+        "code": "4635",
+        "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
         "field": "sell"
       },
       "secondary": {
-        "code": "4635",
-        "namePattern": "^GOLD\\s+999\\s+IMPORTED",
+        "code": "4616",
+        "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
         "field": "sell"
       },
       "refRows": {
         "gst999": {
-          "code": "4619",
-          "namePattern": "999\\s+BIS\\s+APPROVED.*GST"
+          "code": "4433",
+          "namePattern": "999.*IMP.*GST"
         }
       },
       "refreshMs": 5000,
       "maxAgeMs": 120000,
-      "warnPct": 0.35,
-      "failPct": 1,
+      "warnPct": 0.5,
+      "failPct": 1.5,
       "gstFactor": 1.03
     },
     "parity": {
