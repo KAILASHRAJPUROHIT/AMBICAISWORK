@@ -207,8 +207,13 @@ class MainActivity : AppCompatActivity() {
             }
             val burstFrames = intent.getIntExtra("burstFrames", 1).coerceIn(1, 10)
             if (burstFrames > 1) {
-                Log.i(TAG, "testSonyCaptureReceiver: starting diagnostic native burst frames=$burstFrames")
-                sonyProduction.testBurst(burstFrames) { result ->
+                val useSmallProxies = intent.getBooleanExtra("smallProxies", false)
+                Log.i(
+                    TAG,
+                    "testSonyCaptureReceiver: starting diagnostic native burst " +
+                        "frames=$burstFrames smallProxies=$useSmallProxies"
+                )
+                sonyProduction.testBurst(burstFrames, useSmallProxies) { result ->
                     Log.i(
                         TAG,
                         "testSonyCaptureReceiver: burst result success=${result?.success} " +
@@ -229,6 +234,19 @@ class MainActivity : AppCompatActivity() {
                     "${options.outWidth}x${options.outHeight}"
                 }
                 Log.i(TAG, "testSonyCaptureReceiver: bytes=${bytes?.size} dimensions=$bounds")
+            }
+        }
+    }
+    // Read-only diagnostic for whether Sony exposes card objects in Remote mode.
+    // adb shell am broadcast -a com.aradhana.capturecam.TEST_SONY_CARD_OBJECTS
+    private val testSonyCardObjectsReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            sonyProduction.probeCardObjects { result ->
+                Log.i(
+                    TAG,
+                    "testSonyCardObjectsReceiver: storages=${result?.storageIds?.map { "0x${it.toString(16)}" }} " +
+                        "total=${result?.totalHandles} newest=${result?.newestObjects} error=${result?.error}"
+                )
             }
         }
     }
@@ -1098,12 +1116,14 @@ class MainActivity : AppCompatActivity() {
         val zoomFilter = IntentFilter("com.aradhana.capturecam.TEST_ZOOM")
         val zoomMotorFilter = IntentFilter("com.aradhana.capturecam.TEST_ZOOM_MOTOR")
         val sonyCaptureFilter = IntentFilter("com.aradhana.capturecam.TEST_SONY_CAPTURE")
+        val sonyCardObjectsFilter = IntentFilter("com.aradhana.capturecam.TEST_SONY_CARD_OBJECTS")
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(testMoveReceiver, filter, RECEIVER_EXPORTED)
             registerReceiver(testExposureReceiver, exposureFilter, RECEIVER_EXPORTED)
             registerReceiver(testZoomReceiver, zoomFilter, RECEIVER_EXPORTED)
             registerReceiver(testZoomMotorReceiver, zoomMotorFilter, RECEIVER_EXPORTED)
             registerReceiver(testSonyCaptureReceiver, sonyCaptureFilter, RECEIVER_EXPORTED)
+            registerReceiver(testSonyCardObjectsReceiver, sonyCardObjectsFilter, RECEIVER_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(testMoveReceiver, filter)
@@ -1115,6 +1135,8 @@ class MainActivity : AppCompatActivity() {
             registerReceiver(testZoomMotorReceiver, zoomMotorFilter)
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(testSonyCaptureReceiver, sonyCaptureFilter)
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(testSonyCardObjectsReceiver, sonyCardObjectsFilter)
         }
     }
 
@@ -5496,5 +5518,6 @@ class MainActivity : AppCompatActivity() {
         try { unregisterReceiver(testZoomReceiver) } catch (_: IllegalArgumentException) {}
         try { unregisterReceiver(testZoomMotorReceiver) } catch (_: IllegalArgumentException) {}
         try { unregisterReceiver(testSonyCaptureReceiver) } catch (_: IllegalArgumentException) {}
+        try { unregisterReceiver(testSonyCardObjectsReceiver) } catch (_: IllegalArgumentException) {}
     }
 }

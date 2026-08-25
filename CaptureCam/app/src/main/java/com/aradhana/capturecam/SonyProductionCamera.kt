@@ -44,6 +44,7 @@ class SonyProductionCamera(
     @Volatile private var latestFocusIndication: Int? = null
     private var finishCaptureRunnable: Runnable? = null
     private var generation = 0L
+    private var liveLoopEpoch = 0L
     private var reconnectAttempt = 0
     private var reconnectIncidentStartedAtMs = 0L
     private var liveSessionStartedAtMs = 0L
@@ -60,6 +61,26 @@ class SonyProductionCamera(
             ?: controller?.zoomRatio() ?: 1f
 
     fun currentFocusIndication(): Int? = latestFocusIndication
+
+    /** Read-only diagnostic for card visibility in the active Remote session. */
+    fun probeCardObjects(onResult: (SonyPtpIpController.CardObjectProbe?) -> Unit) {
+        val camera = controller
+        if (!isAvailable || camera == null || !camera.isConnected || captureMode || controlTransition) {
+            mainHandler.post { onResult(null) }
+            return
+        }
+        thread(name = "SonyCardObjectProbe") {
+            val result = commandLock.withLock {
+                try {
+                    camera.probeCardObjects()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Sony card-object probe failed", e)
+                    null
+                }
+            }
+            mainHandler.post { onResult(result) }
+        }
+    }
 
     fun start(cameraIp: String, sshUser: String, sshPassword: String) {
         synchronized(stateLock) {
@@ -124,23 +145,29 @@ class SonyProductionCamera(
             synchronized(stateLock) {
                 controller?.disconnect()
                 controller = candidate
+                captureQualityVerified = false
             }
             startLiveLoop(candidate, expectedGeneration)
         }
     }
 
     private fun startLiveLoop(camera: SonyPtpIpController, expectedGeneration: Long) {
+        val expectedLiveLoopEpoch = synchronized(stateLock) {
+            liveLoopEpoch += 1L
+            liveLoopEpoch
+        }
         camera.setLiveViewStreaming(true)
         liveRunning = true
         frameReady = false
         thread(name = "SonyProductionLiveView") {
+            val loopStartedAt = SystemClock.elapsedRealtime()
             var failures = 0
             var firstFrame = true
             var lastLoggedFocusIndication: Int? = null
             var cadenceWindowStartedAt = SystemClock.elapsedRealtime()
             var cadenceFrames = 0
             while (running && liveRunning && generation == expectedGeneration &&
-                controller === camera && camera.isConnected
+                liveLoopEpoch == expectedLiveLoopEpoch && controller === camera && camera.isConnected
             ) {
                 // No proactive lease refresh here -- confirmed live
                 // 2026-08-24 that it made things WORSE, not better.
@@ -171,6 +198,12 @@ class SonyProductionCamera(
                     BitmapFactory.decodeByteArray(it.jpeg, 0, it.jpeg.size)
                 }
                 if (bitmap == null) {
+                    if (firstFrame &&
+                        SystemClock.elapsedRealtime() - loopStartedAt < LIVE_RESUME_FIRST_FRAME_GRACE_MS
+                    ) {
+                        try { Thread.sleep(50L) } catch (_: InterruptedException) { break }
+                        continue
+                    }
                     failures += 1
                     if (failures >= MAX_CONSECUTIVE_FRAME_FAILURES) {
                         Log.w(TAG, "Sony Live View unhealthy after $failures failures")
@@ -217,9 +250,8 @@ class SonyProductionCamera(
                 // frames rather than latency -- but there is no reason to pay
                 // it at all.
             }
-            camera.disconnect()
             val stillOwnsProductionSession = synchronized(stateLock) {
-                if (controller === camera) {
+                if (liveLoopEpoch == expectedLiveLoopEpoch && controller === camera) {
                     controller = null
                     liveRunning = false
                     frameReady = false
@@ -231,6 +263,7 @@ class SonyProductionCamera(
                     false
                 }
             }
+            if (stillOwnsProductionSession) camera.disconnect()
             if (stillOwnsProductionSession && running && generation == expectedGeneration &&
                 !captureMode && !controlTransition
             ) {
@@ -295,7 +328,13 @@ class SonyProductionCamera(
         return "$minutes:$seconds"
     }
 
-    /** Takes a native Sony burst and returns the sharpest original full-resolution JPEG. */
+    /**
+     * Takes one verified original-resolution Sony still.
+     *
+     * Best-of-five stays diagnostic-only. The ZV-E10 II exposes one volatile
+     * host object at a time and does not support RemoteTransfer mode; pulling
+     * five RAW+JPEG originals synchronously held production for ~20 seconds.
+     */
     fun captureStill(onResult: (ByteArray?) -> Unit) {
         finishCaptureRunnable?.let(mainHandler::removeCallbacks)
         finishCaptureRunnable = null
@@ -306,7 +345,6 @@ class SonyProductionCamera(
         }
 
         val liveCamera: SonyPtpIpController
-        val expectedGeneration: Long
         synchronized(stateLock) {
             if (!isAvailable || captureMode || captureConnectInFlight) {
                 mainHandler.post { onResult(null) }
@@ -316,35 +354,21 @@ class SonyProductionCamera(
                 mainHandler.post { onResult(null) }
                 return
             }
-            expectedGeneration = generation
             captureMode = true
-            captureConnectInFlight = true
             liveRunning = false
             frameReady = false
             controller = null
+            captureController = liveCamera
+            liveLoopEpoch += 1L
         }
 
-        // The ZV-E10 II accepts one PTP command session at a time. Its command
-        // responses remain serialized once the HTTP Live View stream starts,
-        // even after that HTTP stream closes. A full-resolution shutter must
-        // therefore reopen one fresh PTP session. Live View is restored after
-        // the short capture-session idle window below.
-        liveCamera.disconnect()
-        thread(name = "SonyProductionCaptureConnect") {
-            try { Thread.sleep(CAPTURE_REOPEN_SETTLE_MS) } catch (_: InterruptedException) { }
-            val camera = SonyPtpIpController()
-            val connected = camera.connectBlocking(cameraIp, sshUser, sshPassword, "CaptureCam-Capture")
-            captureConnectInFlight = false
-            if (!running || generation != expectedGeneration || !connected) {
-                camera.disconnect()
-                mainHandler.post { onResult(null) }
-                finishCaptureMode(expectedGeneration)
-                return@thread
-            }
-            captureController = camera
-            captureQualityVerified = false
-            captureOnSession(camera, onResult)
-        }
+        // HTTP Live View is a sibling channel. Stop only that pump and keep
+        // the already-authenticated PTP command session for the shutter and
+        // original download. Reconnecting SSH/PTP before and after every
+        // angle added ~3-4 seconds with no image-quality benefit.
+        liveCamera.setLiveViewStreaming(false)
+        onAvailabilityChanged(false, "Sony capturing original…")
+        captureOnSession(liveCamera, onResult)
     }
 
     private fun captureOnSession(camera: SonyPtpIpController, onResult: (ByteArray?) -> Unit) {
@@ -363,20 +387,11 @@ class SonyProductionCamera(
                     if (!qualityOk) {
                         null
                     } else {
-                        val burst = camera.triggerBurstTest(CAPTURE_BEST_OF_FRAMES)
-                        val selected = burst.selectedImage
-                        if (selected != null) {
-                            Log.i(
-                                TAG,
-                                "Sony production best-of-${burst.requestedFrames}: " +
-                                    "retrieved=${burst.retrievedFrames} selected=${burst.selectedFrameIndex} " +
-                                    "scores=${burst.sharpnessScores.map { "%.1f".format(it) }}"
-                            )
-                            selected
-                        } else {
-                            Log.w(TAG, "Sony burst selection failed; taking one fail-safe still: ${burst.error}")
-                            if (camera.triggerShutter()) camera.lastCapturedImage else null
-                        }
+                        if (camera.triggerShutter()) {
+                            camera.lastCapturedImage.also {
+                                Log.i(TAG, "Sony production single original bytes=${it?.size}")
+                            }
+                        } else null
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Sony still capture failed", e)
@@ -395,13 +410,14 @@ class SonyProductionCamera(
     /** Diagnostic hook for the same native burst/retrieval/scoring path used in production. */
     fun testBurst(
         frameCount: Int = 5,
+        useSmallProxies: Boolean = false,
         onResult: (SonyPtpIpController.BurstTestResult?) -> Unit
     ) {
         finishCaptureRunnable?.let(mainHandler::removeCallbacks)
         finishCaptureRunnable = null
 
         captureController?.takeIf { it.isConnected }?.let { camera ->
-            burstOnSession(camera, frameCount, onResult)
+            burstOnSession(camera, frameCount, useSmallProxies, onResult)
             return
         }
 
@@ -438,24 +454,35 @@ class SonyProductionCamera(
             }
             captureController = camera
             captureQualityVerified = false
-            burstOnSession(camera, frameCount, onResult)
+            burstOnSession(camera, frameCount, useSmallProxies, onResult)
         }
     }
 
     private fun burstOnSession(
         camera: SonyPtpIpController,
         frameCount: Int,
+        useSmallProxies: Boolean,
         onResult: (SonyPtpIpController.BurstTestResult?) -> Unit
     ) {
         thread(name = "SonyProductionBurst") {
             val result = commandLock.withLock {
                 try {
                     val desired = desiredQualitySettings
-                    val qualityOk = captureQualityVerified ||
+                    // Proxy timing diagnostics deliberately preserve the
+                    // already-running camera profile. Reapplying the entire
+                    // quality hardwall here can reject an unrelated focus-
+                    // area readback before the transfer test even starts.
+                    val qualityOk = useSmallProxies || captureQualityVerified ||
                         (desired == null || camera.applyQualitySettings(desired)).also {
                             captureQualityVerified = it
                         }
-                    if (qualityOk) camera.triggerBurstTest(frameCount) else null
+                    if (!qualityOk) {
+                        null
+                    } else if (useSmallProxies) {
+                        camera.triggerProxyBurstTest(frameCount)
+                    } else {
+                        camera.triggerBurstTest(frameCount)
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Sony burst test failed", e)
                     null
@@ -476,16 +503,26 @@ class SonyProductionCamera(
     }
 
     private fun finishCaptureMode(expectedGeneration: Long) {
+        var resumeCamera: SonyPtpIpController? = null
+        var reconnect = false
         synchronized(stateLock) {
             finishCaptureRunnable?.let(mainHandler::removeCallbacks)
             finishCaptureRunnable = null
-            captureController?.disconnect()
+            val camera = captureController
             captureController = null
-            captureQualityVerified = false
             captureConnectInFlight = false
             captureMode = false
+            if (running && generation == expectedGeneration && camera?.isConnected == true) {
+                controller = camera
+                resumeCamera = camera
+            } else {
+                camera?.disconnect()
+                captureQualityVerified = false
+                reconnect = running && generation == expectedGeneration
+            }
         }
-        if (running && generation == expectedGeneration) connectOnce(expectedGeneration)
+        resumeCamera?.let { startLiveLoop(it, expectedGeneration) }
+        if (reconnect) connectOnce(expectedGeneration)
     }
 
     fun autofocus(
@@ -588,9 +625,16 @@ class SonyProductionCamera(
         settings: SonyQualitySettings,
         onResult: (Boolean) -> Unit = {}
     ) {
+        if (desiredQualitySettings == settings && captureQualityVerified) {
+            mainHandler.post { onResult(true) }
+            return
+        }
         desiredQualitySettings = settings
         captureQualityVerified = false
-        runFreshControl("SonyProductionQuality", onResult) {
+        runFreshControl("SonyProductionQuality", { ok ->
+            captureQualityVerified = ok
+            onResult(ok)
+        }) {
             it.applyQualitySettings(settings)
         }
     }
@@ -649,9 +693,9 @@ class SonyProductionCamera(
         private const val TAG = "SonyProduction"
         private const val FRAME_INTERVAL_MS = 33L
         private const val MAX_CONSECUTIVE_FRAME_FAILURES = 8
+        private const val LIVE_RESUME_FIRST_FRAME_GRACE_MS = 12_000L
         private const val CAPTURE_REOPEN_SETTLE_MS = 300L
-        private const val CAPTURE_BURST_IDLE_MS = 750L
-        private const val CAPTURE_BEST_OF_FRAMES = 5
+        private const val CAPTURE_BURST_IDLE_MS = 100L
         private const val POWER_CONFIGURATION_HINT_ATTEMPT = 4
         private const val SONY_ISO_AUTO = 0x00FF_FFFF
     }

@@ -150,6 +150,7 @@ class SonyPtpIpController {
         private const val PTP_OC_GetDeviceInfo = 0x1001
         private const val PTP_OC_OpenSession = 0x1002
         private const val PTP_OC_GetStorageIDs = 0x1004
+        private const val PTP_OC_GetObjectHandles = 0x1007
         private const val PTP_OC_GetObjectInfo = 0x1008
         private const val PTP_OC_GetObject = 0x1009
 
@@ -217,6 +218,8 @@ class SonyPtpIpController {
         private const val DRIVE_SINGLE = 0x00000001
         private const val DRIVE_CONTINUOUS_HI_PLUS = 0x00010002
         private const val SAVE_MEDIA_HOST_AND_CAMERA = 0x0011
+        private const val TRANSFER_SIZE_ORIGINAL = 1
+        private const val TRANSFER_SIZE_2M = 2
 
         // Sony D2DD is a signed BYTE: positive=tele, negative=wide, 0=stop.
         // The old constants were reversed and were sent as UInt16, so the
@@ -366,11 +369,79 @@ class SonyPtpIpController {
         val latestImage: ByteArray? get() = selectedImage
     }
 
+    data class CardObject(
+        val handle: Long,
+        val filename: String?,
+        val objectFormat: Int?,
+        val objectSize: Long?
+    )
+
+    data class CardObjectProbe(
+        val storageIds: List<Long>,
+        val totalHandles: Int,
+        val newestObjects: List<CardObject>,
+        val error: String?
+    )
+
     private data class BufferedCapture(
         val bytes: ByteArray,
         val filename: String?,
         val objectFormat: Int?
     )
+
+    /**
+     * Read-only proof for deferred full-resolution transfer. Lists Sony's
+     * normal on-card PTP objects without downloading image payloads. Keep
+     * this on the existing authenticated command session: the ZV-E10 II has
+     * one remote-control session, while HTTP Live View is only a sibling SSH
+     * channel. Opening a second PTP session would steal/kill production.
+     */
+    fun probeCardObjects(maxNewest: Int = 12): CardObjectProbe =
+        withLiveViewHttpReleasedForControl {
+            try {
+                val storageResult = executeOperation(PTP_OC_GetStorageIDs)
+                if (!storageResult.isOk) {
+                    return@withLiveViewHttpReleasedForControl CardObjectProbe(
+                        emptyList(), 0, emptyList(),
+                        "GetStorageIDs response=0x${storageResult.code.toString(16)}"
+                    )
+                }
+                val storageIds = parsePtpU32Array(storageResult.data)
+                val handlesResult = executeOperation(
+                    PTP_OC_GetObjectHandles,
+                    intArrayOf(0xFFFFFFFF.toInt(), 0, 0)
+                )
+                if (!handlesResult.isOk) {
+                    return@withLiveViewHttpReleasedForControl CardObjectProbe(
+                        storageIds, 0, emptyList(),
+                        "GetObjectHandles response=0x${handlesResult.code.toString(16)}"
+                    )
+                }
+                val handles = parsePtpU32Array(handlesResult.data)
+                val newest = handles.takeLast(maxNewest.coerceIn(1, 50)).mapNotNull { unsignedHandle ->
+                    val info = executeOperation(PTP_OC_GetObjectInfo, intArrayOf(unsignedHandle.toInt()))
+                    if (!info.isOk) return@mapNotNull null
+                    CardObject(
+                        handle = unsignedHandle,
+                        filename = if (info.data.size > 52) {
+                            readPtpValue(info.data, 52, 0xFFFF)?.stringValue
+                        } else null,
+                        objectFormat = if (info.data.size >= 6) info.data.readU16LeAt(4) else null,
+                        objectSize = if (info.data.size >= 12) info.data.readU32LeAt(8) else null
+                    )
+                }
+                CardObjectProbe(storageIds, handles.size, newest, null)
+            } catch (e: Exception) {
+                CardObjectProbe(emptyList(), 0, emptyList(), e.message ?: e.javaClass.simpleName)
+            }
+        }
+
+    private fun parsePtpU32Array(data: ByteArray): List<Long> {
+        if (data.size < 4) return emptyList()
+        val count = data.readU32LeAt(0)
+        if (count > 1_000_000L || data.size < 4L + count * 4L) return emptyList()
+        return List(count.toInt()) { index -> data.readU32LeAt(4 + index * 4) }
+    }
 
     private data class BurstDrainStats(
         val objectAddedEvents: Int,
@@ -751,7 +822,8 @@ class SonyPtpIpController {
 
     // ---- High-level camera actions -------------------------------------
 
-    fun triggerShutter(afSettleMs: Long = 1_500L, holdMs: Long = 1_500L): Boolean {
+    fun triggerShutter(afSettleMs: Long = 250L, holdMs: Long = 120L): Boolean {
+        val captureStartedAt = System.currentTimeMillis()
         lastCapturedImage = null
         lastCapturedFilename = null
         lastCapturedObjectFormat = null
@@ -760,34 +832,69 @@ class SonyPtpIpController {
             Log.w(TAG, "Shutter blocked: Sony Live View did not become ready")
             return false
         }
-        if ((currentShootingFileInfo ?: 0L) and 0x8000L != 0L) {
-            waitForShootingFileInfoClear(10_000L)
+
+        // D215's host object is a FIFO entry, not a busy bit that clears by
+        // itself. The old code waited ten seconds for a stale object to
+        // disappear even though only GetObject can pop it. Consume any stale
+        // object now so it can never be mistaken for this shutter's result.
+        val staleState = readSonyProperties()[PROP_ShootingFileInfo]?.currentValue ?: 0L
+        if (sonyBufferedCaptureCount(staleState) > 0) {
+            val discarded = mutableListOf<BufferedCapture>()
+            val discardStartedAt = System.currentTimeMillis()
+            if (!popSonyHostCapture(discarded)) {
+                Log.w(TAG, "Shutter blocked: stale Sony host object could not be drained")
+                return false
+            }
+            Log.w(
+                TAG,
+                "Discarded stale Sony host object before shutter bytes=${discarded.first().bytes.size} " +
+                    "elapsedMs=${System.currentTimeMillis() - discardStartedAt}"
+            )
         }
-        val shutterWritten = synchronized(operationLock) {
+
+        eventQueue.clear()
+        var shutterPressedAt = 0L
+        var objectReadyAt = 0L
+        val shotReady = synchronized(operationLock) {
+            var autofocusHeld = false
+            var captureHeld = false
             try {
-                val transactions = ArrayList<Int>(4)
-                transactions += sendControlDeviceBNoWait(PROP_AutoFocus, 2, 2)
+                // AF-C already tracks continuously. A short acknowledged S1
+                // pulse lets the body confirm the final focus position; a
+                // 1.5s S1 delay plus two 1.5s S2 sleeps added 4.5 artificial
+                // seconds to every still without improving a static subject.
+                if (!setControlDeviceB(PROP_AutoFocus, 2, 2)) return@synchronized false
+                autofocusHeld = true
                 Thread.sleep(afSettleMs)
-                transactions += sendControlDeviceBNoWait(PROP_Capture, 2, 2)
+                if (!setControlDeviceB(PROP_Capture, 2, 2)) return@synchronized false
+                captureHeld = true
+                shutterPressedAt = System.currentTimeMillis()
                 Thread.sleep(holdMs)
-                transactions += sendControlDeviceBNoWait(PROP_Capture, 1, 2)
-                Thread.sleep(holdMs)
-                transactions += sendControlDeviceBNoWait(PROP_AutoFocus, 1, 2)
-                drainDeferredControlResponses(transactions)
-                true
+                waitForShootingFileReadyEventFirst(30_000L).also { ready ->
+                    if (ready) objectReadyAt = System.currentTimeMillis()
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "Sony shutter control sequence write failed: ${e.message}", e)
                 false
+            } finally {
+                // Sony's virtual S2 must remain held until the body completes
+                // the exposure. A fixed 120ms release ACKed but cancelled the
+                // actual still on the live ZV-E10 II. Always release S2/S1,
+                // including failure/timeout paths, so no virtual key sticks.
+                if (captureHeld) setControlDeviceB(PROP_Capture, 1, 2)
+                if (autofocusHeld) setControlDeviceB(PROP_AutoFocus, 1, 2)
             }
         }
-        if (!shutterWritten) return false
-        if (!waitForShootingFileReady(30_000L)) {
+        val shutterReleasedAt = System.currentTimeMillis()
+        if (!shotReady) {
             Log.w(TAG, "Shutter sequence ACKed, but no Sony shot object became ready")
             return false
         }
 
+        val infoStartedAt = System.currentTimeMillis()
         val info = executeOperation(PTP_OC_GetObjectInfo, intArrayOf(SHOT_OBJECT_HANDLE))
         if (!info.isOk) return false
+        val infoCompletedAt = System.currentTimeMillis()
         val objectFormat = if (info.data.size >= 6) info.data.readU16LeAt(4) else null
         val objectSize = if (info.data.size >= 12) info.data.readU32LeAt(8) else null
         val pixelWidth = if (info.data.size >= 30) info.data.readU32LeAt(26) else null
@@ -795,8 +902,10 @@ class SonyPtpIpController {
         val fileName = if (info.data.size > 52) {
             readPtpValue(info.data, 52, 0xFFFF)?.stringValue
         } else null
+        val downloadStartedAt = System.currentTimeMillis()
         val shot = executeOperation(PTP_OC_GetObject, intArrayOf(SHOT_OBJECT_HANDLE))
         if (!shot.isOk || shot.data.isEmpty()) return false
+        val downloadCompletedAt = System.currentTimeMillis()
         lastCapturedImage = shot.data
         lastCapturedFilename = fileName
         lastCapturedObjectFormat = objectFormat
@@ -810,7 +919,13 @@ class SonyPtpIpController {
             TAG,
             "Sony still captured and downloaded: ${shot.data.size}B payload=$payloadType " +
                 "filename=$fileName format=${objectFormat?.let { "0x${it.toString(16)}" }} " +
-                "declaredSize=$objectSize dimensions=${pixelWidth}x$pixelHeight"
+                "declaredSize=$objectSize dimensions=${pixelWidth}x$pixelHeight " +
+                "timingMs={preShutter=${shutterPressedAt - captureStartedAt}," +
+                "camera=${objectReadyAt - shutterPressedAt}," +
+                "release=${shutterReleasedAt - objectReadyAt}," +
+                "info=${infoCompletedAt - infoStartedAt}," +
+                "download=${downloadCompletedAt - downloadStartedAt}," +
+                "total=${downloadCompletedAt - captureStartedAt}}"
         )
         return true
     }
@@ -937,7 +1052,7 @@ class SonyPtpIpController {
                 restoredSingle = waitForPropertyValue(
                     PROP_DriveMode,
                     DRIVE_SINGLE.toLong(),
-                    5_000L
+                    1_000L
                 )
                 if (!restoreAck && restoredSingle) {
                     Log.w(TAG, "Sony single-shot restore ACK was false; readback confirmed mode=1")
@@ -969,6 +1084,49 @@ class SonyPtpIpController {
     }
 
     /**
+     * Captures/scans the same native burst using Sony's 2M host-transfer
+     * resource. Full RAW+JPEG files remain on the memory card because the
+     * save destination stays Host+Camera. Restores the operator's transfer
+     * size before returning, even on failure.
+     */
+    fun triggerProxyBurstTest(frameCount: Int = 5): BurstTestResult {
+        val before = readSonyProperties()[PROP_StillImageTransferSize]?.currentValue?.toInt()
+            ?: TRANSFER_SIZE_ORIGINAL
+        val proxySet = setStillImageTransferSize(TRANSFER_SIZE_2M) &&
+            waitForPropertyValue(
+                PROP_StillImageTransferSize,
+                TRANSFER_SIZE_2M.toLong(),
+                3_000L
+            )
+        if (!proxySet) {
+            return BurstTestResult(
+                success = false,
+                requestedFrames = frameCount.coerceIn(2, 10),
+                holdMs = 0L,
+                driveModeApplied = false,
+                objectAddedEvents = 0,
+                eventCodes = emptyList(),
+                retrievedFrames = 0,
+                readyCountPeak = 0,
+                selectedFrameIndex = null,
+                sharpnessScores = emptyList(),
+                selectedImage = null,
+                restoredSingleShot = true,
+                error = "Sony 2M proxy transfer-size write/readback failed"
+            )
+        }
+        return try {
+            triggerBurstTest(frameCount)
+        } finally {
+            val restored = setStillImageTransferSize(before) &&
+                waitForPropertyValue(PROP_StillImageTransferSize, before.toLong(), 3_000L)
+            if (!restored) {
+                Log.e(TAG, "Sony transfer-size restore failed expected=$before")
+            }
+        }
+    }
+
+    /**
      * Sony host transfer is a one-slot FIFO on this body. Keep S2 logically
      * down and pop one virtual object whenever D215 becomes ready. That lets
      * the body advance to the next exposure without guessing shutter speed.
@@ -983,24 +1141,30 @@ class SonyPtpIpController {
         val deadline = System.currentTimeMillis() + timeoutMs
         var sonyObjectAdded = 0
         var readyPeak = 0
+        var lastPropertyFallbackAt = 0L
         while (hasOpenControlTransport() && captures.size < requested &&
             System.currentTimeMillis() < deadline) {
-            sonyObjectAdded += collectBurstEvents(eventCodes, 0L)
-            val value = readSonyProperties()[PROP_ShootingFileInfo]?.currentValue ?: 0L
-            val queued = sonyBufferedCaptureCount(value)
-            readyPeak = maxOf(readyPeak, queued)
-            if (queued > 0) {
-                val before = captures.size
-                drainSonyHostCaptureQueue(
-                    captures = captures,
-                    maxFrames = 1,
-                    timeoutMs = 15_000L,
-                    stopWhenQuiet = false
-                )
-                if (captures.size == before) Thread.sleep(50L)
+            // C201 is Sony's exact "host object ready" notification. The old
+            // loop hammered the 9.6KB 0x9209 property dataset every 50ms,
+            // serializing 100+ commands with card writing and stretching a
+            // 190KB proxy burst to 11 seconds. Let the event channel wake the
+            // downloader; keep D215 only as a low-rate lost-event fallback.
+            val added = collectBurstEvents(eventCodes, 250L)
+            sonyObjectAdded += added
+            if (added > 0) {
+                repeat(added.coerceAtMost(requested - captures.size)) {
+                    if (popSonyHostCapture(captures)) readyPeak = maxOf(readyPeak, 1)
+                }
                 continue
             }
-            Thread.sleep(50L)
+            val now = System.currentTimeMillis()
+            if (now - lastPropertyFallbackAt >= 500L) {
+                lastPropertyFallbackAt = now
+                val value = readSonyProperties()[PROP_ShootingFileInfo]?.currentValue ?: 0L
+                val queued = sonyBufferedCaptureCount(value)
+                readyPeak = maxOf(readyPeak, queued)
+                if (queued > 0) popSonyHostCapture(captures)
+            }
         }
         sonyObjectAdded += collectBurstEvents(eventCodes, 0L)
         return BurstDrainStats(
@@ -1050,29 +1214,33 @@ class SonyPtpIpController {
                 Thread.sleep(40L)
                 continue
             }
-            val info = executeOperation(PTP_OC_GetObjectInfo, intArrayOf(SHOT_OBJECT_HANDLE))
-            if (!info.isOk) {
+            val target = captures ?: mutableListOf()
+            if (!popSonyHostCapture(target)) {
                 Thread.sleep(50L)
                 continue
             }
-            val objectFormat = if (info.data.size >= 6) info.data.readU16LeAt(4) else null
-            val declaredSize = if (info.data.size >= 12) info.data.readU32LeAt(8) else null
-            val filename = if (info.data.size > 52) {
-                readPtpValue(info.data, 52, 0xFFFF)?.stringValue
-            } else null
-            val shot = executeOperation(PTP_OC_GetObject, intArrayOf(SHOT_OBJECT_HANDLE))
-            if (!shot.isOk || shot.data.isEmpty()) {
-                Thread.sleep(50L)
-                continue
-            }
-            if (declaredSize != null && declaredSize != 0L && declaredSize != shot.data.size.toLong()) {
-                Log.w(TAG, "Sony burst frame size mismatch declared=$declaredSize actual=${shot.data.size}")
-            }
-            captures?.add(BufferedCapture(shot.data, filename, objectFormat))
             drained += 1
-            Log.i(TAG, "Sony burst frame ${captures?.size ?: drained} downloaded ${shot.data.size}B filename=$filename")
         }
         return drained
+    }
+
+    /** Pops exactly one ready object from Sony's virtual host FIFO. */
+    private fun popSonyHostCapture(captures: MutableList<BufferedCapture>): Boolean {
+        val info = executeOperation(PTP_OC_GetObjectInfo, intArrayOf(SHOT_OBJECT_HANDLE))
+        if (!info.isOk) return false
+        val objectFormat = if (info.data.size >= 6) info.data.readU16LeAt(4) else null
+        val declaredSize = if (info.data.size >= 12) info.data.readU32LeAt(8) else null
+        val filename = if (info.data.size > 52) {
+            readPtpValue(info.data, 52, 0xFFFF)?.stringValue
+        } else null
+        val shot = executeOperation(PTP_OC_GetObject, intArrayOf(SHOT_OBJECT_HANDLE))
+        if (!shot.isOk || shot.data.isEmpty()) return false
+        if (declaredSize != null && declaredSize != 0L && declaredSize != shot.data.size.toLong()) {
+            Log.w(TAG, "Sony burst frame size mismatch declared=$declaredSize actual=${shot.data.size}")
+        }
+        captures.add(BufferedCapture(shot.data, filename, objectFormat))
+        Log.i(TAG, "Sony burst frame ${captures.size} downloaded ${shot.data.size}B filename=$filename")
+        return true
     }
 
     private fun sonyBufferedCaptureCount(value: Long): Int {
@@ -1310,9 +1478,12 @@ class SonyPtpIpController {
                 PROP_ISO to (settings.iso.toLong() and 0xFFFF_FFFFL),
                 PROP_WhiteBalance to settings.whiteBalance.toLong(),
                 PROP_ExposureCompensation to settings.exposureCompensationMilliEv.toLong(),
-                PROP_FocusMode to settings.focusMode.toLong(),
-                PROP_FocusArea to settings.focusArea.toLong()
+                PROP_FocusMode to settings.focusMode.toLong()
             )
+            // Focus area is phase-controlled (TAG=Wide, JEWEL=operator area)
+            // and the ZV-E10 II reports the prior value for one or more 9209
+            // cycles after ACK. It must not reject otherwise-valid RAW/JPEG,
+            // ISO, aperture and metering settings or block the shutter.
             settings.stillFileFormat?.let { expected[PROP_FileFormatStill] = it.toLong() }
             settings.rawFileType?.let { expected[PROP_RawFileType] = it.toLong() }
             settings.jpegQuality?.let { expected[PROP_JpegQuality] = it.toLong() }
@@ -1624,6 +1795,7 @@ class SonyPtpIpController {
     private fun runLiveViewPump(epoch: Int) {
         var consecutiveFailures = 0
         var consecutiveHttpRejects = 0
+        var retryBudgetExhausted = false
         while (liveViewPumpRunning && isConnected && epoch == connectionEpoch.get()) {
             if (liveViewControlTransition) {
                 try { Thread.sleep(10L) } catch (_: InterruptedException) { break }
@@ -1635,6 +1807,7 @@ class SonyPtpIpController {
                     consecutiveFailures += 1
                     consecutiveHttpRejects = if (lastLiveViewHttpRejected) consecutiveHttpRejects + 1 else 0
                     if (consecutiveFailures >= LIVE_VIEW_MAX_REOPEN_FAILURES) {
+                        retryBudgetExhausted = true
                         Log.w(
                             TAG,
                             "Live View pump giving up early: failures=$consecutiveFailures " +
@@ -1689,7 +1862,10 @@ class SonyPtpIpController {
                 Log.w(TAG, "Live View pump read failed: ${e.message}")
                 closeLiveViewHttpStream()
                 liveViewReopenCount.incrementAndGet()
-                if (consecutiveFailures >= LIVE_VIEW_MAX_REOPEN_FAILURES) break
+                if (consecutiveFailures >= LIVE_VIEW_MAX_REOPEN_FAILURES) {
+                    retryBudgetExhausted = true
+                    break
+                }
                 try { Thread.sleep(LIVE_VIEW_REOPEN_RETRY_DELAY_MS) } catch (_: InterruptedException) { break }
             }
         }
@@ -1697,7 +1873,14 @@ class SonyPtpIpController {
         // fetchLatestLiveViewSample() call cannot silently kick off a second
         // full retry storm against the same dead producer/session -- see the
         // field comment on liveViewPumpFailedEpoch above.
-        liveViewPumpFailedEpoch = epoch
+        // An intentional capture/control pause also exits this loop after
+        // stopLiveViewPump() clears liveViewPumpRunning. Do not poison the
+        // still-healthy session in that case. Latch only a genuinely spent
+        // HTTP retry budget; otherwise preview can resume on the same SSH/PTP
+        // session immediately after the original has downloaded.
+        if (retryBudgetExhausted && isConnected && epoch == connectionEpoch.get()) {
+            liveViewPumpFailedEpoch = epoch
+        }
         liveViewPumpRunning = false
         synchronized(liveViewSampleMonitor) { liveViewSampleMonitor.notifyAll() }
         Log.i(TAG, "Live View pump stopped")
@@ -2391,22 +2574,24 @@ class SonyPtpIpController {
         return false
     }
 
-    private fun waitForShootingFileInfoClear(timeoutMs: Long): Boolean {
+    private fun waitForShootingFileReadyEventFirst(timeoutMs: Long): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
+        var lastPropertyFallbackAt = 0L
         while (hasOpenControlTransport() && System.currentTimeMillis() < deadline) {
-            val value = readSonyProperties()[PROP_ShootingFileInfo]?.currentValue
-            if (value != null && value and 0x8000L == 0L) return true
-            Thread.sleep(100L)
-        }
-        return false
-    }
-
-    private fun waitForShootingFileReady(timeoutMs: Long): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (hasOpenControlTransport() && System.currentTimeMillis() < deadline) {
-            val value = readSonyProperties()[PROP_ShootingFileInfo]?.currentValue ?: 0L
-            if (value and 0x8000L != 0L) return true
-            Thread.sleep(100L)
+            val event = eventQueue.poll(250L, TimeUnit.MILLISECONDS)
+            if (event != null && event.size >= 2) {
+                val code = event.readU16LeAt(0)
+                if (code == PTP_EC_ObjectAdded || code == PTP_EC_SonyObjectAdded) {
+                    Log.d(TAG, "Sony single ObjectAdded event=0x${code.toString(16)}")
+                    return true
+                }
+            }
+            val now = System.currentTimeMillis()
+            if (now - lastPropertyFallbackAt >= 500L) {
+                lastPropertyFallbackAt = now
+                val value = readSonyProperties()[PROP_ShootingFileInfo]?.currentValue ?: 0L
+                if (sonyBufferedCaptureCount(value) > 0) return true
+            }
         }
         return false
     }
