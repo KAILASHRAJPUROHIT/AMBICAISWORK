@@ -7,7 +7,9 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Dns
 import org.json.JSONObject
+import java.net.InetAddress
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import javax.net.ssl.HostnameVerifier
@@ -34,6 +36,15 @@ object UploadClient {
 
     data class CategoryResult(val key: String, val label: String, val prefix: String)
 
+    /** Keeps a catalogue rejection distinct from a transport failure.
+     * Unknown labels must stop before capture; an unreachable server should
+     * remain retryable and must not falsely brand a real label invalid. */
+    data class CategoryResolution(
+        val category: CategoryResult?,
+        val serverReached: Boolean,
+        val error: String?
+    )
+
     data class SaveResult(
         val ok: Boolean,
         val error: String?,
@@ -54,6 +65,18 @@ object UploadClient {
         OkHttpClient.Builder()
             .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
             .hostnameVerifier(HostnameVerifier { _, _ -> true })
+            // ARADHANA runs capture_server.py on both active adapters. Give
+            // OkHttp both routes explicitly so LAN cable/Wi-Fi transitions do
+            // not depend on Android's mDNS cache expiring first.
+            .dns(object : Dns {
+                override fun lookup(hostname: String): List<InetAddress> {
+                    if (!hostname.equals("ARADHANA.local", ignoreCase = true)) {
+                        return Dns.SYSTEM.lookup(hostname)
+                    }
+                    return listOf("192.168.0.3", "192.168.0.7")
+                        .map(InetAddress::getByName)
+                }
+            })
             // Three full-resolution Sony JPEGs can exceed 40 MB, followed
             // by synchronous local SAM segmentation and full-detail
             // compositing. OkHttp's 10-second defaults would report a false
@@ -65,15 +88,10 @@ object UploadClient {
             .build()
     }
 
-    /** capture_server.py's /api/capture/resolve_category -- the tag's code
-     * prefix is the sole source of truth for its category, this just gives
-     * the phone app the same resolution the browser capture tool already
-     * had. Added 2026-08-19 for category-aware behavior on-device (the
-     * ghungroo/dangler symmetry check needs to know which items actually
-     * have a mirror-symmetric pair/halves worth comparing). Null on any
-     * failure -- callers must treat this as advisory-only and never block
-     * a capture on it being unavailable. */
-    suspend fun resolveCategory(baseUrl: String, tagCode: String): CategoryResult? = withContext(Dispatchers.IO) {
+    /** capture_server.py's /api/capture/resolve_category. Category resolution
+     * is a hard pre-capture gate: otherwise a bad/misread code consumes three
+     * full-resolution shutters and fails only at the final save. */
+    suspend fun resolveCategory(baseUrl: String, tagCode: String): CategoryResolution = withContext(Dispatchers.IO) {
         try {
             val encoded = java.net.URLEncoder.encode(tagCode, "UTF-8")
             val request = Request.Builder()
@@ -83,15 +101,25 @@ object UploadClient {
             client.newCall(request).execute().use { response ->
                 val text = response.body?.string() ?: "{}"
                 val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
-                if (!json.optBoolean("ok", false)) return@withContext null
-                CategoryResult(
-                    key = json.getString("key"),
-                    label = json.getString("label"),
-                    prefix = json.getString("prefix")
+                if (!json.optBoolean("ok", false)) {
+                    return@withContext CategoryResolution(
+                        category = null,
+                        serverReached = true,
+                        error = json.optString("error").ifBlank { "Unknown category" }
+                    )
+                }
+                CategoryResolution(
+                    category = CategoryResult(
+                        key = json.getString("key"),
+                        label = json.getString("label"),
+                        prefix = json.getString("prefix")
+                    ),
+                    serverReached = true,
+                    error = null
                 )
             }
         } catch (e: Exception) {
-            null
+            CategoryResolution(category = null, serverReached = false, error = e.message)
         }
     }
 
@@ -101,7 +129,7 @@ object UploadClient {
      * recapture of that same item, so this is looked up fresh whenever a
      * tag resolves, not cached across items. Null on any failure -- the
      * live UI falls back to the on-device auto-guess when this can't be
-     * reached, same "advisory, never blocking" posture as resolveCategory. */
+     * reached. This flag remains advisory; category resolution does not. */
     suspend fun getStudFlag(baseUrl: String, tagCode: String): Boolean? = withContext(Dispatchers.IO) {
         try {
             val encoded = java.net.URLEncoder.encode(tagCode, "UTF-8")

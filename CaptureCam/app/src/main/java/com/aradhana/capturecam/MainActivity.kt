@@ -43,7 +43,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.aradhana.capturecam.databinding.ActivityMainBinding
 import com.aradhana.capturecam.databinding.DialogSettingsBinding
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
@@ -55,6 +57,9 @@ import org.opencv.core.Mat
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.Arrays
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.max
@@ -200,6 +205,23 @@ class MainActivity : AppCompatActivity() {
                 Log.w(TAG, "testSonyCaptureReceiver: Sony is not active")
                 return
             }
+            val burstFrames = intent.getIntExtra("burstFrames", 1).coerceIn(1, 10)
+            if (burstFrames > 1) {
+                Log.i(TAG, "testSonyCaptureReceiver: starting diagnostic native burst frames=$burstFrames")
+                sonyProduction.testBurst(burstFrames) { result ->
+                    Log.i(
+                        TAG,
+                        "testSonyCaptureReceiver: burst result success=${result?.success} " +
+                            "requested=${result?.requestedFrames} holdMs=${result?.holdMs} " +
+                            "objectAdded=${result?.objectAddedEvents} retrieved=${result?.retrievedFrames} " +
+                            "readyPeak=${result?.readyCountPeak} selected=${result?.selectedFrameIndex} " +
+                            "scores=${result?.sharpnessScores?.map { "%.1f".format(it) }} " +
+                            "selectedBytes=${result?.selectedImage?.size} " +
+                            "restoredSingle=${result?.restoredSingleShot} error=${result?.error}"
+                    )
+                }
+                return
+            }
             captureFullRes { bytes ->
                 val bounds = bytes?.let {
                     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -284,10 +306,39 @@ class MainActivity : AppCompatActivity() {
 
     private val prefs by lazy { getSharedPreferences("capturecam", MODE_PRIVATE) }
 
-    private fun serverUrl(): String =
-        prefs.getString("server_url", DEFAULT_SERVER_URL)?.trim()?.ifEmpty { DEFAULT_SERVER_URL } ?: DEFAULT_SERVER_URL
+    private fun serverUrl(): String {
+        val stored = prefs.getString("server_url", DEFAULT_SERVER_URL)
+            ?.trim()?.ifEmpty { DEFAULT_SERVER_URL } ?: DEFAULT_SERVER_URL
+        // The old Ethernet-only address fails when its cable is removed.
+        // Windows mDNS publishes this host on both Ethernet and Wi-Fi, so
+        // Android re-resolves the active interface without operator edits.
+        return if (stored.equals(LEGACY_ETHERNET_SERVER_URL, ignoreCase = true)) {
+            DEFAULT_SERVER_URL
+        } else {
+            stored
+        }
+    }
     private val handler = Handler(Looper.getMainLooper())
-    private val barcodeScanner by lazy { BarcodeScanning.getClient() }
+    // Restrict ML Kit to formats used by stock labels. Scanning every format
+    // made one Sony bitmap analysis occupy the scanner for roughly 5 seconds.
+    private val barcodeScanner by lazy {
+        BarcodeScanning.getClient(
+            BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(
+                    Barcode.FORMAT_QR_CODE,
+                    Barcode.FORMAT_DATA_MATRIX,
+                    Barcode.FORMAT_CODE_128,
+                    Barcode.FORMAT_CODE_39
+                )
+                .build()
+        )
+    }
+    // Conversion and Task listeners stay off the main/UI looper. Default ML
+    // Kit listeners were starved behind the 25fps ImageView renderer, leaving
+    // barcodeBusy latched for seconds even when native recognition had ended.
+    private val barcodeExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "CaptureCamBarcode").apply { isDaemon = true }
+    }
     // Lightweight on-device "Google Lens"-style object localizer -- a small
     // bundled TFLite model (no network, no server round-trip), the same
     // class of tech behind Lens's live object framing. Only gives coarse
@@ -434,11 +485,12 @@ class MainActivity : AppCompatActivity() {
     private var tagJpeg: ByteArray? = null
     private var tagCodeHistory = mutableListOf<String>()
     private var stableTagCode: String? = null
-    // Resolved async right after the tag locks (see recordTagCode) --
-    // null until resolution completes or if it fails; every consumer
-    // treats null as "skip the category-aware behavior," never as a
-    // reason to block anything.
+    // Hard pre-capture category gate. A decoded label is not accepted until
+    // the catalogue server confirms its exact category.
     private var resolvedCategoryKey: String? = null
+    private var categoryResolutionCode: String? = null
+    private var categoryResolutionError: String? = null
+    private var invalidTagCode: String? = null
     // Stud/rhodium-accent status (2026-08-19, explicit request). Null
     // means "not yet fetched/no correction on record" -- the live UI falls
     // back to studAutoGuess in that case. Once studFlagPersisted is
@@ -489,6 +541,7 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "CaptureCam"
+        private val TAG_CODE_PATTERN = Regex("^[A-Za-z]{1,8}[0-9]{0,4}[/_-][0-9]+$")
         private const val PREF_CAMERA_MODE = "camera_mode_index"
         private const val SONY_CAMERA_IP = "192.168.0.14"
         private const val SONY_SSH_USER = "pkANY7"
@@ -635,11 +688,11 @@ class MainActivity : AppCompatActivity() {
         // which two angle shots are considered near-duplicates (item
         // likely wasn't actually rotated between them).
         private const val UNROTATED_MEAN_DIFF_THRESHOLD = 8.0
-        // Gentler per-step ratio (was 1.15x) and a real pause between steps
-        // (ZOOM_STEP_INTERVAL_MS) so the climb reads as a smooth, deliberate
-        // approach rather than a jumpy series of jerks.
-        private const val ZOOM_STEP_RATIO = 1.10f
-        private const val ZOOM_STEP_INTERVAL_MS = 350L
+        // Larger closed-loop steps reduce costly Sony HTTP/control-pipeline
+        // transitions while retaining detection feedback after every step.
+        private const val ZOOM_STEP_RATIO = 1.25f
+        private const val ZOOM_STEP_INTERVAL_MS = 250L
+        private const val CAPTURE_PREVIEW_SECONDS = 2
         // Auto-exposure (2026-08-18): steps exposure compensation down
         // when too much of the GOLD area is blown out (specular
         // reflections eating engraving/facet detail), back up toward 0
@@ -686,7 +739,8 @@ class MainActivity : AppCompatActivity() {
         // URL -- confirmed reachable (2026-08-19). Settings still allows
         // overriding it (e.g. a different LAN IP if the laptop changes),
         // but the app now works correctly out of the box with zero setup.
-        private const val DEFAULT_SERVER_URL = "https://192.168.0.7:7660"
+        private const val DEFAULT_SERVER_URL = "https://ARADHANA.local:7660"
+        private const val LEGACY_ETHERNET_SERVER_URL = "https://192.168.0.7:7660"
         // ~1.5s total grace before treating the gimbal as truly disconnected
         // (see waitForGimbalReady's caller doc comment).
         private const val GIMBAL_READY_GRACE_ATTEMPTS = 5
@@ -1372,19 +1426,76 @@ class MainActivity : AppCompatActivity() {
                 if (barcodeBusy) return
                 barcodeBusy = true
                 barcodeAttempts += 1
-                barcodeScanner.process(InputImage.fromBitmap(bitmap, 0))
-                    .addOnSuccessListener { barcodes ->
-                        lastBarcodeCount = barcodes.size
-                        recordTagCode(barcodes.firstOrNull { !it.rawValue.isNullOrBlank() }?.rawValue)
+                val attempt = barcodeAttempts
+                val startedAt = System.nanoTime()
+                barcodeExecutor.execute {
+                    try {
+                        // Sony arrives as JPEG/Bitmap. Convert off the stream
+                        // and UI threads to NV21 so ML Kit gets its native fast
+                        // input path instead of internally converting Bitmap.
+                        val nv21 = bitmapToGrayscaleNv21(bitmap)
+                        val input = InputImage.fromByteArray(
+                            nv21, bitmap.width, bitmap.height, 0,
+                            InputImage.IMAGE_FORMAT_NV21
+                        )
+                        barcodeScanner.process(input)
+                            .addOnCompleteListener(barcodeExecutor) { task ->
+                                barcodeBusy = false
+                                val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L
+                                if (task.isSuccessful) {
+                                    val barcodes = task.result.orEmpty()
+                                    val codes = barcodes.mapNotNull { it.rawValue?.trim()?.takeIf(String::isNotEmpty) }
+                                    if (codes.isNotEmpty() || attempt % 25 == 0) {
+                                        Log.i(TAG, "Sony tag scan attempt=$attempt ms=$elapsedMs results=${codes.size}")
+                                    }
+                                    handler.post {
+                                        if (!isDestroyed && phase == Phase.TAG) {
+                                            lastBarcodeCount = barcodes.size
+                                            lastBarcodeError = null
+                                            // Prefer stock-label-shaped values when an
+                                            // unrelated code is visible in the same frame.
+                                            val code = codes.firstOrNull { TAG_CODE_PATTERN.matches(it) }
+                                                ?: codes.firstOrNull()
+                                            recordTagCode(code)
+                                        }
+                                    }
+                                } else {
+                                    val error = task.exception
+                                    Log.e(TAG, "Sony barcode scan failed after ${elapsedMs}ms", error)
+                                    handler.post {
+                                        lastBarcodeError = error?.message ?: error?.javaClass?.simpleName ?: "scan failed"
+                                    }
+                                }
+                            }
+                    } catch (e: Exception) {
+                        barcodeBusy = false
+                        Log.e(TAG, "Sony barcode preprocessing failed", e)
+                        handler.post { lastBarcodeError = e.message ?: e.javaClass.simpleName }
                     }
-                    .addOnFailureListener { e ->
-                        Log.e(TAG, "Sony barcode scan failed", e)
-                        lastBarcodeError = e.message ?: e.javaClass.simpleName
-                    }
-                    .addOnCompleteListener { barcodeBusy = false }
+                }
             }
             Phase.UPLOADING -> Unit
         }
+    }
+
+    /** ML Kit only needs luminance for tag edges. Native NV21 avoids its
+     * warned-about Bitmap conversion path; neutral chroma preserves format. */
+    private fun bitmapToGrayscaleNv21(bitmap: Bitmap): ByteArray {
+        val width = bitmap.width
+        val height = bitmap.height
+        val frameSize = width * height
+        val pixels = IntArray(frameSize)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        val nv21 = ByteArray(frameSize + frameSize / 2)
+        for (i in pixels.indices) {
+            val pixel = pixels[i]
+            val red = (pixel shr 16) and 0xff
+            val green = (pixel shr 8) and 0xff
+            val blue = pixel and 0xff
+            nv21[i] = ((77 * red + 150 * green + 29 * blue) shr 8).toByte()
+        }
+        Arrays.fill(nv21, frameSize, nv21.size, 128.toByte())
+        return nv21
     }
 
     /** Checks whether this phone exposes its own computational-photography
@@ -1848,35 +1959,69 @@ class MainActivity : AppCompatActivity() {
     private fun recordTagCode(code: String?) {
         // A locked tag remains latched until resetForNewItem(TAG). Empty
         // frames during preview/camera transitions must not erase it.
+        if (stableTagCode != null) return
         if (code == null) return
         val trimmed = code.trim()
-        tagCodeHistory = (if (tagCodeHistory.lastOrNull() == trimmed) tagCodeHistory + trimmed else mutableListOf(trimmed))
-            .takeLast(3).toMutableList()
-        val wasNull = stableTagCode == null
-        stableTagCode = if (tagCodeHistory.size >= 2) trimmed else null
-        if (wasNull && stableTagCode != null) {
+        if (trimmed.isEmpty()) return
+        // Do not hammer the server every analysis frame for the same known-
+        // bad decode. A different decoded value immediately releases it.
+        if (trimmed == invalidTagCode) return
+        invalidTagCode = null
+        // Two matching reads inside the latest four positive frames. Faster
+        // than demanding adjacent reads when glare causes a missed frame,
+        // while still refusing a one-frame hallucination. Server validation
+        // below is the final authoritative accuracy gate.
+        tagCodeHistory = (tagCodeHistory + trimmed).takeLast(4).toMutableList()
+        stableTagCode = if (tagCodeHistory.count { it == trimmed } >= 2) trimmed else null
+        if (stableTagCode != null) {
             resolveCategoryForCurrentTag()
         }
     }
 
-    /** Fire-and-forget category lookup the instant the tag locks -- needed
-     * on-device (2026-08-19, explicit request) for the ghungroo/dangler
-     * symmetry check, which only applies to categories with a genuine
-     * mirror-symmetric pair/halves (see CategoryOrientation.kt). Advisory
-     * only: resolvedCategoryKey stays null on any failure, and every
-     * caller treats that as "skip the check," never as a reason to block
-     * or retry the capture itself. */
+    /** Resolve before capture. Unknown labels are rejected here, before the
+     * operator spends a full three-angle Sony cycle. Transport failures keep
+     * the decoded label latched and retry without misclassifying it. */
     private fun resolveCategoryForCurrentTag() {
         val code = stableTagCode ?: return
+        if (categoryResolutionCode == code) return
         resolvedCategoryKey = null
+        categoryResolutionError = null
+        categoryResolutionCode = code
         lifecycleScope.launch {
-            resolvedCategoryKey = try {
-                UploadClient.resolveCategory(serverUrl(), code)?.key
-            } catch (e: Exception) {
-                null
+            val result = UploadClient.resolveCategory(serverUrl(), code)
+            if (stableTagCode != code) {
+                if (categoryResolutionCode == code) categoryResolutionCode = null
+                return@launch
+            }
+            categoryResolutionCode = null
+            val category = result.category
+            if (category != null) {
+                resolvedCategoryKey = category.key
+                categoryResolutionError = null
+                logCaptureEvent("tag_category_resolved", mapOf("code" to code, "category" to category.key))
+                fetchStudFlagForCurrentTag(code)
+                return@launch
+            }
+            resolvedCategoryKey = null
+            categoryResolutionError = result.error
+            if (result.serverReached) {
+                invalidTagCode = code
+                stableTagCode = null
+                tagCodeHistory = mutableListOf()
+                autoFired = false
+                logCaptureEvent("tag_rejected_unknown_category", mapOf("code" to code, "error" to result.error))
+                setStatus("Unknown stock label $code — show the correct label", ready = false)
+                Toast.makeText(this@MainActivity, "Unknown stock label: $code", Toast.LENGTH_LONG).show()
+            } else {
+                logCaptureEvent("tag_category_server_unreachable", mapOf("code" to code, "error" to result.error))
+                setStatus("Catalogue server unavailable — retrying…", ready = false)
+                handler.postDelayed({
+                    if (phase == Phase.TAG && stableTagCode == code && categoryResolutionCode == null) {
+                        resolveCategoryForCurrentTag()
+                    }
+                }, 1000L)
             }
         }
-        fetchStudFlagForCurrentTag(code)
     }
 
     /** Fire-and-forget stud-flag lookup, same pattern/reasoning as category
@@ -2014,11 +2159,25 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
-        binding.tagCodeText.text = stableTagCode?.let { "Tag: $it · ready" } ?: "Show the tag QR/barcode…"
-        setStatus(stableTagCode?.let { "Tag locked. Capturing…" } ?: "Scanning tag…", ready = stableTagCode != null)
+        val validated = stableTagCode != null && resolvedCategoryKey != null
+        binding.tagCodeText.text = when {
+            validated -> "Tag: $stableTagCode · ${resolvedCategoryKey} · ready"
+            stableTagCode != null -> "Tag: $stableTagCode · checking catalogue…"
+            invalidTagCode != null -> "Unknown label: $invalidTagCode · show another label"
+            else -> "Show the tag QR/barcode…"
+        }
+        setStatus(
+            when {
+                validated -> "Tag validated. Capturing…"
+                stableTagCode != null -> "Checking tag category…"
+                invalidTagCode != null -> "Unknown stock label — show the correct label"
+                else -> "Scanning tag…"
+            },
+            ready = validated
+        )
         binding.debugText.text = "attempts=$barcodeAttempts  lastSeen=$lastBarcodeCount" +
             (lastBarcodeError?.let { "  error=$it" } ?: "")
-        if (stableTagCode != null && !autoFired) {
+        if (validated && !autoFired) {
             autoFired = true
             captureTagFrame { bytes ->
                 if (bytes == null) {
@@ -3710,13 +3869,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun captureAngle1() {
         setStatus("Capturing angle 1…", ready = false)
-        triggerCameraAutoFocus(physicalSony = activeCameraSource == ProductionCameraSource.SONY)
-        handler.postDelayed({
-            captureFullRes { bytes ->
-                Log.i(TAG, "captureAngle1 result bytes=${bytes?.size}")
-                onAngle1Captured(bytes)
-            }
-        }, 400L)
+        // centerThenCapture() already completed touch-focus + stable-frame
+        // gating. A second focus command here interrupted Sony Live View and
+        // added delay immediately before every side shutter.
+        captureFullRes { bytes ->
+            Log.i(TAG, "captureAngle1 result bytes=${bytes?.size}")
+            onAngle1Captured(bytes)
+        }
     }
 
     private fun onAngle1Captured(bytes: ByteArray?) {
@@ -3746,13 +3905,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun captureAngle2() {
         setStatus("Capturing angle 2…", ready = false)
-        triggerCameraAutoFocus(physicalSony = activeCameraSource == ProductionCameraSource.SONY)
-        handler.postDelayed({
-            captureFullRes { bytes ->
-                Log.i(TAG, "captureAngle2 result bytes=${bytes?.size}")
-                onAngle2Captured(bytes)
-            }
-        }, 400L)
+        captureFullRes { bytes ->
+            Log.i(TAG, "captureAngle2 result bytes=${bytes?.size}")
+            onAngle2Captured(bytes)
+        }
     }
 
     private fun onAngle2Captured(bytes: ByteArray?) {
@@ -3863,11 +4019,34 @@ class MainActivity : AppCompatActivity() {
                         input.error = "Required"
                         return@setOnClickListener
                     }
-                    stableTagCode = code
-                    logCaptureEvent("manual_tag_code_entered", mapOf("code" to code))
-                    dismiss()
-                    resetForNewItem(Phase.JEWEL)
-                    promptToPlaceMainItem()
+                    val continueButton = getButton(AlertDialog.BUTTON_POSITIVE)
+                    continueButton.isEnabled = false
+                    continueButton.text = "Checking…"
+                    lifecycleScope.launch {
+                        val result = UploadClient.resolveCategory(serverUrl(), code)
+                        val category = result.category
+                        if (category != null) {
+                            stableTagCode = code
+                            resolvedCategoryKey = category.key
+                            categoryResolutionError = null
+                            logCaptureEvent(
+                                "manual_tag_code_entered",
+                                mapOf("code" to code, "category" to category.key)
+                            )
+                            fetchStudFlagForCurrentTag(code)
+                            dismiss()
+                            resetForNewItem(Phase.JEWEL)
+                            promptToPlaceMainItem()
+                        } else {
+                            input.error = if (result.serverReached) {
+                                result.error ?: "Unknown stock label"
+                            } else {
+                                "Catalogue server unavailable — try again"
+                            }
+                            continueButton.isEnabled = true
+                            continueButton.text = "Continue"
+                        }
+                    }
                 }
             }
     }
@@ -3875,7 +4054,7 @@ class MainActivity : AppCompatActivity() {
     // ---------------------------------------------------------------- Capture preview
 
     /** Shows the just-captured photo full-screen with Retake/Cancel item
-     * buttons and a 5s auto-continue countdown -- gives the operator a
+     * buttons and a short auto-continue countdown -- gives the operator a
      * real chance to catch a bad frame before it's used, matching
      * capture.html's own "Best frame selected · auto-proceeding in 3 sec"
      * preview step. */
@@ -3929,7 +4108,7 @@ class MainActivity : AppCompatActivity() {
             binding.previewCountdown.text = "Still soft after retries — tap Retake"
             previewCountdownRunnable = null
         } else {
-            var secondsLeft = 5
+            var secondsLeft = CAPTURE_PREVIEW_SECONDS
             val tick = object : Runnable {
                 override fun run() {
                     if (secondsLeft <= 0) {
@@ -4472,6 +4651,9 @@ class MainActivity : AppCompatActivity() {
         tagCodeHistory = mutableListOf()
         stableTagCode = null
         resolvedCategoryKey = null
+        categoryResolutionCode = null
+        categoryResolutionError = null
+        invalidTagCode = null
         studFlagPersisted = null
         studAutoGuess = false
         updateStudStatusUi()
@@ -4499,10 +4681,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Takes exactly one still and returns its bytes, or null on failure.
-     * Internal building block for [captureFullRes]'s 2-frame burst -- kept
-     * separate so the burst/compare logic below doesn't have to duplicate
-     * the ImageCapture callback plumbing or the dead-session rebind fix. */
+    /** Takes exactly one still and returns its bytes, or null on failure. */
     private fun captureOneFrame(
         source: ProductionCameraSource = activeCameraSource,
         onResult: (ByteArray?) -> Unit
@@ -4544,87 +4723,21 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    /** 2-frame burst, keeps the sharper one -- explicit request (2026-08-19):
-     * "capture 2 frames per angle and automatically keep the sharper one."
-     * Even with focus locked and the gimbal stationary, a real capture can
-     * land slightly softer than the very next one (residual micro-vibration,
-     * a hair of AF settling) -- catalogue-source images going into Flux.2
-     * Pro need the sharper of the two, not whichever happened to fire first.
-     * Scored with SharpnessAnalyzer.scoreBitmapRaw() on the ACTUAL decoded
-     * full-res bytes (not the low-res live-preview metric) -- this is a
-     * RELATIVE comparison between two frames of the same shot, which sidesteps
-     * the exact problem that sank the earlier attempt at an absolute
-     * full-res threshold (real captures land at 0.6-15 raw variance with no
-     * calibrated cutoff ever established): two frames of the same subject,
-     * same framing, same light are directly comparable to each other even
-     * without knowing what "good" looks like in absolute terms.
-     * Fails open at every step -- if the second shot fails, or either
-     * fails to decode, whichever frame IS usable is returned rather than
-     * the whole capture failing over a burst-compare technicality.
-     *
-     * Scoring runs on Dispatchers.Default, NOT inline in the CameraX
-     * capture callback -- confirmed live (2026-08-19): decoding a ~12MP
-     * JPEG to a Bitmap and running SharpnessAnalyzer's manual per-pixel
-     * Laplacian loop over it is real CPU work, and CameraX's
-     * OnImageCapturedCallback fires on ContextCompat.getMainExecutor, so
-     * doing this scoring inline (as the first version of this burst
-     * feature did) froze the entire UI thread for several real seconds
-     * between every pair of shots -- reported as "the capture tool gets
-     * stuck between image 1 and image 2." The two takePicture() calls
-     * themselves still go through CameraX's own executor as before; only
-     * the decode+score step moves off it. */
+    /** One physical shutter per requested view. The old two-frame sharpness
+     * burst doubled all three shutters and added roughly 25-30 seconds per
+     * item. Focus and motion quality are already gated before this call. */
     private fun captureFullRes(onResult: (ByteArray?) -> Unit) {
-        // Pin both burst frames to one camera. A Sony disconnect between
-        // frames may drop frame two, but can never silently mix a DSLR and
-        // phone image in the same sharpness comparison/capture angle.
+        // One physical shutter per requested view. Focus-state, stable-frame
+        // and gimbal-still gates have already passed before this call.
         val captureSource = activeCameraSource
         val captureEpoch = cameraModeEpoch
-        captureOneFrame(captureSource) firstFrame@{ first ->
+        captureOneFrame(captureSource) frame@{ bytes ->
             if (captureEpoch != cameraModeEpoch || captureSource != activeCameraSource) {
-                Log.w(TAG, "Discarding first frame after camera-mode change")
+                Log.w(TAG, "Discarding frame after camera-mode change")
                 onResult(null)
-                return@firstFrame
+                return@frame
             }
-            if (first == null) {
-                onResult(null)
-                return@firstFrame
-            }
-            captureOneFrame(captureSource) secondFrame@{ second ->
-                if (captureEpoch != cameraModeEpoch || captureSource != activeCameraSource) {
-                    Log.w(TAG, "Discarding second frame after camera-mode change")
-                    onResult(null)
-                    return@secondFrame
-                }
-                if (second == null) {
-                    onResult(first)
-                    return@secondFrame
-                }
-                lifecycleScope.launch {
-                    val (firstScore, secondScore) = withContext(Dispatchers.Default) {
-                        scoreCaptureSharpness(first) to scoreCaptureSharpness(second)
-                    }
-                    if (captureEpoch != cameraModeEpoch || captureSource != activeCameraSource) {
-                        Log.w(TAG, "Discarding scored burst after camera-mode change")
-                        onResult(null)
-                        return@launch
-                    }
-                    Log.i(TAG, "captureFullRes burst scores: first=$firstScore second=$secondScore")
-                    onResult(if (secondScore >= firstScore) second else first)
-                }
-            }
-        }
-    }
-
-    private fun scoreCaptureSharpness(bytes: ByteArray): Double {
-        val bmp = try {
-            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        } catch (e: Exception) {
-            null
-        } ?: return -1.0
-        return try {
-            SharpnessAnalyzer.scoreBitmapRaw(bmp)
-        } finally {
-            bmp.recycle()
+            onResult(bytes)
         }
     }
 
@@ -4947,6 +5060,9 @@ class MainActivity : AppCompatActivity() {
             tagCodeHistory = mutableListOf()
             stableTagCode = null
             resolvedCategoryKey = null
+            categoryResolutionCode = null
+            categoryResolutionError = null
+            invalidTagCode = null
             studFlagPersisted = null
             studAutoGuess = false
             updateStudStatusUi()
@@ -5371,6 +5487,8 @@ class MainActivity : AppCompatActivity() {
         // Runnable reference to remove individually), and nothing should
         // fire against this Activity once it's destroyed anyway.
         handler.removeCallbacksAndMessages(null)
+        barcodeScanner.close()
+        barcodeExecutor.shutdownNow()
         if (::sonyProduction.isInitialized) sonyProduction.stop()
         rsc2.disconnect()
         try { unregisterReceiver(testMoveReceiver) } catch (_: IllegalArgumentException) {}

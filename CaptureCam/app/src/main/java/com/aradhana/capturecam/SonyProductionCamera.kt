@@ -295,7 +295,7 @@ class SonyProductionCamera(
         return "$minutes:$seconds"
     }
 
-    /** Takes one full-resolution Sony still and downloads its JPEG. */
+    /** Takes a native Sony burst and returns the sharpest original full-resolution JPEG. */
     fun captureStill(onResult: (ByteArray?) -> Unit) {
         finishCaptureRunnable?.let(mainHandler::removeCallbacks)
         finishCaptureRunnable = null
@@ -328,7 +328,7 @@ class SonyProductionCamera(
         // responses remain serialized once the HTTP Live View stream starts,
         // even after that HTTP stream closes. A full-resolution shutter must
         // therefore reopen one fresh PTP session. Live View is restored after
-        // the short two-frame burst idle window below.
+        // the short capture-session idle window below.
         liveCamera.disconnect()
         thread(name = "SonyProductionCaptureConnect") {
             try { Thread.sleep(CAPTURE_REOPEN_SETTLE_MS) } catch (_: InterruptedException) { }
@@ -360,7 +360,24 @@ class SonyProductionCamera(
                             if (!ok) Log.e(TAG, "Sony capture blocked: quality hardwall verification failed")
                         }
                     }
-                    if (qualityOk && camera.triggerShutter()) camera.lastCapturedImage else null
+                    if (!qualityOk) {
+                        null
+                    } else {
+                        val burst = camera.triggerBurstTest(CAPTURE_BEST_OF_FRAMES)
+                        val selected = burst.selectedImage
+                        if (selected != null) {
+                            Log.i(
+                                TAG,
+                                "Sony production best-of-${burst.requestedFrames}: " +
+                                    "retrieved=${burst.retrievedFrames} selected=${burst.selectedFrameIndex} " +
+                                    "scores=${burst.sharpnessScores.map { "%.1f".format(it) }}"
+                            )
+                            selected
+                        } else {
+                            Log.w(TAG, "Sony burst selection failed; taking one fail-safe still: ${burst.error}")
+                            if (camera.triggerShutter()) camera.lastCapturedImage else null
+                        }
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Sony still capture failed", e)
                     null
@@ -368,9 +385,85 @@ class SonyProductionCamera(
             }
             mainHandler.post {
                 scheduleFinishCaptureMode(generation)
-                // Schedule first so captureFullRes()'s immediate second frame
+                // Schedule before callback so a subsequent requested capture
                 // can cancel this idle timer before starting its shutter.
                 onResult(bytes)
+            }
+        }
+    }
+
+    /** Diagnostic hook for the same native burst/retrieval/scoring path used in production. */
+    fun testBurst(
+        frameCount: Int = 5,
+        onResult: (SonyPtpIpController.BurstTestResult?) -> Unit
+    ) {
+        finishCaptureRunnable?.let(mainHandler::removeCallbacks)
+        finishCaptureRunnable = null
+
+        captureController?.takeIf { it.isConnected }?.let { camera ->
+            burstOnSession(camera, frameCount, onResult)
+            return
+        }
+
+        val liveCamera: SonyPtpIpController
+        val expectedGeneration: Long
+        synchronized(stateLock) {
+            if (!isAvailable || captureMode || captureConnectInFlight) {
+                mainHandler.post { onResult(null) }
+                return
+            }
+            liveCamera = controller ?: run {
+                mainHandler.post { onResult(null) }
+                return
+            }
+            expectedGeneration = generation
+            captureMode = true
+            captureConnectInFlight = true
+            liveRunning = false
+            frameReady = false
+            controller = null
+        }
+
+        liveCamera.disconnect()
+        thread(name = "SonyProductionBurstConnect") {
+            try { Thread.sleep(CAPTURE_REOPEN_SETTLE_MS) } catch (_: InterruptedException) { }
+            val camera = SonyPtpIpController()
+            val connected = camera.connectBlocking(cameraIp, sshUser, sshPassword, "CaptureCam-BurstTest")
+            captureConnectInFlight = false
+            if (!running || generation != expectedGeneration || !connected) {
+                camera.disconnect()
+                mainHandler.post { onResult(null) }
+                finishCaptureMode(expectedGeneration)
+                return@thread
+            }
+            captureController = camera
+            captureQualityVerified = false
+            burstOnSession(camera, frameCount, onResult)
+        }
+    }
+
+    private fun burstOnSession(
+        camera: SonyPtpIpController,
+        frameCount: Int,
+        onResult: (SonyPtpIpController.BurstTestResult?) -> Unit
+    ) {
+        thread(name = "SonyProductionBurst") {
+            val result = commandLock.withLock {
+                try {
+                    val desired = desiredQualitySettings
+                    val qualityOk = captureQualityVerified ||
+                        (desired == null || camera.applyQualitySettings(desired)).also {
+                            captureQualityVerified = it
+                        }
+                    if (qualityOk) camera.triggerBurstTest(frameCount) else null
+                } catch (e: Exception) {
+                    Log.e(TAG, "Sony burst test failed", e)
+                    null
+                }
+            }
+            mainHandler.post {
+                scheduleFinishCaptureMode(generation)
+                onResult(result)
             }
         }
     }
@@ -558,6 +651,7 @@ class SonyProductionCamera(
         private const val MAX_CONSECUTIVE_FRAME_FAILURES = 8
         private const val CAPTURE_REOPEN_SETTLE_MS = 300L
         private const val CAPTURE_BURST_IDLE_MS = 750L
+        private const val CAPTURE_BEST_OF_FRAMES = 5
         private const val POWER_CONFIGURATION_HINT_ATTEMPT = 4
         private const val SONY_ISO_AUTO = 0x00FF_FFFF
     }

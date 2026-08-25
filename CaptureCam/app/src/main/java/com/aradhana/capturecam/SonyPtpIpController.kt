@@ -1,5 +1,6 @@
 package com.aradhana.capturecam
 
+import android.graphics.BitmapFactory
 import android.util.Log
 import com.jcraft.jsch.Channel
 import com.jcraft.jsch.ChannelDirectTCPIP
@@ -152,6 +153,12 @@ class SonyPtpIpController {
         private const val PTP_OC_GetObjectInfo = 0x1008
         private const val PTP_OC_GetObject = 0x1009
 
+        // Sony asynchronous events. libgphoto2's current Sony table confirms
+        // C201=ObjectAdded, C202=ObjectRemoved, C203=DevicePropChanged and
+        // C206=CapturedEvent. Older third-party tables swapped C201/C202.
+        private const val PTP_EC_ObjectAdded = 0x4002
+        private const val PTP_EC_SonyObjectAdded = 0xC201
+
         // --- Sony SDIO extension opcodes (reverse engineered, see class doc) ---
         private const val OC_SDIOConnect = 0x9201
         private const val OC_SDIOGetExtDeviceInfo = 0x9202
@@ -198,14 +205,17 @@ class SonyPtpIpController {
         // LiveviewImageQualityController and sets it before opening HTTP.
         private const val PROP_LiveViewQuality = 0xD26A
         private const val LIVE_VIEW_QUALITY_DISPLAY_SPEED = 0x01
-        private const val PROP_OperatingMode = 0x5013
+        // Standard/Sony DriveMode. Earlier code mislabeled this OperatingMode;
+        // value 1 is single shot and 0x00010002 is Continuous Hi+.
+        private const val PROP_DriveMode = 0x5013
         private const val PROP_ShootingFileInfo = 0xD215
         private const val PROP_LiveViewStatus = 0xD221
         private const val PROP_SaveMedia = 0xD222
         private const val PROP_PositionKey = 0xD25A
         private const val PROP_LiveViewUrl = 0xD278
 
-        private const val OPERATING_MODE_STANDBY = 0x01
+        private const val DRIVE_SINGLE = 0x00000001
+        private const val DRIVE_CONTINUOUS_HI_PLUS = 0x00010002
         private const val SAVE_MEDIA_HOST_AND_CAMERA = 0x0011
 
         // Sony D2DD is a signed BYTE: positive=tele, negative=wide, 0=stop.
@@ -336,6 +346,37 @@ class SonyPtpIpController {
     @Volatile private var currentOpticalZoomPercent: Int = 0
     @Volatile private var currentLiveViewStatus: Long? = null
     @Volatile private var currentShootingFileInfo: Long? = null
+
+    data class BurstTestResult(
+        val success: Boolean,
+        val requestedFrames: Int,
+        val holdMs: Long,
+        val driveModeApplied: Boolean,
+        val objectAddedEvents: Int,
+        val eventCodes: List<Int>,
+        val retrievedFrames: Int,
+        val readyCountPeak: Int,
+        val selectedFrameIndex: Int?,
+        val sharpnessScores: List<Double>,
+        val selectedImage: ByteArray?,
+        val restoredSingleShot: Boolean,
+        val error: String?
+    ) {
+        /** Compatibility alias for the existing diagnostic receiver. */
+        val latestImage: ByteArray? get() = selectedImage
+    }
+
+    private data class BufferedCapture(
+        val bytes: ByteArray,
+        val filename: String?,
+        val objectFormat: Int?
+    )
+
+    private data class BurstDrainStats(
+        val objectAddedEvents: Int,
+        val readyCountPeak: Int,
+        val shutterHoldMs: Long
+    )
 
     /**
      * Blocking connect -- run this off the main thread. sshUser/sshPassword
@@ -585,8 +626,8 @@ class SonyPtpIpController {
                     "control=${remoteTouch?.currentValue}/${remoteTouch?.enabled}"
             )
 
-            // D25A is Sony's Position Key: value 1 hands the mode dial to
-            // the remote host. Then 5013=1 selects the still/standby mode.
+            // D25A is Sony's Position Key: value 1 hands control to the
+            // remote host. Then 5013=1 selects single-shot drive mode.
             if (!setControlDeviceARaw(PROP_PositionKey, byteArrayOf(1))) {
                 Log.w(TAG, "Failed to enable Sony remote Position Key"); return false
             }
@@ -602,12 +643,12 @@ class SonyPtpIpController {
             // reconnect (measured baseline was ~1.4-1.6s total).
             val operatingModeExposed = false
             val stillMode = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
-                .putInt(OPERATING_MODE_STANDBY).array()
-            if (!setControlDeviceARaw(PROP_OperatingMode, stillMode)) {
+                .putInt(DRIVE_SINGLE).array()
+            if (!setControlDeviceARaw(PROP_DriveMode, stillMode)) {
                 Log.w(TAG, "Failed to enter Sony still-ready mode"); return false
             }
             if (operatingModeExposed &&
-                !waitForPropertyValue(PROP_OperatingMode, OPERATING_MODE_STANDBY.toLong(), 5_000L)) {
+                !waitForPropertyValue(PROP_DriveMode, DRIVE_SINGLE.toLong(), 5_000L)) {
                 Log.w(TAG, "Sony still-ready mode was not confirmed"); return false
             }
 
@@ -772,6 +813,326 @@ class SonyPtpIpController {
                 "declaredSize=$objectSize dimensions=${pixelWidth}x$pixelHeight"
         )
         return true
+    }
+
+    /**
+     * Captures a native Hi+ burst, drains every Sony host-buffer object, scores
+     * the first [frameCount] full-resolution images without altering their
+     * bytes, and exposes the sharpest original through [lastCapturedImage].
+     *
+     * Sony does not assign a distinct host handle to each frame. D215 contains
+     * 0x8000 | queuedCount and every GetObject(0xFFFFC001) pops one frame from
+     * that FIFO. C201/0xFFFFC001 is only a wake-up hint; D215 is authoritative.
+     */
+    fun triggerBurstTest(frameCount: Int = 5): BurstTestResult {
+        val requested = frameCount.coerceIn(2, 10)
+        var holdMs = 0L
+        var driveApplied = false
+        var restoredSingle = false
+        var error: String? = null
+        val eventCodes = mutableListOf<Int>()
+        var objectAddedEvents = 0
+        var readyCountPeak = 0
+        val captured = mutableListOf<BufferedCapture>()
+        var selectedFrameIndex: Int? = null
+        var selectedImage: ByteArray? = null
+        var sharpnessScores = emptyList<Double>()
+
+        try {
+            // A failed/aborted earlier capture can survive in Sony host RAM.
+            // Drain it before firing so an old file can never win this burst.
+            val stale = drainSonyHostCaptureQueue(
+                captures = null,
+                maxFrames = 10,
+                timeoutMs = 5_000L,
+                stopWhenQuiet = true
+            )
+            if (stale > 0) Log.w(TAG, "Discarded $stale stale Sony host capture(s) before burst")
+
+            val drive = readSonyProperties()[PROP_DriveMode]
+            if (drive == null || !drive.supportedValues.contains(DRIVE_CONTINUOUS_HI_PLUS.toLong())) {
+                error = "Continuous Hi+ is not advertised by this camera state"
+            } else {
+                driveApplied = setControlDeviceASerialized(PROP_DriveMode, DRIVE_CONTINUOUS_HI_PLUS, 4) &&
+                    waitForPropertyValue(PROP_DriveMode, DRIVE_CONTINUOUS_HI_PLUS.toLong(), 3_000L)
+                if (!driveApplied) error = "Continuous Hi+ write/readback failed"
+            }
+
+            if (error == null) {
+                eventQueue.clear()
+                var autofocusHeld = false
+                var shutterHeld = false
+                try {
+                    if (!setControlDeviceB(PROP_AutoFocus, 2, 2)) {
+                        error = "S1 press failed"
+                    } else {
+                        autofocusHeld = true
+                        Thread.sleep(250L)
+                    }
+                    if (error == null) {
+                        if (!setControlDeviceB(PROP_Capture, 2, 2)) {
+                            error = "S2 press failed"
+                        } else {
+                            shutterHeld = true
+                            // Keep S2 held while each 0xFFFFC001 object is
+                            // downloaded. Sony exposes one host slot at a time;
+                            // releasing first leaves only one candidate.
+                            val stats = captureBurstWhileShutterHeld(
+                                requested = requested,
+                                captures = captured,
+                                eventCodes = eventCodes,
+                                timeoutMs = 45_000L
+                            )
+                            objectAddedEvents = stats.objectAddedEvents
+                            readyCountPeak = stats.readyCountPeak
+                            holdMs = stats.shutterHoldMs
+                            if (!setControlDeviceB(PROP_Capture, 1, 2)) {
+                                error = "S2 release was not acknowledged"
+                            } else {
+                                shutterHeld = false
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    error = "Burst control failed: ${e.message}"
+                } finally {
+                    // A Sony virtual shutter has no timeout. Never leave S2/S1
+                    // logically held, even if the test throws mid-sequence.
+                    if (shutterHeld) {
+                        try { setControlDeviceB(PROP_Capture, 1, 2) } catch (_: Exception) { }
+                    }
+                    if (autofocusHeld) {
+                        try { setControlDeviceB(PROP_AutoFocus, 1, 2) } catch (_: Exception) { }
+                    }
+                }
+
+                objectAddedEvents += collectBurstEvents(eventCodes, 500L)
+                if (captured.size < requested) {
+                    error = "Sony burst incomplete: retrieved ${captured.size}/$requested host frames"
+                } else {
+                    // Ignore any timing-boundary surplus for best-of-N scoring,
+                    // but still drain it from camera RAM above.
+                    val candidates = captured.take(requested)
+                    sharpnessScores = candidates.map { sharpnessScore(it.bytes) }
+                    selectedFrameIndex = sharpnessScores.indices.maxByOrNull { sharpnessScores[it] }
+                    selectedImage = selectedFrameIndex?.let { candidates[it].bytes }
+                    val selected = selectedFrameIndex?.let { candidates[it] }
+                    if (selectedImage == null || sharpnessScores.all { !it.isFinite() }) {
+                        error = "No decodable burst frame available for sharpness scoring"
+                    } else {
+                        lastCapturedImage = selectedImage
+                        lastCapturedFilename = selected?.filename
+                        lastCapturedObjectFormat = selected?.objectFormat
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            error = error ?: "Burst test failed: ${e.message}"
+        } finally {
+            try {
+                val restoreAck = setControlDeviceASerialized(PROP_DriveMode, DRIVE_SINGLE, 4)
+                // Sony can return a late/negative command ACK while its card
+                // writer is draining even though the setting was applied.
+                // The property readback is the hardwall, not the ACK bit.
+                restoredSingle = waitForPropertyValue(
+                    PROP_DriveMode,
+                    DRIVE_SINGLE.toLong(),
+                    5_000L
+                )
+                if (!restoreAck && restoredSingle) {
+                    Log.w(TAG, "Sony single-shot restore ACK was false; readback confirmed mode=1")
+                }
+                if (!restoredSingle) {
+                    error = error ?: "Single-shot restore readback failed"
+                }
+            } catch (e: Exception) {
+                error = error ?: "Single-shot restore failed: ${e.message}"
+            }
+        }
+
+        val success = error == null && driveApplied && restoredSingle &&
+            captured.size >= requested && selectedImage != null
+        Log.i(
+            TAG,
+            "Sony burst test success=$success requested=$requested holdMs=$holdMs " +
+                "driveApplied=$driveApplied objectAdded=$objectAddedEvents " +
+                "events=${eventCodes.map { "0x${it.toString(16)}" }} " +
+                "retrieved=${captured.size} readyPeak=$readyCountPeak " +
+                "selected=$selectedFrameIndex scores=${sharpnessScores.map { "%.1f".format(it) }} " +
+                "selectedBytes=${selectedImage?.size} restoredSingle=$restoredSingle error=$error"
+        )
+        return BurstTestResult(
+            success, requested, holdMs, driveApplied, objectAddedEvents,
+            eventCodes, captured.size, readyCountPeak, selectedFrameIndex,
+            sharpnessScores, selectedImage, restoredSingle, error
+        )
+    }
+
+    /**
+     * Sony host transfer is a one-slot FIFO on this body. Keep S2 logically
+     * down and pop one virtual object whenever D215 becomes ready. That lets
+     * the body advance to the next exposure without guessing shutter speed.
+     */
+    private fun captureBurstWhileShutterHeld(
+        requested: Int,
+        captures: MutableList<BufferedCapture>,
+        eventCodes: MutableList<Int>,
+        timeoutMs: Long
+    ): BurstDrainStats {
+        val started = System.currentTimeMillis()
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var sonyObjectAdded = 0
+        var readyPeak = 0
+        while (hasOpenControlTransport() && captures.size < requested &&
+            System.currentTimeMillis() < deadline) {
+            sonyObjectAdded += collectBurstEvents(eventCodes, 0L)
+            val value = readSonyProperties()[PROP_ShootingFileInfo]?.currentValue ?: 0L
+            val queued = sonyBufferedCaptureCount(value)
+            readyPeak = maxOf(readyPeak, queued)
+            if (queued > 0) {
+                val before = captures.size
+                drainSonyHostCaptureQueue(
+                    captures = captures,
+                    maxFrames = 1,
+                    timeoutMs = 15_000L,
+                    stopWhenQuiet = false
+                )
+                if (captures.size == before) Thread.sleep(50L)
+                continue
+            }
+            Thread.sleep(50L)
+        }
+        sonyObjectAdded += collectBurstEvents(eventCodes, 0L)
+        return BurstDrainStats(
+            sonyObjectAdded,
+            readyPeak,
+            System.currentTimeMillis() - started
+        )
+    }
+
+    /** Drains raw Sony event packets and returns ObjectAdded count. */
+    private fun collectBurstEvents(eventCodes: MutableList<Int>, waitMs: Long): Int {
+        var objectAdded = 0
+        val first = if (waitMs > 0L) eventQueue.poll(waitMs, TimeUnit.MILLISECONDS) else eventQueue.poll()
+        var event = first
+        while (event != null) {
+            if (event.size >= 2) {
+                val code = event.readU16LeAt(0)
+                eventCodes += code
+                if (code == PTP_EC_ObjectAdded || code == PTP_EC_SonyObjectAdded) {
+                    objectAdded += 1
+                    val handle = if (event.size >= 10) event.readU32LeAt(6) else null
+                    Log.d(TAG, "Sony burst ObjectAdded event=0x${code.toString(16)} handle=${handle?.let { "0x${it.toString(16)}" }}")
+                }
+            }
+            event = eventQueue.poll()
+        }
+        return objectAdded
+    }
+
+    /**
+     * Pops Sony's 0xFFFFC001 FIFO until D215 is empty or [maxFrames] is hit.
+     * Returns the number of successfully removed objects. When [captures] is
+     * null the objects are deliberately discarded as stale pre-burst data.
+     */
+    private fun drainSonyHostCaptureQueue(
+        captures: MutableList<BufferedCapture>?,
+        maxFrames: Int,
+        timeoutMs: Long,
+        stopWhenQuiet: Boolean
+    ): Int {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var drained = 0
+        while (hasOpenControlTransport() && drained < maxFrames && System.currentTimeMillis() < deadline) {
+            val state = readSonyProperties()[PROP_ShootingFileInfo]?.currentValue ?: 0L
+            if (sonyBufferedCaptureCount(state) <= 0) {
+                if (stopWhenQuiet || drained > 0) break
+                Thread.sleep(40L)
+                continue
+            }
+            val info = executeOperation(PTP_OC_GetObjectInfo, intArrayOf(SHOT_OBJECT_HANDLE))
+            if (!info.isOk) {
+                Thread.sleep(50L)
+                continue
+            }
+            val objectFormat = if (info.data.size >= 6) info.data.readU16LeAt(4) else null
+            val declaredSize = if (info.data.size >= 12) info.data.readU32LeAt(8) else null
+            val filename = if (info.data.size > 52) {
+                readPtpValue(info.data, 52, 0xFFFF)?.stringValue
+            } else null
+            val shot = executeOperation(PTP_OC_GetObject, intArrayOf(SHOT_OBJECT_HANDLE))
+            if (!shot.isOk || shot.data.isEmpty()) {
+                Thread.sleep(50L)
+                continue
+            }
+            if (declaredSize != null && declaredSize != 0L && declaredSize != shot.data.size.toLong()) {
+                Log.w(TAG, "Sony burst frame size mismatch declared=$declaredSize actual=${shot.data.size}")
+            }
+            captures?.add(BufferedCapture(shot.data, filename, objectFormat))
+            drained += 1
+            Log.i(TAG, "Sony burst frame ${captures?.size ?: drained} downloaded ${shot.data.size}B filename=$filename")
+        }
+        return drained
+    }
+
+    private fun sonyBufferedCaptureCount(value: Long): Int {
+        if (value and 0x8000L == 0L) return 0
+        return (value and 0x7FFFL).toInt()
+    }
+
+    /** Variance-of-Laplacian on a downsampled image. Original bytes are kept. */
+    private fun sharpnessScore(original: ByteArray): Double {
+        val jpeg = if (original.size >= 2 && original[0] == 0xFF.toByte() &&
+            original[1] == 0xD8.toByte()) original else extractJpeg(original) ?: return Double.NEGATIVE_INFINITY
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, bounds)
+        if (bounds.outWidth < 3 || bounds.outHeight < 3) return Double.NEGATIVE_INFINITY
+        var sample = 1
+        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 960) sample *= 2
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sample
+            inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+        }
+        val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, options)
+            ?: return Double.NEGATIVE_INFINITY
+        return try {
+            val width = bitmap.width
+            val height = bitmap.height
+            if (width < 3 || height < 3) return Double.NEGATIVE_INFINITY
+            val pixels = IntArray(width * height)
+            bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+            val left = (width * 0.08).toInt().coerceAtLeast(1)
+            val right = (width * 0.92).toInt().coerceAtMost(width - 1)
+            val top = (height * 0.08).toInt().coerceAtLeast(1)
+            val bottom = (height * 0.92).toInt().coerceAtMost(height - 1)
+            fun gray(pixel: Int): Int {
+                val r = pixel shr 16 and 0xFF
+                val g = pixel shr 8 and 0xFF
+                val b = pixel and 0xFF
+                return (77 * r + 150 * g + 29 * b) shr 8
+            }
+            var sum = 0.0
+            var sumSquares = 0.0
+            var count = 0L
+            for (y in top until bottom) {
+                val row = y * width
+                for (x in left until right) {
+                    val i = row + x
+                    val laplacian = 4 * gray(pixels[i]) - gray(pixels[i - 1]) -
+                        gray(pixels[i + 1]) - gray(pixels[i - width]) - gray(pixels[i + width])
+                    val value = laplacian.toDouble()
+                    sum += value
+                    sumSquares += value * value
+                    count += 1
+                }
+            }
+            if (count == 0L) Double.NEGATIVE_INFINITY else {
+                val mean = sum / count
+                (sumSquares / count) - mean * mean
+            }
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     fun driveZoom(tele: Boolean, durationMs: Long): Boolean {
@@ -1840,7 +2201,7 @@ class SonyPtpIpController {
         properties[PROP_LiveViewStatus]?.currentValue?.let { currentLiveViewStatus = it }
         properties[PROP_ShootingFileInfo]?.currentValue?.let { currentShootingFileInfo = it }
         for (code in intArrayOf(
-            PROP_OperatingMode,
+            PROP_DriveMode,
             PROP_ShootingFileInfo,
             PROP_LiveViewStatus,
             PROP_SaveMedia,
