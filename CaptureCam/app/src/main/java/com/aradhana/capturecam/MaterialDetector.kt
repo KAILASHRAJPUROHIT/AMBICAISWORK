@@ -558,7 +558,12 @@ object MaterialDetector {
      * physical gimbal toward a neutral background highlight.
      */
     @Synchronized
-    fun analyse(bitmap: Bitmap, step: Int = 6, fullFrame: Boolean = false): Result {
+    fun analyse(
+        bitmap: Bitmap,
+        step: Int = 6,
+        fullFrame: Boolean = false,
+        region: Bounds? = null
+    ): Result {
         val width = bitmap.width
         val height = bitmap.height
         if (width <= 0 || height <= 0) return Result(false, null, 0f, 0f, 0f, 0f)
@@ -567,10 +572,34 @@ object MaterialDetector {
         if (bitmapArgbBuffer.size < pixelCount) bitmapArgbBuffer = IntArray(pixelCount)
         bitmap.getPixels(bitmapArgbBuffer, 0, width, 0, 0, width, height)
 
-        val startX = if (fullFrame) 0 else (width * 0.18).toInt()
-        val endX = if (fullFrame) width else (width * 0.82).toInt()
-        val startY = if (fullFrame) 0 else (height * 0.16).toInt()
-        val endY = if (fullFrame) height else (height * 0.84).toInt()
+        // Sony composition lock: after full-frame acquisition and centering,
+        // analyse only the padded category silhouette rectangle. This drops
+        // warm reflections/stand edges outside the expected item position.
+        // Caller clears the lock immediately on loss, returning here with
+        // fullFrame=true so a misplaced item always self-recovers.
+        val validRegion = region?.takeIf {
+            !fullFrame && it.x1 > it.x0 && it.y1 > it.y0
+        }
+        val startX = when {
+            fullFrame -> 0
+            validRegion != null -> (width * validRegion.x0.coerceIn(0f, 0.98f)).toInt()
+            else -> (width * 0.18).toInt()
+        }
+        val endX = when {
+            fullFrame -> width
+            validRegion != null -> (width * validRegion.x1.coerceIn(0.02f, 1f)).toInt()
+            else -> (width * 0.82).toInt()
+        }.coerceAtLeast(startX + 1)
+        val startY = when {
+            fullFrame -> 0
+            validRegion != null -> (height * validRegion.y0.coerceIn(0f, 0.98f)).toInt()
+            else -> (height * 0.16).toInt()
+        }
+        val endY = when {
+            fullFrame -> height
+            validRegion != null -> (height * validRegion.y1.coerceIn(0.02f, 1f)).toInt()
+            else -> (height * 0.84).toInt()
+        }.coerceAtLeast(startY + 1)
         val cols = max(1, (endX - startX) / step)
         val rows = max(1, (endY - startY) / step)
         val goldMask = BooleanArray(cols * rows)

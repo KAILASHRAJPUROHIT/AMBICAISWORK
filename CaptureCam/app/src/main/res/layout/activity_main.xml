@@ -208,6 +208,24 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <!-- Live physical-placement guide. This reports how far the stand
+             must move so the detected ornament fills its safe target box at
+             the Sony lens' verified 50mm/3.125x optical limit. It is an
+             overlay only and is never part of the captured JPEG. -->
+        <TextView
+            android:id="@+id/standGuideText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:background="@drawable/bg_card"
+            android:gravity="center"
+            android:paddingHorizontal="14dp"
+            android:paddingVertical="10dp"
+            android:textColor="@color/amber_working"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/tagCodeText"
             android:layout_width="match_parent"
@@ -384,6 +402,16 @@
                     android:layout_marginStart="4dp"
                     android:layout_marginEnd="4dp"
                     android:text="@string/continue_now" />
+
+                <Button
+                    android:id="@+id/previewCompleteButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp"
+                    android:text="@string/complete_item"
+                    android:visibility="gone" />
 
                 <Button
                     android:id="@+id/previewCancelButton"

@@ -12,6 +12,8 @@
     <string name="retake">Retake</string>
     <string name="cancel_item">Cancel item</string>
     <string name="continue_now">Continue</string>
+    <string name="proceed_angle_2">Proceed to Angle 2</string>
+    <string name="complete_item">Complete</string>
     <string name="zoom_out">−</string>
     <string name="zoom_in">+</string>
     <string name="auto_tracking">AUTO TRACKING</string>

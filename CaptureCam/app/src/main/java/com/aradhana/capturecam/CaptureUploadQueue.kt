@@ -1,0 +1,233 @@
+package com.aradhana.capturecam
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import android.widget.Toast
+import androidx.work.Constraints
+import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
+import java.util.concurrent.TimeUnit
+
+/**
+ * Disk-backed hand-off between capture and upload.
+ *
+ * The camera workflow blocks only until originals are fsynced into one
+ * app-private job directory. WorkManager then uploads jobs independently of
+ * MainActivity, survives process/network restarts, and retries transport
+ * failures. Server-side validation failures keep their originals in
+ * `pending_capture_uploads` with state=needs_review; nothing is discarded.
+ */
+object CaptureUploadQueue {
+    private const val ROOT = "pending_capture_uploads"
+    internal const val MANIFEST = "manifest.json"
+    internal const val TYPE_MULTI = "multi"
+    internal const val TYPE_PAIR = "pair"
+    private const val WORK_PREFIX = "capture-upload-"
+    private const val WORK_TAG = "capture-upload"
+
+    data class Staged(val id: String, val tagCode: String)
+
+    suspend fun stageMulti(
+        context: Context,
+        serverUrl: String,
+        tagCode: String,
+        staffName: String,
+        main: ByteArray,
+        angle1: ByteArray,
+        angle2: ByteArray
+    ): Staged = stage(
+        context, TYPE_MULTI, serverUrl, tagCode, staffName,
+        mapOf("main.jpg" to main, "angle1.jpg" to angle1, "angle2.jpg" to angle2)
+    )
+
+    suspend fun stagePair(
+        context: Context,
+        serverUrl: String,
+        tagCode: String,
+        staffName: String,
+        jewel: ByteArray,
+        tag: ByteArray
+    ): Staged = stage(
+        context, TYPE_PAIR, serverUrl, tagCode, staffName,
+        mapOf("jewel.jpg" to jewel, "tag.jpg" to tag)
+    )
+
+    private suspend fun stage(
+        context: Context,
+        type: String,
+        serverUrl: String,
+        tagCode: String,
+        staffName: String,
+        files: Map<String, ByteArray>
+    ): Staged = withContext(Dispatchers.IO) {
+        val root = File(context.filesDir, ROOT).apply { mkdirs() }
+        val id = "${System.currentTimeMillis()}-${UUID.randomUUID()}"
+        val temp = File(root, ".$id.tmp")
+        val target = File(root, id)
+        check(temp.mkdir()) { "Cannot create upload staging directory" }
+        try {
+            files.forEach { (name, bytes) -> durableWrite(File(temp, name), bytes) }
+            writeManifest(
+                temp,
+                JSONObject().apply {
+                    put("schema", 1)
+                    put("id", id)
+                    put("type", type)
+                    put("server_url", serverUrl)
+                    put("tag_code", tagCode)
+                    put("staff_name", staffName)
+                    put("created_at", System.currentTimeMillis())
+                    put("state", "queued")
+                    put("attempts", 0)
+                }
+            )
+            check(temp.renameTo(target)) { "Cannot publish upload staging directory" }
+        } catch (e: Exception) {
+            temp.deleteRecursively()
+            throw e
+        }
+        enqueue(context.applicationContext, target)
+        Log.i(TAG, "Staged background upload id=$id tag=$tagCode type=$type bytes=${files.values.sumOf { it.size.toLong() }}")
+        Staged(id, tagCode)
+    }
+
+    /** Re-enqueue durable jobs after an app/process restart. WorkManager KEEP
+     * makes this idempotent if the original request still exists. */
+    fun resumePending(context: Context) {
+        val root = File(context.filesDir, ROOT)
+        root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }?.forEach { dir ->
+            val state = readManifest(dir)?.optString("state")
+            if (state != "needs_review") enqueue(context.applicationContext, dir)
+        }
+    }
+
+    internal fun readManifest(dir: File): JSONObject? = try {
+        JSONObject(File(dir, MANIFEST).readText())
+    } catch (e: Exception) {
+        Log.e(TAG, "Unreadable upload manifest: ${dir.absolutePath}", e)
+        null
+    }
+
+    internal fun updateState(dir: File, state: String, error: String? = null, attempts: Int? = null) {
+        val json = readManifest(dir) ?: return
+        json.put("state", state)
+        json.put("updated_at", System.currentTimeMillis())
+        if (error == null) json.remove("last_error") else json.put("last_error", error)
+        if (attempts != null) json.put("attempts", attempts)
+        writeManifest(dir, json)
+    }
+
+    private fun enqueue(context: Context, dir: File) {
+        val request = OneTimeWorkRequestBuilder<CaptureUploadWorker>()
+            .setInputData(workDataOf("job_dir" to dir.absolutePath))
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL, 10, TimeUnit.SECONDS)
+            .addTag(WORK_TAG)
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            WORK_PREFIX + dir.name,
+            ExistingWorkPolicy.KEEP,
+            request
+        )
+    }
+
+    private fun durableWrite(file: File, bytes: ByteArray) {
+        FileOutputStream(file).use { output ->
+            output.write(bytes)
+            output.flush()
+            output.fd.sync()
+        }
+    }
+
+    private fun writeManifest(dir: File, json: JSONObject) {
+        val temp = File(dir, "$MANIFEST.tmp")
+        durableWrite(temp, json.toString().toByteArray(Charsets.UTF_8))
+        val target = File(dir, MANIFEST)
+        if (target.exists() && !target.delete()) error("Cannot replace upload manifest")
+        check(temp.renameTo(target)) { "Cannot commit upload manifest" }
+    }
+
+    internal fun toast(context: Context, text: String, long: Boolean = false) {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(context.applicationContext, text, if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private const val TAG = "CaptureUpload"
+}
+
+class CaptureUploadWorker(
+    appContext: Context,
+    params: WorkerParameters
+) : CoroutineWorker(appContext, params) {
+
+    override suspend fun doWork(): Result = uploadMutex.withLock {
+        val path = inputData.getString("job_dir") ?: return@withLock Result.failure()
+        val dir = File(path)
+        if (!dir.isDirectory) return@withLock Result.success()
+        val manifest = CaptureUploadQueue.readManifest(dir) ?: return@withLock Result.failure()
+        val tag = manifest.optString("tag_code")
+        val attempts = runAttemptCount + 1
+        CaptureUploadQueue.updateState(dir, "uploading", attempts = attempts)
+        try {
+            val result = when (manifest.optString("type")) {
+                CaptureUploadQueue.TYPE_MULTI -> UploadClient.saveMultiFiles(
+                    manifest.getString("server_url"), tag, manifest.optString("staff_name"),
+                    File(dir, "main.jpg"), File(dir, "angle1.jpg"), File(dir, "angle2.jpg")
+                )
+                CaptureUploadQueue.TYPE_PAIR -> UploadClient.savePairFiles(
+                    manifest.getString("server_url"), tag, manifest.optString("staff_name"),
+                    File(dir, "jewel.jpg"), File(dir, "tag.jpg")
+                )
+                else -> {
+                    CaptureUploadQueue.updateState(dir, "needs_review", "unknown_job_type", attempts)
+                    return@withLock Result.success(workDataOf("status" to "needs_review", "tag" to tag))
+                }
+            }
+            if (result.ok) {
+                Log.i(TAG, "Background upload saved tag=$tag attempt=$attempts")
+                dir.deleteRecursively()
+                CaptureUploadQueue.toast(applicationContext, "Saved in background: $tag")
+                Result.success(workDataOf("status" to "saved", "tag" to tag))
+            } else if (result.error == null) {
+                CaptureUploadQueue.updateState(dir, "queued", "empty_or_invalid_server_response", attempts)
+                Result.retry()
+            } else {
+                // Duplicate/blur/visibility and any catalogue rejection need a
+                // human decision. Preserve originals and let later jobs run.
+                CaptureUploadQueue.updateState(dir, "needs_review", result.error, attempts)
+                Log.e(TAG, "Background upload needs review tag=$tag error=${result.error}")
+                CaptureUploadQueue.toast(applicationContext, "Upload needs review: $tag (${result.error})", long = true)
+                Result.success(workDataOf("status" to "needs_review", "tag" to tag, "error" to result.error))
+            }
+        } catch (e: CancellationException) {
+            CaptureUploadQueue.updateState(dir, "queued", "cancelled", attempts)
+            throw e
+        } catch (e: Exception) {
+            CaptureUploadQueue.updateState(dir, "queued", e.message ?: e.javaClass.simpleName, attempts)
+            Log.w(TAG, "Background upload retry tag=$tag attempt=$attempts: ${e.message}")
+            Result.retry()
+        }
+    }
+
+    companion object {
+        private const val TAG = "CaptureUpload"
+        private val uploadMutex = Mutex()
+    }
+}

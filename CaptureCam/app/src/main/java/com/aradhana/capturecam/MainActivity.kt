@@ -8,6 +8,9 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.RectF
 import android.hardware.camera2.CaptureResult
 import android.os.Build
@@ -54,7 +57,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.opencv.core.Mat
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.Arrays
@@ -106,7 +108,10 @@ class MainActivity : AppCompatActivity() {
     private var sonyManualZoomInFlight = false
     private var sonyManualZoomBusyRetries = 0
     @Volatile private var sonyAfRequestedAt = 0L
+    @Volatile private var sonyAfRequestedAtNanos = 0L
     @Volatile private var sonyAfCommandAcknowledged = false
+    @Volatile private var sonyFocusX = 0.5f
+    @Volatile private var sonyFocusY = 0.5f
     private var sonyQualityApplyScheduled = false
     // Throttles rebindUseCases-on-capture-failure so a genuinely dead
     // session gets one recovery attempt per cooldown window instead of a
@@ -169,6 +174,7 @@ class MainActivity : AppCompatActivity() {
     private val testExposureReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val ev = intent.getFloatExtra("ev", 0f)
+            manualExposureOverride = true
             autoExposureEv = ev
             setCameraExposureCompensationEv(ev)
             Log.i(TAG, "testExposureReceiver: set ev=$ev available=${cameraExposureControlAvailable()} range=${cameraExposureRangeEv()}")
@@ -191,9 +197,21 @@ class MainActivity : AppCompatActivity() {
     private val testZoomMotorReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val tele = intent.getStringExtra("direction")?.lowercase() != "wide"
-            val durationMs = intent.getLongExtra("durationMs", 600L).coerceIn(80L, 1_500L)
+            val durationMs = intent.getLongExtra("durationMs", 600L).coerceIn(80L, 1_800L)
             sonyProduction.driveZoom(tele, durationMs) { ok ->
                 Log.i(TAG, "testZoomMotorReceiver: tele=$tele durationMs=$durationMs ok=$ok")
+            }
+        }
+    }
+    // Deterministic remote touch-focus test in normalized Live View space.
+    // adb shell am broadcast -a com.aradhana.capturecam.TEST_FOCUS
+    // --ef x 0.5 --ef y 0.5
+    private val testFocusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val x = intent.getFloatExtra("x", 0.5f).coerceIn(0f, 1f)
+            val y = intent.getFloatExtra("y", 0.5f).coerceIn(0f, 1f)
+            sonyProduction.autofocus(x, y) { ok ->
+                Log.i(TAG, "testFocusReceiver: x=$x y=$y ok=$ok")
             }
         }
     }
@@ -262,6 +280,12 @@ class MainActivity : AppCompatActivity() {
     // of "works on item 1, breaks on item 2" -- item 2 inherited whatever mess
     // the race left behind.
     private var inAngleSequence = false
+    // One Sony original may take several seconds to transfer. Prevent an
+    // immediate null callback from recursively launching hundreds of new
+    // shutters while the previous capture lane is still returning to Live
+    // View. Retries are delayed and bounded instead.
+    private var angleCaptureInFlight = false
+    private var angleCaptureRetryCount = 0
     // Set while the READY button is showing, waiting for the staff to
     // confirm the ornament is positioned for this angle's shot; null the
     // rest of the time so an accidental late tap does nothing.
@@ -355,8 +379,22 @@ class MainActivity : AppCompatActivity() {
     // Kit listeners were starved behind the 25fps ImageView renderer, leaving
     // barcodeBusy latched for seconds even when native recognition had ended.
     private val barcodeExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "CaptureCamBarcode").apply { isDaemon = true }
+        Thread({
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+            runnable.run()
+        }, "CaptureCamBarcode").apply { isDaemon = true }
     }
+    // Material analysis must never execute on SonyProductionLiveView. That
+    // thread's only job is to drain/decode the newest camera frame. A
+    // single-flight background lane drops obsolete analysis instead of
+    // slowing the stream or building latency.
+    private val jewelAnalysisExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
+        Thread({
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+            runnable.run()
+        }, "CaptureCamJewelAnalysis").apply { isDaemon = true }
+    }
+    private val jewelAnalysisBusy = AtomicBoolean(false)
     // Lightweight on-device "Google Lens"-style object localizer -- a small
     // bundled TFLite model (no network, no server round-trip), the same
     // class of tech behind Lens's live object framing. Only gives coarse
@@ -407,6 +445,11 @@ class MainActivity : AppCompatActivity() {
     // doesn't leave the NEXT item starting under-exposed.
     private var autoExposureEv = 0f
     private var lastExposureAdjustAt = 0L
+    private var exposureClipStreak = 0
+    private var exposureClearStreak = 0
+    private var exposureCommandInFlight = false
+    private var pendingAutoExposureEv: Float? = null
+    private var manualExposureOverride = false
     // Manual zoom override: true only after staff uses zoom +/-. Exposure
     // adjustment and tap/long-press focus are compatible with automatic
     // capture and must not silently stop it (confirmed live 2026-08-24).
@@ -469,6 +512,11 @@ class MainActivity : AppCompatActivity() {
     // zoom level -- the single-shot discipline that stops AF being
     // re-triggered every tick while waiting for its result.
     private var focusTriggeredThisLevel = false
+    private var focusEvaluationNotBefore = 0L
+    // Hard circuit breaker for automatic RemoteTouchOperation requests in
+    // one physical pose. Detector/ROI oscillation must never restart Sony AF
+    // indefinitely. Staff tap-to-focus bypasses this budget deliberately.
+    private var sonyAutomaticAfCommandsForPose = 0
     // True while a smoothZoomTo() ramp is actively running -- tickJewel
     // must not judge focus, take another step, or capture while the zoom
     // is still physically moving. Set false when the ramp reaches target.
@@ -494,6 +542,22 @@ class MainActivity : AppCompatActivity() {
     // promptForSideProfile()'s gate before angle1/angle2.
     private var jewelReadyPending = false
     private var angleStableStreak = 0
+    private var angleStableRefocusAttempts = 0
+    // One decisive Sony AF request per settled side-angle pose. The angle
+    // retry loop used to issue RemoteTouchOperation every ~1.57s whenever a
+    // non-focus capture gate (usually occupancy/centering) still failed,
+    // repeatedly driving an already-sharp lens through a new AF sweep.
+    // Re-arm only after the operator changes angle or this method actually
+    // moves the gimbal/zoom.
+    private var angleFocusTriggered = false
+    // EMA of the physical stand-distance ratio. Updated on the UI thread
+    // from Sony detector results; smoothing stops a stationary stand from
+    // flickering CLOSER/FARTHER as reflective highlights change its box.
+    private var standDistanceRatioEma: Float? = null
+    // Full-frame locate -> centered category ROI -> full-frame recovery.
+    // Volatile because Sony analysis and the main capture tick use separate
+    // executors. Never stays locked after a missed target.
+    @Volatile private var compositionRoiLocked = false
     // Bounds how many zoom-in steps centerThenCapture() will take chasing
     // CAPTURE_MIN_OCCUPANCY for ONE angle shot -- reset per side (see
     // promptForSideProfile), not per item.
@@ -546,6 +610,8 @@ class MainActivity : AppCompatActivity() {
     // is still looking at the last one.
     private var previewShowing = false
     private var previewCountdownRunnable: Runnable? = null
+    private var previewGeneration = 0L
+    private var capturePreviewBitmap: Bitmap? = null
 
     @Volatile private var latestMaterial: MaterialDetector.Result? = null
     @Volatile private var lastSonyMaterialPresent = false
@@ -553,6 +619,15 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var sonyFocusLockedForItem = false
     @Volatile private var latestSharpness: Float = 0f
     @Volatile private var barcodeBusy = false
+    // Single-flight barcode analysis can safely reuse these buffers until
+    // ML Kit's completion callback releases barcodeBusy. This removes the
+    // old full-frame IntArray + NV21 allocations from every scan.
+    private var barcodeScaledBitmap: Bitmap? = null
+    private var barcodeArgbBuffer = IntArray(0)
+    private var barcodeNv21Buffer = ByteArray(0)
+    private val barcodeScalePaint = Paint(Paint.FILTER_BITMAP_FLAG)
+    private var lastTrackingLogAt = 0L
+    private var lastCenterLimitLogAt = 0L
     @Volatile private var barcodeAttempts = 0
     @Volatile private var lastBarcodeCount = -1
     @Volatile private var lastBarcodeError: String? = null
@@ -574,6 +649,11 @@ class MainActivity : AppCompatActivity() {
         // physical ZoomOperation press/release path as the proven +/- buttons;
         // ZoomScale can ACK without changing the optical Live View image.
         private const val SONY_ZOOM_FULL_TRAVEL_MS = 1_650f
+        // Endpoint reset deliberately runs slightly longer than measured
+        // travel. This removes accumulated position-estimate error and lets
+        // the lens's own endpoint stop guarantee true 16mm/full-wide.
+        private const val SONY_ZOOM_WIDE_ENDPOINT_HOLD_MS = 1_800L
+        private const val SONY_ZOOM_WIDE_RESET_MAX_ATTEMPTS = 3
         // Short Sony ZoomOperation press/release pulse for each manual tap.
         // About 7% of the 16-50mm lens travel: fine enough for framing while
         // remaining visibly responsive.
@@ -615,6 +695,7 @@ class MainActivity : AppCompatActivity() {
             "Flexible Spot L", "Wide", "Zone", "Tracking: Zone", "Tracking: Spot L"
         )
         private val SONY_FOCUS_AREA_VALUES = intArrayOf(259, 1, 2, 514, 518)
+        private const val SONY_JEWEL_FOCUS_AREA_TRACKING_SPOT_L = 518
         private val SONY_METERING_LABELS = arrayOf(
             "Multi", "Center-weighted", "Entire screen average", "Spot", "Highlight"
         )
@@ -689,6 +770,10 @@ class MainActivity : AppCompatActivity() {
         // genuinely stuck item down relative to the old always-accept path.
         private const val MAX_USABLE_ZOOM_GRACE_MS = 6000L
         private const val MAX_FOCUS_RETRIES = 2
+        // 50->16mm in 1/1.25 backoff steps needs at most six AF checks.
+        // Seven remains a finite hard wall while allowing the full ladder.
+        private const val MAX_AUTOMATIC_AF_COMMANDS_PER_POSE = 7
+        private const val FOCUS_EVALUATION_DELAY_MS = 1_000L
         private const val ZOOM_BACKOFF_RATIO = 0.8f
         // Below this zoom, a "lost the piece" reading only pauses the climb
         // (holds current zoom, waits) instead of backing off -- at low zoom
@@ -711,6 +796,9 @@ class MainActivity : AppCompatActivity() {
         private const val ZOOM_STEP_RATIO = 1.25f
         private const val ZOOM_STEP_INTERVAL_MS = 250L
         private const val CAPTURE_PREVIEW_SECONDS = 2
+        private const val PREVIEW_DECODE_MAX_EDGE = 4096
+        private const val ANGLE_CAPTURE_MAX_RETRIES = 6
+        private const val ANGLE_CAPTURE_RETRY_DELAY_MS = 350L
         // Auto-exposure (2026-08-18): steps exposure compensation down
         // when too much of the GOLD area is blown out (specular
         // reflections eating engraving/facet detail), back up toward 0
@@ -738,11 +826,16 @@ class MainActivity : AppCompatActivity() {
         // steps, faster cadence, deeper floor -- gold clipping at all
         // should pull exposure down hard and fast, not creep toward it.
         private const val EXPOSURE_ADJUST_INTERVAL_MS = 250L
-        private const val SONY_EXPOSURE_ADJUST_INTERVAL_MS = 600L
-        private const val EXPOSURE_STEP_EV = 1.0f
-        private const val EXPOSURE_MIN_EV = -4.0f
-        private const val HIGHLIGHT_CLIP_HIGH = 0.03f
-        private const val HIGHLIGHT_CLIP_LOW = 0.01f
+        private const val SONY_EXPOSURE_ADJUST_INTERVAL_MS = 500L
+        private const val EXPOSURE_STEP_EV = 1f / 3f
+        private const val EXPOSURE_MIN_EV = -2.0f
+        private const val GOLD_CLIP_HIGH = 0.08f
+        private const val GOLD_CLIP_LOW = 0.02f
+        private const val EXPOSURE_CONFIRM_TICKS = 3
+        private const val EXPOSURE_CLEAR_TICKS = 5
+        private const val MIN_TRUSTED_TARGET_AREA = 0.004f
+        private const val MIN_TRUSTED_GOLD_POINTS = 12
+        private const val TRACKING_LOG_INTERVAL_MS = 1_000L
         // Quiet time required after ANY zoom change (a climb step or a
         // backoff step) before focus is triggered or judged at all. Camera2
         // AF triggered while the lens/sensor is still settling from a zoom
@@ -773,7 +866,10 @@ class MainActivity : AppCompatActivity() {
         // 8.3fps keeps the Sony preview at its 25fps target. Live testing at
         // 80ms reduced preview to 20-21fps; focus, not scan cadence, was the
         // real tag-lock bottleneck. Two-frame confirmation remains ~240ms.
-        private const val SONY_TAG_ANALYSIS_INTERVAL_MS = 120L
+        private const val SONY_TAG_ANALYSIS_INTERVAL_MS = 60L
+        // Preserve the Sony stream's full width. Small printed labels lost
+        // too many finder/edge pixels when reduced to 640px.
+        private const val SONY_TAG_ANALYSIS_LONG_EDGE = 1024
         private const val SONY_JEWEL_ANALYSIS_INTERVAL_MS = 80L
         private const val SONY_TAG_FOCUS_AREA_WIDE = 1
         private const val SHARPNESS_THRESHOLD = 40f
@@ -815,6 +911,7 @@ class MainActivity : AppCompatActivity() {
         // tilt/pan on wherever the piece ended up, not a preset sweep.
         private const val ANGLE_STABLE_TIMEOUT_MS = 4500L
         private const val ANGLE_STABLE_TICKS = 3
+        private const val ANGLE_STABLE_REFOCUS_ATTEMPTS = 3
         // Conservative live-zoom cap per the "physical distance should do
         // most of the framing" principle -- pushing digital/hybrid zoom
         // much past this loses detail the catalogue pipeline later wants.
@@ -866,12 +963,12 @@ class MainActivity : AppCompatActivity() {
         // (250 x 900ms), nowhere near enough to close a large offset.
         private const val CENTERING_TICK_MS = 200L
         private const val CENTERING_TICK_MS_MAX = 900L
-        private const val CENTERING_MAX_ATTEMPTS = 4
+        private const val CENTERING_MAX_ATTEMPTS = 12
         // Angle shots reuse the same centering primitive but need a bigger
         // budget: staff places the piece by hand after rotating it, which
         // can start much further off-center than MAIN's fine pre-capture
         // correction ever has to travel from.
-        private const val ANGLE_CENTERING_MAX_ATTEMPTS = 8
+        private const val ANGLE_CENTERING_MAX_ATTEMPTS = 12
         // Angle shots have no independent zoom-climb loop like MAIN's
         // tickJewel -- centerThenCapture() does bounded manual zoom steps
         // toward CAPTURE_MIN_OCCUPANCY instead, capped so a piece that
@@ -1087,9 +1184,11 @@ class MainActivity : AppCompatActivity() {
         setupManualControls()
 
         sonyProduction = SonyProductionCamera(
+            context = applicationContext,
             onFrame = ::onSonyFrame,
             onAvailabilityChanged = ::onSonyAvailabilityChanged
         )
+        CaptureUploadQueue.resumePending(applicationContext)
         ensurePipelineStarted()
         applyRequestedCameraMode(allowPermissionPrompt = true)
 
@@ -1115,6 +1214,7 @@ class MainActivity : AppCompatActivity() {
         val exposureFilter = IntentFilter("com.aradhana.capturecam.TEST_EXPOSURE")
         val zoomFilter = IntentFilter("com.aradhana.capturecam.TEST_ZOOM")
         val zoomMotorFilter = IntentFilter("com.aradhana.capturecam.TEST_ZOOM_MOTOR")
+        val focusFilter = IntentFilter("com.aradhana.capturecam.TEST_FOCUS")
         val sonyCaptureFilter = IntentFilter("com.aradhana.capturecam.TEST_SONY_CAPTURE")
         val sonyCardObjectsFilter = IntentFilter("com.aradhana.capturecam.TEST_SONY_CARD_OBJECTS")
         if (Build.VERSION.SDK_INT >= 33) {
@@ -1122,6 +1222,7 @@ class MainActivity : AppCompatActivity() {
             registerReceiver(testExposureReceiver, exposureFilter, RECEIVER_EXPORTED)
             registerReceiver(testZoomReceiver, zoomFilter, RECEIVER_EXPORTED)
             registerReceiver(testZoomMotorReceiver, zoomMotorFilter, RECEIVER_EXPORTED)
+            registerReceiver(testFocusReceiver, focusFilter, RECEIVER_EXPORTED)
             registerReceiver(testSonyCaptureReceiver, sonyCaptureFilter, RECEIVER_EXPORTED)
             registerReceiver(testSonyCardObjectsReceiver, sonyCardObjectsFilter, RECEIVER_EXPORTED)
         } else {
@@ -1133,6 +1234,8 @@ class MainActivity : AppCompatActivity() {
             registerReceiver(testZoomReceiver, zoomFilter)
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(testZoomMotorReceiver, zoomMotorFilter)
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(testFocusReceiver, focusFilter)
             @Suppress("UnspecifiedRegisterReceiverFlag")
             registerReceiver(testSonyCaptureReceiver, sonyCaptureFilter)
             @Suppress("UnspecifiedRegisterReceiverFlag")
@@ -1328,6 +1431,14 @@ class MainActivity : AppCompatActivity() {
             setStatus("Sony camera credential missing", ready = false)
             return
         }
+        val phaseFocusArea = if (phase == Phase.TAG) {
+            SONY_TAG_FOCUS_AREA_WIDE
+        } else {
+            SONY_JEWEL_FOCUS_AREA_TRACKING_SPOT_L
+        }
+        sonyProduction.setStartupQualitySettings(
+            savedSonyQualitySettings().copy(focusArea = phaseFocusArea)
+        )
         sonyProduction.start(
             prefs.getString("sony_camera_ip", SONY_CAMERA_IP) ?: SONY_CAMERA_IP,
             prefs.getString("sony_ssh_user", SONY_SSH_USER) ?: SONY_SSH_USER,
@@ -1348,7 +1459,14 @@ class MainActivity : AppCompatActivity() {
         if (available) {
             sonyZoomRatio = sonyProduction.currentZoomRatio()
             sonyZoomTarget = sonyZoomRatio
-            scheduleSavedSonyQualitySettings()
+            queueAutoExposure(autoExposureEv)
+            // resetForNewItem(TAG) can run before the Sony handshake is
+            // ready. Availability is the authoritative moment to perform
+            // the deferred full-wide endpoint reset; startup waiting never
+            // consumes the bounded command-failure retry budget.
+            if (phase == Phase.TAG && !wideResetComplete && !wideResetInFlight) {
+                handler.post(::resetSonyZoomFullyWideForNextTag)
+            }
         }
         Log.i(TAG, "Production camera=${activeCameraSource.name}: $detail")
         handler.post {
@@ -1391,61 +1509,30 @@ class MainActivity : AppCompatActivity() {
 
         when (phase) {
             Phase.JEWEL -> {
-                val analysisStartedAt = System.nanoTime()
-                val result = MaterialDetector.analyse(bitmap, fullFrame = !armed)
-                latestMaterial = result
-                latestSharpness = result.bounds?.let { SharpnessAnalyzer.score(bitmap, it) } ?: 0f
-                val present = result.material || result.bounds != null
-                if (present != lastSonyMaterialPresent) {
-                    lastSonyMaterialPresent = present
-                    val detectedAt = System.nanoTime()
-                    Log.i(
-                        TAG,
-                        "Sony item presence=$present " +
-                            "detectorMs=${(System.nanoTime() - analysisStartedAt) / 1_000_000L} " +
-                            "coverage=${result.coverage} sharpness=$latestSharpness"
-                    )
-                    if (present) {
-                        sonyItemDetectedAtNanos = detectedAt
-                        sonyFocusLockedForItem = false
-                        // First positive detector frame immediately targets the
-                        // item's centre. This timestamp is the start of the
-                        // measured detect-to-focus-lock path.
-                        // AF-C/Pre-AF on the body starts tracking the new
-                        // subject without a PTP touch command. The latter
-                        // interrupts this camera's HTTP Live View producer.
-                        triggerCameraAutoFocus()
-                    } else {
-                        sonyItemDetectedAtNanos = 0L
-                        sonyFocusLockedForItem = false
-                    }
-                }
-                val focus = sonyProduction.currentFocusIndication()
-                if (present && !sonyFocusLockedForItem && (focus == 2 || focus == 6)) {
-                    val detectedAt = sonyItemDetectedAtNanos
-                    if (detectedAt != 0L) {
-                        sonyFocusLockedForItem = true
-                        Log.i(
-                            TAG,
-                            "Sony item focus locked detectToLockMs=" +
-                                "${(System.nanoTime() - detectedAt) / 1_000_000L} " +
-                                "focusIndication=$focus sharpness=$latestSharpness"
-                        )
-                    }
-                }
-                lastMaterialRotationDegrees = 0
-                val goldPoints = result.points.filter { it.gold }
-                handler.post {
-                    if (!isDestroyed && activeCameraSource == ProductionCameraSource.SONY) {
-                        binding.boundsOverlay.update(goldPoints, bitmap.width, bitmap.height, 0)
+                if (jewelAnalysisBusy.compareAndSet(false, true)) {
+                    jewelAnalysisExecutor.execute {
+                        try {
+                            analyseSonyJewelFrame(bitmap)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Sony jewellery analysis failed", e)
+                        } finally {
+                            jewelAnalysisBusy.set(false)
+                        }
                     }
                 }
             }
             Phase.TAG -> {
                 handler.post {
-                    if (!isDestroyed) binding.boundsOverlay.update(emptyList(), 0, 0, 0)
+                    if (!isDestroyed) {
+                        binding.boundsOverlay.update(emptyList(), 0, 0, 0)
+                        clearStandDistanceGuide()
+                    }
                 }
-                if (barcodeBusy) return
+                // Do not judge a label while the lens is still travelling to
+                // its full-wide endpoint. Those first frames are blurred and
+                // the simultaneous PTP zoom operation causes avoidable source
+                // cadence gaps.
+                if (!wideResetComplete || wideResetInFlight || barcodeBusy) return
                 barcodeBusy = true
                 barcodeAttempts += 1
                 val attempt = barcodeAttempts
@@ -1455,20 +1542,27 @@ class MainActivity : AppCompatActivity() {
                         // Sony arrives as JPEG/Bitmap. Convert off the stream
                         // and UI threads to NV21 so ML Kit gets its native fast
                         // input path instead of internally converting Bitmap.
-                        val nv21 = bitmapToGrayscaleNv21(bitmap)
+                        val barcodeFrame = bitmapToGrayscaleNv21(bitmap)
+                        val preprocessedAt = System.nanoTime()
                         val input = InputImage.fromByteArray(
-                            nv21, bitmap.width, bitmap.height, 0,
+                            barcodeFrame.bytes, barcodeFrame.width, barcodeFrame.height, 0,
                             InputImage.IMAGE_FORMAT_NV21
                         )
                         barcodeScanner.process(input)
                             .addOnCompleteListener(barcodeExecutor) { task ->
                                 barcodeBusy = false
                                 val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L
+                                val prepMs = (preprocessedAt - startedAt) / 1_000_000L
+                                val mlMs = elapsedMs - prepMs
                                 if (task.isSuccessful) {
                                     val barcodes = task.result.orEmpty()
                                     val codes = barcodes.mapNotNull { it.rawValue?.trim()?.takeIf(String::isNotEmpty) }
                                     if (codes.isNotEmpty() || attempt % 25 == 0) {
-                                        Log.i(TAG, "Sony tag scan attempt=$attempt ms=$elapsedMs results=${codes.size}")
+                                        Log.i(
+                                            TAG,
+                                            "Sony tag scan attempt=$attempt totalMs=$elapsedMs " +
+                                                "prepMs=$prepMs mlMs=$mlMs results=${codes.size}"
+                                        )
                                     }
                                     handler.post {
                                         if (!isDestroyed && phase == Phase.TAG) {
@@ -1500,24 +1594,285 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** ML Kit only needs luminance for tag edges. Native NV21 avoids its
-     * warned-about Bitmap conversion path; neutral chroma preserves format. */
-    private fun bitmapToGrayscaleNv21(bitmap: Bitmap): ByteArray {
-        val width = bitmap.width
-        val height = bitmap.height
+    /** Background-only consumer of the newest Sony frame. */
+    private fun analyseSonyJewelFrame(bitmap: Bitmap) {
+        val analysisStartedAt = System.nanoTime()
+        val compositionProfile = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
+        // A pair's union is centred in the frame but its centre is normally
+        // empty space between the two ornaments. A small centred ROI therefore
+        // alternated full-frame acquire -> empty ROI miss -> acquire on every
+        // frame, and made both AF and the gimbal panic. Paired categories stay
+        // full-frame; composition still uses their union midpoint.
+        val supportsCenteredCompositionRoi = !isSplitPairProfile(compositionProfile)
+        if (!supportsCenteredCompositionRoi) compositionRoiLocked = false
+        val useCompositionRoi = armed && compositionRoiLocked &&
+            compositionProfile != null && supportsCenteredCompositionRoi
+        val result = MaterialDetector.analyse(
+            bitmap,
+            fullFrame = !useCompositionRoi,
+            region = if (useCompositionRoi) compositionProfile?.detectorRegion() else null
+        )
+        latestMaterial = result
+        // For paired jewellery, judge detail on one actual gold lobe. The old
+        // union rectangle included the empty gap and could report a misleading
+        // score unrelated to the surface Sony was supposed to focus.
+        val focusTarget = jewelleryFocusTarget(result, compositionProfile)
+        latestSharpness = focusTarget?.detailBounds
+            ?.let { SharpnessAnalyzer.score(bitmap, it) } ?: 0f
+        val cameraAssists = CameraAssistAnalyzer.analyse(bitmap, result.bounds)
+        val present = isTrustedMaterialTarget(result)
+        val resultBounds = result.bounds
+        if (!present || resultBounds == null) {
+            if (compositionRoiLocked) {
+                compositionRoiLocked = false
+                Log.i(TAG, "Composition ROI lost target; expanding to full-frame acquisition")
+            }
+        } else if (!compositionRoiLocked && compositionProfile != null &&
+            supportsCenteredCompositionRoi
+        ) {
+            val cx = (resultBounds.x0 + resultBounds.x1) * 0.5f
+            val cy = (resultBounds.y0 + resultBounds.y1) * 0.5f
+            val roi = compositionProfile.detectorRegion()
+            val goldInsideRoi = result.points.count {
+                it.gold && it.x >= roi.x0 && it.x <= roi.x1 && it.y >= roi.y0 && it.y <= roi.y1
+            }
+            if (goldInsideRoi >= 3 &&
+                kotlin.math.abs(cx - 0.5f) <= 0.10f &&
+                kotlin.math.abs(cy - 0.5f) <= 0.10f
+            ) {
+                compositionRoiLocked = true
+                Log.i(TAG, "Composition ROI locked category=${compositionProfile.categoryKey}")
+            }
+        }
+        if (present != lastSonyMaterialPresent) {
+            lastSonyMaterialPresent = present
+            val detectedAt = System.nanoTime()
+            Log.i(
+                TAG,
+                "Sony item presence=$present " +
+                    "detectorMs=${(System.nanoTime() - analysisStartedAt) / 1_000_000L} " +
+                    "coverage=${result.coverage} sharpness=$latestSharpness"
+            )
+            if (present) {
+                sonyItemDetectedAtNanos = detectedAt
+                sonyFocusLockedForItem = false
+                // AF-C/Pre-AF handles acquisition. Do not interrupt Live View
+                // with a touch-focus command on every detector transition.
+            } else {
+                sonyItemDetectedAtNanos = 0L
+                sonyFocusLockedForItem = false
+            }
+        }
+        val focus = sonyProduction.currentFocusIndication()
+        if (present && !sonyFocusLockedForItem && (focus == 2 || focus == 6)) {
+            val detectedAt = sonyItemDetectedAtNanos
+            if (detectedAt != 0L) {
+                sonyFocusLockedForItem = true
+                Log.i(
+                    TAG,
+                    "Sony item focus locked detectToLockMs=" +
+                        "${(System.nanoTime() - detectedAt) / 1_000_000L} " +
+                        "focusIndication=$focus sharpness=$latestSharpness"
+                )
+            }
+        }
+        lastMaterialRotationDegrees = 0
+        val goldPoints = result.points.filter { it.gold }
+        val standGuidance = result.bounds?.let { bounds ->
+            StandDistanceGuide.calculate(
+                widthFraction = bounds.x1 - bounds.x0,
+                heightFraction = bounds.y1 - bounds.y0,
+                currentZoom = cameraZoomRatio(),
+                maxZoom = SONY_MAX_ZOOM_RATIO,
+                desiredArea = compositionProfile?.targetArea
+                    ?: StandDistanceGuide.DESIRED_FRAME_AREA,
+                targetAspect = compositionProfile?.normalizedFrameAspect
+            )
+        }
+        handler.post {
+            if (!isDestroyed && activeCameraSource == ProductionCameraSource.SONY) {
+                binding.boundsOverlay.update(
+                    goldPoints,
+                    bitmap.width,
+                    bitmap.height,
+                    rotationDegrees = 0,
+                    fitCenter = true
+                )
+                binding.boundsOverlay.updateCameraAssists(cameraAssists)
+                binding.boundsOverlay.updateCameraFocus(
+                    sonyFocusX,
+                    sonyFocusY,
+                    sonyProduction.currentFocusSnapshot()?.indication
+                )
+                renderStandDistanceGuide(standGuidance, compositionProfile)
+            }
+        }
+    }
+
+    private data class JewelleryFocusTarget(
+        val x: Float,
+        val y: Float,
+        val detailBounds: MaterialDetector.Bounds
+    )
+
+    /** Keep pair composition centred on the pair, but focus and measure
+     * detail on one real gold ornament rather than the empty midpoint. */
+    private fun jewelleryFocusTarget(
+        result: MaterialDetector.Result?,
+        profile: CaptureCompositionProfiles.Profile? =
+            CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
+    ): JewelleryFocusTarget? {
+        val bounds = result?.bounds ?: return null
+        val fallback = JewelleryFocusTarget(
+            (bounds.x0 + bounds.x1) * 0.5f,
+            (bounds.y0 + bounds.y1) * 0.5f,
+            bounds
+        )
+        if (!isSplitPairProfile(profile)) return fallback
+
+        val gold = result.points.filter { it.gold }
+        if (gold.isEmpty()) return fallback
+        val splitX = (bounds.x0 + bounds.x1) * 0.5f
+        val left = gold.filter { it.x <= splitX }
+        val right = gold.filter { it.x > splitX }
+        // Fixed left-first choice prevents a symmetric pair's focus target
+        // from hopping between lobes as highlight counts fluctuate.
+        val cluster = left.takeIf { it.isNotEmpty() }
+            ?: right.takeIf { it.isNotEmpty() }
+            ?: return fallback
+
+        fun median(values: List<Float>): Float {
+            val sorted = values.sorted()
+            val middle = sorted.size / 2
+            return if (sorted.size % 2 == 0) {
+                (sorted[middle - 1] + sorted[middle]) * 0.5f
+            } else sorted[middle]
+        }
+
+        val focusX = median(cluster.map { it.x }).coerceIn(0f, 1f)
+        val focusY = median(cluster.map { it.y }).coerceIn(0f, 1f)
+        val rawX0 = cluster.minOf { it.x }
+        val rawY0 = cluster.minOf { it.y }
+        val rawX1 = cluster.maxOf { it.x }
+        val rawY1 = cluster.maxOf { it.y }
+        val halfWidth = maxOf(0.04f, (rawX1 - rawX0) * 0.65f)
+        val halfHeight = maxOf(0.04f, (rawY1 - rawY0) * 0.65f)
+        return JewelleryFocusTarget(
+            focusX,
+            focusY,
+            MaterialDetector.Bounds(
+                (focusX - halfWidth).coerceAtLeast(0f),
+                (focusY - halfHeight).coerceAtLeast(0f),
+                (focusX + halfWidth).coerceAtMost(1f),
+                (focusY + halfHeight).coerceAtMost(1f)
+            )
+        )
+    }
+
+    private fun isSplitPairProfile(profile: CaptureCompositionProfiles.Profile?): Boolean =
+        when (profile?.silhouette) {
+            CaptureCompositionProfiles.Silhouette.HOOP_PAIR,
+            CaptureCompositionProfiles.Silhouette.STUD_PAIR,
+            CaptureCompositionProfiles.Silhouette.DROP_PAIR -> true
+            else -> false
+        }
+
+    /** Relative-distance guidance needs no depth sensor or AI. The apparent
+     * ornament area from the deterministic material detector plus the
+     * current/maximum optical zoom gives the target distance ratio. Staff
+     * move the stand until the centered dashed frame and message turn green. */
+    private fun renderStandDistanceGuide(
+        guidance: StandDistanceGuide.Guidance?,
+        profile: CaptureCompositionProfiles.Profile?
+    ) {
+        if (phase != Phase.JEWEL || activeCameraSource != ProductionCameraSource.SONY ||
+            guidance == null
+        ) {
+            clearStandDistanceGuide()
+            return
+        }
+        val previous = standDistanceRatioEma
+        val smoothed = if (previous == null) guidance.rawDistanceRatio
+        else previous + 0.22f * (guidance.rawDistanceRatio - previous)
+        standDistanceRatioEma = smoothed
+        val direction = StandDistanceGuide.direction(smoothed)
+        binding.standGuideText.visibility = View.VISIBLE
+        val geometryMessage = StandDistanceGuide.message(guidance, smoothed)
+        val profileMessage = profile?.let {
+            "${it.label} • ${it.mount.instruction}"
+        }
+        val opticalLimit = profile?.opticalPlan()?.takeUnless { it.requestedCompositionAchievable }
+            ?.let {
+                "Kit-lens limit • retain approximately ${it.projectedWidthPixels}×${it.projectedHeightPixels}px for crop"
+            }
+        binding.standGuideText.text = listOfNotNull(profileMessage, geometryMessage, opticalLimit)
+            .joinToString("\n")
+        binding.standGuideText.setTextColor(
+            ContextCompat.getColor(
+                this,
+                if (direction == StandDistanceGuide.Direction.READY) R.color.green_ready
+                else R.color.amber_working
+            )
+        )
+        if (profile != null) {
+            binding.boundsOverlay.updateCompositionGuide(
+                profile,
+                guidance.targetWidth,
+                guidance.targetHeight,
+                direction == StandDistanceGuide.Direction.READY
+            )
+        } else {
+            binding.boundsOverlay.updateStandGuide(
+                guidance.targetWidth,
+                guidance.targetHeight,
+                direction == StandDistanceGuide.Direction.READY
+            )
+        }
+    }
+
+    private fun clearStandDistanceGuide() {
+        standDistanceRatioEma = null
+        binding.standGuideText.visibility = View.GONE
+        binding.boundsOverlay.clearStandGuide()
+    }
+
+    private data class BarcodeNv21(val bytes: ByteArray, val width: Int, val height: Int)
+
+    /** ML Kit only needs luminance for tag edges. Scale once into reusable
+     * 640px storage, then reuse ARGB/NV21 buffers. This keeps tag work off the
+     * 25fps stream/UI paths and removes per-scan garbage collection stalls. */
+    private fun bitmapToGrayscaleNv21(bitmap: Bitmap): BarcodeNv21 {
+        val sourceWidth = bitmap.width
+        val sourceHeight = bitmap.height
+        val scale = min(1f, SONY_TAG_ANALYSIS_LONG_EDGE.toFloat() / max(sourceWidth, sourceHeight))
+        val width = max(2, (sourceWidth * scale).toInt() and -2)
+        val height = max(2, (sourceHeight * scale).toInt() and -2)
+        val analysisBitmap = if (width == sourceWidth && height == sourceHeight) {
+            bitmap
+        } else {
+            var scaled = barcodeScaledBitmap
+            if (scaled == null || scaled.width != width || scaled.height != height) {
+                scaled?.recycle()
+                scaled = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                barcodeScaledBitmap = scaled
+            }
+            Canvas(scaled).drawBitmap(bitmap, null, Rect(0, 0, width, height), barcodeScalePaint)
+            scaled
+        }
         val frameSize = width * height
-        val pixels = IntArray(frameSize)
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-        val nv21 = ByteArray(frameSize + frameSize / 2)
-        for (i in pixels.indices) {
-            val pixel = pixels[i]
+        if (barcodeArgbBuffer.size < frameSize) barcodeArgbBuffer = IntArray(frameSize)
+        val nv21Size = frameSize + frameSize / 2
+        if (barcodeNv21Buffer.size < nv21Size) barcodeNv21Buffer = ByteArray(nv21Size)
+        analysisBitmap.getPixels(barcodeArgbBuffer, 0, width, 0, 0, width, height)
+        for (i in 0 until frameSize) {
+            val pixel = barcodeArgbBuffer[i]
             val red = (pixel shr 16) and 0xff
             val green = (pixel shr 8) and 0xff
             val blue = pixel and 0xff
-            nv21[i] = ((77 * red + 150 * green + 29 * blue) shr 8).toByte()
+            barcodeNv21Buffer[i] = ((77 * red + 150 * green + 29 * blue) shr 8).toByte()
         }
-        Arrays.fill(nv21, frameSize, nv21.size, 128.toByte())
-        return nv21
+        Arrays.fill(barcodeNv21Buffer, frameSize, nv21Size, 128.toByte())
+        return BarcodeNv21(barcodeNv21Buffer, width, height)
     }
 
     /** Checks whether this phone exposes its own computational-photography
@@ -1989,12 +2344,14 @@ class MainActivity : AppCompatActivity() {
         // bad decode. A different decoded value immediately releases it.
         if (trimmed == invalidTagCode) return
         invalidTagCode = null
-        // Two matching reads inside the latest four positive frames. Faster
-        // than demanding adjacent reads when glare causes a missed frame,
-        // while still refusing a one-frame hallucination. Server validation
-        // below is the final authoritative accuracy gate.
+        // A strict stock-label-shaped decode can go directly to the
+        // authoritative catalogue lookup. Requiring it twice made a real
+        // label wait for a second rare glare-free frame. Non-standard values
+        // still require two matching positive frames.
         tagCodeHistory = (tagCodeHistory + trimmed).takeLast(4).toMutableList()
-        stableTagCode = if (tagCodeHistory.count { it == trimmed } >= 2) trimmed else null
+        stableTagCode = if (
+            TAG_CODE_PATTERN.matches(trimmed) || tagCodeHistory.count { it == trimmed } >= 2
+        ) trimmed else null
         if (stableTagCode != null) {
             resolveCategoryForCurrentTag()
         }
@@ -2208,19 +2565,12 @@ class MainActivity : AppCompatActivity() {
                     return@captureTagFrame
                 }
                 tagJpeg = bytes
-                showCapturePreview(
-                    bytes,
-                    // Tag is FIRST under the #76 flip -- move on to the
-                    // jewel photos (MAIN/angle1/angle2) instead of
-                    // uploading immediately. resetForNewItem(Phase.JEWEL)
-                    // does not clear tagJpeg/stableTagCode, only jewel-side
-                    // state, so the tag just captured survives into upload.
-                    // promptToPlaceMainItem() gates the actual hunt/detect
-                    // loop behind a READY tap -- see its doc comment.
-                    onProceed = { resetForNewItem(Phase.JEWEL); promptToPlaceMainItem() },
-                    onRetake = { retakeTag() },
-                    onCancel = { cancelItem() }
-                )
+                // The catalogue already validated the decoded tag. A forced
+                // two-second image-review countdown only held production and
+                // looked like failed detection. Preserve evidence, then move
+                // immediately to ornament placement.
+                resetForNewItem(Phase.JEWEL)
+                promptToPlaceMainItem()
             }
         }
     }
@@ -2233,14 +2583,7 @@ class MainActivity : AppCompatActivity() {
             captureFullRes(onResult)
             return
         }
-        val bitmap = latestSonyPreviewBitmap
-        if (bitmap == null) {
-            onResult(null)
-            return
-        }
-        val output = ByteArrayOutputStream()
-        val ok = bitmap.compress(Bitmap.CompressFormat.JPEG, 95, output)
-        onResult(if (ok) output.toByteArray() else null)
+        onResult(sonyProduction.currentLiveViewJpeg())
     }
 
     /**
@@ -2362,7 +2705,7 @@ class MainActivity : AppCompatActivity() {
         // MaterialDetector's own bounds exist -- that's the actual "no
         // position estimate at all" case, not "coverage momentarily read
         // low."
-        if (result == null || (bestObjectBox() == null && result.bounds == null)) {
+        if (result == null || (bestObjectBox() == null && !isTrustedMaterialTarget(result))) {
             // Lost the piece -- likely walked out of frame on a zoom step
             // (digital/hybrid zoom on this class of lens is still centre-
             // anchored). Ease back to re-acquire rather than climbing
@@ -2372,8 +2715,15 @@ class MainActivity : AppCompatActivity() {
             // zero-detection tick can still be a one-off glitch.
             materialLossStreak += 1
             if (materialLossStreak < MATERIAL_LOSS_GRACE_TICKS) {
-                setStatus("Re-centre the item…", ready = false)
+                setStatus("Tracking ornament — reacquiring…", ready = false)
                 return
+            }
+            // A real target that disappears immediately after our last
+            // gimbal nudge was probably pushed out of frame. Let the existing
+            // exact-duration revert path undo that move; tiny warm fragments
+            // are deliberately treated as lost here too.
+            if (result != null && rsc2.isReady) {
+                attemptCenteringCorrection(result)
             }
             val zoom = cameraZoomRatio()
             if (zoom > ZOOM_BACKOFF_MIN_ZOOM) {
@@ -2381,71 +2731,10 @@ class MainActivity : AppCompatActivity() {
                 stepFocusAttempts = 0
                 focusTriggeredThisLevel = false
             }
-            setStatus("Re-centre the item…", ready = false)
+            setStatus("Tracking ornament — reacquiring…", ready = false)
             return
         }
         materialLossStreak = 0
-
-        if (result.material && now - armedAt > MAX_STALL_MS) {
-            // Absolute safety valve -- accept the best frame on offer rather
-            // than cycling forever. This used to call captureJewel() with
-            // zero regard for focus/sharpness at all, which is exactly how
-            // a shot could come out blurred: if AF genuinely never
-            // converges (low-texture surface, awkward angle), stall expiry
-            // fired mid-scan and shuttered on whatever was live that
-            // instant. Now it still gives up eventually, but only after one
-            // last forced re-focus, and only accepts a plainly-soft frame
-            // if that final attempt also failed.
-            val relaxedSharp = latestSharpness >= SHARPNESS_THRESHOLD * 0.6f
-            if (relaxedSharp) {
-                if (meetsHardCaptureRules()) {
-                    captureJewel()
-                    return
-                }
-                // Focus is fine but the non-negotiable occupancy/centering
-                // rules aren't met -- fall through to the normal zoom-climb
-                // /centering logic below instead of returning, so the
-                // pipeline keeps actively working toward compliance rather
-                // than getting stuck re-entering this stall branch forever.
-            } else {
-                if (stallGraceAt == 0L) {
-                    stallGraceAt = now
-                    val focusBounds = result.bounds
-                    triggerCameraAutoFocus(
-                        physicalSony = activeCameraSource == ProductionCameraSource.SONY,
-                        normalizedX = focusBounds?.let { (it.x0 + it.x1) * 0.5f },
-                        normalizedY = focusBounds?.let { (it.y0 + it.y1) * 0.5f }
-                    )
-                    setStatus("Focusing…", ready = false)
-                    return
-                }
-                if (now - stallGraceAt < 800L) {
-                    setStatus("Focusing…", ready = false)
-                    return
-                }
-                // Final forced re-focus also failed. A CATASTROPHICALLY low
-                // reading here (not just "a bit soft") means autofocus
-                // never converged at all in 12+ seconds of trying -- the
-                // signature of a subject closer than this lens can
-                // physically focus (this phone's main lens floor is ~10cm,
-                // confirmed via Camera2 characteristics; see CameraDiag
-                // logs). Capturing anyway would silently save an unusable
-                // photo with no way for staff to know why.
-                if (latestSharpness < TOO_CLOSE_SHARPNESS_FLOOR && !tooCloseWarned) {
-                    tooCloseWarned = true
-                    armedAt = now
-                    stallGraceAt = 0L
-                    setStatus("Too close to focus — move the ornament back a little", ready = false)
-                    return
-                }
-                if (meetsHardCaptureRules()) {
-                    captureJewel()
-                    return
-                }
-                // Focus forced through but occupancy/centering still not
-                // met -- same fall-through as above, non-negotiable either way.
-            }
-        }
 
         // Concurrent centering, not deferred to the end -- per explicit
         // request (2026-08-18): before this, attemptCenteringCorrection()
@@ -2459,25 +2748,22 @@ class MainActivity : AppCompatActivity() {
         // serialize; firing a centering correction every tick regardless
         // of zoom-climb phase lets both run concurrently.
         //
-        // maxAttempts = Int.MAX_VALUE here, NOT the default
-        // CENTERING_MAX_ATTEMPTS(4) -- that budget was tuned for the OLD
-        // design where this only ran occasionally (once readyStreak hit
-        // 3). Calling it every tick now burns through 4 attempts in well
-        // under a second, after which it silently gives up for the rest
-        // of the item since nothing else resets centeringAttempts.
-        // Confirmed live (2026-08-18): ring visibly off-center near the
-        // frame edge, af=LOCKED, gimbal completely idle, stuck cycling
-        // "Adjusting framing" forever -- centering had given up almost
-        // immediately and never got to retry. Per the standing "keep gold
-        // centered by all means necessary" rule, this loop should keep
-        // trying every tick, not exhaust a budget meant for a rare
-        // one-shot check.
-        if (rsc2.isReady) attemptCenteringCorrection(result, maxAttempts = Int.MAX_VALUE)
+        // Production hardwall: never replace the bounded correction budget
+        // with Int.MAX_VALUE here. Live LR22/18 testing (2026-08-25) proved
+        // that a flickering target could otherwise enter an endless
+        // nudge/lost/revert loop (182+ actions) and physically hunt for
+        // minutes. Four actions are enough to establish convergence. If
+        // they do not converge, stop moving; the operator can reposition
+        // the piece or explicitly enter manual mode with zoom +/-.
+        if (rsc2.isReady) attemptCenteringCorrection(result)
 
         val zoom = cameraZoomRatio()
         val zoomRange = cameraZoomRange()
-        val atZoomCeiling = zoom >= min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO) - 0.02f ||
-            zoom >= maxUsableZoom - 0.02f
+        val effectiveZoomCeiling = min(
+            min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO),
+            maxUsableZoom
+        )
+        val atZoomCeiling = zoom >= effectiveZoomCeiling - 0.02f
         // At the ceiling, accept whatever coverage is on offer as "the best
         // framing available" -- but this must NOT mean skipping focus
         // verification. It previously called captureJewel() directly here,
@@ -2539,7 +2825,7 @@ class MainActivity : AppCompatActivity() {
         // across the ring's engraved face despite the corrector running.
         // Gating capture on this (not just adjusting exposure and hoping)
         // closes that gap.
-        val goldOverexposed = result.highlightClipFraction > 0f
+        val goldOverexposed = result.highlightClipFraction >= GOLD_CLIP_HIGH
         // Explicit phase label for diagnostics, in the spirit of the DINO/
         // MIL branch's VisionState enum (2026-08-18 port) -- derived
         // read-only from signals already computed above, no new EMA-
@@ -2554,7 +2840,10 @@ class MainActivity : AppCompatActivity() {
             readyStreak > 0 -> "HOLDING(${readyStreak}/${REQUIRED_READY_TICKS})"
             else -> "FRAMING"
         }
-        Log.d(TAG, "tickJewel phase=$trackPhase coverage=${result.coverage} colourOccupancy=$colourOccupancy mlOccupancy=$mlOccupancy zoom=$zoom coverageOk=$coverageOk bounds=${b?.let { "[${it.x0},${it.y0},${it.x1},${it.y1}] cx=${(it.x0+it.x1)/2f} cy=${(it.y0+it.y1)/2f}" } ?: "null"}")
+        if (now - lastTrackingLogAt >= TRACKING_LOG_INTERVAL_MS) {
+            lastTrackingLogAt = now
+            Log.d(TAG, "tickJewel phase=$trackPhase coverage=${result.coverage} colourOccupancy=$colourOccupancy mlOccupancy=$mlOccupancy zoom=$zoom coverageOk=$coverageOk bounds=${b?.let { "[${it.x0},${it.y0},${it.x1},${it.y1}] cx=${(it.x0+it.x1)/2f} cy=${(it.y0+it.y1)/2f}" } ?: "null"}")
+        }
 
         // isCenteredNow() folded in here, not just checked once right before
         // firing -- confirmed live (2026-08-18): bounds cx can drift steadily
@@ -2671,13 +2960,16 @@ class MainActivity : AppCompatActivity() {
             // exact same problem zoom every time, failed focus again,
             // backed off again, forever: the "zooms in, zooms back out,
             // keeps cycling" loop.
-            val climbCeiling = min(min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO), maxUsableZoom)
+            val climbCeiling = effectiveZoomCeiling
             val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(climbCeiling)
-            smoothZoomTo(next)
-            stepFocusAttempts = 0
-            focusTriggeredThisLevel = false
-            setStatus("Zooming in…", ready = false)
-            return
+            if (next > zoom + 0.01f) {
+                smoothZoomTo(next)
+                stepFocusAttempts = 0
+                focusTriggeredThisLevel = false
+                focusEvaluationNotBefore = 0L
+                setStatus("Zooming in…", ready = false)
+                return
+            }
         }
 
         // Coverage is trustworthy now. Still give the lens/sensor a moment
@@ -2693,12 +2985,20 @@ class MainActivity : AppCompatActivity() {
             // One decisive trigger per zoom level -- not re-fired every
             // tick while waiting for its result, that restart-storm was
             // the other half of the hunting complaint.
-            focusTriggeredThisLevel = true
-            triggerCameraAutoFocus(
+            val focusTarget = jewelleryFocusTarget(result)
+            focusTriggeredThisLevel = triggerCameraAutoFocus(
                 physicalSony = activeCameraSource == ProductionCameraSource.SONY,
-                normalizedX = b?.let { (it.x0 + it.x1) * 0.5f },
-                normalizedY = b?.let { (it.y0 + it.y1) * 0.5f }
+                normalizedX = focusTarget?.x,
+                normalizedY = focusTarget?.y
             )
+            if (focusTriggeredThisLevel) {
+                focusEvaluationNotBefore = now + FOCUS_EVALUATION_DELAY_MS
+            }
+            setStatus("Focusing…", ready = false)
+            return
+        }
+
+        if (now < focusEvaluationNotBefore) {
             setStatus("Focusing…", ready = false)
             return
         }
@@ -2711,25 +3011,16 @@ class MainActivity : AppCompatActivity() {
         }
         if (!focusLocked || !sharpEnough) {
             if (focusFailed || !sharpEnough) {
-                stepFocusAttempts += 1
-                if (stepFocusAttempts <= MAX_FOCUS_RETRIES) {
-                    // One more genuine, decisive attempt at this SAME zoom
-                    // level (falls through to the focusTriggeredThisLevel
-                    // branch above on the next tick).
-                    focusTriggeredThisLevel = false
-                    setStatus("Focusing…", ready = false)
+                // Never hammer AF repeatedly at an unfocusable magnification.
+                // Step optically wider, settle, aim at the same real-gold
+                // target and try once at the new level. maxUsableZoom makes
+                // the failed level a hard ceiling so the climb cannot undo
+                // the backoff and oscillate.
+                if (backOffOneZoomForFocus()) {
                     return
                 }
-                // Retries exhausted -- step BACK, never forward into a level
-                // even less likely to resolve.
-                stepFocusAttempts = 0
-                val backedOff = (zoom * ZOOM_BACKOFF_RATIO).coerceAtLeast(zoomRange.start)
-                if (backedOff < zoom - 0.05f) {
-                    maxUsableZoom = backedOff
-                    smoothZoomTo(backedOff)
-                }
-                focusTriggeredThisLevel = false
-                setStatus("Focusing…", ready = false)
+                focusTriggeredThisLevel = true
+                setStatus("Still blurred at full wide — move the stand slightly back", ready = false)
                 return
             }
             setStatus("Focusing…", ready = false)
@@ -2861,47 +3152,68 @@ class MainActivity : AppCompatActivity() {
      * range (exposureControlAvailable() false) -- fails open rather than
      * guessing at unsupported values. */
     private fun applyAutoExposure(result: MaterialDetector.Result) {
-        if (!cameraExposureControlAvailable()) return
+        if (manualExposureOverride || !cameraExposureControlAvailable() ||
+            !isTrustedMaterialTarget(result)
+        ) {
+            exposureClipStreak = 0
+            exposureClearStreak = 0
+            return
+        }
         val now = System.currentTimeMillis()
         val adjustInterval = if (activeCameraSource == ProductionCameraSource.SONY) {
             SONY_EXPOSURE_ADJUST_INTERVAL_MS
         } else EXPOSURE_ADJUST_INTERVAL_MS
         if (now - lastExposureAdjustAt < adjustInterval) return
+        val goldOverexposed = result.highlightClipFraction >= GOLD_CLIP_HIGH
+        val goldClearlyFine = result.highlightClipFraction <= GOLD_CLIP_LOW
+        exposureClipStreak = if (goldOverexposed) exposureClipStreak + 1 else 0
+        exposureClearStreak = if (goldClearlyFine) exposureClearStreak + 1 else 0
+        if (exposureClipStreak < EXPOSURE_CONFIRM_TICKS &&
+            exposureClearStreak < EXPOSURE_CLEAR_TICKS
+        ) return
         lastExposureAdjustAt = now
-        // highlightClipFraction alone wasn't enough -- confirmed live
-        // (2026-08-18): every capture came out overexposed while
-        // highlightClipFraction read 0.0 nearly every tick. That metric is
-        // GOLD-sample-only; with a small/under-framed piece there are only
-        // a handful of gold samples per frame at all, and even when the
-        // piece is well-framed, the gold itself not clipping says nothing
-        // about a bright washed-out BACKGROUND clipping, which is what was
-        // actually happening. sceneClipFraction (all sampled cells, any
-        // classification) catches that; react to whichever signal is worse.
-        // GOLD clipping at all (2026-08-18, explicit request): any part of
-        // the gold reading blown-out white means real design detail is
-        // already being lost there -- no percentage floor makes sense for
-        // that judgment, unlike the general scene-brightness signal below.
-        // Silver's own trigger will need separate tuning later (different
-        // reflectance behaviour) -- this is gold-specific for now.
-        val goldOverexposed = result.highlightClipFraction > 0f
         val range = cameraExposureRangeEv()
         val floor = max(range.start, EXPOSURE_MIN_EV)
         val before = autoExposureEv
-        when {
-            goldOverexposed || result.sceneClipFraction > HIGHLIGHT_CLIP_HIGH ->
-                autoExposureEv = (autoExposureEv - EXPOSURE_STEP_EV).coerceAtLeast(floor)
-            !goldOverexposed && result.sceneClipFraction < HIGHLIGHT_CLIP_LOW && autoExposureEv < 0f ->
-                autoExposureEv = (autoExposureEv + EXPOSURE_STEP_EV).coerceAtMost(0f)
+        val target = when {
+            exposureClipStreak >= EXPOSURE_CONFIRM_TICKS ->
+                (before - EXPOSURE_STEP_EV).coerceAtLeast(floor)
+            exposureClearStreak >= EXPOSURE_CLEAR_TICKS && before < 0f ->
+                (before + EXPOSURE_STEP_EV).coerceAtMost(0f)
+            else -> before
         }
-        // Do not submit an unchanged EV. Sony currently applies this through
-        // a bounded session transition; the old unconditional call caused a
-        // needless disconnect/reconnect every 250 ms even after AE had
-        // converged. One command per actual 1 EV step preserves automatic
-        // highlight protection without continuously destroying Live View.
-        if (autoExposureEv != before) {
-            setCameraExposureCompensationEv(autoExposureEv)
+        exposureClipStreak = 0
+        exposureClearStreak = 0
+        if (target != before) queueAutoExposure(target)
+        Log.d(TAG, "applyAutoExposure goldClip=${result.highlightClipFraction} sceneClipIgnored=${result.sceneClipFraction} before=$before target=$target floor=$floor")
+    }
+
+    /** Latest-wins exposure queue. Do not update state until Sony ACKs. */
+    private fun queueAutoExposure(targetEv: Float) {
+        if (activeCameraSource != ProductionCameraSource.SONY) {
+            autoExposureEv = targetEv
+            setCameraExposureCompensationEv(targetEv)
+            return
         }
-        Log.d(TAG, "applyAutoExposure goldClip=${result.highlightClipFraction} sceneClip=${result.sceneClipFraction} before=$before after=$autoExposureEv floor=$floor")
+        if (!exposureCommandInFlight && pendingAutoExposureEv == null && targetEv == autoExposureEv) {
+            return
+        }
+        pendingAutoExposureEv = targetEv
+        if (!exposureCommandInFlight) drainAutoExposureQueue()
+    }
+
+    private fun drainAutoExposureQueue() {
+        val target = pendingAutoExposureEv ?: return
+        pendingAutoExposureEv = null
+        exposureCommandInFlight = true
+        sonyProduction.setExposureCompensationEv(target) { ok ->
+            if (ok) autoExposureEv = target
+            exposureCommandInFlight = false
+            if (!ok) Log.w(TAG, "Sony auto exposure command failed target=$target")
+            if (pendingAutoExposureEv != null && pendingAutoExposureEv != autoExposureEv) {
+                drainAutoExposureQueue()
+            }
+        }
     }
 
     /** The NON-NEGOTIABLE capture rules: the gimbal must not be mid-move
@@ -3078,10 +3390,15 @@ class MainActivity : AppCompatActivity() {
      * agreement. Require several gold samples so one isolated warm pixel
      * cannot arm target-guided gimbal movement. Blind movement remains
      * independently hard-disabled by AUTONOMOUS_BLIND_HUNT_ENABLED. */
+    private fun isTrustedMaterialTarget(material: MaterialDetector.Result): Boolean {
+        val bounds = material.bounds ?: return false
+        return bounds.area() >= MIN_TRUSTED_TARGET_AREA &&
+            material.points.count { it.gold } >= MIN_TRUSTED_GOLD_POINTS
+    }
+
     private fun detectedNow(): Boolean {
         val material = latestMaterial
-        val boundedGold = material?.bounds != null && material.points.count { it.gold } >= 8
-        return material?.material == true || boundedGold || bestObjectBox() != null
+        return (material != null && isTrustedMaterialTarget(material)) || bestObjectBox() != null
     }
 
     /** Active gimbal search for MAIN, used only once nothing has been
@@ -3277,7 +3594,9 @@ class MainActivity : AppCompatActivity() {
         // attempt, rather than continuing to push the axis that just lost
         // it. "What works" pattern per live testing: one axis at a time,
         // revert on loss, try the other axis next.
-        if (lastCenterAxis != CenterAxis.NONE && bestObjectBox() == null && result.bounds == null) {
+        if (lastCenterAxis != CenterAxis.NONE && bestObjectBox() == null &&
+            !isTrustedMaterialTarget(result)
+        ) {
             centeringAttempts += 1
             val axis = lastCenterAxis
             val sign = lastCenterSign
@@ -3336,7 +3655,11 @@ class MainActivity : AppCompatActivity() {
                 if (needsPan) {
                     choosePan = true
                 } else {
-                    Log.w(TAG, "centering: tilt budget exhausted (ms=$centeringTiltMs) and pan not needed -- giving up this round")
+                    val now = System.currentTimeMillis()
+                    if (now - lastCenterLimitLogAt >= TRACKING_LOG_INTERVAL_MS) {
+                        lastCenterLimitLogAt = now
+                        Log.w(TAG, "centering: tilt budget exhausted (ms=$centeringTiltMs) and pan not needed")
+                    }
                     lastCenterAxis = CenterAxis.NONE
                     return false
                 }
@@ -3353,7 +3676,11 @@ class MainActivity : AppCompatActivity() {
                 if (needsTilt) {
                     choosePan = false
                 } else {
-                    Log.w(TAG, "centering: pan budget exhausted (ms=$centeringPanMs) and tilt not needed -- giving up this round")
+                    val now = System.currentTimeMillis()
+                    if (now - lastCenterLimitLogAt >= TRACKING_LOG_INTERVAL_MS) {
+                        lastCenterLimitLogAt = now
+                        Log.w(TAG, "centering: pan budget exhausted (ms=$centeringPanMs) and tilt not needed")
+                    }
                     lastCenterAxis = CenterAxis.NONE
                     return false
                 }
@@ -3569,18 +3896,25 @@ class MainActivity : AppCompatActivity() {
             // Real focus verification still comes from Camera2's actual
             // CONTROL_AF_STATE + the steady-hold debounce in tickJewel,
             // which ARE trustworthy.
-            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            val raw = bmp?.let { SharpnessAnalyzer.scoreBitmapRaw(it) }
-            Log.i(TAG, "jewel capture fullRes sharpness raw=$raw size=${bmp?.width}x${bmp?.height} liveSharp=$latestSharpness")
-            bmp?.recycle()
-
             jewelCaptureRetries = 0
             jewelJpeg = bytes
+            // Calibration only. Never hold the UI or captured-image choice
+            // behind a full 26MP bitmap decode; the original JPEG bytes stay
+            // untouched for saving/uploading.
+            lifecycleScope.launch(Dispatchers.Default) {
+                val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
+                val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+                val raw = bmp?.let { SharpnessAnalyzer.scoreBitmapRaw(it) }
+                Log.i(TAG, "jewel capture sampled sharpness raw=$raw size=${bmp?.width}x${bmp?.height} liveSharp=$latestSharpness")
+                bmp?.recycle()
+            }
             showCapturePreview(
                 bytes,
                 onProceed = { onMainCaptureAccepted() },
+                onComplete = { completeAfterMainCapture() },
                 onRetake = { retakeJewel() },
-                onCancel = { cancelItem() }
+                onCancel = { cancelItem() },
+                requireManualConfirm = true
             )
         }
     }
@@ -3625,6 +3959,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** MAIN is sufficient for items without a multi-angle requirement. Keep
+     * the same lossless single-image upload path; only restore any accumulated
+     * gimbal correction before completing the item. */
+    private fun completeAfterMainCapture() {
+        Log.i(TAG, "completeAfterMainCapture: operator selected single-angle item")
+        inAngleSequence = false
+        setStatus("Completing item…", ready = false)
+        undoCenteringThenAdvance { uploadCapturedSet() }
+    }
+
     private fun waitForGimbalReady(attemptsLeft: Int = GIMBAL_READY_GRACE_ATTEMPTS, onResult: (Boolean) -> Unit) {
         if (rsc2.isReady) {
             onResult(true)
@@ -3665,10 +4009,14 @@ class MainActivity : AppCompatActivity() {
      * pan-sweep gate. The staff decides when the piece is actually
      * positioned; nothing should capture before that. */
     private fun promptForSideProfile(instruction: String, onReady: () -> Unit) {
+        angleCaptureRetryCount = 0
+        angleStableRefocusAttempts = 0
         setStatus(instruction, ready = false)
         showReadyButton {
             centeringAttempts = 0
             angleZoomRounds = 0
+            angleFocusTriggered = false
+            resetSonyAutomaticAfBudget()
             // Re-arms continuous AF as the baseline for this side's
             // tracking -- the MAIN capture's final triggerAutoFocus() lock
             // (or this same side's own, on a retake) does not resume
@@ -3700,6 +4048,15 @@ class MainActivity : AppCompatActivity() {
      * can start much further off-center than MAIN's fine correction ever
      * has to travel, hence the larger attempt budget passed here. */
     private fun centerThenCapture(onCentered: () -> Unit) {
+        // Zoom +/- is the explicit manual-mode switch. Angle capture used to
+        // ignore it and keep issuing RemoteTouchOperation in the background,
+        // so the lens visibly hunted even while the UI said "auto standing
+        // by". Stand down completely; MANUAL CAPTURE routes to the active
+        // side below.
+        if (manualModeActive) {
+            setStatus("Manual mode — tap MANUAL CAPTURE when sharp", ready = true)
+            return
+        }
         val result = latestMaterial
         // Continuous tracking follows the object through every nudge this
         // loop issues, including while the gimbal is physically still
@@ -3708,8 +4065,9 @@ class MainActivity : AppCompatActivity() {
         // not this call; this just keeps AF/AE aimed at the right place
         // the whole time so there's nothing to re-acquire once it stops.
         updateTrackingRegionFor(result)
-        if (result != null && result.material &&
+        if (result != null && isTrustedMaterialTarget(result) &&
             attemptCenteringCorrection(result, ANGLE_CENTERING_MAX_ATTEMPTS)) {
+            angleFocusTriggered = false
             handler.postDelayed({ centerThenCapture(onCentered) }, CENTERING_TICK_MS + 200L)
             return
         }
@@ -3722,9 +4080,12 @@ class MainActivity : AppCompatActivity() {
         if ((occupancy == null || occupancy < CAPTURE_MIN_OCCUPANCY) && angleZoomRounds < ANGLE_ZOOM_MAX_ROUNDS) {
             val zoom = cameraZoomRatio()
             val zoomRange = cameraZoomRange()
-            val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO))
+            val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(
+                min(min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO), maxUsableZoom)
+            )
             if (next > zoom + 0.01f) {
                 angleZoomRounds += 1
+                angleFocusTriggered = false
                 setStatus("Zooming in…", ready = false)
                 smoothZoomTo(next) {
                     handler.postDelayed({ centerThenCapture(onCentered) }, ZOOM_SETTLE_MS)
@@ -3732,12 +4093,14 @@ class MainActivity : AppCompatActivity() {
                 return
             }
         }
-        val bounds = latestMaterial?.bounds
-        triggerCameraAutoFocus(
-            physicalSony = activeCameraSource == ProductionCameraSource.SONY,
-            normalizedX = bounds?.let { (it.x0 + it.x1) * 0.5f },
-            normalizedY = bounds?.let { (it.y0 + it.y1) * 0.5f }
-        )
+        if (!angleFocusTriggered) {
+            val focusTarget = jewelleryFocusTarget(latestMaterial)
+            angleFocusTriggered = triggerCameraAutoFocus(
+                physicalSony = activeCameraSource == ProductionCameraSource.SONY,
+                normalizedX = focusTarget?.x,
+                normalizedY = focusTarget?.y
+            )
+        }
         waitForStableFrame("Focusing…") {
             if (!meetsHardCaptureRules()) {
                 // Non-negotiable: still not ≥75% of frame AND centered
@@ -3817,8 +4180,31 @@ class MainActivity : AppCompatActivity() {
                     return
                 }
                 if (now >= deadline) {
-                    Log.w(TAG, "waitForStableFrame forced after timeout present=$present edgeClipped=$edgeClipped focusLocked=$focusLocked sharp=$latestSharpness")
-                    onDetected()
+                    angleStableRefocusAttempts += 1
+                    Log.w(
+                        TAG,
+                        "waitForStableFrame timeout attempt=$angleStableRefocusAttempts " +
+                            "present=$present edgeClipped=$edgeClipped focusLocked=$focusLocked " +
+                            "sharp=$latestSharpness"
+                    )
+                    if (present && !edgeClipped && !wrongShape &&
+                        backOffOneZoomForFocus {
+                            angleFocusTriggered = false
+                            handler.postDelayed(
+                                { centerThenCapture(onDetected) },
+                                ZOOM_SETTLE_MS
+                            )
+                        }
+                    ) {
+                        angleFocusTriggered = false
+                    } else {
+                        setStatus("Still blurred at full wide — adjust stand, then tap READY", ready = false)
+                        showReadyButton {
+                            angleStableRefocusAttempts = 0
+                            angleFocusTriggered = false
+                            centerThenCapture(onDetected)
+                        }
+                    }
                     return
                 }
                 handler.postDelayed(this, 150L)
@@ -3844,7 +4230,10 @@ class MainActivity : AppCompatActivity() {
     private fun looksUnrotated(a: ByteArray, b: ByteArray): Boolean {
         val gridSize = 24
         fun grayscaleGrid(bytes: ByteArray): IntArray? {
-            val opts = BitmapFactory.Options().apply { inSampleSize = 8 }
+            // The result is reduced to a 24x24 luminance grid. Decoding a
+            // 6K original at 1/8 scale wasted hundreds of milliseconds and
+            // millions of pixels; 1/32 still gives far more than 24x24 input.
+            val opts = BitmapFactory.Options().apply { inSampleSize = 32 }
             val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
             val scaled = Bitmap.createScaledBitmap(decoded, gridSize, gridSize, true)
             val pixels = IntArray(gridSize * gridSize)
@@ -3876,25 +4265,37 @@ class MainActivity : AppCompatActivity() {
         onConfirmed: () -> Unit,
         onRetake: () -> Unit
     ) {
-        if (previousBytes != null && looksUnrotated(newBytes, previousBytes)) {
-            AlertDialog.Builder(this)
-                .setTitle("Item doesn't look moved")
-                .setMessage("This angle looks the same as the previous shot. Please turn/move the item, then retake.")
-                .setPositiveButton("Retake") { _, _ -> onRetake() }
-                .setNegativeButton("Use anyway") { _, _ -> onConfirmed() }
-                .setCancelable(false)
-                .show()
-        } else {
+        if (previousBytes == null) {
             onConfirmed()
+            return
+        }
+        lifecycleScope.launch {
+            val unmoved = withContext(Dispatchers.Default) {
+                looksUnrotated(newBytes, previousBytes)
+            }
+            if (unmoved) {
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Item doesn't look moved")
+                    .setMessage("This angle looks the same as the previous shot. Please turn/move the item, then retake.")
+                    .setPositiveButton("Retake") { _, _ -> onRetake() }
+                    .setNegativeButton("Use anyway") { _, _ -> onConfirmed() }
+                    .setCancelable(false)
+                    .show()
+            } else {
+                onConfirmed()
+            }
         }
     }
 
     private fun captureAngle1() {
+        if (angleCaptureInFlight) return
+        angleCaptureInFlight = true
         setStatus("Capturing angle 1…", ready = false)
         // centerThenCapture() already completed touch-focus + stable-frame
         // gating. A second focus command here interrupted Sony Live View and
         // added delay immediately before every side shutter.
         captureFullRes { bytes ->
+            angleCaptureInFlight = false
             Log.i(TAG, "captureAngle1 result bytes=${bytes?.size}")
             onAngle1Captured(bytes)
         }
@@ -3902,10 +4303,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun onAngle1Captured(bytes: ByteArray?) {
         if (bytes == null) {
-            setStatus("Angle 1 capture failed — retrying", ready = false)
-            captureAngle1()
+            angleCaptureRetryCount += 1
+            if (angleCaptureRetryCount <= ANGLE_CAPTURE_MAX_RETRIES) {
+                setStatus("Sony finishing previous transfer — retrying angle 1…", ready = false)
+                handler.postDelayed({ captureAngle1() }, ANGLE_CAPTURE_RETRY_DELAY_MS)
+            } else {
+                Log.w(TAG, "Angle 1 capture unavailable after $angleCaptureRetryCount delayed attempts")
+                promptForSideProfile("Angle 1 not captured — reposition, then tap READY") {
+                    centerThenCapture { captureAngle1() }
+                }
+            }
             return
         }
+        angleCaptureRetryCount = 0
         // Item-not-moved check: angle1 should look visibly different from
         // MAIN (the item was supposed to be turned to show a side
         // profile) -- if it doesn't, the operator likely tapped through
@@ -3926,8 +4336,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun captureAngle2() {
+        if (angleCaptureInFlight) return
+        angleCaptureInFlight = true
         setStatus("Capturing angle 2…", ready = false)
         captureFullRes { bytes ->
+            angleCaptureInFlight = false
             Log.i(TAG, "captureAngle2 result bytes=${bytes?.size}")
             onAngle2Captured(bytes)
         }
@@ -3935,10 +4348,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun onAngle2Captured(bytes: ByteArray?) {
         if (bytes == null) {
-            setStatus("Angle 2 capture failed — retrying", ready = false)
-            captureAngle2()
+            angleCaptureRetryCount += 1
+            if (angleCaptureRetryCount <= ANGLE_CAPTURE_MAX_RETRIES) {
+                setStatus("Sony finishing previous transfer — retrying angle 2…", ready = false)
+                handler.postDelayed({ captureAngle2() }, ANGLE_CAPTURE_RETRY_DELAY_MS)
+            } else {
+                Log.w(TAG, "Angle 2 capture unavailable after $angleCaptureRetryCount delayed attempts")
+                promptForSideProfile("Angle 2 not captured — reposition, then tap READY") {
+                    centerThenCapture { captureAngle2() }
+                }
+            }
             return
         }
+        angleCaptureRetryCount = 0
         // Same item-not-moved check as angle1, against angle1 this time --
         // angle2 is supposed to be the OTHER side profile.
         promptRotateIfUnmoved(bytes, angle1Jpeg, onConfirmed = {
@@ -3966,7 +4388,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun forceCaptureCurrentPhase() {
         when (phase) {
-            Phase.JEWEL -> captureJewel()
+            Phase.JEWEL -> when {
+                inAngleSequence && angle1Jpeg == null -> captureAngle1()
+                inAngleSequence -> captureAngle2()
+                else -> captureJewel()
+            }
             Phase.TAG -> {
                 if (SKIP_BARCODE_FOR_TESTING) {
                     // Temporary, per explicit request while testing the
@@ -4083,19 +4509,12 @@ class MainActivity : AppCompatActivity() {
     private fun showCapturePreview(
         jpeg: ByteArray,
         onProceed: () -> Unit,
+        onComplete: (() -> Unit)? = null,
         onRetake: () -> Unit,
         onCancel: () -> Unit,
         requireManualConfirm: Boolean = false
     ) {
-        val bitmap = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size)
-        if (bitmap == null) {
-            // Decode failed -- don't show a blank/stale ImageView with the
-            // live camera visible behind it looking like "the preview
-            // didn't update". Skip straight to onProceed instead.
-            Log.e(TAG, "Failed to decode captured JPEG for preview (${jpeg.size} bytes)")
-            onProceed()
-            return
-        }
+        val generation = ++previewGeneration
         previewShowing = true
         // Actually hide the live camera surface, not just draw over it --
         // a translucent overlay alone left the feed visibly bleeding
@@ -4109,45 +4528,101 @@ class MainActivity : AppCompatActivity() {
         binding.previewImage.scaleY = 1f
         binding.previewImage.translationX = 0f
         binding.previewImage.translationY = 0f
-        binding.previewImage.setImageBitmap(bitmap)
+        binding.previewImage.setImageDrawable(null)
         binding.previewOverlay.visibility = View.VISIBLE
-
-        binding.previewRetakeButton.setOnClickListener {
-            hideCapturePreview()
-            onRetake()
-        }
-        binding.previewContinueButton.setOnClickListener {
-            hideCapturePreview()
-            onProceed()
-        }
-        binding.previewCancelButton.setOnClickListener {
-            hideCapturePreview()
-            onCancel()
-        }
-
         previewCountdownRunnable?.let { handler.removeCallbacks(it) }
-        if (requireManualConfirm) {
-            binding.previewCountdown.text = "Still soft after retries — tap Retake"
-            previewCountdownRunnable = null
+        previewCountdownRunnable = null
+        binding.previewCountdown.text = "Preparing full-resolution preview…"
+        binding.previewRetakeButton.isEnabled = false
+        binding.previewContinueButton.isEnabled = false
+        binding.previewCancelButton.isEnabled = false
+        binding.previewCompleteButton.isEnabled = false
+        binding.previewCompleteButton.visibility = if (onComplete == null) View.GONE else View.VISIBLE
+        binding.previewContinueButton.text = if (onComplete == null) {
+            getString(R.string.continue_now)
         } else {
-            var secondsLeft = CAPTURE_PREVIEW_SECONDS
-            val tick = object : Runnable {
-                override fun run() {
-                    if (secondsLeft <= 0) {
-                        hideCapturePreview()
-                        onProceed()
-                        return
-                    }
-                    binding.previewCountdown.text = "Continuing in ${secondsLeft}s… (pinch photo to zoom)"
-                    secondsLeft -= 1
-                    handler.postDelayed(this, 1000)
-                }
-            }
-            previewCountdownRunnable = tick
-            handler.post(tick)
+            getString(R.string.proceed_angle_2)
         }
 
-        setupPreviewZoomAndPan()
+        // Decode only a display-sized derivative, off the UI thread. The
+        // original JPEG byte array remains bit-for-bit untouched for upload.
+        lifecycleScope.launch {
+            val bitmap = withContext(Dispatchers.Default) { decodePreviewBitmap(jpeg) }
+            if (generation != previewGeneration || !previewShowing || isDestroyed) {
+                bitmap?.recycle()
+                return@launch
+            }
+            if (bitmap == null) {
+                Log.e(TAG, "Failed to decode captured JPEG for preview (${jpeg.size} bytes)")
+                hideCapturePreview()
+                onProceed()
+                return@launch
+            }
+            capturePreviewBitmap?.recycle()
+            capturePreviewBitmap = bitmap
+            binding.previewImage.setImageBitmap(bitmap)
+
+            binding.previewRetakeButton.isEnabled = true
+            binding.previewContinueButton.isEnabled = true
+            binding.previewCancelButton.isEnabled = true
+            binding.previewCompleteButton.isEnabled = true
+            binding.previewRetakeButton.setOnClickListener {
+                hideCapturePreview()
+                onRetake()
+            }
+            binding.previewContinueButton.setOnClickListener {
+                hideCapturePreview()
+                onProceed()
+            }
+            binding.previewCompleteButton.setOnClickListener {
+                hideCapturePreview()
+                onComplete?.invoke()
+            }
+            binding.previewCancelButton.setOnClickListener {
+                hideCapturePreview()
+                onCancel()
+            }
+
+            if (onComplete != null) {
+                binding.previewCountdown.text = "Choose: capture more angles or complete this item"
+            } else if (requireManualConfirm) {
+                binding.previewCountdown.text = "Still soft after retries — tap Retake"
+            } else {
+                var secondsLeft = CAPTURE_PREVIEW_SECONDS
+                val tick = object : Runnable {
+                    override fun run() {
+                        if (secondsLeft <= 0) {
+                            hideCapturePreview()
+                            onProceed()
+                            return
+                        }
+                        binding.previewCountdown.text = "Continuing in ${secondsLeft}s… (pinch photo to zoom)"
+                        secondsLeft -= 1
+                        handler.postDelayed(this, 1000)
+                    }
+                }
+                previewCountdownRunnable = tick
+                handler.post(tick)
+            }
+
+            setupPreviewZoomAndPan()
+        }
+    }
+
+    private fun decodePreviewBitmap(jpeg: ByteArray): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (max(bounds.outWidth, bounds.outHeight) / sample > PREVIEW_DECODE_MAX_EDGE) {
+            sample *= 2
+        }
+        return BitmapFactory.decodeByteArray(
+            jpeg,
+            0,
+            jpeg.size,
+            BitmapFactory.Options().apply { inSampleSize = sample }
+        )
     }
 
     /** Every manual correction, logged as one JSON line -- the data-
@@ -4238,6 +4713,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val target = requested.coerceIn(SONY_MIN_ZOOM_RATIO, SONY_MAX_ZOOM_RATIO)
+        // Do not blend a pre-zoom distance estimate with the new field of
+        // view. The next analysed frame establishes a fresh ratio.
+        standDistanceRatioEma = null
         val before = sonyProduction.currentZoomRatio()
         sonyZoomRatio = before
         sonyZoomTarget = before
@@ -4247,12 +4725,23 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val tele = delta > 0f
-        val holdMs = (abs(delta) /
-            (SONY_MAX_ZOOM_RATIO - SONY_MIN_ZOOM_RATIO) * SONY_ZOOM_FULL_TRAVEL_MS)
-            .toLong().coerceIn(80L, 1_500L)
+        val hardTeleEndpoint = tele && target >= SONY_MAX_ZOOM_RATIO - 0.01f
+        val holdMs = if (hardTeleEndpoint) {
+            SONY_ZOOM_WIDE_ENDPOINT_HOLD_MS
+        } else {
+            (abs(delta) /
+                (SONY_MAX_ZOOM_RATIO - SONY_MIN_ZOOM_RATIO) * SONY_ZOOM_FULL_TRAVEL_MS)
+                .toLong().coerceIn(80L, 1_800L)
+        }
         lastZoomChangeAt = System.currentTimeMillis()
         sonyProduction.driveZoom(tele, holdMs) { ok ->
-            if (ok) sonyZoomRatio = sonyProduction.currentZoomRatio()
+            if (ok) {
+                sonyZoomRatio = if (hardTeleEndpoint) {
+                    SONY_MAX_ZOOM_RATIO
+                } else {
+                    sonyProduction.currentZoomRatio()
+                }
+            }
             sonyZoomTarget = sonyZoomRatio
             Log.i(
                 TAG,
@@ -4281,18 +4770,31 @@ class MainActivity : AppCompatActivity() {
     private fun triggerCameraAutoFocus(
         physicalSony: Boolean = false,
         normalizedX: Float? = null,
-        normalizedY: Float? = null
-    ) {
+        normalizedY: Float? = null,
+        manualRequest: Boolean = false
+    ): Boolean {
         if (activeCameraSource != ProductionCameraSource.SONY) {
             focusZoom.triggerAutoFocus()
-            return
+            return true
         }
         // AF-C/Pre-AF remains the non-disruptive baseline. A decisive focus
         // gate explicitly requests physicalSony=true once per zoom level.
-        if (!physicalSony) return
+        if (!physicalSony) return false
         val now = System.currentTimeMillis()
-        if (now - sonyAfRequestedAt < 650L) return
+        if (now - sonyAfRequestedAt < 650L) return false
+        if (!manualRequest &&
+            sonyAutomaticAfCommandsForPose >= MAX_AUTOMATIC_AF_COMMANDS_PER_POSE
+        ) {
+            Log.w(
+                TAG,
+                "Sony automatic AF suppressed: pose budget=" +
+                    "$sonyAutomaticAfCommandsForPose/$MAX_AUTOMATIC_AF_COMMANDS_PER_POSE"
+            )
+            return false
+        }
+        if (!manualRequest) sonyAutomaticAfCommandsForPose += 1
         sonyAfRequestedAt = now
+        sonyAfRequestedAtNanos = System.nanoTime()
         sonyAfCommandAcknowledged = false
         // Use Creators' App's SDI-310 RemoteTouchOperation on the existing
         // PTP session. Automatic and manual decisive requests both use the
@@ -4302,16 +4804,77 @@ class MainActivity : AppCompatActivity() {
             ?: bounds?.let { (it.x0 + it.x1) * 0.5f } ?: 0.5f
         val focusY = normalizedY?.coerceIn(0f, 1f)
             ?: bounds?.let { (it.y0 + it.y1) * 0.5f } ?: 0.5f
+        sonyFocusX = focusX
+        sonyFocusY = focusY
+        binding.boundsOverlay.updateCameraFocus(
+            sonyFocusX,
+            sonyFocusY,
+            sonyProduction.currentFocusSnapshot()?.indication
+        )
+        Log.i(
+            TAG,
+            "Sony AF request x=$focusX y=$focusY manual=$manualRequest " +
+                "poseCount=$sonyAutomaticAfCommandsForPose"
+        )
         sonyProduction.autofocus(
             normalizedX = focusX,
             normalizedY = focusY
-        ) { ok -> sonyAfCommandAcknowledged = ok }
+        ) { ok ->
+            sonyAfCommandAcknowledged = ok
+            if (ok) {
+                // Reject a green AF status belonging to the frame that
+                // existed before this exact touch-focus command.
+                sonyAfRequestedAtNanos = System.nanoTime()
+            }
+        }
+        return true
+    }
+
+    /** One-way optical focus ladder. Every failed magnification becomes the
+     * new ceiling; no path can immediately climb back and repeat it. */
+    private fun backOffOneZoomForFocus(onDone: (() -> Unit)? = null): Boolean {
+        val zoom = cameraZoomRatio()
+        val floor = cameraZoomRange().start
+        if (zoom <= floor + 0.03f) return false
+        val next = (zoom / ZOOM_STEP_RATIO).coerceAtLeast(floor)
+        if (next >= zoom - 0.01f) return false
+        maxUsableZoom = min(maxUsableZoom, next)
+        stepFocusAttempts += 1
+        focusTriggeredThisLevel = false
+        focusEvaluationNotBefore = 0L
+        focusEvaluationNotBefore = 0L
+        sonyAfRequestedAt = 0L
+        sonyAfRequestedAtNanos = 0L
+        sonyAfCommandAcknowledged = false
+        readyStreak = 0
+        Log.i(
+            TAG,
+            "Focus ladder backoff level=$stepFocusAttempts from=$zoom to=$next " +
+                "sharpness=$latestSharpness ceiling=$maxUsableZoom"
+        )
+        setStatus("Image soft — zooming back one step and refocusing…", ready = false)
+        smoothZoomTo(next, onDone = onDone)
+        return true
+    }
+
+    private fun resetSonyAutomaticAfBudget() {
+        sonyAutomaticAfCommandsForPose = 0
+        focusEvaluationNotBefore = 0L
+        sonyAfRequestedAt = 0L
+        sonyAfRequestedAtNanos = 0L
+        sonyAfCommandAcknowledged = false
     }
 
     private fun cameraAfState(): Int? {
         if (activeCameraSource != ProductionCameraSource.SONY) return focusZoom.afState.value
-        when (sonyProduction.currentFocusIndication()) {
-            2, 6 -> if (latestSharpness >= SHARPNESS_THRESHOLD) {
+        val snapshot = sonyProduction.currentFocusSnapshot()
+        val isFreshForRequest = sonyAfRequestedAtNanos == 0L ||
+            (snapshot != null && snapshot.receivedAtNanos > sonyAfRequestedAtNanos)
+        when (snapshot?.indication) {
+            // Camera-native AF state is primary. The separate multi-frame
+            // detail gate remains a sanity check before shutter; it no
+            // longer rewrites a real Sony focus lock into a software guess.
+            2, 6 -> if (isFreshForRequest) {
                 return CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED
             }
             3, 7 -> return CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
@@ -4323,16 +4886,25 @@ class MainActivity : AppCompatActivity() {
         // Sony does not publish Camera2 AF state over this PTP session.
         // Command ACK plus fresh ROI detail is the equivalent production
         // lock gate; if the body omits an ACK, sharpness still fails closed.
-        return if (sonyAfCommandAcknowledged && latestSharpness >= SHARPNESS_THRESHOLD) {
-            CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED
-        } else if (elapsed >= 1_500L) {
+        return if (elapsed >= 1_500L) {
             CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED
         } else CaptureResult.CONTROL_AF_STATE_ACTIVE_SCAN
     }
 
     private fun isCameraFocusLocked(state: Int?): Boolean =
         if (activeCameraSource == ProductionCameraSource.SONY) {
-            state == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED
+            state == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED ||
+                // Some ZV-E10 II AF-C sessions remain in camera state 5
+                // (tracking) instead of publishing state 6 for a stationary
+                // remote-touch target. Accept this for capture only when the
+                // command was acknowledged, focal metadata is fresh, and the
+                // separate multi-frame detail gate passes. The UI continues
+                // to display the raw Sony state; this is not fake telemetry.
+                (state == CaptureResult.CONTROL_AF_STATE_ACTIVE_SCAN &&
+                    sonyAfCommandAcknowledged &&
+                    sonyProduction.currentFocusSnapshot()?.receivedAtNanos
+                        ?.let { it > sonyAfRequestedAtNanos } == true &&
+                    latestSharpness >= SHARPNESS_THRESHOLD)
         } else focusZoom.isFocusLocked(state)
 
     private fun isCameraFocusFailed(state: Int?): Boolean =
@@ -4452,7 +5024,8 @@ class MainActivity : AppCompatActivity() {
                 triggerCameraAutoFocus(
                     physicalSony = true,
                     normalizedX = cx,
-                    normalizedY = cy
+                    normalizedY = cy,
+                    manualRequest = true
                 )
                 logManualAction("tap_focus", mapOf("cx" to cx, "cy" to cy))
                 return true
@@ -4463,7 +5036,8 @@ class MainActivity : AppCompatActivity() {
                 triggerCameraAutoFocus(
                     physicalSony = true,
                     normalizedX = cx,
-                    normalizedY = cy
+                    normalizedY = cy,
+                    manualRequest = true
                 )
                 manualFocusLocked = true
                 logManualAction("focus_lock", mapOf("cx" to cx, "cy" to cy))
@@ -4546,6 +5120,10 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {
                 beforeDrag = autoExposureEv
+                manualExposureOverride = true
+                pendingAutoExposureEv = null
+                exposureClipStreak = 0
+                exposureClearStreak = 0
             }
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
                 if (activeCameraSource == ProductionCameraSource.SONY) {
@@ -4609,8 +5187,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun hideCapturePreview() {
+        previewGeneration += 1L
         previewCountdownRunnable?.let { handler.removeCallbacks(it) }
         previewCountdownRunnable = null
+        binding.previewImage.setImageDrawable(null)
+        capturePreviewBitmap?.recycle()
+        capturePreviewBitmap = null
         binding.previewOverlay.visibility = View.GONE
         binding.previewView.visibility = if (activeCameraSource == ProductionCameraSource.SONY) {
             View.GONE
@@ -4632,9 +5214,13 @@ class MainActivity : AppCompatActivity() {
         angle1Jpeg = null
         angle2Jpeg = null
         inAngleSequence = false
+        angleCaptureInFlight = false
+        angleCaptureRetryCount = 0
+        angleFocusTriggered = false
         hideReadyButton()
         armed = false
         stepFocusAttempts = 0
+        resetSonyAutomaticAfBudget()
         maxUsableZoom = Float.MAX_VALUE
         maxUsableZoomStuckSince = 0L
         latestMaterial = null
@@ -4642,6 +5228,7 @@ class MainActivity : AppCompatActivity() {
         armedAt = System.currentTimeMillis()
         lastZoomChangeAt = 0L
         focusTriggeredThisLevel = false
+        focusEvaluationNotBefore = 0L
         isZooming = false
         stallGraceAt = 0L
         tooCloseWarned = false
@@ -4692,6 +5279,8 @@ class MainActivity : AppCompatActivity() {
      * for this item is simply over. Otherwise loop for a fresh item. */
     private fun cancelItem() {
         inAngleSequence = false
+        angleCaptureInFlight = false
+        angleCaptureRetryCount = 0
         hideReadyButton()
         rsc2.stopAndReturnToCenter()
         if (launchedFromBrowser) {
@@ -4774,7 +5363,57 @@ class MainActivity : AppCompatActivity() {
      * angle1/angle2 shots, otherwise the original single-image path --
      * called from both the auto-fire and manual-shutter TAG capture sites. */
     private fun uploadCapturedSet() {
+        // All camera captures are complete. Reset the physical lens NOW,
+        // in parallel with local staging/upload, so the next tag is already
+        // presented at true 16mm/full-wide. Do not wait for the background
+        // upload or the next-item screen transition.
+        resetSonyZoomFullyWideForNextTag()
         if (angle1Jpeg != null && angle2Jpeg != null) uploadMulti() else uploadPair()
+    }
+
+    private var wideResetInFlight = false
+    private var wideResetComplete = false
+    private var wideResetAttempts = 0
+
+    /** Hard endpoint reset. A normal ratio command uses the controller's
+     * estimated position and can inherit motor-timing drift. Holding WIDE
+     * beyond measured full travel guarantees the lens reaches its own 16mm
+     * stop. Failed/busy PTP commands retry without blocking local staging. */
+    private fun resetSonyZoomFullyWideForNextTag() {
+        if (activeCameraSource != ProductionCameraSource.SONY) {
+            setCameraZoomRatio(SONY_MIN_ZOOM_RATIO)
+            return
+        }
+        if (wideResetInFlight || wideResetComplete) return
+        if (!sonyProduction.isAvailable) {
+            Log.i(TAG, "Sony next-item full-wide reset deferred until camera ready")
+            return
+        }
+        sonyManualZoomPendingSteps = 0
+        wideResetInFlight = true
+        wideResetAttempts += 1
+        val attempt = wideResetAttempts
+        Log.i(TAG, "Sony next-item full-wide reset start attempt=$attempt")
+        sonyProduction.driveZoom(
+            tele = false,
+            durationMs = SONY_ZOOM_WIDE_ENDPOINT_HOLD_MS
+        ) { ok ->
+            wideResetInFlight = false
+            sonyZoomRatio = sonyProduction.currentZoomRatio()
+            sonyZoomTarget = sonyZoomRatio
+            if (ok) {
+                wideResetComplete = true
+                wideResetAttempts = 0
+                Log.i(TAG, "Sony next-item full-wide reset complete ratio=$sonyZoomRatio")
+            } else if (wideResetAttempts < SONY_ZOOM_WIDE_RESET_MAX_ATTEMPTS &&
+                !isDestroyed
+            ) {
+                Log.w(TAG, "Sony next-item full-wide reset busy/failed attempt=$attempt; retrying")
+                handler.postDelayed(::resetSonyZoomFullyWideForNextTag, 400L)
+            } else {
+                Log.e(TAG, "Sony next-item full-wide reset failed after $attempt attempts")
+            }
+        }
     }
 
     private fun uploadMulti() {
@@ -4791,8 +5430,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         phase = Phase.UPLOADING
-        setStatus("Uploading 3-angle set…", ready = false)
-        logCaptureEvent("upload_multi_attempt")
+        setStatus("Securing 3-angle set locally…", ready = false)
+        logCaptureEvent("upload_multi_stage_attempt")
         val serverUrl = serverUrl()
         val staffName = prefs.getString("staff_name", "") ?: ""
         if (serverUrl.isBlank()) {
@@ -4803,36 +5442,24 @@ class MainActivity : AppCompatActivity() {
             return
         }
         lifecycleScope.launch {
-            val result = try {
-                UploadClient.saveMulti(serverUrl, tagCode, staffName, main, angle1, angle2)
+            val staged = try {
+                CaptureUploadQueue.stageMulti(
+                    applicationContext, serverUrl, tagCode, staffName,
+                    main, angle1, angle2
+                )
             } catch (e: Exception) {
-                Log.e(TAG, "Multi-angle upload failed", e)
-                logCaptureEvent("upload_multi_exception", mapOf("message" to e.message))
-                null
-            }
-            if (result == null) {
-                showUploadFailedPopup("Upload failed — check server URL/network.")
+                Log.e(TAG, "Multi-angle local staging failed", e)
+                logCaptureEvent("upload_multi_stage_failed", mapOf("message" to e.message))
+                showUploadFailedPopup("Could not secure photos locally: ${e.message}")
                 return@launch
             }
-            when {
-                result.ok -> {
-                    logCaptureEvent("upload_multi_ok")
-                    showItemSavedPopup(tagCode)
-                }
-                result.duplicate -> confirmOverrideAndRetry("Duplicate tag $tagCode — save anyway?") { overrideDup ->
-                    retryUploadMulti(tagCode, staffName, main, angle1, angle2, overrideDuplicate = overrideDup)
-                }
-                result.blurry -> confirmOverrideAndRetry("A photo in the set looked blurry — save anyway?") { overrideBlur ->
-                    retryUploadMulti(tagCode, staffName, main, angle1, angle2, overrideBlur = overrideBlur)
-                }
-                result.notVisible -> confirmOverrideAndRetry("Jewellery not clearly visible — save anyway?") { overrideVis ->
-                    retryUploadMulti(tagCode, staffName, main, angle1, angle2, overrideVisibility = overrideVis)
-                }
-                else -> {
-                    logCaptureEvent("upload_multi_failed", mapOf("error" to result.error))
-                    showUploadFailedPopup("Save failed: ${result.error}")
-                }
-            }
+            logCaptureEvent("upload_multi_queued", mapOf("job_id" to staged.id))
+            jewelJpeg = null
+            angle1Jpeg = null
+            angle2Jpeg = null
+            tagJpeg = null
+            Toast.makeText(this@MainActivity, "Queued $tagCode — uploading in background", Toast.LENGTH_SHORT).show()
+            finishOrResetForNewItem()
         }
     }
 
@@ -4900,7 +5527,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
         phase = Phase.UPLOADING
-        setStatus("Uploading…", ready = false)
+        setStatus("Securing photos locally…", ready = false)
         val serverUrl = serverUrl()
         val staffName = prefs.getString("staff_name", "") ?: ""
         if (serverUrl.isBlank()) {
@@ -4910,39 +5537,23 @@ class MainActivity : AppCompatActivity() {
             resetForNewItem(Phase.TAG)
             return
         }
-        logCaptureEvent("upload_pair_attempt")
+        logCaptureEvent("upload_pair_stage_attempt")
         lifecycleScope.launch {
-            val result = try {
-                UploadClient.savePair(serverUrl, tagCode, staffName, jewel, tag)
+            val staged = try {
+                CaptureUploadQueue.stagePair(
+                    applicationContext, serverUrl, tagCode, staffName, jewel, tag
+                )
             } catch (e: Exception) {
-                Log.e(TAG, "Upload failed", e)
-                logCaptureEvent("upload_pair_exception", mapOf("message" to e.message))
-                null
-            }
-            if (result == null) {
-                showUploadFailedPopup("Upload failed — check server URL/network.")
+                Log.e(TAG, "Pair local staging failed", e)
+                logCaptureEvent("upload_pair_stage_failed", mapOf("message" to e.message))
+                showUploadFailedPopup("Could not secure photos locally: ${e.message}")
                 return@launch
             }
-            when {
-                result.ok -> {
-                    logCaptureEvent("upload_pair_ok")
-                    Toast.makeText(this@MainActivity, "Saved: $tagCode", Toast.LENGTH_SHORT).show()
-                    finishOrResetForNewItem()
-                }
-                result.duplicate -> confirmOverrideAndRetry("Duplicate tag $tagCode — save anyway?") { overrideDup ->
-                    retryUpload(tagCode, staffName, jewel, tag, overrideDuplicate = overrideDup)
-                }
-                result.blurry -> confirmOverrideAndRetry("Jewel photo looked blurry — save anyway?") { overrideBlur ->
-                    retryUpload(tagCode, staffName, jewel, tag, overrideBlur = overrideBlur)
-                }
-                result.notVisible -> confirmOverrideAndRetry("Jewellery not clearly visible — save anyway?") { overrideVis ->
-                    retryUpload(tagCode, staffName, jewel, tag, overrideVisibility = overrideVis)
-                }
-                else -> {
-                    logCaptureEvent("upload_pair_failed", mapOf("error" to result.error))
-                    showUploadFailedPopup("Save failed: ${result.error}")
-                }
-            }
+            logCaptureEvent("upload_pair_queued", mapOf("job_id" to staged.id))
+            jewelJpeg = null
+            tagJpeg = null
+            Toast.makeText(this@MainActivity, "Queued $tagCode — uploading in background", Toast.LENGTH_SHORT).show()
+            finishOrResetForNewItem()
         }
     }
 
@@ -5034,6 +5645,7 @@ class MainActivity : AppCompatActivity() {
         armed = next == Phase.TAG
         armedAt = System.currentTimeMillis()
         stepFocusAttempts = 0
+        resetSonyAutomaticAfBudget()
         maxUsableZoom = Float.MAX_VALUE
         maxUsableZoomStuckSince = 0L
         autoFired = false
@@ -5044,7 +5656,17 @@ class MainActivity : AppCompatActivity() {
         stallGraceAt = 0L
         materialLossStreak = 0
         readyStreak = 0
+        exposureClipStreak = 0
+        exposureClearStreak = 0
+        manualExposureOverride = false
+        lastTrackingLogAt = 0L
+        lastCenterLimitLogAt = 0L
         jewelCaptureRetries = 0
+        angleCaptureInFlight = false
+        angleCaptureRetryCount = 0
+        angleFocusTriggered = false
+        clearStandDistanceGuide()
+        compositionRoiLocked = false
         centerEmaCx = null
         centerEmaCy = null
         lastNudgeAxis = CenterAxis.NONE
@@ -5091,12 +5713,19 @@ class MainActivity : AppCompatActivity() {
             // Auto-exposure bias is per-item, not permanent -- a piece
             // that needed heavy negative EV shouldn't leave the NEXT
             // item starting under-exposed.
-            autoExposureEv = 0f
-            setCameraExposureCompensationEv(0f)
+            queueAutoExposure(0f)
+            // Defensive path for cancellations, browser handoffs and app
+            // re-entry. Normal successful capture already starts this reset
+            // inside uploadCapturedSet(), where it overlaps local staging.
+            resetSonyZoomFullyWideForNextTag()
             // Sony remains in AF-C/Pre-AF. Do not send a remote-touch nudge:
             // it interrupts Live View on this body.
         }
         if (next == Phase.JEWEL) {
+            // This item may zoom in. Its eventual completion must issue a
+            // fresh endpoint reset for the following tag.
+            wideResetComplete = false
+            wideResetAttempts = 0
             // Deliberately does NOT touch tagJpeg/stableTagCode/
             // tagCodeHistory -- entering JEWEL now means "tag already
             // scanned, go shoot the jewel photos for THIS item," not a new
@@ -5118,11 +5747,11 @@ class MainActivity : AppCompatActivity() {
         val material = latestMaterial
         binding.debugText.text = if (phase == Phase.JEWEL) {
             val range = cameraZoomRange()
-            val base = "zoom=%.1fx range=[%.1f,%.1f] max=%.1f  coverage=%.3f  sharp=%.0f  af=%s\nev=%.2f  goldClip=%.3f  sceneClip=%.3f".format(
+            val base = "zoom=%.1fx range=[%.1f,%.1f]  coverage=%.3f  detail=%s  sonyAF=%s\nev=%.2f  goldClip=%.3f  sceneClip=%.3f".format(
                 cameraZoomRatio(),
-                range.start, range.endInclusive, maxUsableZoom,
+                range.start, range.endInclusive,
                 material?.coverage ?: 0f,
-                latestSharpness,
+                if (latestSharpness >= SHARPNESS_THRESHOLD) "PASS" else "LOW",
                 afStateLabel(cameraAfState()),
                 autoExposureEv,
                 material?.highlightClipFraction ?: 0f,
@@ -5221,11 +5850,14 @@ class MainActivity : AppCompatActivity() {
         val evThirds = (autoExposureEv * 3f).roundToInt()
         val evMilli = ((evThirds * 1_000f / 3f) / 100f).roundToInt() * 100
         if (profile == 0) {
-            // Static jewellery + controlled light: low-noise ISO 100 and f/8
-            // depth of field. Aperture priority lets the body choose shutter.
+            // Production preview/capture hardwall: 1/100 keeps sensor exposure
+            // safely below the 40ms frame budget; f/8 preserves jewellery
+            // depth; ISO Auto supplies brightness and keeps EV compensation
+            // available in Manual mode. Aperture priority + ISO 100 previously
+            // selected long shutters and made Sony's source fall to 6-10fps.
             return SonyQualitySettings(
-                exposureMode = 131_075,
-                iso = 100,
+                exposureMode = 1,
+                iso = 0x00FF_FFFF,
                 whiteBalance = 2,
                 stillFileFormat = 2,
                 jpegQuality = 1,
@@ -5236,6 +5868,8 @@ class MainActivity : AppCompatActivity() {
                 dynamicRangeOptimizer = 1,
                 creativeLook = 1,
                 fNumberTimes100 = 800,
+                shutterNumerator = 1,
+                shutterDenominator = 100,
                 exposureCompensationMilliEv = evMilli,
                 focusMode = 0x8004,
                 focusArea = 259,
@@ -5358,7 +5992,7 @@ class MainActivity : AppCompatActivity() {
         val target = if (phase == Phase.TAG) {
             SONY_TAG_FOCUS_AREA_WIDE
         } else {
-            savedSonyQualitySettings().focusArea
+            SONY_JEWEL_FOCUS_AREA_TRACKING_SPOT_L
         }
         sonyProduction.setFocusArea(target) { ok ->
             Log.i(TAG, "Sony phase focus area phase=$phase value=$target ok=$ok")
@@ -5511,12 +6145,14 @@ class MainActivity : AppCompatActivity() {
         handler.removeCallbacksAndMessages(null)
         barcodeScanner.close()
         barcodeExecutor.shutdownNow()
+        jewelAnalysisExecutor.shutdownNow()
         if (::sonyProduction.isInitialized) sonyProduction.stop()
         rsc2.disconnect()
         try { unregisterReceiver(testMoveReceiver) } catch (_: IllegalArgumentException) {}
         try { unregisterReceiver(testExposureReceiver) } catch (_: IllegalArgumentException) {}
         try { unregisterReceiver(testZoomReceiver) } catch (_: IllegalArgumentException) {}
         try { unregisterReceiver(testZoomMotorReceiver) } catch (_: IllegalArgumentException) {}
+        try { unregisterReceiver(testFocusReceiver) } catch (_: IllegalArgumentException) {}
         try { unregisterReceiver(testSonyCaptureReceiver) } catch (_: IllegalArgumentException) {}
         try { unregisterReceiver(testSonyCardObjectsReceiver) } catch (_: IllegalArgumentException) {}
     }

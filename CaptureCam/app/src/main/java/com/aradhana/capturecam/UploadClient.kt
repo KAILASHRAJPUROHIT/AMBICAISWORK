@@ -7,6 +7,7 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.Dns
 import org.json.JSONObject
 import java.net.InetAddress
@@ -17,6 +18,7 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 import java.util.concurrent.TimeUnit
+import java.io.File
 
 /**
  * Talks to capture_server.py's existing /api/capture/save -- the SAME
@@ -257,5 +259,70 @@ object UploadClient {
                 raw = json
             )
         }
+    }
+
+    /** File-backed variant used by the durable background queue. It streams
+     * originals from app-private storage instead of materialising another
+     * 40-60 MB set of ByteArrays while the next item is being captured. */
+    suspend fun saveMultiFiles(
+        baseUrl: String,
+        tagCode: String,
+        staffName: String,
+        mainJpeg: File,
+        angle1Jpeg: File,
+        angle2Jpeg: File
+    ): SaveResult = withContext(Dispatchers.IO) {
+        val jpeg = "image/jpeg".toMediaType()
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("tag_code", tagCode)
+            .addFormDataPart("staff_name", staffName)
+            .addFormDataPart("main", "main.jpg", mainJpeg.asRequestBody(jpeg))
+            .addFormDataPart("angle1", "angle1.jpg", angle1Jpeg.asRequestBody(jpeg))
+            .addFormDataPart("angle2", "angle2.jpg", angle2Jpeg.asRequestBody(jpeg))
+            .build()
+        val request = Request.Builder()
+            .url("${baseUrl.trimEnd('/')}/api/capture/save_multi")
+            .post(body)
+            .build()
+        client.newCall(request).execute().use { response ->
+            parseSaveResult(response.body?.string() ?: "{}")
+        }
+    }
+
+    /** File-backed two-image variant; see [saveMultiFiles]. */
+    suspend fun savePairFiles(
+        baseUrl: String,
+        tagCode: String,
+        staffName: String,
+        jewelJpeg: File,
+        tagJpeg: File
+    ): SaveResult = withContext(Dispatchers.IO) {
+        val jpeg = "image/jpeg".toMediaType()
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("tag_code", tagCode)
+            .addFormDataPart("staff_name", staffName)
+            .addFormDataPart("jewel", "jewel.jpg", jewelJpeg.asRequestBody(jpeg))
+            .addFormDataPart("tag", "tag.jpg", tagJpeg.asRequestBody(jpeg))
+            .build()
+        val request = Request.Builder()
+            .url("${baseUrl.trimEnd('/')}/api/capture/save")
+            .post(body)
+            .build()
+        client.newCall(request).execute().use { response ->
+            parseSaveResult(response.body?.string() ?: "{}")
+        }
+    }
+
+    private fun parseSaveResult(text: String): SaveResult {
+        val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
+        val errorField = if (json.has("error")) json.optString("error").ifBlank { null } else null
+        return SaveResult(
+            ok = json.optBoolean("ok", false),
+            error = errorField,
+            duplicate = errorField == "duplicate",
+            blurry = errorField == "blurry",
+            notVisible = errorField == "not_clearly_visible",
+            raw = json
+        )
     }
 }

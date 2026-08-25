@@ -1,6 +1,7 @@
 package com.aradhana.capturecam
 
 import android.graphics.BitmapFactory
+import android.os.Process
 import android.util.Log
 import com.jcraft.jsch.Channel
 import com.jcraft.jsch.ChannelDirectTCPIP
@@ -9,10 +10,8 @@ import com.jcraft.jsch.Session
 import java.io.BufferedInputStream
 import java.io.InputStream
 import java.io.OutputStream
-import java.net.HttpURLConnection
 import java.net.URI
 import java.net.SocketTimeoutException
-import java.net.URL
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.UUID
@@ -91,9 +90,12 @@ class SonyPtpIpController {
         private const val TUNNEL_HOST = "localhost"
         private const val TUNNEL_PORT = 15740
         private const val LIVE_VIEW_REMOTE_PORT = 60152
-        private const val LOOPBACK_HOST = "localhost"
+        private const val SSH_CONTROL_WINDOW_BYTES = 4 * 1024 * 1024
+        private const val SSH_LIVE_VIEW_WINDOW_BYTES = 1024 * 1024
+        private const val SSH_CHANNEL_PACKET_BYTES = 64 * 1024
         private const val PTP_READ_TIMEOUT_MS = 12_000L
         private const val LIVE_VIEW_READ_TIMEOUT_MS = 8_000L
+        private const val QUALITY_PROPERTY_SETTLE_TIMEOUT_MS = 800L
         private const val LIVE_VIEW_MAX_JPEG_BYTES = 4 * 1024 * 1024
         private const val LIVE_VIEW_MAX_FOCAL_INFO_BYTES = 512 * 1024
         private const val LIVE_VIEW_MAX_DATASET_BYTES = 5 * 1024 * 1024
@@ -110,6 +112,9 @@ class SonyPtpIpController {
         // expensive path.
         private const val LIVE_VIEW_MAX_REOPEN_FAILURES = 40
         private const val LIVE_VIEW_REOPEN_RETRY_DELAY_MS = 400L
+        // More than two 25fps frame periods. Count as a real source stall,
+        // not ordinary network jitter.
+        private const val LIVE_VIEW_SLOW_GAP_MS = 80L
         // Creators keeps retrying this local HTTP producer on the same PTP/SSH
         // session. A 503 is also the normal transient response while the power
         // zoom motor is active, so it must not be treated as proof that the
@@ -121,7 +126,11 @@ class SonyPtpIpController {
         // still legitimately retrying -- that was fine when the pump gave
         // up after ~1s, but would now just add a second, redundant
         // interruption on top of the pump's own in-progress recovery.
-        private const val LIVE_VIEW_STALL_TIMEOUT_MS = 20_000L
+        // Healthy 25fps source cadence is ~40ms. Bound a blocked HTTP body
+        // read without disturbing the separate persistent PTP control lane.
+        private const val LIVE_VIEW_STALL_TIMEOUT_MS = 750L
+        private const val TRANSPORT_HEALTH_POLL_MS = 250L
+        private const val TRANSPORT_HEALTH_LOG_MS = 15_000L
         private const val PRODUCTION_ZOOM_MIN_RATIO = 1f
         private const val PRODUCTION_ZOOM_MAX_RATIO = 3.125f
         private const val PRODUCTION_ZOOM_FULL_TRAVEL_MS = 1_650f
@@ -233,15 +242,21 @@ class SonyPtpIpController {
     }
 
     @Volatile private var sshSession: Session? = null
+    // Live View receives its own SSH transport/reader/window whenever the
+    // camera accepts a second authenticated tunnel. PTP control and event
+    // traffic then cannot consume the stream channel's flow-control window
+    // or stall its JSch session reader. Shared-session fallback preserves
+    // compatibility with bodies that permit only one SSH login.
+    @Volatile private var liveViewSshSession: Session? = null
     private var controlChannel: ChannelDirectTCPIP? = null
     private var eventChannel: ChannelDirectTCPIP? = null
-    @Volatile private var liveViewConnection: HttpURLConnection? = null
-    @Volatile private var liveViewForwardPort: Int = 0
+    @Volatile private var liveViewChannel: ChannelDirectTCPIP? = null
     private var controlOut: OutputStream? = null
     private var controlIn: InputStream? = null
     private var eventOut: OutputStream? = null
     private var eventIn: InputStream? = null
     @Volatile private var liveViewIn: InputStream? = null
+    @Volatile private var liveViewOut: OutputStream? = null
     private var liveViewCarry = ByteArray(0)
     @Volatile private var liveViewUrl: String? = null
     // PTP spec reserves TransactionID 0 for the session-less OpenSession
@@ -306,9 +321,14 @@ class SonyPtpIpController {
     private val liveViewDecodedCount = AtomicLong(0L)
     private val liveViewDroppedBeforeDecode = AtomicLong(0L)
     private val liveViewReopenCount = AtomicLong(0L)
+    private val liveViewSlowGapCount = AtomicLong(0L)
+    private val lastLoggedFocalState = AtomicInteger(Int.MIN_VALUE)
+    private val liveViewMaxGapMs = AtomicLong(0L)
+    private val lastSlowDatasetLogAtNanos = AtomicLong(0L)
     @Volatile private var liveViewPumpRunning = false
     @Volatile private var liveViewPumpThread: Thread? = null
     @Volatile private var lastLiveViewFrameAtNanos = 0L
+    @Volatile private var previousLiveViewSourceFrameAtNanos = 0L
     @Volatile private var lastServedSequence = 0L
     // Connection epoch the pump last gave up on. Confirmed live 2026-08-24:
     // without this latch, fetchLatestLiveViewSample() calling
@@ -473,71 +493,31 @@ class SonyPtpIpController {
         try {
             val jsch = JSch()
             val session = jsch.getSession(sshUser, cameraIp, 22)
-            session.setPassword(sshPassword)
-            // The camera's SSH host key changes per-device and isn't
-            // something an operator can pre-provision -- same trust model
-            // as the original PTP-IP GUID pairing this replaces (trust on
-            // first use, on a LAN the operator physically controls).
-            session.setConfig("StrictHostKeyChecking", "no")
-            // Channel.getInputStream() defaults to a fixed 32KB pipe. Sony
-            // Live View JPEGs are substantially larger, so JSch's single
-            // session reader can block inside channel.write() before it
-            // reaches the SSH WINDOW_ADJUST code. A supported session
-            // setting makes the pipe resizable and large enough for several
-            // complete frames; no reflection or patched JSch is required.
-            session.setConfig("max_input_buffer_size", "1048576")
-            // Live view is ~189KB JPEGs streamed continuously -- JSch's pure-
-            // Java crypto has no hardware AES acceleration, so whichever
-            // cipher the camera offers first (often a CBC variant) becomes a
-            // real per-byte CPU cost on the tablet, not just a connect-time
-            // negotiation detail. CTR mode ciphers are cheaper to compute and
-            // pipeline better; putting them first measurably raises sustained
-            // tunnel throughput without weakening security in any way that
-            // matters on a LAN the operator already controls physically.
-            // Compression is pure overhead on already-compressed JPEG bytes.
-            session.setConfig(
-                "cipher.s2c",
-                "aes128-ctr,aes192-ctr,aes256-ctr,aes128-cbc,aes192-cbc,aes256-cbc,3des-ctr,3des-cbc"
-            )
-            session.setConfig(
-                "cipher.c2s",
-                "aes128-ctr,aes192-ctr,aes256-ctr,aes128-cbc,aes192-cbc,aes256-cbc,3des-ctr,3des-cbc"
-            )
-            session.setConfig("compression.s2c", "none")
-            session.setConfig("compression.c2s", "none")
-            session.timeout = timeoutMs
-            // Keep the authenticated SSH transport alive while the operator
-            // composes a shot. The camera otherwise closes an idle tunnel in
-            // roughly one minute.
-            session.serverAliveInterval = 10_000
-            session.serverAliveCountMax = 3
+            configureSshSession(session, sshPassword, timeoutMs)
             session.connect(timeoutMs)
             sshSession = session
-            // Sony Creators keeps one SSH transport alive and exposes the
-            // camera's streaming service through a persistent LOCAL port
-            // forward. HttpURLConnection then owns each HTTP connection.
-            // This is materially different from opening a raw direct-tcpip
-            // channel and implementing HTTP inside the frame pump.
-            liveViewForwardPort = try {
-                session.setPortForwardingL(
-                    LOOPBACK_HOST,
-                    LIVE_VIEW_REMOTE_PORT,
-                    TUNNEL_HOST,
-                    LIVE_VIEW_REMOTE_PORT
-                )
-            } catch (_: Exception) {
-                session.setPortForwardingL(
-                    LOOPBACK_HOST,
-                    0,
-                    TUNNEL_HOST,
-                    LIVE_VIEW_REMOTE_PORT
-                )
+            // Use a physically separate SSH transport for the high-volume
+            // HTTP stream. This gives Live View its own JSch reader and flow-
+            // control window instead of merely adding another channel to the
+            // PTP session. Some bodies allow only one SSH login; those fall
+            // back to the primary transport without failing the camera.
+            var dedicatedLiveViewSession = try {
+                val liveViewSshTimeoutMs = minOf(timeoutMs, 2_000)
+                jsch.getSession(sshUser, cameraIp, 22).also { liveSession ->
+                    configureSshSession(liveSession, sshPassword, liveViewSshTimeoutMs)
+                    liveSession.connect(liveViewSshTimeoutMs)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Dedicated Sony Live View SSH unavailable; using shared tunnel: ${e.message}")
+                null
             }
+            liveViewSshSession = dedicatedLiveViewSession
             Log.i(TAG, "SSH authenticated to $cameraIp as $sshUser")
             Log.i(
                 TAG,
-                "Sony persistent SSH Live View forward " +
-                    "$LOOPBACK_HOST:$liveViewForwardPort -> $TUNNEL_HOST:$LIVE_VIEW_REMOTE_PORT"
+                "Sony Live View SSH transport=" +
+                    (if (dedicatedLiveViewSession != null) "dedicated" else "shared") +
+                    " direct-tcpip -> $TUNNEL_HOST:$LIVE_VIEW_REMOTE_PORT"
             )
 
             val ctrl = openTunnelChannel(session, timeoutMs) ?: run {
@@ -777,12 +757,37 @@ class SonyPtpIpController {
             val channel = session.openChannel("direct-tcpip") as ChannelDirectTCPIP
             channel.setHost(TUNNEL_HOST)
             channel.setPort(destinationPort)
+            tuneTunnelChannelWindow(channel, SSH_CONTROL_WINDOW_BYTES)
             channel.connect(timeoutMs)
             channel
         } catch (e: Exception) {
             Log.w(TAG, "openTunnelChannel($TUNNEL_HOST:$destinationPort) failed: ${e.message}")
             null
         }
+    }
+
+    private fun configureSshSession(session: Session, password: String, timeoutMs: Int) {
+        session.setPassword(password)
+        // Trust-on-first-use on the operator-controlled camera LAN.
+        session.setConfig("StrictHostKeyChecking", "no")
+        // Keep enough receive-pipe headroom for both the 25fps preview and
+        // 15-20MB original JPEG transfers. The previous 1MB pipe still made
+        // a full-resolution GetObject repeatedly stop for WINDOW_ADJUST;
+        // measured live: a 17.9MB original spent 7.0s in download alone.
+        session.setConfig("max_input_buffer_size", SSH_CONTROL_WINDOW_BYTES.toString())
+        session.setConfig(
+            "cipher.s2c",
+            "aes128-ctr,aes192-ctr,aes256-ctr,aes128-cbc,aes192-cbc,aes256-cbc,3des-ctr,3des-cbc"
+        )
+        session.setConfig(
+            "cipher.c2s",
+            "aes128-ctr,aes192-ctr,aes256-ctr,aes128-cbc,aes192-cbc,aes256-cbc,3des-ctr,3des-cbc"
+        )
+        session.setConfig("compression.s2c", "none")
+        session.setConfig("compression.c2s", "none")
+        session.timeout = timeoutMs
+        session.serverAliveInterval = 10_000
+        session.serverAliveCountMax = 3
     }
 
     fun disconnect(reason: String = "requested") {
@@ -809,11 +814,11 @@ class SonyPtpIpController {
         closeLiveViewHttpStream()
         try { controlChannel?.disconnect() } catch (_: Exception) {}
         try { eventChannel?.disconnect() } catch (_: Exception) {}
+        try { liveViewSshSession?.disconnect() } catch (_: Exception) {}
         try { sshSession?.disconnect() } catch (_: Exception) {}
         liveViewStreaming = false
         liveViewPrimed = false
-        liveViewForwardPort = 0
-        sshSession = null; controlChannel = null; eventChannel = null
+        sshSession = null; liveViewSshSession = null; controlChannel = null; eventChannel = null
         controlIn = null; controlOut = null; eventIn = null; eventOut = null
         liveViewUrl = null
         sdiVendorCodeVersion = 0
@@ -822,7 +827,11 @@ class SonyPtpIpController {
 
     // ---- High-level camera actions -------------------------------------
 
-    fun triggerShutter(afSettleMs: Long = 250L, holdMs: Long = 120L): Boolean {
+    fun triggerShutter(
+        afSettleMs: Long = 250L,
+        holdMs: Long = 120L,
+        onShotReady: (() -> Unit)? = null
+    ): Boolean {
         val captureStartedAt = System.currentTimeMillis()
         lastCapturedImage = null
         lastCapturedFilename = null
@@ -890,6 +899,9 @@ class SonyPtpIpController {
             Log.w(TAG, "Shutter sequence ACKed, but no Sony shot object became ready")
             return false
         }
+        // Exposure is complete and Sony's host object exists. The heavy
+        // original download still follows, but UI/gimbal work can start now.
+        onShotReady?.invoke()
 
         val infoStartedAt = System.currentTimeMillis()
         val info = executeOperation(PTP_OC_GetObjectInfo, intArrayOf(SHOT_OBJECT_HANDLE))
@@ -1305,7 +1317,12 @@ class SonyPtpIpController {
 
     fun driveZoom(tele: Boolean, durationMs: Long): Boolean {
         if (!isConnected) return false
-        val holdMs = durationMs.coerceIn(80L, 1_500L)
+        // Full 16-50mm travel is measured at ~1,650ms. The former 1,500ms
+        // ceiling made an endpoint command stop roughly 9% short, so the
+        // next tag started visibly zoomed-in after a completed item. Allow
+        // a small endpoint overrun; Sony's power-zoom motor safely stops at
+        // its own mechanical/electronic limit.
+        val holdMs = durationMs.coerceIn(80L, 1_800L)
         val direction = if (tele) ZOOM_TELE_STEP else ZOOM_WIDE_STEP
         val directionName = if (tele) "tele" else "wide"
         val before = currentOpticalZoomPercent.coerceIn(0, 100)
@@ -1313,19 +1330,18 @@ class SonyPtpIpController {
         var released = false
         var interrupted = false
 
-        // Match Creators' App exactly: ZoomOperation Plus/Minus on press,
-        // then ZoomOperation Stop on release. Keep HTTP closed for the whole
-        // motor pulse so the producer cannot race either PTP transaction.
-        withLiveViewHttpReleasedForControl {
-            pressed = setControlDeviceB(PROP_ZoomStep, direction, 1)
-            if (pressed) {
-                try {
-                    Thread.sleep(holdMs)
-                } catch (_: InterruptedException) {
-                    interrupted = true
-                } finally {
-                    released = setControlDeviceB(PROP_ZoomStep, 0, 1)
-                }
+        // Match Creators' App: synchronous ZoomOperation Plus/Minus, then
+        // Stop, over the PTP command lane while the sibling HTTP downloader
+        // keeps draining. Closing HTTP for the whole motor pulse guaranteed
+        // a visible preview freeze exactly as long as every zoom action.
+        pressed = setControlDeviceB(PROP_ZoomStep, direction, 1)
+        if (pressed) {
+            try {
+                Thread.sleep(holdMs)
+            } catch (_: InterruptedException) {
+                interrupted = true
+            } finally {
+                released = setControlDeviceB(PROP_ZoomStep, 0, 1)
             }
         }
         if (interrupted) Thread.currentThread().interrupt()
@@ -1365,13 +1381,11 @@ class SonyPtpIpController {
         val y = (normalizedY.coerceIn(0f, 1f) * 479f).toInt()
         val packed = ((x and 0xFFFF) shl 16) or (y and 0xFFFF)
         val startedAt = System.nanoTime()
-        // This camera suspends its HTTP producer while applying remote touch.
-        // Release HTTP first and consume the matching PTP response before the
-        // pump reopens; sending this no-wait while streaming caused the tablet
-        // to enter a long 503/restoring cycle after every preview tap.
-        val focused = withLiveViewHttpReleasedForControl {
-            setControlDeviceB(CONTROL_RemoteTouchOperation, packed, 4)
-        }
+        // Consume the synchronous PTP response but leave HTTP open. The old
+        // close/reopen wrapper turned one touch into a restoring cycle; the
+        // earlier no-wait failure was caused by leaving the PTP reply queued,
+        // not by the independent HTTP channel existing at the same time.
+        val focused = setControlDeviceB(CONTROL_RemoteTouchOperation, packed, 4)
         Log.i(
             TAG,
             "Sony remote touch focus x=$x y=$y focused=$focused " +
@@ -1380,26 +1394,30 @@ class SonyPtpIpController {
         return focused
     }
 
-    fun setIso(value: Int): Boolean = setControlDeviceASerialized(PROP_ISO, value, 4)
-    fun setWhiteBalance(value: Int): Boolean = setControlDeviceASerialized(PROP_WhiteBalance, value, 2)
-    fun setFocusMode(value: Int): Boolean = setControlDeviceASerialized(PROP_FocusMode, value, 2)
-    fun setFocusArea(value: Int): Boolean = setControlDeviceASerialized(PROP_FocusArea, value, 2)
+    // Device-A property writes use the PTP command socket while Live View
+    // uses a separate SSH-forwarded HTTP channel. Keep that stream open for
+    // short synchronous property transactions. Closing/reopening HTTP around
+    // every EV/ISO/WB/focus-area change created the visible preview gaps.
+    fun setIso(value: Int): Boolean = setControlDeviceAStreamingSafe(PROP_ISO, value, 4)
+    fun setWhiteBalance(value: Int): Boolean = setControlDeviceAStreamingSafe(PROP_WhiteBalance, value, 2)
+    fun setFocusMode(value: Int): Boolean = setControlDeviceAStreamingSafe(PROP_FocusMode, value, 2)
+    fun setFocusArea(value: Int): Boolean = setControlDeviceAStreamingSafe(PROP_FocusArea, value, 2)
     fun setExposureMode(value: Int): Boolean =
-        setControlDeviceASerialized(PROP_ExposureMode, value, 4)
+        setControlDeviceAStreamingSafe(PROP_ExposureMode, value, 4)
     fun setShutterSpeed(numerator: Int, denominator: Int): Boolean {
         require(numerator in 0..0xFFFF && denominator in 0..0xFFFF)
-        return setControlDeviceASerialized(
+        return setControlDeviceAStreamingSafe(
             PROP_ShutterSpeed,
             ((numerator and 0xFFFF) shl 16) or (denominator and 0xFFFF),
             4
         )
     }
     fun setFNumber(fNumberTimes100: Int): Boolean =
-        setControlDeviceASerialized(PROP_FNumber, fNumberTimes100, 2)
+        setControlDeviceAStreamingSafe(PROP_FNumber, fNumberTimes100, 2)
     fun setExposureMeteringMode(value: Int): Boolean =
-        setControlDeviceASerialized(PROP_ExposureMeteringMode, value, 2)
+        setControlDeviceAStreamingSafe(PROP_ExposureMeteringMode, value, 2)
     fun setExposureCompensation(value: Int): Boolean =
-        setControlDeviceASerialized(PROP_ExposureCompensation, value, 2)
+        setControlDeviceAStreamingSafe(PROP_ExposureCompensation, value, 2)
     fun setStillFileFormat(value: Int): Boolean =
         setControlDeviceASerialized(PROP_FileFormatStill, value, 2)
     fun setJpegQuality(value: Int): Boolean =
@@ -1461,6 +1479,24 @@ class SonyPtpIpController {
                 val packed = ((settings.shutterNumerator and 0xFFFF) shl 16) or
                     (settings.shutterDenominator and 0xFFFF)
                 results["shutter"] = setControlDeviceA(PROP_ShutterSpeed, packed, 4)
+                // Exposure-mode transitions are acknowledged before the
+                // shutter mechanism/property table settles. Immediate
+                // readback observed the transient 1/50 value after a valid
+                // 1/100 ACK. Keep this pre-stream and verify the final value.
+                if (results["shutter"] == true &&
+                    !waitForPropertyValue(
+                        PROP_ShutterSpeed,
+                        packed.toLong() and 0xFFFF_FFFFL,
+                        QUALITY_PROPERTY_SETTLE_TIMEOUT_MS
+                    )
+                ) {
+                    results["shutter"] = setControlDeviceA(PROP_ShutterSpeed, packed, 4) &&
+                        waitForPropertyValue(
+                            PROP_ShutterSpeed,
+                            packed.toLong() and 0xFFFF_FFFFL,
+                            QUALITY_PROPERTY_SETTLE_TIMEOUT_MS
+                        )
+                }
             }
             results["exposureCompensation"] = setControlDeviceA(
                 PROP_ExposureCompensation,
@@ -1533,12 +1569,11 @@ class SonyPtpIpController {
         return setZoomPercentWithScale(targetPercent)
     }
 
-    /**
-     * Creators' App uses writable ZoomScale (D25C) for discrete/automatic
-     * zoom. This body temporarily suspends its HTTP producer for any zoom
-     * control, so serialize the PTP transaction with an intentional HTTP
-     * release/reopen. Its advertised valid range is 1000..2000/100.
-     */
+    /** Creators' App uses writable ZoomScale (D25C) for discrete/automatic
+     * zoom. Keep the dedicated Live View channel open: live testing proved
+     * DeviceProperty writes and motor zoom complete on the independent PTP
+     * lane while preview remains at 25fps. Closing/reopening HTTP for every
+     * smooth-zoom sub-step was the source of the repeated "restoring" UI. */
     private fun setZoomPercentWithScale(requestedPercent: Int): Boolean {
         val observed = currentOpticalZoomPercent.coerceIn(0, 100)
         val requested = requestedPercent.coerceIn(0, 100)
@@ -1554,17 +1589,14 @@ class SonyPtpIpController {
         }
         if (steppedPercent == observed && currentZoomScale in 1_000..2_000) return true
         val targetScale = 1_000 + steppedPercent * 10
-        // Creators serializes each DevicePropertySetter transaction and does
-        // not send the next zoom value until Sony's operation response has
-        // completed. Leaving replies queued caused later controls to execute
-        // against a permanently suspended HTTP producer.
-        val moved = withLiveViewHttpReleasedForControl {
-            setControlDeviceARaw(
-                PROP_ZoomScale,
-                ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
-                    .putInt(targetScale).array()
-            )
-        }
+        // The caller's single ordered control executor serializes each setter.
+        // Consume the synchronous PTP response before accepting another value,
+        // without touching the sibling direct-tcpip Live View channel.
+        val moved = setControlDeviceARaw(
+            PROP_ZoomScale,
+            ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(targetScale).array()
+        )
         if (moved) {
             currentZoomScale = targetScale
             currentOpticalZoomPercent = steppedPercent
@@ -1583,6 +1615,7 @@ class SonyPtpIpController {
         if (releaseStream) {
             liveViewControlTransition = true
             lastLiveViewFrameAtNanos = System.nanoTime()
+            previousLiveViewSourceFrameAtNanos = 0L
             forceCloseLiveViewChannel()
             closeLiveViewHttpStream()
             try { Thread.sleep(25L) } catch (_: InterruptedException) { }
@@ -1684,7 +1717,7 @@ class SonyPtpIpController {
         // Must go through forceCloseLiveViewChannel(), not
         // closeLiveViewHttpStream() directly: this runs on the
         // SonyProductionLiveView loop thread while SonyLiveViewPump reads
-        // liveViewConnection/liveViewIn concurrently on its own
+        // liveViewChannel/liveViewIn concurrently on its own
         // thread. Nulling those fields from here without coordination raced
         // against the pump's own read/reopen cycle. forceCloseLiveViewChannel
         // only disconnects the channel (safe from any thread, same as the
@@ -1751,8 +1784,11 @@ class SonyPtpIpController {
             liveViewPumpRunning = true
             liveViewStreaming = true
             lastLiveViewFrameAtNanos = System.nanoTime()
+            liveViewSlowGapCount.set(0L)
+            liveViewMaxGapMs.set(0L)
             val epoch = connectionEpoch.get()
             liveViewPumpThread = thread(name = "SonyLiveViewPump", isDaemon = true) {
+                Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY)
                 runLiveViewPump(epoch)
             }
             return true
@@ -1789,7 +1825,7 @@ class SonyPtpIpController {
      * thread blocked in read() can always be released. */
     private fun forceCloseLiveViewChannel() {
         try { liveViewIn?.close() } catch (_: Exception) {}
-        try { liveViewConnection?.disconnect() } catch (_: Exception) {}
+        try { liveViewChannel?.disconnect() } catch (_: Exception) {}
     }
 
     private fun runLiveViewPump(epoch: Int) {
@@ -1826,13 +1862,23 @@ class SonyPtpIpController {
                 consecutiveFailures = 0
                 consecutiveHttpRejects = 0
                 liveViewPrimed = true
-                lastLiveViewFrameAtNanos = System.nanoTime()
+                val receivedAtNanos = System.nanoTime()
+                val previousReceivedAtNanos = previousLiveViewSourceFrameAtNanos
+                if (previousReceivedAtNanos > 0L) {
+                    val gapMs = (receivedAtNanos - previousReceivedAtNanos) / 1_000_000L
+                    if (gapMs >= LIVE_VIEW_SLOW_GAP_MS) {
+                        liveViewSlowGapCount.incrementAndGet()
+                    }
+                    liveViewMaxGapMs.accumulateAndGet(gapMs, ::maxOf)
+                }
+                previousLiveViewSourceFrameAtNanos = receivedAtNanos
+                lastLiveViewFrameAtNanos = receivedAtNanos
                 val sequence = liveViewSourceSequence.incrementAndGet()
                 val previous = latestLiveViewSample.getAndSet(
                     LiveViewSample(
                         sequence,
                         frame.jpeg,
-                        lastLiveViewFrameAtNanos,
+                        receivedAtNanos,
                         frame.focusIndication
                     )
                 )
@@ -1915,14 +1961,16 @@ class SonyPtpIpController {
         val age = sample?.let { liveViewSampleAgeMs(it) } ?: -1L
         return "source=${liveViewSourceSequence.get()} decoded=${liveViewDecodedCount.get()} " +
             "dropped=${liveViewDroppedBeforeDecode.get()} reopens=${liveViewReopenCount.get()} " +
-            "latestAgeMs=$age pump=$liveViewPumpRunning"
+            "slowGaps=${liveViewSlowGapCount.get()} maxGapMs=${liveViewMaxGapMs.get()} " +
+            "latestAgeMs=$age pump=$liveViewPumpRunning tunnel=" +
+            (if (liveViewSshSession != null) "dedicated" else "shared")
     }
 
     fun liveViewSourceFrameCount(): Long = liveViewSourceSequence.get()
     fun liveViewDroppedFrameCount(): Long = liveViewDroppedBeforeDecode.get()
 
     private fun ensureLiveViewHttpStream(): Boolean {
-        if (liveViewConnection != null && liveViewIn != null) {
+        if (liveViewChannel?.isConnected == true && liveViewIn != null) {
             return true
         }
         closeLiveViewHttpStream()
@@ -1947,7 +1995,8 @@ class SonyPtpIpController {
             Log.w(TAG, "Unexpected Sony Live View port: $port")
             return false
         }
-        if (sshSession?.isConnected != true || liveViewForwardPort <= 0) return false
+        val liveTunnel = liveViewSshSession ?: sshSession
+        if (liveTunnel?.isConnected != true) return false
 
         val rawPath = uri.rawPath?.takeIf { it.isNotEmpty() } ?: "/"
         val requestTarget = if (uri.rawQuery.isNullOrEmpty()) {
@@ -1955,47 +2004,91 @@ class SonyPtpIpController {
         } else {
             "$rawPath?${uri.rawQuery}"
         }
-        val localUrl = URL("http", LOOPBACK_HOST, liveViewForwardPort, requestTarget)
-        val connection = try {
-            (localUrl.openConnection() as HttpURLConnection).apply {
-                connectTimeout = LIVE_VIEW_READ_TIMEOUT_MS.toInt()
-                readTimeout = LIVE_VIEW_READ_TIMEOUT_MS.toInt()
-                useCaches = false
-                doInput = true
-                setRequestProperty("Connection", "close")
-                connect()
+        val channel = try {
+            (liveTunnel.openChannel("direct-tcpip") as ChannelDirectTCPIP).apply {
+                setHost(TUNNEL_HOST)
+                setPort(LIVE_VIEW_REMOTE_PORT)
+                setOrgIPAddress("127.0.0.1")
+                setOrgPort(0)
+                tuneTunnelChannelWindow(this, SSH_LIVE_VIEW_WINDOW_BYTES)
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Sony Live View HTTP connection failed: ${e.message}")
+            Log.w(TAG, "Sony Live View direct-tcpip channel creation failed: ${e.message}")
             return false
         }
-        liveViewConnection = connection
-        val responseCode = try {
-            connection.responseCode
+        val rawInput: BufferedInputStream
+        val rawOutput: OutputStream
+        try {
+            rawInput = BufferedInputStream(channel.inputStream, 256 * 1024)
+            rawOutput = channel.outputStream
+            liveViewChannel = channel
+            liveViewOut = rawOutput
+            channel.connect(LIVE_VIEW_READ_TIMEOUT_MS.toInt())
+            val request = buildString {
+                append("GET ").append(requestTarget).append(" HTTP/1.1\r\n")
+                append("Host: ").append(TUNNEL_HOST).append(':').append(LIVE_VIEW_REMOTE_PORT).append("\r\n")
+                append("Accept: */*\r\n")
+                append("Connection: close\r\n\r\n")
+            }.toByteArray(Charsets.ISO_8859_1)
+            rawOutput.write(request)
+            rawOutput.flush()
+        } catch (e: Exception) {
+            Log.w(TAG, "Sony Live View direct-tcpip connection failed: ${e.message}")
+            closeLiveViewHttpStream()
+            return false
+        }
+
+        val headers = try {
+            readHttpHeaders(rawInput)
         } catch (e: Exception) {
             Log.w(TAG, "Sony Live View HTTP response failed: ${e.message}")
             closeLiveViewHttpStream()
             return false
         }
-        if (responseCode != HttpURLConnection.HTTP_OK) {
-            Log.w(TAG, "Sony Live View HTTP rejected: HTTP $responseCode ${connection.responseMessage}")
+        val statusLine = headers.lineSequence().firstOrNull().orEmpty()
+        val responseCode = Regex("""^HTTP/\d(?:\.\d)?\s+(\d{3})""")
+            .find(statusLine)?.groupValues?.getOrNull(1)?.toIntOrNull()
+        if (responseCode != 200) {
+            Log.w(TAG, "Sony Live View HTTP rejected: $statusLine")
             lastLiveViewHttpRejected = true
             closeLiveViewHttpStream()
             return false
         }
-        liveViewIn = try {
-            BufferedInputStream(connection.inputStream)
-        } catch (e: Exception) {
-            Log.w(TAG, "Sony Live View HTTP input failed: ${e.message}")
-            closeLiveViewHttpStream()
-            return false
+        val chunked = headers.lineSequence().any { line ->
+            line.startsWith("Transfer-Encoding:", ignoreCase = true) &&
+                line.contains("chunked", ignoreCase = true)
         }
+        liveViewIn = if (chunked) HttpChunkedInputStream(rawInput) else rawInput
         Log.i(
             TAG,
-            "Sony persistent Live View HTTP stream connected via local SSH forward " +
-                "$LOOPBACK_HOST:$liveViewForwardPort"
+            "Sony persistent Live View HTTP stream connected via direct-tcpip " +
+                "window=1MB packet=64KB chunked=$chunked"
         )
         return true
+    }
+
+    /** JSch's direct-tcpip defaults are only a 128KB receive window and 16KB
+     * packet. The Sony stream is continuous; enlarge both before channel-open
+     * so WINDOW_ADJUST is not required every few 42KB frames. These methods
+     * are package-private in JSch, hence the narrow reflection bridge. */
+    private fun tuneTunnelChannelWindow(channel: ChannelDirectTCPIP, windowBytes: Int) {
+        try {
+            val base = Channel::class.java
+            base.getDeclaredMethod("setLocalWindowSizeMax", Int::class.javaPrimitiveType).apply {
+                isAccessible = true
+                invoke(channel, windowBytes)
+            }
+            base.getDeclaredMethod("setLocalWindowSize", Int::class.javaPrimitiveType).apply {
+                isAccessible = true
+                invoke(channel, windowBytes)
+            }
+            base.getDeclaredMethod("setLocalPacketSize", Int::class.javaPrimitiveType).apply {
+                isAccessible = true
+                invoke(channel, SSH_CHANNEL_PACKET_BYTES)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Sony SSH window tuning unavailable: ${e.message}")
+        }
     }
 
     private class HttpChunkedInputStream(private val source: InputStream) : InputStream() {
@@ -2083,8 +2176,10 @@ class SonyPtpIpController {
      * focal block supplies the camera's real AF-C state every frame.
      */
     private fun readNextLiveViewFrame(input: InputStream): LiveViewFrame {
+        val readStartedAtNanos = System.nanoTime()
         val header = ByteArray(16)
         readFullyBlocking(input, header)
+        val headerReadAtNanos = System.nanoTime()
         val imageOffset = header.readIntLeAt(0)
         val imageSize = header.readIntLeAt(4)
         val focalOffset = header.readIntLeAt(8)
@@ -2111,6 +2206,25 @@ class SonyPtpIpController {
         val dataset = ByteArray(datasetSize.toInt())
         System.arraycopy(header, 0, dataset, 0, header.size)
         readFullyBlocking(input, dataset, header.size, dataset.size - header.size)
+        val bodyReadAtNanos = System.nanoTime()
+
+        val totalReadMs = (bodyReadAtNanos - readStartedAtNanos) / 1_000_000L
+        val nowNanos = bodyReadAtNanos
+        val lastSlowLog = lastSlowDatasetLogAtNanos.get()
+        if (
+            totalReadMs >= LIVE_VIEW_SLOW_GAP_MS &&
+            nowNanos - lastSlowLog >= 1_000_000_000L &&
+            lastSlowDatasetLogAtNanos.compareAndSet(lastSlowLog, nowNanos)
+        ) {
+            val headerReadMs = (headerReadAtNanos - readStartedAtNanos) / 1_000_000L
+            val bodyReadMs = (bodyReadAtNanos - headerReadAtNanos) / 1_000_000L
+            Log.w(
+                TAG,
+                "Sony Live View slow dataset read totalMs=$totalReadMs " +
+                    "headerMs=$headerReadMs bodyMs=$bodyReadMs datasetBytes=$datasetSize " +
+                    "jpegBytes=$imageSize focalBytes=$focalSize"
+            )
+        }
 
         val jpeg = dataset.copyOfRange(imageOffset, imageOffset + imageSize)
         if (jpeg.size < 4 || jpeg[0] != 0xFF.toByte() || jpeg[1] != 0xD8.toByte()) {
@@ -2123,6 +2237,9 @@ class SonyPtpIpController {
                 it == 1 || it == 2 || it == 3 || it == 5 || it == 6 || it == 7
             }
         } else null
+        if (focus != null && lastLoggedFocalState.getAndSet(focus) != focus) {
+            Log.i(TAG, "Sony focal-info state=$focus")
+        }
         return LiveViewFrame(jpeg, focus)
     }
 
@@ -2135,7 +2252,7 @@ class SonyPtpIpController {
         var offset = start
         val end = start + length
         while (offset < end) {
-            if (liveViewConnection == null) {
+            if (liveViewChannel?.isConnected != true) {
                 throw java.io.EOFException("Sony Live View HTTP connection closed")
             }
             val count = input.read(target, offset, end - offset)
@@ -2182,7 +2299,7 @@ class SonyPtpIpController {
             }
             scanFrom = maxOf(1, size)
 
-            if (liveViewConnection == null) {
+            if (liveViewChannel?.isConnected != true) {
                 throw java.io.EOFException("Sony Live View HTTP connection closed")
             }
             if (System.nanoTime() >= deadline) {
@@ -2207,7 +2324,7 @@ class SonyPtpIpController {
                 if (value < 0) throw java.io.EOFException("Sony Live View HTTP stream closed")
                 return value
             }
-            if (liveViewConnection == null) {
+            if (liveViewChannel?.isConnected != true) {
                 throw java.io.EOFException("Sony Live View HTTP connection closed")
             }
             if (System.nanoTime() >= deadlineNanos) {
@@ -2219,11 +2336,14 @@ class SonyPtpIpController {
 
     private fun closeLiveViewHttpStream() = synchronized(liveViewLock) {
         val input = liveViewIn
-        val connection = liveViewConnection
+        val output = liveViewOut
+        val channel = liveViewChannel
         liveViewIn = null
-        liveViewConnection = null
+        liveViewOut = null
+        liveViewChannel = null
         try { input?.close() } catch (_: Exception) {}
-        try { connection?.disconnect() } catch (_: Exception) {}
+        try { output?.close() } catch (_: Exception) {}
+        try { channel?.disconnect() } catch (_: Exception) {}
         liveViewCarry = ByteArray(0)
     }
 
@@ -2275,6 +2395,21 @@ class SonyPtpIpController {
         return withLiveViewHttpReleasedForControl {
             setControlDeviceARaw(propCode, payload.array())
         }
+    }
+
+    /** Short property transaction on Sony's independent PTP command lane.
+     * The response is still consumed synchronously; only the sibling HTTP
+     * channel remains open, preventing a needless Live View reopen. */
+    private fun setControlDeviceAStreamingSafe(propCode: Int, value: Int, byteWidth: Int): Boolean {
+        if (!isConnected) return false
+        val payload = ByteBuffer.allocate(byteWidth).order(ByteOrder.LITTLE_ENDIAN)
+        when (byteWidth) {
+            1 -> payload.put(value.toByte())
+            2 -> payload.putShort(value.toShort())
+            4 -> payload.putInt(value)
+            else -> throw IllegalArgumentException("Unsupported ControlDeviceA width: $byteWidth")
+        }
+        return setControlDeviceARaw(propCode, payload.array())
     }
 
     private fun setControlDeviceARaw(propCode: Int, payload: ByteArray): Boolean =
@@ -2924,9 +3059,10 @@ class SonyPtpIpController {
         val epoch = connectionEpoch.get()
         keepAliveThreadRunning = true
         thread(name = "SonyPtpIpKeepAlive", isDaemon = true) {
+            var lastHealthLogAtNanos = 0L
             while (keepAliveThreadRunning && isConnected && epoch == connectionEpoch.get()) {
                 try {
-                    Thread.sleep(15_000L)
+                    Thread.sleep(TRANSPORT_HEALTH_POLL_MS)
                 } catch (_: InterruptedException) {
                     break
                 }
@@ -2952,9 +3088,10 @@ class SonyPtpIpController {
                 // from here (a different thread, holding no read lock) makes
                 // that read throw, and the pump reopens on its next loop.
                 if (liveViewPumpRunning) {
-                    val sinceFrameMs =
-                        (System.nanoTime() - lastLiveViewFrameAtNanos) / 1_000_000L
-                    if (sinceFrameMs > LIVE_VIEW_STALL_TIMEOUT_MS) {
+                    val lastFrameAt = lastLiveViewFrameAtNanos
+                    val sinceFrameMs = if (lastFrameAt == 0L) 0L else
+                        (System.nanoTime() - lastFrameAt) / 1_000_000L
+                    if (lastFrameAt != 0L && sinceFrameMs > LIVE_VIEW_STALL_TIMEOUT_MS) {
                         Log.w(TAG, "Live View stalled ${sinceFrameMs}ms; forcing channel reopen")
                         lastLiveViewFrameAtNanos = System.nanoTime()
                         liveViewReopenCount.incrementAndGet()
@@ -2975,7 +3112,13 @@ class SonyPtpIpController {
                 // that's the actual blocker, not the specific opcode used
                 // (this ruled out SDIOConnect the same way an earlier
                 // attempt ruled out 0x9209).
-                Log.d(TAG, "Sony tunnel health OK; ${liveViewTelemetry()}")
+                val nowNanos = System.nanoTime()
+                if (nowNanos - lastHealthLogAtNanos >=
+                    TimeUnit.MILLISECONDS.toNanos(TRANSPORT_HEALTH_LOG_MS)
+                ) {
+                    lastHealthLogAtNanos = nowNanos
+                    Log.d(TAG, "Sony tunnel health OK; ${liveViewTelemetry()}")
+                }
             }
         }
     }

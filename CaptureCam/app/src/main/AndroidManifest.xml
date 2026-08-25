@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Required by WifiManager.WifiLock. DSLR mode holds a non-reference-
+         counted low-latency lock only while Sony live view is active. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Sony ZV-E10 II PTP-IP control (SonyPtpIpController/
          SonyWifiConnectionManager): the camera runs its own WiFi access
