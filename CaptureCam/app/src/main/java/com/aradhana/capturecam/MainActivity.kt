@@ -566,7 +566,21 @@ class MainActivity : AppCompatActivity() {
     private var jewelJpeg: ByteArray? = null
     private var tagJpeg: ByteArray? = null
     private var tagCodeHistory = mutableListOf<String>()
-    private var stableTagCode: String? = null
+    @Volatile private var stableTagCode: String? = null
+    private data class TagBurstSample(val code: String?, val jpeg: ByteArray?)
+    private data class TagBurstOutcome(
+        val active: Boolean,
+        val progress: Int,
+        val winner: String? = null,
+        val evidenceJpeg: ByteArray? = null,
+        val failed: Boolean = false,
+        val started: Boolean = false
+    )
+    private val tagBurstLock = Any()
+    private val tagBurstSamples = mutableListOf<TagBurstSample>()
+    @Volatile private var tagBurstActive = false
+    @Volatile private var tagBurstProgress = 0
+    private var confirmedTagEvidenceJpeg: ByteArray? = null
     // Hard pre-capture category gate. A decoded label is not accepted until
     // the catalogue server confirms its exact category.
     private var resolvedCategoryKey: String? = null
@@ -870,6 +884,8 @@ class MainActivity : AppCompatActivity() {
         // Preserve the Sony stream's full width. Small printed labels lost
         // too many finder/edge pixels when reduced to 640px.
         private const val SONY_TAG_ANALYSIS_LONG_EDGE = 1024
+        private const val SONY_TAG_BURST_FRAMES = 5
+        private const val SONY_TAG_BURST_MAJORITY = 3
         private const val SONY_JEWEL_ANALYSIS_INTERVAL_MS = 80L
         private const val SONY_TAG_FOCUS_AREA_WIDE = 1
         private const val SHARPNESS_THRESHOLD = 40f
@@ -1499,7 +1515,11 @@ class MainActivity : AppCompatActivity() {
         // material detector do not need to run at display FPS; doing so used
         // 67% app CPU and visibly starved the preview/UI. Detection remains
         // responsive at 8.3fps (tag) / 12.5fps (jewellery).
-        val analysisInterval = if (phase == Phase.TAG) {
+        val analysisInterval = if (phase == Phase.TAG && tagBurstActive) {
+            // During the bounded five-frame burst, decode every next distinct
+            // frame as soon as the preceding ML task completes.
+            0L
+        } else if (phase == Phase.TAG) {
             SONY_TAG_ANALYSIS_INTERVAL_MS
         } else {
             SONY_JEWEL_ANALYSIS_INTERVAL_MS
@@ -1537,6 +1557,9 @@ class MainActivity : AppCompatActivity() {
                 barcodeAttempts += 1
                 val attempt = barcodeAttempts
                 val startedAt = System.nanoTime()
+                // Exact camera JPEG paired with this decoded frame. Five are
+                // only retained during a candidate burst (~200KB total).
+                val sourceJpeg = sonyProduction.currentLiveViewJpeg()
                 barcodeExecutor.execute {
                     try {
                         // Sony arrives as JPEG/Bitmap. Convert off the stream
@@ -1564,15 +1587,23 @@ class MainActivity : AppCompatActivity() {
                                                 "prepMs=$prepMs mlMs=$mlMs results=${codes.size}"
                                         )
                                     }
+                                    val eligibleCodes = codes.filterNot { it == invalidTagCode }
+                                    val outcome = consumeSonyTagBurst(eligibleCodes, sourceJpeg)
                                     handler.post {
                                         if (!isDestroyed && phase == Phase.TAG) {
                                             lastBarcodeCount = barcodes.size
                                             lastBarcodeError = null
-                                            // Prefer stock-label-shaped values when an
-                                            // unrelated code is visible in the same frame.
-                                            val code = codes.firstOrNull { TAG_CODE_PATTERN.matches(it) }
-                                                ?: codes.firstOrNull()
-                                            recordTagCode(code)
+                                            when {
+                                                outcome.winner != null -> acceptSonyTagBurst(outcome)
+                                                outcome.failed -> setStatus(
+                                                    "Label changed or blurred — hold it steady",
+                                                    ready = false
+                                                )
+                                                outcome.active -> setStatus(
+                                                    "Confirming label ${outcome.progress}/$SONY_TAG_BURST_FRAMES…",
+                                                    ready = false
+                                                )
+                                            }
                                         }
                                     }
                                 } else {
@@ -1592,6 +1623,80 @@ class MainActivity : AppCompatActivity() {
             }
             Phase.UPLOADING -> Unit
         }
+    }
+
+    /** First readable label starts a five-frame burst. Each incoming frame is
+     * decoded immediately; no queue or five-frame wait is introduced. */
+    private fun consumeSonyTagBurst(codes: List<String>, jpeg: ByteArray?): TagBurstOutcome =
+        synchronized(tagBurstLock) {
+            var started = false
+            if (!tagBurstActive) {
+                if (codes.isEmpty()) return@synchronized TagBurstOutcome(false, 0)
+                tagBurstSamples.clear()
+                tagBurstActive = true
+                tagBurstProgress = 0
+                started = true
+                Log.i(TAG, "Sony tag five-frame burst started firstCodes=$codes")
+            }
+
+            val preferred = codes.firstOrNull { TAG_CODE_PATTERN.matches(it) }
+                ?: codes.firstOrNull()
+            tagBurstSamples += TagBurstSample(preferred, jpeg)
+            tagBurstProgress = tagBurstSamples.size
+            if (tagBurstSamples.size < SONY_TAG_BURST_FRAMES) {
+                return@synchronized TagBurstOutcome(
+                    active = true,
+                    progress = tagBurstProgress,
+                    started = started
+                )
+            }
+
+            val vote = tagBurstSamples.mapNotNull { it.code }
+                .groupingBy { it }
+                .eachCount()
+                .maxByOrNull { it.value }
+            val winner = vote?.key?.takeIf { vote.value >= SONY_TAG_BURST_MAJORITY }
+            val evidence = winner?.let { accepted ->
+                // Middle matching frame is normally the steadiest evidence,
+                // avoiding the operator's first-arrival/last-removal motion.
+                val matches = tagBurstSamples.filter { it.code == accepted && it.jpeg != null }
+                matches.getOrNull(matches.size / 2)?.jpeg
+            }
+            val votes = tagBurstSamples.map { it.code }
+            tagBurstSamples.clear()
+            tagBurstActive = false
+            tagBurstProgress = 0
+            if (winner == null) {
+                Log.w(TAG, "Sony tag burst rejected votes=$votes")
+                TagBurstOutcome(false, SONY_TAG_BURST_FRAMES, failed = true)
+            } else {
+                Log.i(TAG, "Sony tag burst accepted code=$winner votes=$votes")
+                TagBurstOutcome(
+                    active = false,
+                    progress = SONY_TAG_BURST_FRAMES,
+                    winner = winner,
+                    evidenceJpeg = evidence
+                )
+            }
+        }
+
+    private fun acceptSonyTagBurst(outcome: TagBurstOutcome) {
+        val code = outcome.winner?.trim()?.takeIf(String::isNotEmpty) ?: return
+        if (phase != Phase.TAG || stableTagCode != null || code == invalidTagCode) return
+        confirmedTagEvidenceJpeg = outcome.evidenceJpeg
+        invalidTagCode = null
+        tagCodeHistory = mutableListOf(code)
+        stableTagCode = code
+        resolveCategoryForCurrentTag()
+    }
+
+    private fun resetSonyTagBurst() {
+        synchronized(tagBurstLock) {
+            tagBurstSamples.clear()
+            tagBurstActive = false
+            tagBurstProgress = 0
+        }
+        confirmedTagEvidenceJpeg = null
     }
 
     /** Background-only consumer of the newest Sony frame. */
@@ -2386,6 +2491,7 @@ class MainActivity : AppCompatActivity() {
             if (result.serverReached) {
                 invalidTagCode = code
                 stableTagCode = null
+                confirmedTagEvidenceJpeg = null
                 tagCodeHistory = mutableListOf()
                 autoFired = false
                 logCaptureEvent("tag_rejected_unknown_category", mapOf("code" to code, "error" to result.error))
@@ -2549,12 +2655,14 @@ class MainActivity : AppCompatActivity() {
             when {
                 validated -> "Tag validated. Capturing…"
                 stableTagCode != null -> "Checking tag category…"
+                tagBurstActive -> "Confirming label $tagBurstProgress/$SONY_TAG_BURST_FRAMES…"
                 invalidTagCode != null -> "Unknown stock label — show the correct label"
                 else -> "Scanning tag…"
             },
             ready = validated
         )
         binding.debugText.text = "attempts=$barcodeAttempts  lastSeen=$lastBarcodeCount" +
+            (if (tagBurstActive) "  burst=$tagBurstProgress/$SONY_TAG_BURST_FRAMES" else "") +
             (lastBarcodeError?.let { "  error=$it" } ?: "")
         if (validated && !autoFired) {
             autoFired = true
@@ -2583,7 +2691,7 @@ class MainActivity : AppCompatActivity() {
             captureFullRes(onResult)
             return
         }
-        onResult(sonyProduction.currentLiveViewJpeg())
+        onResult(confirmedTagEvidenceJpeg?.copyOf() ?: sonyProduction.currentLiveViewJpeg())
     }
 
     /**
@@ -5257,6 +5365,7 @@ class MainActivity : AppCompatActivity() {
      * stays, no need to redo it. */
     private fun retakeTag() {
         tagJpeg = null
+        resetSonyTagBurst()
         tagCodeHistory = mutableListOf()
         stableTagCode = null
         resolvedCategoryKey = null
@@ -5701,6 +5810,7 @@ class MainActivity : AppCompatActivity() {
             lastBarcodeCount = -1
             lastBarcodeError = null
             tagJpeg = null
+            resetSonyTagBurst()
             tagCodeHistory = mutableListOf()
             stableTagCode = null
             resolvedCategoryKey = null
