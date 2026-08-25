@@ -45,7 +45,16 @@ while ($true) {
         # almost always because the phone rebooted. Only a USB session can
         # re-arm it. Look for any USB-attached device serial (anything in
         # `adb devices` that isn't an ip:port entry).
-        $usbSerial = ($devices | Select-String '^\S+\s+device$' | Where-Object { $_ -notmatch [regex]::Escape($target) } | ForEach-Object { ($_ -split '\s+')[0] } | Select-Object -First 1)
+        # A network device is never a USB bootstrap, regardless of whether it
+        # is the phone target. The old filter excluded only 192.168.0.6:5555,
+        # so it mistook the tablet's 192.168.0.22:5555 for USB and restarted
+        # tablet adbd every 30 seconds. That exact restart closed scrcpy and
+        # rotated Android Wireless Debugging's TLS port indefinitely.
+        $usbSerial = ($devices |
+            Select-String '^\S+\s+device$' |
+            ForEach-Object { ($_ -split '\s+')[0] } |
+            Where-Object { $_ -notmatch ':' } |
+            Select-Object -First 1)
         if ($usbSerial) {
             & adb -s $usbSerial tcpip $PhonePort 2>$null | Out-Null
             Start-Sleep -Seconds 2
