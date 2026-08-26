@@ -1,0 +1,27 @@
+name: Keep cloud instance awake
+
+# Render's free tier sleeps a web service after ~15 minutes with no
+# incoming HTTP traffic, costing the next visitor a 20-50s cold start.
+# Pinging /api/health every 10 minutes keeps it under that threshold.
+#
+# Caveats worth knowing:
+# - GitHub schedules are "best effort" - under high platform load a run
+#   can slip by several minutes. Fine here since we only need to beat a
+#   15-minute window, not hit an exact time.
+# - GitHub auto-disables scheduled workflows after 60 days with no
+#   commits to the repo. Not a practical concern for an actively
+#   developed project, but worth knowing if this repo goes quiet.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/health
+        run: |
+          curl -sS -m 30 -o /dev/null -w "HTTP %{http_code} in %{time_total}s\n" \
+            https://aradhana-gold-monitor.onrender.com/api/health
