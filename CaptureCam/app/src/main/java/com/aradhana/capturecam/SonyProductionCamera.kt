@@ -377,17 +377,11 @@ class SonyProductionCamera(
                     TAG,
                     "Sony Live View lost; sessionAge=${sessionAgeMs?.let(::formatDuration) ?: "unknown"}"
                 )
-                // Without the old proactive lease-refresh path, EVERY loop
-                // exit here now means the same thing that path's failure
-                // used to: the pump exhausted its own patient HTTP-reopen
-                // retries (SonyPtpIpController.LIVE_VIEW_MAX_REOPEN_FAILURES)
-                // on what is very likely a temporary Sony-side hiccup, not a
-                // genuinely dead camera -- a truly gone camera fails the
-                // `camera.isConnected` check in this loop's own condition
-                // instead. So always take the graceful path: keep showing
-                // the last good frame and reconnect quickly, rather than
-                // visibly flashing to the CameraX fallback UI for what is
-                // usually a few-second blip.
+                // The pump exits after eight HTTP 503s or after a replacement
+                // stream also fails. Local SSH state can still say connected
+                // while Sony's producer is wedged, so replace the whole
+                // session. Preserve the last good frame during the ~1.4s
+                // reconnect instead of flashing the CameraX fallback.
                 connectOnce(expectedGeneration, preserveLastSonyFrame = true)
             }
         }
