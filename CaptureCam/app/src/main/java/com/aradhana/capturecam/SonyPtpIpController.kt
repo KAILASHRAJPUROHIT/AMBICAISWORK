@@ -102,34 +102,24 @@ class SonyPtpIpController {
         private const val LIVE_VIEW_MAX_FOCAL_INFO_BYTES = 512 * 1024
         private const val LIVE_VIEW_MAX_DATASET_BYTES = 5 * 1024 * 1024
         private const val LIVE_VIEW_READ_CHUNK_BYTES = 64 * 1024
-        // Confirmed live (2026-08-24): after ANY HTTP live-view stream
-        // close (Sony's natural ~45s server-side timeout, or previously our
-        // own now-removed property-poll refresh), the camera's HTTP
-        // producer can return 503 Service Unavailable for several seconds
-        // before it's ready again. The old budget (5 x 200ms = ~1s) gave up
-        // long before that window closed, forcing a full SSH/PTP
-        // re-handshake (~10s) instead of a cheap HTTP-only reopen on the
-        // SAME still-open SSH session. 40 x 400ms = ~16s of patience, well
-        // past the worst 503 stretch observed, before paying for the
-        // expensive path.
-        private const val LIVE_VIEW_MAX_REOPEN_FAILURES = 40
+        // HTTP 503 is a valid short transient while Sony restarts its local
+        // producer or moves the power zoom. Give that producer 3.2s, then
+        // let SonyProductionCamera replace the whole SSH/PTP session. The
+        // previous 40 x 400ms budget held production for 16-40s even though
+        // a complete session replacement takes about 1.4s.
+        private const val LIVE_VIEW_MAX_HTTP_REJECTS = 8
+        // One failed stream may be reopened once. If that replacement also
+        // fails before delivering a frame, the session is not useful; fail
+        // the pump so the owning layer performs a full reconnect.
+        private const val LIVE_VIEW_MAX_TRANSPORT_FAILURES = 2
         private const val LIVE_VIEW_REOPEN_RETRY_DELAY_MS = 400L
         // More than two 25fps frame periods. Count as a real source stall,
         // not ordinary network jitter.
         private const val LIVE_VIEW_SLOW_GAP_MS = 80L
-        // Creators keeps retrying this local HTTP producer on the same PTP/SSH
-        // session. A 503 is also the normal transient response while the power
-        // zoom motor is active, so it must not be treated as proof that the
-        // session died. PTP/IP ProbeRequest/ProbeResponse now owns liveness.
-        // Must stay comfortably ABOVE the pump's own total HTTP-reopen
-        // retry budget (LIVE_VIEW_MAX_REOPEN_FAILURES *
-        // LIVE_VIEW_REOPEN_RETRY_DELAY_MS = 40*400ms = ~16s), or this
-        // watchdog force-closes the channel out from under a pump that is
-        // still legitimately retrying -- that was fine when the pump gave
-        // up after ~1s, but would now just add a second, redundant
-        // interruption on top of the pump's own in-progress recovery.
         // Healthy 25fps source cadence is ~40ms. Bound a blocked HTTP body
         // read without disturbing the separate persistent PTP control lane.
+        // The single-flight recovery gate below guarantees this watchdog can
+        // close a stuck channel only once per recovery attempt.
         private const val LIVE_VIEW_STALL_TIMEOUT_MS = 750L
         private const val TRANSPORT_HEALTH_POLL_MS = 250L
         private const val TRANSPORT_HEALTH_LOG_MS = 15_000L
@@ -323,6 +313,7 @@ class SonyPtpIpController {
     private val liveViewDecodedCount = AtomicLong(0L)
     private val liveViewDroppedBeforeDecode = AtomicLong(0L)
     private val liveViewReopenCount = AtomicLong(0L)
+    private val liveViewWatchdogTripCount = AtomicLong(0L)
     private val liveViewSlowGapCount = AtomicLong(0L)
     private val lastLoggedFocalState = AtomicInteger(Int.MIN_VALUE)
     private val liveViewMaxGapMs = AtomicLong(0L)
@@ -341,11 +332,15 @@ class SonyPtpIpController {
     // for this epoch once it is set; a new connectBlocking() (which bumps
     // connectionEpoch) is the only thing that clears it.
     @Volatile private var liveViewPumpFailedEpoch: Int = -1
-    // Set true only by the specific "HTTP status line was not 200" rejection
-    // path in ensureLiveViewHttpStream, and reset on every other outcome --
-    // this is what lets the pump loop tell "camera answered, said no" apart
-    // from "channel/session-level failure" for the fast-fail check below.
-    @Volatile private var lastLiveViewHttpRejected = false
+    // Set true only for HTTP 503, Sony's known retryable producer state, and
+    // reset on every other outcome. Other HTTP responses fail like transport
+    // errors instead of burning the producer-restart budget.
+    @Volatile private var lastLiveViewHttpRetryableReject = false
+    // True from the first detected failure until a replacement stream has
+    // been opened. The keepalive watchdog may atomically claim recovery only
+    // while false, so it cannot close a channel while the pump is already
+    // reopening it or waiting through Sony's HTTP 503 interval.
+    private val liveViewRecoveryActive = AtomicBoolean(false)
     @Volatile private var sessionConnectedAtNanos: Long = 0L
     private val eventQueue = LinkedBlockingQueue<ByteArray>()
     @Volatile private var eventThreadRunning = false
@@ -720,6 +715,7 @@ class SonyPtpIpController {
             connected = true
             sessionConnectedAtNanos = System.nanoTime()
             liveViewPumpFailedEpoch = -1
+            liveViewRecoveryActive.set(false)
 
             // Full-time autofocus: set the camera's OWN AF-C (continuous AF)
             // hardware mode once here, rather than repeatedly triggering S1
@@ -808,6 +804,7 @@ class SonyPtpIpController {
         // channel from outside the read lock specifically so that read can
         // be cancelled rather than wedging shutdown.
         liveViewPumpRunning = false
+        liveViewRecoveryActive.set(false)
         forceCloseLiveViewChannel()
         synchronized(liveViewSampleMonitor) { liveViewSampleMonitor.notifyAll() }
         liveViewPumpThread = null
@@ -1785,7 +1782,10 @@ class SonyPtpIpController {
             if (liveViewPumpFailedEpoch == connectionEpoch.get()) return false
             liveViewPumpRunning = true
             liveViewStreaming = true
-            lastLiveViewFrameAtNanos = System.nanoTime()
+            // The first HTTP open owns recovery until it either supplies a
+            // frame or fails. Do not let the watchdog race channel creation.
+            liveViewRecoveryActive.set(true)
+            lastLiveViewFrameAtNanos = 0L
             liveViewSlowGapCount.set(0L)
             liveViewMaxGapMs.set(0L)
             val epoch = connectionEpoch.get()
@@ -1809,6 +1809,7 @@ class SonyPtpIpController {
         val thread: Thread?
         synchronized(liveViewPumpLock) {
             liveViewPumpRunning = false
+            liveViewRecoveryActive.set(false)
             thread = liveViewPumpThread
             liveViewPumpThread = null
         }
@@ -1831,7 +1832,7 @@ class SonyPtpIpController {
     }
 
     private fun runLiveViewPump(epoch: Int) {
-        var consecutiveFailures = 0
+        var consecutiveTransportFailures = 0
         var consecutiveHttpRejects = 0
         var retryBudgetExhausted = false
         while (liveViewPumpRunning && isConnected && epoch == connectionEpoch.get()) {
@@ -1840,15 +1841,24 @@ class SonyPtpIpController {
                 continue
             }
             try {
-                lastLiveViewHttpRejected = false
+                lastLiveViewHttpRetryableReject = false
                 if (!ensureLiveViewHttpStream()) {
-                    consecutiveFailures += 1
-                    consecutiveHttpRejects = if (lastLiveViewHttpRejected) consecutiveHttpRejects + 1 else 0
-                    if (consecutiveFailures >= LIVE_VIEW_MAX_REOPEN_FAILURES) {
+                    liveViewRecoveryActive.set(true)
+                    if (lastLiveViewHttpRetryableReject) {
+                        consecutiveHttpRejects += 1
+                    } else {
+                        consecutiveTransportFailures += 1
+                        consecutiveHttpRejects = 0
+                    }
+                    val httpBudgetSpent = consecutiveHttpRejects >= LIVE_VIEW_MAX_HTTP_REJECTS
+                    val transportBudgetSpent =
+                        consecutiveTransportFailures >= LIVE_VIEW_MAX_TRANSPORT_FAILURES
+                    if (httpBudgetSpent || transportBudgetSpent) {
                         retryBudgetExhausted = true
                         Log.w(
                             TAG,
-                            "Live View pump giving up early: failures=$consecutiveFailures " +
+                            "Live View pump escalating to full session reconnect: " +
+                                "transportFailures=$consecutiveTransportFailures " +
                                 "httpRejects=$consecutiveHttpRejects"
                         )
                         break
@@ -1856,13 +1866,20 @@ class SonyPtpIpController {
                     Thread.sleep(LIVE_VIEW_REOPEN_RETRY_DELAY_MS)
                     continue
                 }
+                // A newly opened stream gets a fresh watchdog interval. The
+                // gate is released only after open succeeds, never while an
+                // HTTP 503/direct-tcpip retry is still in progress.
+                if (liveViewRecoveryActive.getAndSet(false)) {
+                    lastLiveViewFrameAtNanos = System.nanoTime()
+                }
                 val input = liveViewIn ?: continue
                 // No pacing sleep here on purpose: this thread must drain the
                 // socket as fast as the camera fills it, or the backlog this
                 // whole design exists to prevent starts rebuilding.
                 val frame = readNextLiveViewFrame(input)
-                consecutiveFailures = 0
+                consecutiveTransportFailures = 0
                 consecutiveHttpRejects = 0
+                liveViewRecoveryActive.set(false)
                 liveViewPrimed = true
                 val receivedAtNanos = System.nanoTime()
                 val previousReceivedAtNanos = previousLiveViewSourceFrameAtNanos
@@ -1900,18 +1917,25 @@ class SonyPtpIpController {
                     ) {
                         try { Thread.sleep(10L) } catch (_: InterruptedException) { break }
                     }
-                    consecutiveFailures = 0
+                    consecutiveTransportFailures = 0
                     consecutiveHttpRejects = 0
+                    liveViewRecoveryActive.set(false)
                     continue
                 }
-                consecutiveFailures += 1
+                consecutiveTransportFailures += 1
                 consecutiveHttpRejects = 0
                 liveViewPrimed = false
                 Log.w(TAG, "Live View pump read failed: ${e.message}")
                 closeLiveViewHttpStream()
-                liveViewReopenCount.incrementAndGet()
-                if (consecutiveFailures >= LIVE_VIEW_MAX_REOPEN_FAILURES) {
+                if (liveViewRecoveryActive.compareAndSet(false, true)) {
+                    liveViewReopenCount.incrementAndGet()
+                }
+                if (consecutiveTransportFailures >= LIVE_VIEW_MAX_TRANSPORT_FAILURES) {
                     retryBudgetExhausted = true
+                    Log.w(
+                        TAG,
+                        "Live View replacement stream failed; escalating to full session reconnect"
+                    )
                     break
                 }
                 try { Thread.sleep(LIVE_VIEW_REOPEN_RETRY_DELAY_MS) } catch (_: InterruptedException) { break }
@@ -1930,6 +1954,7 @@ class SonyPtpIpController {
             liveViewPumpFailedEpoch = epoch
         }
         liveViewPumpRunning = false
+        liveViewRecoveryActive.set(false)
         synchronized(liveViewSampleMonitor) { liveViewSampleMonitor.notifyAll() }
         Log.i(TAG, "Live View pump stopped")
     }
@@ -1963,8 +1988,10 @@ class SonyPtpIpController {
         val age = sample?.let { liveViewSampleAgeMs(it) } ?: -1L
         return "source=${liveViewSourceSequence.get()} decoded=${liveViewDecodedCount.get()} " +
             "dropped=${liveViewDroppedBeforeDecode.get()} reopens=${liveViewReopenCount.get()} " +
+            "watchdogTrips=${liveViewWatchdogTripCount.get()} " +
             "slowGaps=${liveViewSlowGapCount.get()} maxGapMs=${liveViewMaxGapMs.get()} " +
-            "latestAgeMs=$age pump=$liveViewPumpRunning tunnel=" +
+            "latestAgeMs=$age pump=$liveViewPumpRunning " +
+            "recovering=${liveViewRecoveryActive.get()} tunnel=" +
             (if (liveViewSshSession != null) "dedicated" else "shared")
     }
 
@@ -2052,7 +2079,10 @@ class SonyPtpIpController {
             .find(statusLine)?.groupValues?.getOrNull(1)?.toIntOrNull()
         if (responseCode != 200) {
             Log.w(TAG, "Sony Live View HTTP rejected: $statusLine")
-            lastLiveViewHttpRejected = true
+            // Only 503 is a known temporary Sony producer state. A different
+            // HTTP status is not plausibly repaired by repeating the same
+            // request against the same session.
+            lastLiveViewHttpRetryableReject = responseCode == 503
             closeLiveViewHttpStream()
             return false
         }
@@ -3117,13 +3147,20 @@ class SonyPtpIpController {
                 // parks forever is invisible to it. Disconnecting the channel
                 // from here (a different thread, holding no read lock) makes
                 // that read throw, and the pump reopens on its next loop.
-                if (liveViewPumpRunning) {
+                if (liveViewPumpRunning && !liveViewControlTransition &&
+                    !liveViewRecoveryActive.get()
+                ) {
                     val lastFrameAt = lastLiveViewFrameAtNanos
                     val sinceFrameMs = if (lastFrameAt == 0L) 0L else
                         (System.nanoTime() - lastFrameAt) / 1_000_000L
-                    if (lastFrameAt != 0L && sinceFrameMs > LIVE_VIEW_STALL_TIMEOUT_MS) {
-                        Log.w(TAG, "Live View stalled ${sinceFrameMs}ms; forcing channel reopen")
-                        lastLiveViewFrameAtNanos = System.nanoTime()
+                    if (lastFrameAt != 0L && sinceFrameMs > LIVE_VIEW_STALL_TIMEOUT_MS &&
+                        liveViewRecoveryActive.compareAndSet(false, true)
+                    ) {
+                        Log.w(
+                            TAG,
+                            "Live View stalled ${sinceFrameMs}ms; starting single-flight channel recovery"
+                        )
+                        liveViewWatchdogTripCount.incrementAndGet()
                         liveViewReopenCount.incrementAndGet()
                         forceCloseLiveViewChannel()
                     }
