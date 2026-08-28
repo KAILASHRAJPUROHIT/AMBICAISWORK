@@ -55,10 +55,32 @@ object CameraAssistAnalyzer {
         var sampled = 0
         var shadowClipped = 0
         var highlightClipped = 0
-        var y = 0
-        while (y < height) {
-            var x = 0
-            while (x < width) {
+        // Scoped to the ornament ROI, same inset as the peaking pass below
+        // (2026-08-26 fix): this used to scan the ENTIRE frame, so any
+        // blown-out background, reflection, or gloved hand produced clip
+        // marks scattered far outside the jewellery -- confirmed live, an
+        // operator reported them as confusing "historical traces" since
+        // they didn't track the ring at all. Falls back to full-frame when
+        // no ornament is detected yet (e.g. TAG phase) so the exposure
+        // aids still show something before framing starts.
+        val clipX0: Int
+        val clipX1: Int
+        val clipY0: Int
+        val clipY1: Int
+        if (ornament != null) {
+            val insetX = (ornament.x1 - ornament.x0) * PEAKING_BOUNDS_INSET
+            val insetY = (ornament.y1 - ornament.y0) * PEAKING_BOUNDS_INSET
+            clipX0 = ((ornament.x0 + insetX) * width).toInt().coerceIn(0, width - 1)
+            clipX1 = ((ornament.x1 - insetX) * width).toInt().coerceIn(clipX0 + 1, width)
+            clipY0 = ((ornament.y0 + insetY) * height).toInt().coerceIn(0, height - 1)
+            clipY1 = ((ornament.y1 - insetY) * height).toInt().coerceIn(clipY0 + 1, height)
+        } else {
+            clipX0 = 0; clipX1 = width; clipY0 = 0; clipY1 = height
+        }
+        var y = clipY0
+        while (y < clipY1) {
+            var x = clipX0
+            while (x < clipX1) {
                 val pixel = argbBuffer[y * width + x]
                 val r = (pixel ushr 16) and 0xFF
                 val g = (pixel ushr 8) and 0xFF

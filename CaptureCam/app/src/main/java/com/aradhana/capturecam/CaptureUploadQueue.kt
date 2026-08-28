@@ -117,6 +117,65 @@ object CaptureUploadQueue {
         }
     }
 
+    /** One entry a staff member can act on from the review screen. */
+    data class ReviewItem(
+        val dir: File,
+        val tagCode: String,
+        val error: String?,
+        val type: String,
+        val updatedAt: Long
+    )
+
+    /** Everything currently parked in needs_review -- nothing here was
+     * discarded, it's just waiting for a human decision (2026-08-26 fix:
+     * previously this state was only ever surfaced as a transient Toast,
+     * with no way for staff to actually go act on it). */
+    fun listNeedsReview(context: Context): List<ReviewItem> {
+        val root = File(context.filesDir, ROOT)
+        return root.listFiles()
+            ?.filter { it.isDirectory && !it.name.startsWith(".") }
+            ?.mapNotNull { dir ->
+                val json = readManifest(dir) ?: return@mapNotNull null
+                if (json.optString("state") != "needs_review") return@mapNotNull null
+                ReviewItem(
+                    dir = dir,
+                    tagCode = json.optString("tag_code"),
+                    error = json.optString("last_error").ifBlank { null },
+                    type = json.optString("type"),
+                    updatedAt = json.optLong("updated_at", json.optLong("created_at"))
+                )
+            }
+            ?.sortedBy { it.updatedAt }
+            ?: emptyList()
+    }
+
+    /** Re-queues a needs_review job, optionally forcing past the specific
+     * server-side rejection that parked it there. Staff make this call
+     * explicitly per item -- it is never automatic. */
+    fun retryWithOverride(
+        context: Context,
+        dir: File,
+        overrideDuplicate: Boolean = false,
+        overrideBlur: Boolean = false,
+        overrideVisibility: Boolean = false
+    ) {
+        val json = readManifest(dir) ?: return
+        json.put("state", "queued")
+        json.put("updated_at", System.currentTimeMillis())
+        json.remove("last_error")
+        if (overrideDuplicate) json.put("override_duplicate", true)
+        if (overrideBlur) json.put("override_blur", true)
+        if (overrideVisibility) json.put("override_visibility", true)
+        writeManifest(dir, json)
+        enqueue(context.applicationContext, dir)
+    }
+
+    /** Permanently discards a needs_review item -- e.g. a genuine duplicate
+     * staff confirm should not be saved. Deletes the staged originals. */
+    fun discard(dir: File) {
+        dir.deleteRecursively()
+    }
+
     internal fun readManifest(dir: File): JSONObject? = try {
         JSONObject(File(dir, MANIFEST).readText())
     } catch (e: Exception) {
@@ -184,16 +243,21 @@ class CaptureUploadWorker(
         val manifest = CaptureUploadQueue.readManifest(dir) ?: return@withLock Result.failure()
         val tag = manifest.optString("tag_code")
         val attempts = runAttemptCount + 1
+        val overrideDuplicate = manifest.optBoolean("override_duplicate", false)
+        val overrideBlur = manifest.optBoolean("override_blur", false)
+        val overrideVisibility = manifest.optBoolean("override_visibility", false)
         CaptureUploadQueue.updateState(dir, "uploading", attempts = attempts)
         try {
             val result = when (manifest.optString("type")) {
                 CaptureUploadQueue.TYPE_MULTI -> UploadClient.saveMultiFiles(
                     manifest.getString("server_url"), tag, manifest.optString("staff_name"),
-                    File(dir, "main.jpg"), File(dir, "angle1.jpg"), File(dir, "angle2.jpg")
+                    File(dir, "main.jpg"), File(dir, "angle1.jpg"), File(dir, "angle2.jpg"),
+                    overrideDuplicate, overrideBlur, overrideVisibility
                 )
                 CaptureUploadQueue.TYPE_PAIR -> UploadClient.savePairFiles(
                     manifest.getString("server_url"), tag, manifest.optString("staff_name"),
-                    File(dir, "jewel.jpg"), File(dir, "tag.jpg")
+                    File(dir, "jewel.jpg"), File(dir, "tag.jpg"),
+                    overrideDuplicate, overrideBlur, overrideVisibility
                 )
                 else -> {
                     CaptureUploadQueue.updateState(dir, "needs_review", "unknown_job_type", attempts)
@@ -213,7 +277,11 @@ class CaptureUploadWorker(
                 // human decision. Preserve originals and let later jobs run.
                 CaptureUploadQueue.updateState(dir, "needs_review", result.error, attempts)
                 Log.e(TAG, "Background upload needs review tag=$tag error=${result.error}")
-                CaptureUploadQueue.toast(applicationContext, "Upload needs review: $tag (${result.error})", long = true)
+                CaptureUploadQueue.toast(
+                    applicationContext,
+                    "Upload needs review: $tag (${result.error}) -- long-press Settings to fix",
+                    long = true
+                )
                 Result.success(workDataOf("status" to "needs_review", "tag" to tag, "error" to result.error))
             }
         } catch (e: CancellationException) {

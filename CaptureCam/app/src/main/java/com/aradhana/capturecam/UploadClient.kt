@@ -270,19 +270,24 @@ object UploadClient {
         staffName: String,
         mainJpeg: File,
         angle1Jpeg: File,
-        angle2Jpeg: File
+        angle2Jpeg: File,
+        overrideDuplicate: Boolean = false,
+        overrideBlur: Boolean = false,
+        overrideVisibility: Boolean = false
     ): SaveResult = withContext(Dispatchers.IO) {
         val jpeg = "image/jpeg".toMediaType()
-        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+        val bodyBuilder = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("tag_code", tagCode)
             .addFormDataPart("staff_name", staffName)
             .addFormDataPart("main", "main.jpg", mainJpeg.asRequestBody(jpeg))
             .addFormDataPart("angle1", "angle1.jpg", angle1Jpeg.asRequestBody(jpeg))
             .addFormDataPart("angle2", "angle2.jpg", angle2Jpeg.asRequestBody(jpeg))
-            .build()
+        if (overrideDuplicate) bodyBuilder.addFormDataPart("override_duplicate", "1")
+        if (overrideBlur) bodyBuilder.addFormDataPart("override_blur", "1")
+        if (overrideVisibility) bodyBuilder.addFormDataPart("override_visibility", "1")
         val request = Request.Builder()
             .url("${baseUrl.trimEnd('/')}/api/capture/save_multi")
-            .post(body)
+            .post(bodyBuilder.build())
             .build()
         client.newCall(request).execute().use { response ->
             parseSaveResult(response.body?.string() ?: "{}")
@@ -295,18 +300,23 @@ object UploadClient {
         tagCode: String,
         staffName: String,
         jewelJpeg: File,
-        tagJpeg: File
+        tagJpeg: File,
+        overrideDuplicate: Boolean = false,
+        overrideBlur: Boolean = false,
+        overrideVisibility: Boolean = false
     ): SaveResult = withContext(Dispatchers.IO) {
         val jpeg = "image/jpeg".toMediaType()
-        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+        val bodyBuilder = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("tag_code", tagCode)
             .addFormDataPart("staff_name", staffName)
             .addFormDataPart("jewel", "jewel.jpg", jewelJpeg.asRequestBody(jpeg))
             .addFormDataPart("tag", "tag.jpg", tagJpeg.asRequestBody(jpeg))
-            .build()
+        if (overrideDuplicate) bodyBuilder.addFormDataPart("override_duplicate", "1")
+        if (overrideBlur) bodyBuilder.addFormDataPart("override_blur", "1")
+        if (overrideVisibility) bodyBuilder.addFormDataPart("override_visibility", "1")
         val request = Request.Builder()
             .url("${baseUrl.trimEnd('/')}/api/capture/save")
-            .post(body)
+            .post(bodyBuilder.build())
             .build()
         client.newCall(request).execute().use { response ->
             parseSaveResult(response.body?.string() ?: "{}")

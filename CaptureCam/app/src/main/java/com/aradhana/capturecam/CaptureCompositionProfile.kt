@@ -153,7 +153,21 @@ object CaptureCompositionProfiles {
     }
 
     init {
-        check(BY_CATEGORY.size == 57) { "Expected all 57 stock categories, got ${BY_CATEGORY.size}" }
+        // Soft check, not a hard crash (2026-08-26): a hard check() here
+        // crashed the WHOLE app on launch if the catalogue's stock-category
+        // count ever drifted from exactly 57 -- one operator-side catalogue
+        // edit would take down capture entirely with no diagnostic on
+        // screen. Log loudly instead; forCategory() already returns null
+        // safely for any unmapped key, so a mismatch degrades to "no
+        // composition guide for this one category" rather than "app won't
+        // open."
+        if (BY_CATEGORY.size != 57) {
+            android.util.Log.e(
+                "CaptureCompositionProfiles",
+                "Expected all 57 stock categories, got ${BY_CATEGORY.size} -- " +
+                    "composition guidance will be missing for any category not in this map"
+            )
+        }
     }
 
     fun forCategory(categoryKey: String?): Profile? = categoryKey?.let(BY_CATEGORY::get)

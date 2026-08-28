@@ -94,6 +94,8 @@ class SonyPtpIpController {
         private const val SSH_LIVE_VIEW_WINDOW_BYTES = 1024 * 1024
         private const val SSH_CHANNEL_PACKET_BYTES = 64 * 1024
         private const val PTP_READ_TIMEOUT_MS = 12_000L
+        private const val LOG_ALL_CHUNKS_UNDER = 8
+        private const val LOG_CHUNK_STRIDE = 40
         private const val LIVE_VIEW_READ_TIMEOUT_MS = 8_000L
         private const val QUALITY_PROPERTY_SETTLE_TIMEOUT_MS = 800L
         private const val LIVE_VIEW_MAX_JPEG_BYTES = 4 * 1024 * 1024
@@ -2874,6 +2876,19 @@ class SonyPtpIpController {
                 }
             }
         }
+        // Throttles per-chunk logging for large transfers (2026-08-26 fix):
+        // every PTP data packet used to get its own Log.i() call, string
+        // formatting included, synchronously on this read thread before the
+        // next chunk could even be read. That's harmless for a ~9KB property
+        // dump (a handful of chunks) but a 10-18MB original photo download
+        // is the SAME code path with potentially hundreds to thousands of
+        // small PTP chunks -- the logging tax, not network/WiFi throughput,
+        // was very likely the dominant cost of that transfer. Logs every
+        // chunk in full for the first LOG_ALL_CHUNKS_UNDER (covers all real
+        // control-op sizes), then throttles to periodic progress so a bulk
+        // download's actual read loop isn't fighting its own diagnostics.
+        var chunkIndex = 0
+        var lastLoggedChunkIndex = 0
         try {
             while (true) {
             // Creators' TcpConnection owns one permanent blocking receiver.
@@ -2897,14 +2912,29 @@ class SonyPtpIpController {
                     Log.i(TAG, "RX data-start txId=$txId expectedTxId=$expectedTxId total=$total")
                 }
                 PKT_DATA_PACKET, PKT_END_DATA_PACKET -> {
+                    chunkIndex += 1
                     val txId = if (body.size >= 4) body.readIntLeAt(0) else null
                     if (body.size > 4) data.write(body, 4, body.size - 4)
-                    Log.i(
-                        TAG,
-                        "RX data-${if (type == PKT_END_DATA_PACKET) "end" else "chunk"} " +
-                            "txId=$txId expectedTxId=$expectedTxId chunk=${(body.size - 4).coerceAtLeast(0)}B " +
-                            "accumulated=${data.size()}B"
-                    )
+                    val isEnd = type == PKT_END_DATA_PACKET
+                    // Full detail for the first LOG_ALL_CHUNKS_UNDER chunks
+                    // (every real control op fits inside that), the END
+                    // packet always, and otherwise only every
+                    // LOG_CHUNK_STRIDE-th chunk -- a bulk original-photo
+                    // download can be hundreds to thousands of small PTP
+                    // chunks, and logging every one of them synchronously
+                    // was very likely the dominant cost of that transfer,
+                    // not WiFi/tablet throughput.
+                    if (chunkIndex <= LOG_ALL_CHUNKS_UNDER || isEnd ||
+                        chunkIndex - lastLoggedChunkIndex >= LOG_CHUNK_STRIDE
+                    ) {
+                        lastLoggedChunkIndex = chunkIndex
+                        Log.i(
+                            TAG,
+                            "RX data-${if (isEnd) "end" else "chunk"} " +
+                                "txId=$txId expectedTxId=$expectedTxId chunk=${(body.size - 4).coerceAtLeast(0)}B " +
+                                "accumulated=${data.size()}B chunkIndex=$chunkIndex"
+                        )
+                    }
                 }
                 PKT_OPERATION_RESPONSE -> {
                     val code = ByteBuffer.wrap(body, 0, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xFFFF

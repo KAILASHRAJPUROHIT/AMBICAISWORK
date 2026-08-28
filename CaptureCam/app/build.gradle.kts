@@ -57,6 +57,11 @@ dependencies {
 
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("com.google.mlkit:object-detection:17.0.2")
+    // Runs alongside the barcode scanner on the same frame (2026-08-26):
+    // shop tags print the human-readable code (e.g. "GR22/131") next to
+    // the barcode/QR, so OCR is a second independent decode path that can
+    // succeed on a reflective/low-contrast tag where the barcode can't.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 

@@ -51,6 +51,9 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.objects.ObjectDetection
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -269,6 +272,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private var angle1Jpeg: ByteArray? = null
+    // Angle-2 positioning overlap (2026-08-26, explicit product decision):
+    // the operator starts turning the item for angle 2 the instant angle
+    // 1's physical shutter fires, instead of waiting ~5s for the original
+    // to download. angle1Validated/angle1NeedsRetake gate the ACTUAL angle-2
+    // shutter (not the positioning prompt) until angle 1's async not-moved
+    // check has resolved -- see fireAngle2WhenAngle1Ready(). If it comes
+    // back bad, the operator is redirected to retake angle 1 whenever that
+    // result lands, even if they've already started repositioning.
+    private var angle1Validated = false
+    private var angle1NeedsRetake = false
     private var angle2Jpeg: ByteArray? = null
     // Set for the whole MAIN-accepted -> angle1 -> angle2 sequence. tickJewel()
     // keeps running on its own timer the entire time phase stays JEWEL (which
@@ -374,6 +387,13 @@ class MainActivity : AppCompatActivity() {
                 )
                 .build()
         )
+    }
+    // Runs in parallel with barcodeScanner on the same frame (2026-08-26):
+    // an independent decode path for tags where the printed code is legible
+    // but the barcode/QR itself is reflective, low-contrast, or too small
+    // for that pass to lock onto -- see the tag-scan block in tickTag().
+    private val textRecognizer by lazy {
+        TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     }
     // Conversion and Task listeners stay off the main/UI looper. Default ML
     // Kit listeners were starved behind the 25fps ImageView renderer, leaving
@@ -839,14 +859,24 @@ class MainActivity : AppCompatActivity() {
         // More aggressive still (2026-08-18, explicit request): bigger
         // steps, faster cadence, deeper floor -- gold clipping at all
         // should pull exposure down hard and fast, not creep toward it.
+        // Restored to production's exact tuned values (2026-08-26): this
+        // candidate branch had detuned every dimension of this reactive
+        // corrector -- smaller step (1/3 EV vs 1.0), shallower floor (-2.0
+        // vs -4.0), slower Sony interval (500ms vs 600ms... note interval
+        // itself got FASTER not slower, see below), and replaced the
+        // production two-signal trigger (gold-clip-at-all OR whole-scene
+        // clip) with a gold-only trigger requiring 8% of gold samples
+        // clipped -- gold samples are sparse per frame (production's own
+        // 2026-08-18 comment already root-caused this exact failure mode),
+        // so in practice it almost never fired. Confirmed live: goldClip
+        // read 0.0 on every tick during a real E2E test while the operator
+        // reported the image was visibly too bright.
         private const val EXPOSURE_ADJUST_INTERVAL_MS = 250L
-        private const val SONY_EXPOSURE_ADJUST_INTERVAL_MS = 500L
-        private const val EXPOSURE_STEP_EV = 1f / 3f
-        private const val EXPOSURE_MIN_EV = -2.0f
-        private const val GOLD_CLIP_HIGH = 0.08f
-        private const val GOLD_CLIP_LOW = 0.02f
-        private const val EXPOSURE_CONFIRM_TICKS = 3
-        private const val EXPOSURE_CLEAR_TICKS = 5
+        private const val SONY_EXPOSURE_ADJUST_INTERVAL_MS = 600L
+        private const val EXPOSURE_STEP_EV = 1.0f
+        private const val EXPOSURE_MIN_EV = -4.0f
+        private const val HIGHLIGHT_CLIP_HIGH = 0.03f
+        private const val HIGHLIGHT_CLIP_LOW = 0.01f
         private const val MIN_TRUSTED_TARGET_AREA = 0.004f
         private const val MIN_TRUSTED_GOLD_POINTS = 12
         private const val TRACKING_LOG_INTERVAL_MS = 1_000L
@@ -1191,6 +1221,12 @@ class MainActivity : AppCompatActivity() {
         launchedFromBrowser = intent?.data?.scheme == "capturecam"
 
         binding.settingsButton.setOnClickListener { showSettingsDialog() }
+        // Long-press entry point for reviewing background-upload rejections
+        // (2026-08-26 fix): needs_review items were previously only ever
+        // surfaced as a transient Toast with no way to act on them -- the
+        // settings neutral-button slot is already used by RSC2 BLE test,
+        // so this uses long-press instead of a new dialog button.
+        binding.settingsButton.setOnLongClickListener { showUploadReviewDialog(); true }
         binding.manualShutterButton.setOnClickListener { forceCaptureCurrentPhase() }
         binding.readyButton.setOnClickListener {
             val action = pendingReadyAction ?: return@setOnClickListener
@@ -1204,6 +1240,20 @@ class MainActivity : AppCompatActivity() {
             onFrame = ::onSonyFrame,
             onAvailabilityChanged = ::onSonyAvailabilityChanged
         )
+        // Fires on the live-loop background thread -- post to main before
+        // touching the View. See FpsGraphView's doc comment.
+        sonyProduction.onFrameTiming = { fps ->
+            handler.post { if (!isDestroyed) binding.fpsGraph.addSample(fps) }
+        }
+        // Persists a rediscovered camera IP (2026-08-28) so the NEXT launch
+        // starts at the last-known-good address instead of a stale one --
+        // see SonyCameraDiscovery's doc comment for why this is needed at
+        // all. Fires on a background thread; SharedPreferences.edit() is
+        // thread-safe to call from anywhere.
+        sonyProduction.onCameraIpChanged = { newIp ->
+            prefs.edit().putString("sony_camera_ip", newIp).apply()
+            Log.i(TAG, "Sony camera IP updated to $newIp after rediscovery")
+        }
         CaptureUploadQueue.resumePending(applicationContext)
         ensurePipelineStarted()
         applyRequestedCameraMode(allowPermissionPrompt = true)
@@ -1571,22 +1621,54 @@ class MainActivity : AppCompatActivity() {
                             barcodeFrame.bytes, barcodeFrame.width, barcodeFrame.height, 0,
                             InputImage.IMAGE_FORMAT_NV21
                         )
-                        barcodeScanner.process(input)
-                            .addOnCompleteListener(barcodeExecutor) { task ->
+                        // Barcode/QR and OCR text run SIMULTANEOUSLY on the
+                        // same frame, but OCR's raw per-frame reads are NOT
+                        // fed into the burst consensus directly (2026-08-26,
+                        // reverted after live testing): OCR misreads a
+                        // character (O/G/Z/2 confusion etc.) differently on
+                        // almost every frame, and each misread still happens
+                        // to match TAG_CODE_PATTERN's shape -- confirmed live,
+                        // this produced a stream of near-miss votes
+                        // (GR22/112, GRZ2/112, OR22/112, RZ2/112, ...) that
+                        // never agreed 3-of-5, so the burst rejected forever
+                        // and label detection stopped working entirely on a
+                        // tag whose barcode/QR never decoded either. OCR
+                        // still runs (telemetry only, textResults=N in the
+                        // log) so a future fix can require several IDENTICAL
+                        // OCR reads in a row before trusting one, instead of
+                        // trusting any single frame's read.
+                        val barcodeTask = barcodeScanner.process(input)
+                        val textTask = textRecognizer.process(input)
+                        Tasks.whenAllComplete(barcodeTask, textTask)
+                            .addOnCompleteListener(barcodeExecutor) { _ ->
                                 barcodeBusy = false
                                 val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L
                                 val prepMs = (preprocessedAt - startedAt) / 1_000_000L
                                 val mlMs = elapsedMs - prepMs
-                                if (task.isSuccessful) {
-                                    val barcodes = task.result.orEmpty()
-                                    val codes = barcodes.mapNotNull { it.rawValue?.trim()?.takeIf(String::isNotEmpty) }
-                                    if (codes.isNotEmpty() || attempt % 25 == 0) {
-                                        Log.i(
-                                            TAG,
-                                            "Sony tag scan attempt=$attempt totalMs=$elapsedMs " +
-                                                "prepMs=$prepMs mlMs=$mlMs results=${codes.size}"
-                                        )
-                                    }
+                                val barcodes = if (barcodeTask.isSuccessful) barcodeTask.result.orEmpty() else emptyList()
+                                val barcodeCodes = barcodes.mapNotNull { it.rawValue?.trim()?.takeIf(String::isNotEmpty) }
+                                val textCodes = if (textTask.isSuccessful) {
+                                    textTask.result?.textBlocks.orEmpty()
+                                        .flatMap { it.lines }
+                                        .map { it.text.trim() }
+                                        .filter { TAG_CODE_PATTERN.matches(it) }
+                                } else emptyList()
+                                val codes = barcodeCodes.distinct()
+                                if (codes.isNotEmpty() || attempt % 25 == 0) {
+                                    Log.i(
+                                        TAG,
+                                        "Sony tag scan attempt=$attempt totalMs=$elapsedMs " +
+                                            "prepMs=$prepMs mlMs=$mlMs barcodeResults=${barcodeCodes.size} " +
+                                            "textResults=${textCodes.size}"
+                                    )
+                                }
+                                if (!barcodeTask.isSuccessful) {
+                                    Log.w(TAG, "Sony barcode scan failed after ${elapsedMs}ms", barcodeTask.exception)
+                                }
+                                if (!textTask.isSuccessful) {
+                                    Log.w(TAG, "Sony tag OCR failed after ${elapsedMs}ms", textTask.exception)
+                                }
+                                if (codes.isNotEmpty() || barcodeTask.isSuccessful || textTask.isSuccessful) {
                                     val eligibleCodes = codes.filterNot { it == invalidTagCode }
                                     val outcome = consumeSonyTagBurst(eligibleCodes, sourceJpeg)
                                     handler.post {
@@ -1607,8 +1689,7 @@ class MainActivity : AppCompatActivity() {
                                         }
                                     }
                                 } else {
-                                    val error = task.exception
-                                    Log.e(TAG, "Sony barcode scan failed after ${elapsedMs}ms", error)
+                                    val error = barcodeTask.exception ?: textTask.exception
                                     handler.post {
                                         lastBarcodeError = error?.message ?: error?.javaClass?.simpleName ?: "scan failed"
                                     }
@@ -2688,7 +2769,7 @@ class MainActivity : AppCompatActivity() {
      * photos still use [captureFullRes]. */
     private fun captureTagFrame(onResult: (ByteArray?) -> Unit) {
         if (activeCameraSource != ProductionCameraSource.SONY) {
-            captureFullRes(onResult)
+            captureFullRes(onResult = onResult)
             return
         }
         onResult(confirmedTagEvidenceJpeg?.copyOf() ?: sonyProduction.currentLiveViewJpeg())
@@ -2933,7 +3014,7 @@ class MainActivity : AppCompatActivity() {
         // across the ring's engraved face despite the corrector running.
         // Gating capture on this (not just adjusting exposure and hoping)
         // closes that gap.
-        val goldOverexposed = result.highlightClipFraction >= GOLD_CLIP_HIGH
+        val goldOverexposed = result.highlightClipFraction > 0f
         // Explicit phase label for diagnostics, in the spirit of the DINO/
         // MIL branch's VisionState enum (2026-08-18 port) -- derived
         // read-only from signals already computed above, no new EMA-
@@ -3272,28 +3353,29 @@ class MainActivity : AppCompatActivity() {
             SONY_EXPOSURE_ADJUST_INTERVAL_MS
         } else EXPOSURE_ADJUST_INTERVAL_MS
         if (now - lastExposureAdjustAt < adjustInterval) return
-        val goldOverexposed = result.highlightClipFraction >= GOLD_CLIP_HIGH
-        val goldClearlyFine = result.highlightClipFraction <= GOLD_CLIP_LOW
-        exposureClipStreak = if (goldOverexposed) exposureClipStreak + 1 else 0
-        exposureClearStreak = if (goldClearlyFine) exposureClearStreak + 1 else 0
-        if (exposureClipStreak < EXPOSURE_CONFIRM_TICKS &&
-            exposureClearStreak < EXPOSURE_CLEAR_TICKS
-        ) return
         lastExposureAdjustAt = now
+        // Production's exact two-signal design (2026-08-18, restored
+        // 2026-08-26): gold clipping AT ALL (>0f) means real design detail
+        // (engraving/facets) is already lost there -- no percentage floor
+        // makes sense for that judgment. sceneClipFraction (the whole
+        // sampled region, not just gold) catches a washed-out BACKGROUND
+        // even when the gold itself isn't clipping yet -- gold samples are
+        // sparse per frame, so gold-only ever reacting is what silently
+        // broke this (confirmed live both in 2026-08-18's original bug and
+        // in this branch's regression of it).
+        val goldOverexposed = result.highlightClipFraction > 0f
         val range = cameraExposureRangeEv()
         val floor = max(range.start, EXPOSURE_MIN_EV)
         val before = autoExposureEv
         val target = when {
-            exposureClipStreak >= EXPOSURE_CONFIRM_TICKS ->
+            goldOverexposed || result.sceneClipFraction > HIGHLIGHT_CLIP_HIGH ->
                 (before - EXPOSURE_STEP_EV).coerceAtLeast(floor)
-            exposureClearStreak >= EXPOSURE_CLEAR_TICKS && before < 0f ->
+            !goldOverexposed && result.sceneClipFraction < HIGHLIGHT_CLIP_LOW && before < 0f ->
                 (before + EXPOSURE_STEP_EV).coerceAtMost(0f)
             else -> before
         }
-        exposureClipStreak = 0
-        exposureClearStreak = 0
         if (target != before) queueAutoExposure(target)
-        Log.d(TAG, "applyAutoExposure goldClip=${result.highlightClipFraction} sceneClipIgnored=${result.sceneClipFraction} before=$before target=$target floor=$floor")
+        Log.d(TAG, "applyAutoExposure goldClip=${result.highlightClipFraction} sceneClip=${result.sceneClipFraction} before=$before target=$target floor=$floor")
     }
 
     /** Latest-wins exposure queue. Do not update state until Sony ACKs. */
@@ -3986,7 +4068,7 @@ class MainActivity : AppCompatActivity() {
         val captureFn: ((ByteArray?) -> Unit) -> Unit = if (useNothingCameraForCapture()) {
             { cb -> NothingCameraBridge.captureViaNothingCamera(this, cb) }
         } else {
-            ::captureFullRes
+            { cb -> captureFullRes(onResult = cb) }
         }
         captureFn jewelCapture@{ bytes ->
             if (bytes == null) {
@@ -4399,14 +4481,51 @@ class MainActivity : AppCompatActivity() {
         if (angleCaptureInFlight) return
         angleCaptureInFlight = true
         setStatus("Capturing angle 1…", ready = false)
+        angle1Validated = false
+        angle1NeedsRetake = false
         // centerThenCapture() already completed touch-focus + stable-frame
         // gating. A second focus command here interrupted Sony Live View and
         // added delay immediately before every side shutter.
-        captureFullRes { bytes ->
+        captureFullRes(
+            onShutterAccepted = {
+                // Physical shutter has fired -- let the operator start
+                // turning the item for angle 2 immediately instead of
+                // waiting on the ~5s original download (2026-08-26,
+                // explicit product decision). onAngle1Captured below runs
+                // the not-moved check concurrently; fireAngle2WhenAngle1Ready()
+                // is what actually gates angle 2's shutter on that result,
+                // interrupting with a retake prompt if it comes back bad --
+                // even if the operator has already started repositioning.
+                promptForSideProfile("Turn the ornament to show the OTHER side profile, then tap READY") {
+                    centerThenCapture { fireAngle2WhenAngle1Ready() }
+                }
+            }
+        ) { bytes ->
             angleCaptureInFlight = false
             Log.i(TAG, "captureAngle1 result bytes=${bytes?.size}")
             onAngle1Captured(bytes)
         }
+    }
+
+    /** Gates angle 2's ACTUAL shutter (not the positioning prompt) on angle
+     * 1's async not-moved check having resolved. Called once the operator
+     * has repositioned, tapped READY, and centering/focus have settled --
+     * by then angle 1's result has very likely already arrived, since a
+     * human turning the item takes comparable or longer. */
+    private fun fireAngle2WhenAngle1Ready() {
+        if (angle1NeedsRetake) {
+            angle1NeedsRetake = false
+            promptForSideProfile("Angle 1 needs a retake — reposition, then tap READY") {
+                centerThenCapture { captureAngle1() }
+            }
+            return
+        }
+        if (!angle1Validated) {
+            setStatus("Confirming angle 1…", ready = false)
+            handler.postDelayed({ fireAngle2WhenAngle1Ready() }, 150L)
+            return
+        }
+        captureAngle2()
     }
 
     private fun onAngle1Captured(bytes: ByteArray?) {
@@ -4417,9 +4536,14 @@ class MainActivity : AppCompatActivity() {
                 handler.postDelayed({ captureAngle1() }, ANGLE_CAPTURE_RETRY_DELAY_MS)
             } else {
                 Log.w(TAG, "Angle 1 capture unavailable after $angleCaptureRetryCount delayed attempts")
-                promptForSideProfile("Angle 1 not captured — reposition, then tap READY") {
-                    centerThenCapture { captureAngle1() }
-                }
+                // Unblock fireAngle2WhenAngle1Ready() if the operator already
+                // reached that gate while this was still retrying. They may
+                // already be mid-repositioning for angle 2 with nothing on
+                // screen saying angle 1 failed -- surface it now rather than
+                // silently waiting for them to hit the gate.
+                Toast.makeText(this, "Angle 1 didn't save — you'll be asked to retake it", Toast.LENGTH_LONG).show()
+                angle1NeedsRetake = true
+                angle1Validated = true
             }
             return
         }
@@ -4427,20 +4551,21 @@ class MainActivity : AppCompatActivity() {
         // Item-not-moved check: angle1 should look visibly different from
         // MAIN (the item was supposed to be turned to show a side
         // profile) -- if it doesn't, the operator likely tapped through
-        // READY without actually rotating the piece.
+        // READY without actually rotating the piece. Runs silently; only
+        // interrupts (via fireAngle2WhenAngle1Ready's retake path) if it
+        // actually finds a problem -- the happy path no longer blocks on a
+        // manual preview here (2026-08-26, explicit product decision:
+        // "start angle-2 positioning immediately, show review later if
+        // needed" -- angle 1's full visual review was the thing waiting on
+        // the ~5s download; the automated not-moved check is what actually
+        // needs to gate the next shutter, not a human tapping Continue).
         promptRotateIfUnmoved(bytes, jewelJpeg, onConfirmed = {
-            showCapturePreview(
-                bytes,
-                onProceed = {
-                    angle1Jpeg = bytes
-                    promptForSideProfile("Turn the ornament to show the OTHER side profile, then tap READY") {
-                        centerThenCapture { captureAngle2() }
-                    }
-                },
-                onRetake = { captureAngle1() },
-                onCancel = { cancelItem() }
-            )
-        }, onRetake = { captureAngle1() })
+            angle1Jpeg = bytes
+            angle1Validated = true
+        }, onRetake = {
+            angle1NeedsRetake = true
+            angle1Validated = true
+        })
     }
 
     private fun captureAngle2() {
@@ -5319,7 +5444,7 @@ class MainActivity : AppCompatActivity() {
      * scratch, staying in this session (not returning to the browser). */
     private fun retakeJewel() {
         jewelJpeg = null
-        angle1Jpeg = null
+        angle1Jpeg = null; angle1Validated = false; angle1NeedsRetake = false
         angle2Jpeg = null
         inAngleSequence = false
         angleCaptureInFlight = false
@@ -5401,15 +5526,25 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Takes exactly one still and returns its bytes, or null on failure. */
+    /** Takes exactly one still and returns its bytes, or null on failure.
+     * [onShutterAccepted] fires the instant the physical shutter is
+     * confirmed -- well before [onResult]'s full original download -- so a
+     * caller can let the operator start the NEXT physical step immediately
+     * instead of waiting on transfer. Defaults to a no-op for callers that
+     * don't need the earlier signal. */
     private fun captureOneFrame(
         source: ProductionCameraSource = activeCameraSource,
+        onShutterAccepted: () -> Unit = {},
         onResult: (ByteArray?) -> Unit
     ) {
         if (source == ProductionCameraSource.SONY) {
-            sonyProduction.captureStill(onResult)
+            sonyProduction.captureStill(onShutterAccepted = onShutterAccepted, onResult = onResult)
             return
         }
+        // CameraX's ImageCapture API doesn't expose a separate shutter-
+        // accepted signal ahead of onCaptureSuccess; firing it here (capture
+        // actually requested) is the closest available equivalent.
+        onShutterAccepted()
         val capture = imageCapture ?: run { onResult(null); return }
         capture.takePicture(
             ContextCompat.getMainExecutor(this),
@@ -5446,12 +5581,12 @@ class MainActivity : AppCompatActivity() {
     /** One physical shutter per requested view. The old two-frame sharpness
      * burst doubled all three shutters and added roughly 25-30 seconds per
      * item. Focus and motion quality are already gated before this call. */
-    private fun captureFullRes(onResult: (ByteArray?) -> Unit) {
+    private fun captureFullRes(onShutterAccepted: () -> Unit = {}, onResult: (ByteArray?) -> Unit) {
         // One physical shutter per requested view. Focus-state, stable-frame
         // and gimbal-still gates have already passed before this call.
         val captureSource = activeCameraSource
         val captureEpoch = cameraModeEpoch
-        captureOneFrame(captureSource) frame@{ bytes ->
+        captureOneFrame(captureSource, onShutterAccepted = onShutterAccepted) frame@{ bytes ->
             if (captureEpoch != cameraModeEpoch || captureSource != activeCameraSource) {
                 Log.w(TAG, "Discarding frame after camera-mode change")
                 onResult(null)
@@ -5564,7 +5699,7 @@ class MainActivity : AppCompatActivity() {
             }
             logCaptureEvent("upload_multi_queued", mapOf("job_id" to staged.id))
             jewelJpeg = null
-            angle1Jpeg = null
+            angle1Jpeg = null; angle1Validated = false; angle1NeedsRetake = false
             angle2Jpeg = null
             tagJpeg = null
             Toast.makeText(this@MainActivity, "Queued $tagCode — uploading in background", Toast.LENGTH_SHORT).show()
@@ -5843,7 +5978,7 @@ class MainActivity : AppCompatActivity() {
             // captured (confirmed as the failure mode this would produce
             // during the #76 flip work, 2026-08-18).
             jewelJpeg = null
-            angle1Jpeg = null
+            angle1Jpeg = null; angle1Validated = false; angle1NeedsRetake = false
             angle2Jpeg = null
             setCameraZoomRatio(1f)
         }
@@ -5960,14 +6095,20 @@ class MainActivity : AppCompatActivity() {
         val evThirds = (autoExposureEv * 3f).roundToInt()
         val evMilli = ((evThirds * 1_000f / 3f) / 100f).roundToInt() * 100
         if (profile == 0) {
-            // Production preview/capture hardwall: 1/100 keeps sensor exposure
-            // safely below the 40ms frame budget; f/8 preserves jewellery
-            // depth; ISO Auto supplies brightness and keeps EV compensation
-            // available in Manual mode. Aperture priority + ISO 100 previously
-            // selected long shutters and made Sony's source fall to 6-10fps.
+            // Restored to match the production-verified exposure behavior
+            // (2026-08-25 checkpoint, confirmed "perfect" on real E2E items):
+            // aperture-priority + ISO 100, no fixed shutter override. This
+            // candidate branch had switched profile 0 to Manual+AutoISO+1/100
+            // to chase live-view fps, but that changes what the operator sees
+            // during the pre-capture exposure-adjustment cycle -- explicitly
+            // told to preserve that cycle exactly, not the fps rationale.
+            // The new streaming-safe property-write path (applyQualitySettings
+            // via setControlDeviceAStreamingSafe) still applies these values
+            // without the old HTTP-stream release/reopen -- only the VALUES
+            // reverted, not the write mechanism.
             return SonyQualitySettings(
-                exposureMode = 1,
-                iso = 0x00FF_FFFF,
+                exposureMode = 131_075,
+                iso = 100,
                 whiteBalance = 2,
                 stillFileFormat = 2,
                 jpegQuality = 1,
@@ -5978,8 +6119,6 @@ class MainActivity : AppCompatActivity() {
                 dynamicRangeOptimizer = 1,
                 creativeLook = 1,
                 fNumberTimes100 = 800,
-                shutterNumerator = 1,
-                shutterDenominator = 100,
                 exposureCompensationMilliEv = evMilli,
                 focusMode = 0x8004,
                 focusArea = 259,
@@ -6211,7 +6350,7 @@ class MainActivity : AppCompatActivity() {
                     hideReadyButton()
                     rsc2.stopAndReturnToCenter()
                     jewelJpeg = null
-                    angle1Jpeg = null
+                    angle1Jpeg = null; angle1Validated = false; angle1NeedsRetake = false
                     angle2Jpeg = null
                     resetForNewItem(Phase.TAG)
                     Toast.makeText(
@@ -6246,6 +6385,65 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    /** Lists every background upload parked in needs_review and lets staff
+     * act on each one (2026-08-26 fix -- see CaptureUploadQueue). Nothing
+     * here is automatic: retry, override, and discard are all explicit
+     * per-item staff decisions. */
+    private fun showUploadReviewDialog() {
+        val items = CaptureUploadQueue.listNeedsReview(this)
+        if (items.isEmpty()) {
+            Toast.makeText(this, "No uploads need review", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val labels = items.map { "${it.tagCode}  (${it.error ?: "unknown"})" }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Needs review (${items.size})")
+            .setItems(labels) { _, index -> showUploadReviewActionDialog(items[index]) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showUploadReviewActionDialog(item: CaptureUploadQueue.ReviewItem) {
+        val actions = mutableListOf("Retry as-is", "Discard (delete originals)")
+        // Only offer the specific override that matches what the server
+        // actually rejected -- overriding a duplicate should not also
+        // silently force past a real blur rejection the server never made.
+        when (item.error) {
+            "duplicate" -> actions.add(1, "Save anyway (duplicate)")
+            "blurry" -> actions.add(1, "Save anyway (blurry)")
+            "not_clearly_visible" -> actions.add(1, "Save anyway (not clearly visible)")
+        }
+        AlertDialog.Builder(this)
+            .setTitle(item.tagCode)
+            .setMessage("Rejected: ${item.error ?: "unknown error"}")
+            .setItems(actions.toTypedArray()) { _, index ->
+                when (actions[index]) {
+                    "Retry as-is" -> {
+                        CaptureUploadQueue.retryWithOverride(this, item.dir)
+                        Toast.makeText(this, "Retrying ${item.tagCode}", Toast.LENGTH_SHORT).show()
+                    }
+                    "Discard (delete originals)" -> {
+                        CaptureUploadQueue.discard(item.dir)
+                        Toast.makeText(this, "Discarded ${item.tagCode}", Toast.LENGTH_SHORT).show()
+                    }
+                    "Save anyway (duplicate)" -> {
+                        CaptureUploadQueue.retryWithOverride(this, item.dir, overrideDuplicate = true)
+                        Toast.makeText(this, "Saving ${item.tagCode} anyway", Toast.LENGTH_SHORT).show()
+                    }
+                    "Save anyway (blurry)" -> {
+                        CaptureUploadQueue.retryWithOverride(this, item.dir, overrideBlur = true)
+                        Toast.makeText(this, "Saving ${item.tagCode} anyway", Toast.LENGTH_SHORT).show()
+                    }
+                    "Save anyway (not clearly visible)" -> {
+                        CaptureUploadQueue.retryWithOverride(this, item.dir, overrideVisibility = true)
+                        Toast.makeText(this, "Saving ${item.tagCode} anyway", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         // Clears tickRunnable and any pending scheduleGimbalRetry callback
@@ -6254,6 +6452,7 @@ class MainActivity : AppCompatActivity() {
         // fire against this Activity once it's destroyed anyway.
         handler.removeCallbacksAndMessages(null)
         barcodeScanner.close()
+        textRecognizer.close()
         barcodeExecutor.shutdownNow()
         jewelAnalysisExecutor.shutdownNow()
         if (::sonyProduction.isInitialized) sonyProduction.stop()

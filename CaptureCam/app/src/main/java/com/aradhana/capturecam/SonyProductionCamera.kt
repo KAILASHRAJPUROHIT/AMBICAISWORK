@@ -31,8 +31,9 @@ class SonyProductionCamera(
     private val onFrame: (android.graphics.Bitmap) -> Unit,
     private val onAvailabilityChanged: (Boolean, String) -> Unit
 ) {
+    private val appContext = context.applicationContext
     private val wifiManager =
-        context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+        appContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
     private val liveViewWifiLock: WifiManager.WifiLock = wifiManager.createWifiLock(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             WifiManager.WIFI_MODE_FULL_LOW_LATENCY
@@ -44,6 +45,16 @@ class SonyProductionCamera(
     ).apply { setReferenceCounted(false) }
     private val mainHandler = Handler(Looper.getMainLooper())
     private val stateLock = Any()
+    // Optional per-frame instantaneous-fps listener for the live UI graph
+    // (2026-08-26). Fires on the live-loop background thread, same as
+    // [onFrame] -- callers must post to the main thread themselves.
+    @Volatile var onFrameTiming: ((Float) -> Unit)? = null
+    // Fires on a background thread (2026-08-28) whenever rediscovery finds
+    // the camera at a new address, so the caller can persist it (see
+    // MainActivity's "sony_camera_ip" pref) for next launch. Purely
+    // informational -- this instance already switches to the new IP itself.
+    @Volatile var onCameraIpChanged: ((String) -> Unit)? = null
+    @Volatile private var discoveryInFlight = false
 
     @Volatile private var running = false
     @Volatile private var liveRunning = false
@@ -254,6 +265,7 @@ class SonyProductionCamera(
             var lastLoggedFocusIndication: Int? = null
             var cadenceWindowStartedAt = SystemClock.elapsedRealtime()
             var cadenceFrames = 0
+            var lastFrameAtElapsed = 0L
             while (running && liveRunning && generation == expectedGeneration &&
                 liveLoopEpoch == expectedLiveLoopEpoch && controller === camera && camera.isConnected
             ) {
@@ -298,6 +310,24 @@ class SonyProductionCamera(
                     if (decoded != null) {
                         decodePool[decodeSlot] = decoded
                         decodeSlot = (decodeSlot + 1) % decodePool.size
+                        // Pre-warm the other two pool slots off the FIRST
+                        // successful decode (2026-08-26 fix): before this,
+                        // each of the first 3 frames hit the slow fresh-
+                        // allocation path (inBitmap=null) one at a time as
+                        // the pool cycled through its empty slots -- visible
+                        // live as stutter on exactly the first few frames
+                        // after every reconnect. Frame dimensions aren't
+                        // known until this first real decode, so slots can't
+                        // be pre-allocated any earlier than this; allocating
+                        // the remaining two here means only frame 1 pays the
+                        // slow path instead of frames 1-3.
+                        for (i in decodePool.indices) {
+                            if (decodePool[i] == null) {
+                                decodePool[i] = Bitmap.createBitmap(
+                                    decoded.width, decoded.height, Bitmap.Config.ARGB_8888
+                                )
+                            }
+                        }
                     }
                     decoded
                 }
@@ -330,6 +360,24 @@ class SonyProductionCamera(
                 } catch (e: Exception) {
                     Log.e(TAG, "Sony production frame consumer failed", e)
                 }
+                // Per-frame instantaneous fps, for the live UI graph -- the
+                // existing renderedFps log line only updates every 5s, too
+                // coarse to visually diagnose a stutter confined to a few
+                // individual frames. Optional/no-op unless the UI has wired
+                // a listener (see MainActivity's fpsGraph wiring).
+                val nowElapsed = SystemClock.elapsedRealtime()
+                if (lastFrameAtElapsed != 0L) {
+                    val deltaMs = nowElapsed - lastFrameAtElapsed
+                    if (deltaMs > 0) {
+                        val instantFps = 1000f / deltaMs
+                        try {
+                            onFrameTiming?.invoke(instantFps)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Sony production frame-timing listener failed", e)
+                        }
+                    }
+                }
+                lastFrameAtElapsed = nowElapsed
                 cadenceFrames += 1
                 val cadenceNow = SystemClock.elapsedRealtime()
                 val cadenceElapsed = cadenceNow - cadenceWindowStartedAt
@@ -412,6 +460,38 @@ class SonyProductionCamera(
             reconnectRunnable = task
             mainHandler.postDelayed(task, delayMs)
             Log.w(TAG, "$reason; reconnecting in ${delayMs}ms")
+            // DHCP-assigned IPs for both devices are NOT stable across a
+            // Wi-Fi reconnect (confirmed live, 2026-08-28: camera moved
+            // 192.168.0.14 -> .20 mid-session with zero warning beyond
+            // "connection refused"). One grace failure first (reconnectAttempt
+            // == 2 here, i.e. the second consecutive failure) in case this is
+            // just a transient blip, then sweep the subnet in parallel with
+            // the normal backoff retry -- if it finds the camera at a new
+            // address before the next scheduled retry fires, switch to it
+            // and retry immediately instead of waiting out the backoff.
+            if (reconnectAttempt == 2 && !discoveryInFlight) {
+                discoveryInFlight = true
+                thread(name = "SonyCameraRediscovery", isDaemon = true) {
+                    try {
+                        val found = SonyCameraDiscovery.discoverCameraIp(appContext, sshUser, sshPassword, cameraIp)
+                        if (found != null && found != cameraIp && running && generation == expectedGeneration) {
+                            Log.i(TAG, "Sony camera rediscovered at $found (was $cameraIp)")
+                            cameraIp = found
+                            onCameraIpChanged?.invoke(found)
+                            synchronized(stateLock) {
+                                reconnectRunnable?.let(mainHandler::removeCallbacks)
+                                reconnectRunnable = null
+                                reconnectAttempt = 0
+                            }
+                            connectOnce(expectedGeneration)
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Sony camera rediscovery failed: ${e.message}", e)
+                    } finally {
+                        discoveryInFlight = false
+                    }
+                }
+            }
             if (reconnectAttempt == POWER_CONFIGURATION_HINT_ATTEMPT) {
                 val outageMs = SystemClock.elapsedRealtime() - reconnectIncidentStartedAtMs
                 Log.e(
