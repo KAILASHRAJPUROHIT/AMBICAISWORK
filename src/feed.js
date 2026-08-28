@@ -99,6 +99,35 @@ export function selectRow(rows, spec) {
   };
 }
 
+/**
+ * Locate a row by trying several candidate specs in priority order, for a
+ * dealer whose product catalog itself changes shape over time - not just the
+ * row's rotating date suffix, but which product line exists at all. Kaka Gold
+ * has flipped their 999 line between "999 BIS APPROVED" and "999 IMPORTED"
+ * (and back again) within the same week, each time under a different scrip
+ * code. Rather than hardcode to whichever shape happens to exist today, try
+ * each known shape and use the first one that resolves.
+ *
+ * Returns the same shape as selectRow(), plus `usedCandidate` (the index of
+ * the candidate that matched, for logging) when a candidate matched, or a
+ * combined note listing every candidate's failure when none did.
+ */
+export function selectRowAny(rows, candidates) {
+  const attempts = [];
+  for (let i = 0; i < candidates.length; i++) {
+    const sel = selectRow(rows, candidates[i]);
+    if (sel.row) return { ...sel, usedCandidate: i };
+    attempts.push(`candidate ${i} (code ${candidates[i].code}): ${sel.note}`);
+  }
+  return {
+    row: null,
+    matchedBy: 'none',
+    confident: false,
+    usedCandidate: -1,
+    note: `No candidate matched - ${attempts.join('; ')}`,
+  };
+}
+
 /** Fetch + parse a feed. Throws on transport/HTTP/empty-body problems. */
 export async function fetchFeed(url, timeoutMs = 4000) {
   const ctrl = new AbortController();

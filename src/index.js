@@ -33,7 +33,7 @@ console.log('');
 console.log('  ARADHANA JEWELLERS  -  GOLD RATE MONITOR');
 console.log(`  ${istPretty()} IST`);
 console.log(`  Primary : ${cfg.primary.label} - "${cfg.primary.target.namePattern}" (code ${cfg.primary.target.code})`);
-console.log(`  Reference: ${cfg.validation.kaka.label} (code ${cfg.validation.kaka.target.code})`);
+console.log(`  Reference: ${cfg.validation.kaka.label} (codes: ${cfg.validation.kaka.targetCandidates.map((c) => c.code).join(', ')})`);
 console.log(`  Business : ${cfg.business.label} = ${cfg.business.purityFactor * 100}% of 999, ${cfg.business.unit}`);
 console.log(`  Silver   : ${cfg.silver.business.pureLabel} = COSTING + Rs.${cfg.silver.business.premiumAdd}; ${cfg.silver.business.ornamentLabel} = Pure - ${cfg.silver.business.ornamentDiscountPct}%`);
 console.log('');

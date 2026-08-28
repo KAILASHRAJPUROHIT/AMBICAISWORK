@@ -70,27 +70,57 @@
       "blocking": true,
       "label": "Kaka Gold",
       "url": "https://bcast.kakagold.xyz/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/kaka",
-      "target": {
-        "code": "4635",
-        "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
-        "field": "sell"
-      },
-      "secondary": {
-        "code": "4616",
-        "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
-        "field": "sell"
-      },
       "refRows": {
-        "gst999": {
-          "code": "4433",
-          "namePattern": "999.*IMP.*GST"
-        }
+        "gst999Candidates": [
+          {
+            "code": "4619",
+            "namePattern": "999.*BIS.*GST"
+          },
+          {
+            "code": "4433",
+            "namePattern": "999.*IMP.*GST"
+          }
+        ]
       },
       "refreshMs": 5000,
       "maxAgeMs": 120000,
       "warnPct": 0.5,
       "failPct": 1.5,
-      "gstFactor": 1.03
+      "gstFactor": 1.03,
+      "targetCandidates": [
+        {
+          "code": "4620",
+          "namePattern": "^GOLD\\s+999\\s+BIS\\s+APPROVED\\b",
+          "field": "sell"
+        },
+        {
+          "code": "4635",
+          "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
+          "field": "sell"
+        },
+        {
+          "code": "4616",
+          "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
+          "field": "sell"
+        }
+      ],
+      "secondaryCandidates": [
+        {
+          "code": "4616",
+          "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
+          "field": "sell"
+        },
+        {
+          "code": "4635",
+          "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
+          "field": "sell"
+        },
+        {
+          "code": "4620",
+          "namePattern": "^GOLD\\s+999\\s+BIS\\s+APPROVED\\b",
+          "field": "sell"
+        }
+      ]
     },
     "parity": {
       "_comment": "Advisory sanity floor only - never blocks a publish. Set enabled:false to make Kaka Gold the sole external reference.",

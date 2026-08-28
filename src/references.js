@@ -11,7 +11,7 @@
  * external reference.
  */
 
-import { fetchFeed, selectRow } from './feed.js';
+import { fetchFeed, selectRowAny } from './feed.js';
 
 export class ReferenceSource {
   constructor(name, refreshMs, fetcher, log, attempts = 3) {
@@ -85,16 +85,22 @@ function makeKakaSourceFrom(name, c, timeoutMs, log) {
   return new ReferenceSource(name, c.refreshMs, async () => {
     const feed = await fetchFeed(c.url, timeoutMs);
 
-    const primary = selectRow(feed.rows, c.target);
+    // The dealer's product catalog itself can change shape (not just the
+    // row's rotating date) - Kaka has flipped their 999 line between "BIS
+    // APPROVED" and "IMPORTED" scrip codes more than once in the same week.
+    // Try every known shape in priority order rather than hardcoding one.
+    const primary = selectRowAny(feed.rows, c.targetCandidates);
     if (!primary.row) throw new Error(primary.note || `${c.label} target row not found`);
-    const value = primary.row[c.target.field];
+    const primaryField = c.targetCandidates[primary.usedCandidate].field;
+    const value = primary.row[primaryField];
     if (typeof value !== 'number' || !(value > 0)) {
-      throw new Error(`${c.label} ${c.target.field} not numeric (raw "${primary.row.rawSell}")`);
+      throw new Error(`${c.label} ${primaryField} not numeric (raw "${primary.row.rawSell}")`);
     }
 
-    const sec = c.secondary ? selectRow(feed.rows, c.secondary) : { row: null };
-    const gst = c.refRows && c.refRows.gst999
-      ? selectRow(feed.rows, c.refRows.gst999)
+    const sec = c.secondaryCandidates ? selectRowAny(feed.rows, c.secondaryCandidates) : { row: null };
+    const secField = sec.row && sec.usedCandidate >= 0 ? c.secondaryCandidates[sec.usedCandidate].field : null;
+    const gst = c.refRows && c.refRows.gst999Candidates
+      ? selectRowAny(feed.rows, c.refRows.gst999Candidates)
       : { row: null };
 
     return {
@@ -106,7 +112,7 @@ function makeKakaSourceFrom(name, c, timeoutMs, log) {
       buy: primary.row.buy,
       high: primary.row.high,
       low: primary.row.low,
-      secondary: sec.row ? sec.row[c.secondary.field] : null,
+      secondary: sec.row ? sec.row[secField] : null,
       gst999: gst.row ? gst.row.sell : null,
       latencyMs: feed.latencyMs,
     };
