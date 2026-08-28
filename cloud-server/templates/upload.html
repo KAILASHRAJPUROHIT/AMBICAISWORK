@@ -522,6 +522,7 @@
             <div class="spinner"></div>
             <h3 id="progress-title">Processing...</h3>
             <p id="progress-desc" style="color: #aaa; font-size: 14px; margin-top: 10px;">Please wait.</p>
+            <button id="btn-progress-stuck" class="btn-master hidden" style="margin-top:20px;background:#444;color:white" onclick="cancelStuckUpload()">Taking too long? Tap to retry</button>
         </div>
     </div>
 
@@ -613,7 +614,8 @@
         camera: document.getElementById('view-camera'),
         crop: document.getElementById('view-crop'),
         progress: document.getElementById('view-progress'),
-        success: document.getElementById('view-success')
+        success: document.getElementById('view-success'),
+        error: document.getElementById('view-error')
     };
 
     function showView(viewName) {
@@ -1557,6 +1559,22 @@
         if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
     }
 
+    // ── Upload timeout / stuck-progress recovery ────────────────────────────────
+    // The /upload fetch previously had no timeout at all — if it hung (Render
+    // free-tier cold start after inactivity, a phone screen locking mid-upload,
+    // flaky WiFi), the customer was stuck on "Sending to print queue…" forever
+    // with no button, no retry, nothing. Now: a visible escape hatch appears
+    // after a short wait, and a hard timeout aborts the request outright so it
+    // can never hang indefinitely.
+    const UPLOAD_STUCK_BUTTON_DELAY_MS = 12000;
+    const UPLOAD_TIMEOUT_MS = 60000; // Render's free tier can take 50s+ to wake from sleep
+    let _uploadAbortController = null;
+    let _stuckButtonTimer = null;
+
+    function cancelStuckUpload() {
+        if (_uploadAbortController) _uploadAbortController.abort();
+    }
+
     function proceedWithPrint() {
         if (!_pendingFd) return;
         const fd = _pendingFd;
@@ -1566,16 +1584,25 @@
         showView('progress');
         document.getElementById('progress-title').textContent = 'Sending to print queue…';
         document.getElementById('progress-desc').textContent = 'Please wait while your documents are uploaded.';
+        const stuckBtn = document.getElementById('btn-progress-stuck');
+        stuckBtn.classList.add('hidden');
+        clearTimeout(_stuckButtonTimer);
+        _stuckButtonTimer = setTimeout(() => stuckBtn.classList.remove('hidden'), UPLOAD_STUCK_BUTTON_DELAY_MS);
 
         // Save a clone so retry can re-use the same files
         _lastFd = fd;
 
-        fetch('/upload', { method: 'POST', body: fd })
+        _uploadAbortController = new AbortController();
+        const timeoutId = setTimeout(() => _uploadAbortController.abort(), UPLOAD_TIMEOUT_MS);
+
+        fetch('/upload', { method: 'POST', body: fd, signal: _uploadAbortController.signal })
             .then(r => {
                 if (!r.ok) return r.json().then(d => Promise.reject(d.error || `Server error ${r.status}`));
                 return r.json();
             })
             .then(data => {
+                clearTimeout(timeoutId);
+                clearTimeout(_stuckButtonTimer);
                 document.getElementById('display-queue-id').textContent = data.queue_id;
                 queue.forEach(item => URL.revokeObjectURL(item.url));
                 queue = [];
@@ -1585,7 +1612,13 @@
                 startPolling(data.queue_id);
             })
             .catch(err => {
-                showErrorView(err);
+                clearTimeout(timeoutId);
+                clearTimeout(_stuckButtonTimer);
+                if (err && err.name === 'AbortError') {
+                    showErrorView('Upload took too long and was cancelled. Check your connection and try again.');
+                } else {
+                    showErrorView(err);
+                }
             });
     }
 
