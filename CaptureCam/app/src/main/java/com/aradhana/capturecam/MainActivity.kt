@@ -1121,6 +1121,11 @@ class MainActivity : AppCompatActivity() {
         // sharpness dipped (a real zoom in/out "panic" cycle, confirmed
         // live: 0% -> 9% -> 1% within 2.5 seconds).
         private const val LONG_ITEM_ZOOM_MARGIN = 1.2f
+        // Fixed zoom for a long item's detail shots (2026-08-29) -- these
+        // bypass the occupancy climb entirely (see captureOccupancyFloor's
+        // doc comment), so this is the only thing that actually zooms
+        // them in. First guess, not yet live-verified.
+        private const val LONG_ITEM_DETAIL_ZOOM = 2.2f
         // Physical sanity cap for categoryAnchoredResult's fallback height
         // (2026-08-29 forensic-audit fix): Profile.targetFrame()'s own
         // aspirational value for ms_long_22 works out to ~0.82 (a
@@ -4081,6 +4086,18 @@ class MainActivity : AppCompatActivity() {
      * (rings/studs/etc., where filling most of the frame is both
      * achievable and correct to require). */
     private fun captureOccupancyFloor(): Float {
+        // A long-item detail shot's target is a FIXED-size synthetic box
+        // (longItemDetailTargetBox), not a real tracked object -- a real
+        // object's normalized bounds grow as the camera zooms in, which is
+        // exactly what this whole occupancy-climb mechanism assumes; a
+        // fixed-size synthetic box's "occupancy" can never increase no
+        // matter how far zoom climbs. Live-confirmed as a genuine
+        // unbreakable loop (6 READY taps, zero progress): both the climb
+        // AND this same floor re-checked inside meetsHardCaptureRules()
+        // kept demanding growth that was mathematically impossible.
+        // Already-satisfied by construction -- the synthetic box IS the
+        // intended framing, not something to keep growing toward.
+        if (longItemDetailTargetBounds != null) return 0f
         val profile = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
             ?: return CAPTURE_MIN_OCCUPANCY
         // Only the tall TOP_RAIL geometry is mathematically incompatible
@@ -4800,26 +4817,71 @@ class MainActivity : AppCompatActivity() {
         val cx = (fullBounds.x0 + fullBounds.x1) / 2f
         val midY = (fullBounds.y0 + fullBounds.y1) / 2f
         val bottomY = fullBounds.y1
-        longItemDetailTargetBounds = longItemDetailTargetBox(cx, midY)
+        // Snap to a REAL detected gold point nearest the desired probe
+        // location, not the bounding box's own geometric coordinate
+        // (2026-08-29, live-confirmed root cause): a V/U-draped chain's
+        // horizontal midpoint at mid-height is the GAP between the two
+        // hanging strands, not material -- centering a target there found
+        // zero occupancy no matter how far it zoomed, driving zoom to the
+        // hardware ceiling (3.1x) chasing coverage that could never
+        // appear. Every detail-shot target now snaps to wherever gold was
+        // actually seen.
+        val midTarget = nearestGoldPoint(cx, midY) ?: (cx to midY)
+        longItemDetailTargetBounds = longItemDetailTargetBox(midTarget.first, midTarget.second)
         setStatus("Capturing a design detail close-up…", ready = false)
-        centerThenCapture {
-            captureFullRes { bytes ->
-                angle1Jpeg = bytes
-                longItemDetailTargetBounds = longItemDetailTargetBox(cx, bottomY)
-                setStatus("Capturing the bottom / pendant area…", ready = false)
-                centerThenCapture {
-                    captureFullRes { bytes2 ->
-                        angle2Jpeg = bytes2
-                        longItemDetailTargetBounds = null
-                        setStatus("Returning to center…", ready = false)
-                        undoCenteringThenAdvance {
-                            inAngleSequence = false
-                            uploadCapturedSet()
+        zoomForLongItemDetail {
+            centerThenCapture {
+                captureFullRes { bytes ->
+                    angle1Jpeg = bytes
+                    val bottomTarget = nearestGoldPoint(cx, bottomY) ?: (cx to bottomY)
+                    longItemDetailTargetBounds = longItemDetailTargetBox(bottomTarget.first, bottomTarget.second)
+                    setStatus("Capturing the bottom / pendant area…", ready = false)
+                    zoomForLongItemDetail {
+                        centerThenCapture {
+                            captureFullRes { bytes2 ->
+                                angle2Jpeg = bytes2
+                                longItemDetailTargetBounds = null
+                                setStatus("Returning to center…", ready = false)
+                                undoCenteringThenAdvance {
+                                    inAngleSequence = false
+                                    uploadCapturedSet()
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    /** Drives zoom to a fixed, modest "detail" ratio directly, instead of
+     * the occupancy-based climb (2026-08-29): captureOccupancyFloor()
+     * bypasses entirely while a synthetic detail target is active (see its
+     * own doc comment for why), so nothing else would ever zoom in for
+     * these shots. Unverified exact ratio -- needs live confirmation this
+     * shows a sensible amount of detail, not too tight or too wide. */
+    private fun zoomForLongItemDetail(onDone: () -> Unit) {
+        val target = LONG_ITEM_DETAIL_ZOOM.coerceIn(cameraZoomRange().start, cameraZoomRange().endInclusive)
+        if (abs(cameraZoomRatio() - target) <= 0.05f) {
+            onDone()
+            return
+        }
+        smoothZoomTo(target) {
+            handler.postDelayed(onDone, ZOOM_SETTLE_MS)
+        }
+    }
+
+    /** Nearest actually-detected gold pixel to a desired probe point --
+     * used so a detail-shot target never lands on empty space inside a
+     * curved item's own bounding box (see startLongItemDetailShots's doc
+     * comment). Null only when there are no gold points at all this tick. */
+    private fun nearestGoldPoint(desiredX: Float, desiredY: Float): Pair<Float, Float>? {
+        val gold = latestMaterial?.points?.filter { it.gold } ?: return null
+        return gold.minByOrNull { p ->
+            val dx = p.x - desiredX
+            val dy = p.y - desiredY
+            dx * dx + dy * dy
+        }?.let { it.x to it.y }
     }
 
     /** Small target region around (cx, cy) for a long-item detail shot --
