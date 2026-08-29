@@ -711,7 +711,13 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "CaptureCam"
         private val TAG_CODE_PATTERN = Regex("^[A-Za-z]{1,8}[0-9]{0,4}[/_-][0-9]+$")
         private const val PREF_CAMERA_MODE = "camera_mode_index"
-        private const val SONY_CAMERA_IP = "192.168.0.14"
+        // Fallback seed only, used when no IP has been discovered/persisted
+        // yet (a truly fresh install) -- SonyCameraDiscovery tries this
+        // first, then falls through to a full subnet sweep if it's stale,
+        // so an out-of-date value here never blocks connection, just costs
+        // one quick failed attempt. Updated 2026-08-29 (was .14, camera has
+        // since moved to .20) so a fresh install doesn't pay that cost.
+        private const val SONY_CAMERA_IP = "192.168.0.20"
         private const val SONY_SSH_USER = "pkANY7"
         private val CAMERA_MODE_LABELS = arrayOf(
             "DSLR — Sony ZV-E10 II",
