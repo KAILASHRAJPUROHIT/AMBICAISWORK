@@ -78,7 +78,22 @@ object MaterialDetector {
         // the phone screen during capture). Deliberately loose (any small
         // low-hanging blob, not a verified bead shape) since this only
         // feeds an advisory count-mismatch warning, never a capture gate.
-        val danglerBlobs: List<Bounds> = emptyList()
+        val danglerBlobs: List<Bounds> = emptyList(),
+        // The single largest/densest connected component BEFORE the pair-
+        // union and chain-strap-extension steps run -- i.e. just the
+        // reliably-found dense cluster (a ring, a pendant, a necklace's
+        // bead cluster), never the fragile empirically-linked extension.
+        // 2026-08-29, explicit request: for a long thin item, deciding
+        // "where is it" from pixel-adjacency alone is inherently fragile
+        // (confirmed live: the SAME necklace flickered between a full read
+        // and a partial one tick to tick with no pixel change) -- once the
+        // category is known, its real shape/size doesn't need to be
+        // rediscovered from scratch every frame, only ANCHORED to
+        // something stable. This is that stable anchor; MainActivity uses
+        // it plus CaptureCompositionProfile's known target dimensions to
+        // place the tracked box directly for NECK_CURVE categories,
+        // instead of trusting `bounds`' own strap-linking to succeed.
+        val primaryBounds: Bounds? = null
     )
 
     /** True if the detected material's bounding box touches (or nearly
@@ -504,24 +519,26 @@ object MaterialDetector {
         // (there are only ever a handful of real components per frame);
         // it is not expected to bind in practice.
         //
-        // Tolerance scales with the union box's OWN current span, not a
-        // flat frame fraction (a flat 5%-of-frame tolerance still cropped
-        // the top connector tabs on a real capture): a necklace already
-        // known to be large should get proportionally more reach to keep
-        // continuing itself (the last gap to a small, sparse connector tab
-        // can be wider than 5% of the whole frame on a piece this size),
-        // while a small ring's stray fleck still gets almost none, since
-        // 15% of a tiny union box is itself tiny. Recomputed every pass
-        // since the union box grows. minimumTolerance is the floor for a
-        // still-small union early in the chain.
-        val minimumTolerance = (0.05f * max(cols, rows)).toInt().coerceAtLeast(2)
+        // FIXED frame-relative tolerance, not scaled to the union's own
+        // growing span (2026-08-29, live-confirmed unstable): a tolerance
+        // computed FROM the current union size is self-referential --
+        // whether a borderline strap segment gets included on a given tick
+        // can depend on whether it was already included the tick before,
+        // and real logs showed exactly that bistability: the same necklace
+        // alternating between a full read (all straps unioned in) and a
+        // partial one (just the dense center) tick to tick, with nothing
+        // about the actual pixels changing. That instability was feeding
+        // AF retargeting, readyStreak resets, AND biased centering toward
+        // whichever partial subset happened to be "seen" that tick -- not
+        // a coincidence, all three symptoms trace back to this one flicker.
+        // A flat, frame-relative tolerance can't create that feedback loop:
+        // the same real gap either qualifies or doesn't, every tick.
+        val gapTolerance = (0.12f * max(cols, rows)).toInt().coerceAtLeast(3)
         var grew = true
         var guard = 0
         while (grew && guard < 8) {
             grew = false
             guard += 1
-            val unionSpan = max(bestMaxCol - bestMinCol, bestMaxRow - bestMinRow)
-            val gapTolerance = max(minimumTolerance, (0.18f * unionSpan).toInt())
             for (c in real) {
                 if (c === primary) continue
                 if (c.minCol >= bestMinCol && c.maxCol <= bestMaxCol &&
@@ -802,6 +819,12 @@ object MaterialDetector {
 
         val real = components.filter { fillRatio(it) >= 0.28f || edgesTouched(it) < 2 }
         val primary = real.maxByOrNull { it.size } ?: components.maxByOrNull { it.size }!!
+        val primaryBounds = Bounds(
+            (startX + primary.minCol * step).toFloat() / width,
+            (startY + primary.minRow * step).toFloat() / height,
+            (startX + (primary.maxCol + 1) * step).toFloat() / width,
+            (startY + (primary.maxRow + 1) * step).toFloat() / height
+        )
         var bestMinCol = primary.minCol
         var bestMinRow = primary.minRow
         var bestMaxCol = primary.maxCol
@@ -814,6 +837,37 @@ object MaterialDetector {
             bestMaxCol = max(bestMaxCol, component.maxCol)
             bestMaxRow = max(bestMaxRow, component.maxRow)
             bestSize += component.size
+        }
+        // Chain-strap extension, ported from the CameraX analyse() overload
+        // (2026-08-29 -- confirmed live that overload was never used by the
+        // Sony path this app actually runs; the instability seen live was
+        // this function's OWN raw connected-component noise, not that
+        // dead code). Fixed frame-relative tolerance, not scaled to the
+        // union's own growing span -- that was self-referential/bistable
+        // (see the CameraX copy's own comment for the full story). Still
+        // real -- this catches only the multi-hop cases the category-
+        // anchored box (MainActivity, NECK_CURVE) doesn't already replace;
+        // that anchoring is the primary fix, this is defense in depth for
+        // any category/shape that logic doesn't cover.
+        val gapTolerance = (0.12f * max(cols, rows)).toInt().coerceAtLeast(3)
+        var grew = true
+        var guard = 0
+        while (grew && guard < 8) {
+            grew = false
+            guard += 1
+            for (c in real) {
+                if (c === primary) continue
+                if (c.minCol >= bestMinCol && c.maxCol <= bestMaxCol &&
+                    c.minRow >= bestMinRow && c.maxRow <= bestMaxRow
+                ) continue
+                val colGap = max(0, max(bestMinCol - c.maxCol, c.minCol - bestMaxCol))
+                val rowGap = max(0, max(bestMinRow - c.maxRow, c.minRow - bestMaxRow))
+                if (colGap > gapTolerance || rowGap > gapTolerance) continue
+                bestMinCol = min(bestMinCol, c.minCol); bestMinRow = min(bestMinRow, c.minRow)
+                bestMaxCol = max(bestMaxCol, c.maxCol); bestMaxRow = max(bestMaxRow, c.maxRow)
+                bestSize += c.size
+                grew = true
+            }
         }
 
         val bounds = Bounds(
@@ -849,7 +903,8 @@ object MaterialDetector {
             points,
             highlightClip,
             sceneClip,
-            danglers
+            danglers,
+            primaryBounds
         )
     }
 }

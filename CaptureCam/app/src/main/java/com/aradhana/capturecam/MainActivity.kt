@@ -1894,6 +1894,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Background-only consumer of the newest Sony frame. */
+    /** Builds a tracked box from the category's own known target dimensions
+     * anchored to [MaterialDetector.Result.primaryBounds] (the reliably-
+     * found dense cluster), instead of trusting the empirical chain-strap
+     * union. Returns null when there's nothing to anchor to (no primary
+     * blob found this tick at all) -- callers should fall back to the raw
+     * detector result, same fail-open posture as every other gate here. */
+    private fun categoryAnchoredResult(
+        result: MaterialDetector.Result,
+        profile: CaptureCompositionProfiles.Profile
+    ): MaterialDetector.Result? {
+        val anchor = result.primaryBounds ?: return null
+        val (targetW, targetH) = profile.targetFrame()
+        val anchorCx = (anchor.x0 + anchor.x1) / 2f
+        // Small downward padding: beads/tassels can hang slightly past the
+        // dense cluster's own detected edge without being part of the
+        // primary component. Unverified exact value -- needs live
+        // confirmation against a real piece with visible drop beads.
+        val anchorBottomY = (anchor.y1 + 0.02f).coerceAtMost(1f)
+        val x0 = (anchorCx - targetW / 2f).coerceIn(0f, 1f - targetW.coerceAtMost(1f))
+        val x1 = (x0 + targetW).coerceAtMost(1f)
+        val y1 = anchorBottomY
+        val y0 = (y1 - targetH).coerceAtLeast(0f)
+        val anchoredBounds = MaterialDetector.Bounds(x0, y0, x1, y1)
+        return result.copy(bounds = anchoredBounds, coverage = anchoredBounds.area(), goldBoxArea = anchoredBounds.area())
+    }
+
     private fun analyseSonyJewelFrame(bitmap: Bitmap) {
         val analysisStartedAt = System.nanoTime()
         val compositionProfile = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
@@ -1916,12 +1942,31 @@ class MainActivity : AppCompatActivity() {
         val excludeTopFraction = if (compositionProfile?.silhouette ==
             CaptureCompositionProfiles.Silhouette.NECK_CURVE
         ) RING_LIGHT_EXCLUDE_TOP_FRACTION else 0f
-        val result = MaterialDetector.analyse(
+        val rawResult = MaterialDetector.analyse(
             bitmap,
             fullFrame = !useCompositionRoi,
             region = if (useCompositionRoi) compositionProfile?.detectorRegion() else null,
             excludeTopFraction = excludeTopFraction
         )
+        // Category-anchored box for long items (2026-08-29, explicit
+        // request: "when we have a defined category how can there be any
+        // confusion"). Once the category is known, its real shape/size is
+        // already known too (CaptureCompositionProfiles) -- rediscovering
+        // it from pixel-adjacency every single frame is the fragile part,
+        // confirmed live as a genuine flicker (the same necklace read as
+        // "full" and "partial" tick to tick with no actual pixel change,
+        // because whether the thin chain straps linked back to the dense
+        // center via 8-connectivity depended on noise). `primaryBounds` is
+        // the one signal that DOES stay stable every tick (the dense
+        // cluster itself, found before any strap-linking is attempted) --
+        // anchor the category's known target box to it instead of trusting
+        // that linking to succeed. The dense cluster (pendant/beads) sits
+        // at the LOWEST point of a TOP_RAIL item's drape, so its bottom
+        // edge is used as the box's bottom reference, extending upward by
+        // the category's own known height.
+        val result = if (compositionProfile?.silhouette == CaptureCompositionProfiles.Silhouette.NECK_CURVE) {
+            categoryAnchoredResult(rawResult, compositionProfile) ?: rawResult
+        } else rawResult
         latestMaterial = result
         // For paired jewellery, judge detail on one actual gold lobe. The old
         // union rectangle included the empty gap and could report a misleading
