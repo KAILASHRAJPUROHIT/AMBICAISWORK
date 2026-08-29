@@ -3231,7 +3231,15 @@ class MainActivity : AppCompatActivity() {
         // has enormous slack before risking edge-clipping again (measured
         // ~0.08 against a 0.75 capture threshold at 1.0x).
         val longItemTargetZoom = (zoomRange.start * 1.2f).coerceAtMost(zoomRange.endInclusive)
-        val atZoomFloor = zoom <= longItemTargetZoom + 0.05f
+        // Symmetric tolerance around the target, not a one-sided "anything
+        // below target+margin counts" check (2026-08-29, live-confirmed
+        // bug): the old `zoom <= longItemTargetZoom + 0.05f` accepted the
+        // TRUE zoom floor (1.0) as "already at the 1.2x target" too, since
+        // 1.0 <= 1.25 -- meaning the zoom-in step meant to give AF more
+        // resolution never fired at all, silently making that whole fix a
+        // no-op. Operator confirmed live: zoom sitting at 1.0 with visible
+        // room to zoom in further that the app wasn't using.
+        val atZoomFloor = abs(zoom - longItemTargetZoom) <= 0.05f
         // At the ceiling, accept whatever coverage is on offer as "the best
         // framing available" -- but this must NOT mean skipping focus
         // verification. It previously called captureJewel() directly here,
