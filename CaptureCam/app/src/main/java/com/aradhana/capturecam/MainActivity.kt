@@ -177,6 +177,7 @@ class MainActivity : AppCompatActivity() {
             val ev = intent.getFloatExtra("ev", 0f)
             manualExposureOverride = true
             autoExposureEv = ev
+            desiredAutoExposureEv = ev
             setCameraExposureCompensationEv(ev)
             Log.i(TAG, "testExposureReceiver: set ev=$ev available=${cameraExposureControlAvailable()} range=${cameraExposureRangeEv()}")
         }
@@ -462,11 +463,15 @@ class MainActivity : AppCompatActivity() {
     // resetForNewItem) so a piece that needed a heavy negative bias
     // doesn't leave the NEXT item starting under-exposed.
     private var autoExposureEv = 0f
+    // Command intent is separate from the last camera ACK. A failed command
+    // must not erase the value that should be restored after Sony reconnects.
+    private var desiredAutoExposureEv = 0f
     private var lastExposureAdjustAt = 0L
     private var exposureClipStreak = 0
     private var exposureClearStreak = 0
     private var exposureCommandInFlight = false
     private var pendingAutoExposureEv: Float? = null
+    private var exposureRetryBlockedUntilAvailability = false
     private var manualExposureOverride = false
     // Manual zoom override: true only after staff uses zoom +/-. Exposure
     // adjustment and tap/long-press focus are compatible with automatic
@@ -1656,7 +1661,10 @@ class MainActivity : AppCompatActivity() {
         if (available) {
             sonyZoomRatio = sonyProduction.currentZoomRatio()
             sonyZoomTarget = sonyZoomRatio
-            queueAutoExposure(autoExposureEv)
+            exposureRetryBlockedUntilAvailability = false
+            // A reconnect may leave the physical camera at a value different
+            // from our last ACK. Force one bounded resync; do not hot-retry.
+            queueAutoExposure(desiredAutoExposureEv, force = true)
             // resetForNewItem(TAG) can run before the Sony handshake is
             // ready. Availability is the authoritative moment to perform
             // the deferred full-wide endpoint reset; startup waiting never
@@ -3150,6 +3158,19 @@ class MainActivity : AppCompatActivity() {
         // position estimate at all" case, not "coverage momentarily read
         // low."
         if (result == null || (bestObjectBox() == null && !isTrustedMaterialTarget(result))) {
+            // A NECK_CURVE item can become too dark to satisfy the trusted-
+            // target gate after scene-based exposure correction. The normal
+            // recovery path lives below that gate, so it can never run once
+            // detection is lost. Restore neutral exposure once; subsequent
+            // trusted frames still retain the real gold-clipping protection.
+            val lostLongItem = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
+                ?.silhouette == CaptureCompositionProfiles.Silhouette.NECK_CURVE
+            if (lostLongItem && autoExposureEv < 0f && !manualExposureOverride &&
+                cameraExposureControlAvailable()
+            ) {
+                Log.i(TAG, "Long-item target lost at ev=$autoExposureEv; restoring neutral exposure")
+                queueAutoExposure(0f)
+            }
             // Lost the piece -- likely walked out of frame on a zoom step
             // (digital/hybrid zoom on this class of lens is still centre-
             // anchored). Ease back to re-acquire rather than climbing
@@ -3533,15 +3554,25 @@ class MainActivity : AppCompatActivity() {
             // below (which would push zoom the wrong direction first).
             if (isLongItemCategory && !atZoomFloor) {
                 if (now - lastZoomChangeAt < ZOOM_STEP_INTERVAL_MS) {
-                    setStatus("Zooming out…", ready = false)
+                    setStatus(if (zoom < longItemTargetZoom) "Zooming in…" else "Zooming out…", ready = false)
                     return
                 }
-                val next = (zoom / ZOOM_STEP_RATIO).coerceAtLeast(longItemTargetZoom)
-                if (next < zoom - 0.01f) {
+                // Symmetric tolerance also requires symmetric movement. At
+                // 1.0x the old zoom-out-only branch could not reach 1.2x; it
+                // fell into the ordinary climb and overshot before correcting.
+                val zoomingInToTarget = zoom < longItemTargetZoom
+                val next = if (zoomingInToTarget) {
+                    longItemTargetZoom
+                } else {
+                    (zoom / ZOOM_STEP_RATIO).coerceAtLeast(longItemTargetZoom)
+                }
+                if (abs(next - zoom) > 0.01f) {
                     smoothZoomTo(next)
-                    setStatus("Zooming out…", ready = false)
-                    return
+                    setStatus(if (zoomingInToTarget) "Zooming in…" else "Zooming out…", ready = false)
                 }
+                // Never fall through to the normal 75%-occupancy climb while
+                // a long item is converging on its dedicated zoom target.
+                return
             }
             // Too small to trust a focus verdict either way yet -- climb on
             // coverage alone, same reasoning as the web version's identical
@@ -3815,13 +3846,22 @@ class MainActivity : AppCompatActivity() {
         // broke this (confirmed live both in 2026-08-18's original bug and
         // in this branch's regression of it).
         val goldOverexposed = result.highlightClipFraction > 0f
+        // Long TOP_RAIL items include much more bright studio background and
+        // the physical ring-light edge than compact jewellery. That scene-
+        // wide signal drove EV to -3 live while goldClip remained zero, then
+        // made the thin chain undetectable. Keep real gold clipping strict;
+        // ignore only scene/background clipping for NECK_CURVE categories.
+        val useSceneClip = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
+            ?.silhouette != CaptureCompositionProfiles.Silhouette.NECK_CURVE
+        val sceneOverexposed = useSceneClip && result.sceneClipFraction > HIGHLIGHT_CLIP_HIGH
+        val sceneClear = !useSceneClip || result.sceneClipFraction < HIGHLIGHT_CLIP_LOW
         val range = cameraExposureRangeEv()
         val floor = max(range.start, EXPOSURE_MIN_EV)
         val before = autoExposureEv
         val target = when {
-            goldOverexposed || result.sceneClipFraction > HIGHLIGHT_CLIP_HIGH ->
+            goldOverexposed || sceneOverexposed ->
                 (before - EXPOSURE_STEP_EV).coerceAtLeast(floor)
-            !goldOverexposed && result.sceneClipFraction < HIGHLIGHT_CLIP_LOW && before < 0f ->
+            !goldOverexposed && sceneClear && before < 0f ->
                 (before + EXPOSURE_STEP_EV).coerceAtMost(0f)
             else -> before
         }
@@ -3830,28 +3870,41 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Latest-wins exposure queue. Do not update state until Sony ACKs. */
-    private fun queueAutoExposure(targetEv: Float) {
+    private fun queueAutoExposure(targetEv: Float, force: Boolean = false) {
+        desiredAutoExposureEv = targetEv
         if (activeCameraSource != ProductionCameraSource.SONY) {
             autoExposureEv = targetEv
             setCameraExposureCompensationEv(targetEv)
             return
         }
-        if (!exposureCommandInFlight && pendingAutoExposureEv == null && targetEv == autoExposureEv) {
+        if (!force && !exposureCommandInFlight && pendingAutoExposureEv == null && targetEv == autoExposureEv) {
             return
         }
         pendingAutoExposureEv = targetEv
-        if (!exposureCommandInFlight) drainAutoExposureQueue()
+        if (!exposureCommandInFlight && !exposureRetryBlockedUntilAvailability) {
+            drainAutoExposureQueue()
+        }
     }
 
     private fun drainAutoExposureQueue() {
+        if (exposureRetryBlockedUntilAvailability) return
         val target = pendingAutoExposureEv ?: return
         pendingAutoExposureEv = null
         exposureCommandInFlight = true
         sonyProduction.setExposureCompensationEv(target) { ok ->
-            if (ok) autoExposureEv = target
+            if (ok) {
+                autoExposureEv = target
+                exposureRetryBlockedUntilAvailability = false
+            } else {
+                // Keep the desired value, but never retry it every 150ms from
+                // the live tick. The next availability edge performs one
+                // forced resync against the fresh Sony control session.
+                exposureRetryBlockedUntilAvailability = true
+                if (pendingAutoExposureEv == null) pendingAutoExposureEv = desiredAutoExposureEv
+            }
             exposureCommandInFlight = false
             if (!ok) Log.w(TAG, "Sony auto exposure command failed target=$target")
-            if (pendingAutoExposureEv != null && pendingAutoExposureEv != autoExposureEv) {
+            if (ok && pendingAutoExposureEv != null && pendingAutoExposureEv != autoExposureEv) {
                 drainAutoExposureQueue()
             }
         }
@@ -4001,9 +4054,15 @@ class MainActivity : AppCompatActivity() {
      * (rings/studs/etc., where filling most of the frame is both
      * achievable and correct to require). */
     private fun captureOccupancyFloor(): Float {
-        val categoryTarget = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)?.targetArea
+        val profile = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
             ?: return CAPTURE_MIN_OCCUPANCY
-        return min(CAPTURE_MIN_OCCUPANCY, categoryTarget * 0.85f)
+        // Only the tall TOP_RAIL geometry is mathematically incompatible
+        // with the universal 75% box-area floor. Applying targetArea to all
+        // profiles accidentally reduced rings/studs to ~2-5% occupancy.
+        if (profile.silhouette != CaptureCompositionProfiles.Silhouette.NECK_CURVE) {
+            return CAPTURE_MIN_OCCUPANCY
+        }
+        return min(CAPTURE_MIN_OCCUPANCY, profile.targetArea * 0.85f)
     }
 
     private fun meetsHardCaptureRules(): Boolean {
@@ -5852,6 +5911,7 @@ class MainActivity : AppCompatActivity() {
                 if (!fromUser) return
                 val ev = evRange.start + progress / sliderStepsPerEv
                 autoExposureEv = ev
+                desiredAutoExposureEv = ev
                 // CameraX can accept continuous slider updates. Sony cannot:
                 // each property write briefly releases HTTP Live View. Send
                 // only the final Sony value when the finger lifts.
