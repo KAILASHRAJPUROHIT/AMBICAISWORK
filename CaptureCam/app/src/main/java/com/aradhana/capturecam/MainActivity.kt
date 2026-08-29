@@ -3903,11 +3903,36 @@ class MainActivity : AppCompatActivity() {
      * detection noise, not just a reading that occasionally misjudged
      * "centered enough". Smoothing before the nudge decision as well means
      * a one-tick flicker only nudges the EMA a little, not the camera a lot. */
+    /** Flow-based position for long, curved items (2026-08-29, explicit
+     * request: "for long items box is the wrong tracking method... should
+     * be flow"). A bounding box's geometric center is skewed by however
+     * much empty space the box pads around a curve -- confirmed live as
+     * the actual mechanism behind "way too high" earlier: a tall box
+     * anchored to the pendant's position centers on empty padding, not on
+     * where the real gold pixels are. The point cloud already carries
+     * every classified gold pixel's real position (MaterialDetector.
+     * Result.points); averaging THOSE directly gives a centroid that
+     * reflects the item's actual visible mass, not a rectangle's shape. */
+    private fun flowCentroidFromPoints(result: MaterialDetector.Result?): Pair<Float, Float>? {
+        val gold = result?.points?.filter { it.gold } ?: return null
+        if (gold.isEmpty()) return null
+        var sumX = 0f
+        var sumY = 0f
+        for (p in gold) { sumX += p.x; sumY += p.y }
+        return (sumX / gold.size) to (sumY / gold.size)
+    }
+
     private fun smoothedCenter(result: MaterialDetector.Result? = null): Pair<Float, Float>? {
         val mlBox = bestObjectBox()
         val cx: Float
         val cy: Float
-        if (mlBox != null) {
+        val isLongItem = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
+            ?.silhouette == CaptureCompositionProfiles.Silhouette.NECK_CURVE
+        val flowCentroid = if (isLongItem) flowCentroidFromPoints(result ?: latestMaterial) else null
+        if (flowCentroid != null) {
+            cx = flowCentroid.first
+            cy = flowCentroid.second
+        } else if (mlBox != null) {
             // latestObjectBoxesUpright is already upright (name says so,
             // and that's the whole reason uprightPoint() exists -- to bring
             // raw `points` into this SAME space for containment tests
