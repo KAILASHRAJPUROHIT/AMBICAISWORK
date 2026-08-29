@@ -123,6 +123,25 @@ object MaterialDetector {
         return nonGold >= 5 && frac in 0.02f..0.35f
     }
 
+    /** Illumination-invariant chromaticity approach (2026-08-29 fix,
+     * research-backed): the previous version gated on absolute channel
+     * values/differences (r > 100, delta > 55, r-b >= 45, etc.), which all
+     * shrink toward zero as a pixel darkens -- a genuinely gold pixel in
+     * shadow (same hue, lower brightness) failed these floors even though
+     * every ratio/hue signal still matched. Live-confirmed: a chain's
+     * segment nearest the ring light classified as gold; the same chain a
+     * few inches into shadow did not, despite being visually identical
+     * gold to the eye. The standard CV fix (illumination-invariant colour
+     * recognition via channel-normalized chromaticity) is to classify on
+     * RATIOS between channels, not their absolute magnitude, since a dim
+     * gold pixel keeps the same r:g:b proportion as a bright one. delta/
+     * saturation/cr/cb were already ratio-like and are kept; the absolute
+     * floors and differences are replaced with channel ratios so darker
+     * gold now passes while grey/near-neutral backdrop and stand
+     * (r≈g≈b, ratios ≈1.0) still correctly fails. yLuma/saturation floors
+     * are lowered, not removed -- still excludes true near-black noise and
+     * near-grey surfaces, just no longer double-penalizes darkness on top
+     * of the ratio checks doing the real hue discrimination. */
     private fun looksLikeGold(r: Int, g: Int, b: Int): Boolean {
         val maxV = max(r, max(g, b))
         val minV = min(r, min(g, b))
@@ -131,15 +150,14 @@ object MaterialDetector {
         val yLuma = 0.299f * r + 0.587f * g + 0.114f * b
         val cb = 128 - 0.168736f * r - 0.331264f * g + 0.5f * b
         val cr = 128 + 0.5f * r - 0.418688f * g - 0.081312f * b
-        return yLuma > 35 && yLuma < 245 &&
-            delta > 55 &&
-            saturation > 0.34f &&
-            r > 100 && g > 60 && b > 18 &&
-            r - b >= 45 &&
-            r - g >= 10 &&
-            g - b >= 5 &&
-            r >= g &&
-            g >= b * 0.6 &&
+        val safeB = max(b, 1).toFloat()
+        val safeG = max(g, 1).toFloat()
+        return yLuma > 18 && yLuma < 245 &&
+            saturation > 0.22f &&
+            r >= g && g >= b &&
+            r / safeB >= 1.7f &&
+            r / safeG >= 1.08f &&
+            g / safeB >= 1.3f &&
             cr >= 138 && cr <= 210 &&
             cb >= 72 && cb <= 145
     }

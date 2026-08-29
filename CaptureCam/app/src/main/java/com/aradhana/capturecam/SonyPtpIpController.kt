@@ -120,7 +120,20 @@ class SonyPtpIpController {
         // read without disturbing the separate persistent PTP control lane.
         // The single-flight recovery gate below guarantees this watchdog can
         // close a stuck channel only once per recovery attempt.
-        private const val LIVE_VIEW_STALL_TIMEOUT_MS = 750L
+        // Raised from 750ms (2026-08-29 fix): this code only started running
+        // live against the real camera today (it sat on an unmerged branch
+        // since 2026-08-26) and immediately produced a reconnect loop that
+        // was never present before. Live-confirmed: real stalls measured
+        // consistently at 825-829ms, always just barely over the old 750ms
+        // threshold, during ordinary AF-scan/zoom operations -- not a dead
+        // connection, a frame that was one moment away from arriving. The
+        // watchdog killed a healthy channel right as it was about to
+        // recover, and that forced closure is what produced the resulting
+        // "HTTP chunk header ended early" read failure -- a self-inflicted
+        // error, not a real network fault. 2000ms comfortably clears the
+        // observed real-world gap while still catching a genuinely dead
+        // multi-second stall.
+        private const val LIVE_VIEW_STALL_TIMEOUT_MS = 2_000L
         private const val TRANSPORT_HEALTH_POLL_MS = 250L
         private const val TRANSPORT_HEALTH_LOG_MS = 15_000L
         private const val PRODUCTION_ZOOM_MIN_RATIO = 1f

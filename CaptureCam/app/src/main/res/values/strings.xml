@@ -3,6 +3,13 @@
     <string name="app_name">Aradhana Capture</string>
     <string name="status_starting">Starting camera…</string>
     <string name="settings">⚙</string>
+    <string name="guides_on">Guides: ON</string>
+    <string name="guides_off">Guides: OFF</string>
+    <string name="gimbal_label">GIMBAL</string>
+    <string name="gimbal_up">▲</string>
+    <string name="gimbal_down">▼</string>
+    <string name="gimbal_left">◄</string>
+    <string name="gimbal_right">►</string>
     <string name="manual_shutter">Manual capture</string>
     <string name="ready_capture_angle">✓ READY — Capture This Angle</string>
     <string name="server_url_label">Capture server URL</string>
