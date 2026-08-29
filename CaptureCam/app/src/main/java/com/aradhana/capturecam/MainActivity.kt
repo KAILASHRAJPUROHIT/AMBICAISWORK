@@ -3329,9 +3329,21 @@ class MainActivity : AppCompatActivity() {
         // metric, so climb target and final gate agree on what "big
         // enough" means.
         val colourOccupancy = result.bounds?.area() ?: result.coverage
-        val coverageOk = (if (mlOccupancy != null) mlOccupancy >= CAPTURE_MIN_OCCUPANCY
-                          else colourOccupancy >= CAPTURE_MIN_OCCUPANCY) || atZoomCeiling ||
-            (isLongItemCategory && atZoomFloor)
+        // Uses captureOccupancyFloor() (category-aware, achievable), not
+        // the raw CAPTURE_MIN_OCCUPANCY, and no longer force-satisfies
+        // this unconditionally once a long item reaches its AF-safe zoom
+        // floor (2026-08-29, live-confirmed real waste: a complete,
+        // well-centered chain photo with obvious room to zoom in further
+        // that the app never used, because reaching the floor alone used
+        // to permanently stop any further climb regardless of how much
+        // slack actually existed). Long items now continue the SAME
+        // bounded climb toward their own achievable target once past the
+        // AF floor -- the existing follow-gold/edgeClipped checks earlier
+        // in this tick are the safety net against overshoot, same as they
+        // already are for every other category.
+        val occupancyFloor = captureOccupancyFloor()
+        val coverageOk = (if (mlOccupancy != null) mlOccupancy >= occupancyFloor
+                          else colourOccupancy >= occupancyFloor) || atZoomCeiling
         // Sony exposes one serialized PTP control lane. Exposure used to run
         // before this framing decision and repeatedly occupied that lane,
         // causing every concurrent zoom request to fail busy while the UI
