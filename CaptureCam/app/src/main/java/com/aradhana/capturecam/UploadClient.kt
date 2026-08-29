@@ -36,6 +36,13 @@ import java.io.File
  */
 object UploadClient {
 
+    // Set by MainActivity after a background ServerDiscovery sweep finds
+    // capture_server.py's current real address (2026-08-28 hardwall for the
+    // laptop's own IP drifting, same as the camera/tablet drift already
+    // fixed today) -- consulted BEFORE mDNS and the static fallback in the
+    // Dns override below, since it's the most recently live-verified route.
+    @Volatile var discoveredServerIp: String? = null
+
     data class CategoryResult(val key: String, val label: String, val prefix: String)
 
     /** Keeps a catalogue rejection distinct from a transport failure.
@@ -67,16 +74,35 @@ object UploadClient {
         OkHttpClient.Builder()
             .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
             .hostnameVerifier(HostnameVerifier { _, _ -> true })
-            // ARADHANA runs capture_server.py on both active adapters. Give
-            // OkHttp both routes explicitly so LAN cable/Wi-Fi transitions do
-            // not depend on Android's mDNS cache expiring first.
+            // ARADHANA runs capture_server.py on both active adapters. Real
+            // mDNS resolution (Dns.SYSTEM, which Android resolves via its
+            // built-in .local support) is tried FIRST so this always
+            // reaches the laptop's actual current address -- this same LAN
+            // has now shown DHCP-drift on every device checked (tablet,
+            // camera, and the laptop itself: it moved off 192.168.0.7 to
+            // .12 while these two addresses stayed hardcoded, leaving every
+            // category/upload call aimed at dead IPs with no failure
+            // visible until this got noticed). discoveredServerIp (a live
+            // ServerDiscovery sweep result) is tried before even that; the
+            // old hardcoded pair is kept, appended, ONLY as a last-resort
+            // fallback for a network that blocks mDNS multicast entirely --
+            // never as the primary route.
             .dns(object : Dns {
                 override fun lookup(hostname: String): List<InetAddress> {
                     if (!hostname.equals("ARADHANA.local", ignoreCase = true)) {
                         return Dns.SYSTEM.lookup(hostname)
                     }
-                    return listOf("192.168.0.3", "192.168.0.7")
-                        .map(InetAddress::getByName)
+                    val discovered = discoveredServerIp?.let { ip ->
+                        try { listOf(InetAddress.getByName(ip)) } catch (_: Exception) { emptyList() }
+                    } ?: emptyList()
+                    val resolved = try {
+                        Dns.SYSTEM.lookup(hostname)
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                    val fallback = listOf("192.168.0.12", "192.168.0.3", "192.168.0.7")
+                        .mapNotNull { ip -> try { InetAddress.getByName(ip) } catch (_: Exception) { null } }
+                    return (discovered + resolved + fallback).distinct()
                 }
             })
             // Three full-resolution Sony JPEGs can exceed 40 MB, followed
@@ -90,6 +116,22 @@ object UploadClient {
             .build()
     }
 
+    // Category/stud-flag lookups are small, fast GETs gating a capture
+    // in progress -- reusing `client`'s multi-minute upload timeouts left
+    // the operator stuck on "Checking tag category..." for up to 8 minutes
+    // whenever the server was slow/unresponsive rather than outright down,
+    // since the existing unreachable-server retry UI only fires once the
+    // call actually completes/fails. Same TLS/DNS setup as `client`, just
+    // with timeouts sized for a metadata call.
+    private val metadataClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .writeTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(6, TimeUnit.SECONDS)
+            .callTimeout(8, TimeUnit.SECONDS)
+            .build()
+    }
+
     /** capture_server.py's /api/capture/resolve_category. Category resolution
      * is a hard pre-capture gate: otherwise a bad/misread code consumes three
      * full-resolution shutters and fails only at the final save. */
@@ -100,7 +142,7 @@ object UploadClient {
                 .url("${baseUrl.trimEnd('/')}/api/capture/resolve_category?tag_code=$encoded")
                 .get()
                 .build()
-            client.newCall(request).execute().use { response ->
+            metadataClient.newCall(request).execute().use { response ->
                 val text = response.body?.string() ?: "{}"
                 val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
                 if (!json.optBoolean("ok", false)) {
@@ -139,7 +181,7 @@ object UploadClient {
                 .url("${baseUrl.trimEnd('/')}/api/capture/stud_flag?tag_code=$encoded")
                 .get()
                 .build()
-            client.newCall(request).execute().use { response ->
+            metadataClient.newCall(request).execute().use { response ->
                 val text = response.body?.string() ?: "{}"
                 val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
                 if (!json.optBoolean("ok", false)) return@withContext null
@@ -166,7 +208,7 @@ object UploadClient {
                     .url("${baseUrl.trimEnd('/')}/api/capture/stud_flag")
                     .post(body)
                     .build()
-                client.newCall(request).execute().use { response ->
+                metadataClient.newCall(request).execute().use { response ->
                     val text = response.body?.string() ?: "{}"
                     val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
                     if (!json.optBoolean("ok", false)) return@withContext null

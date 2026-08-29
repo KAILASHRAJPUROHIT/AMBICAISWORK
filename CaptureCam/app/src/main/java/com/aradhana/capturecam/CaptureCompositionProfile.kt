@@ -94,16 +94,26 @@ object CaptureCompositionProfiles {
         profile("bali_18", "BALI 18", Silhouette.HOOP_PAIR, Mount.MIDDLE_RAIL, 1.25f, 0.28f, 70f, 45f, "high"),
         profile("bali_22", "BALI 22", Silhouette.HOOP_PAIR, Mount.MIDDLE_RAIL, 1.25f, 0.28f, 70f, 45f, "high"),
         profile("bangle_22", "BANGLE 22", Silhouette.CIRCLE, Mount.LOWER_RAIL, 1.0f, 0.44f, 62f, 62f, "moderate"),
-        profile("chain_22", "CHAIN 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 1.55f, 0.52f, 210f, 140f, "moderate"),
+        // NECK_CURVE/TOP_RAIL aspect+dims corrected 2026-08-28: old values
+        // (wide, laid-flat-on-a-table convention) don't match how this rig
+        // presents a top-rail-hung item. Live-measured directly on
+        // ms_long_22 pinned to max zoom-out (162 samples, ratio~0.25-0.29,
+        // ~72% of readings) -- see that entry's own comment. Siblings share
+        // identical physical mounting so get the same corrected aspect;
+        // heightMm kept close to the original width (the chain's real
+        // material length carries over from laid-flat to hung), widthMm
+        // derived from the corrected aspect -- unverified per-sibling,
+        // confirm live when tested.
+        profile("chain_22", "CHAIN 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 0.28f, 0.52f, 59f, 210f, "moderate"),
         profile("dull_22", "DULL 22", Silhouette.STUD_PAIR, Mount.MIDDLE_RAIL, 2.0f, 0.055f, 34f, 14f),
         profile("earring_22", "EARRING 22", Silhouette.DROP_PAIR, Mount.MIDDLE_RAIL, 0.9f, 0.24f, 60f, 60f),
-        profile("fancy_mala_18", "FANCY MALA 18", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 1.4f, 0.56f, 220f, 175f, "moderate"),
-        profile("fancy_mala_22", "FANCY MALA 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 1.4f, 0.56f, 220f, 175f, "moderate"),
+        profile("fancy_mala_18", "FANCY MALA 18", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 0.28f, 0.56f, 62f, 220f, "moderate"),
+        profile("fancy_mala_22", "FANCY MALA 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 0.28f, 0.56f, 62f, 220f, "moderate"),
         profile("gents_bracelet_22", "GENTS BRACELET 22", Silhouette.OPEN_CURVE, Mount.LOWER_RAIL, 3.25f, 0.34f, 115f, 35f, "high"),
         profile("gents_kada_18", "GENTS KADA 18", Silhouette.CIRCLE, Mount.LOWER_RAIL, 1.0f, 0.48f, 70f, 70f, "moderate"),
         profile("gents_kada_22", "GENTS KADA 22", Silhouette.CIRCLE, Mount.LOWER_RAIL, 1.0f, 0.48f, 70f, 70f, "moderate"),
         profile("gents_ring_22", "GENTS RING 22", Silhouette.RING, Mount.CLEAR_SUPPORT, 1.0f, 0.060f, 23f, 23f, "moderate"),
-        profile("haar_chain_22", "HAAR CHAIN 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 1.55f, 0.52f, 210f, 140f),
+        profile("haar_chain_22", "HAAR CHAIN 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 0.28f, 0.52f, 59f, 210f),
         profile("jhumka_22", "JHUMKA 22", Silhouette.DROP_PAIR, Mount.MIDDLE_RAIL, 0.85f, 0.30f, 70f, 65f, "moderate"),
         profile("kaan_chain_22", "KAAN CHAIN 22", Silhouette.LONG_VERTICAL, Mount.TOP_RAIL, 0.22f, 0.14f, 35f, 160f, "moderate"),
         profile("ladies_bracelet_18", "LADIES BRACELET 18", Silhouette.OPEN_CURVE, Mount.LOWER_RAIL, 3.25f, 0.30f, 100f, 31f),
@@ -115,11 +125,17 @@ object CaptureCompositionProfiles {
         profile("locket_22", "LOCKET 22", Silhouette.PENDANT, Mount.CLEAR_SUPPORT, 0.78f, 0.16f, 28f, 36f),
         profile("mangota_22", "MANGOTA 22", Silhouette.OPEN_CURVE, Mount.LOWER_RAIL, 3.0f, 0.25f, 100f, 34f, "moderate"),
         profile("moti_nath_18", "MOTI NATH 18", Silhouette.CRESCENT, Mount.CLEAR_SUPPORT, 1.75f, 0.28f, 65f, 38f),
-        profile("ms_long_22", "MS LONG 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 1.5f, 0.58f, 220f, 180f, "moderate"),
-        profile("mss_short_20", "MSS-SHORT 20", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 1.35f, 0.52f, 205f, 155f, "moderate"),
-        profile("mss_short_22", "MSS-SHORT 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 1.35f, 0.52f, 205f, 155f, "moderate"),
+        // Live-confirmed 2026-08-28: operator report + logcat both showed a
+        // real, correctly-hung MS LONG 22 measuring ratio~0.28 tick after
+        // tick (162 samples) against the OLD 1.3-1.7 range -- permanently
+        // blocked capture ("Reposition -- tracking looks off" forever). An
+        // intermediate reciprocal-based guess (0.667) was still ~2.4x too
+        // high; this value is the directly measured one.
+        profile("ms_long_22", "MS LONG 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 0.28f, 0.58f, 62f, 220f, "moderate"),
+        profile("mss_short_20", "MSS-SHORT 20", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 0.28f, 0.52f, 57f, 205f, "moderate"),
+        profile("mss_short_22", "MSS-SHORT 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 0.28f, 0.52f, 57f, 205f, "moderate"),
         profile("nath_22", "NATH 22", Silhouette.CRESCENT, Mount.CLEAR_SUPPORT, 1.75f, 0.26f, 60f, 35f),
-        profile("necklace_22", "NECKLACE 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 1.5f, 0.56f, 215f, 160f),
+        profile("necklace_22", "NECKLACE 22", Silhouette.NECK_CURVE, Mount.TOP_RAIL, 0.28f, 0.56f, 60f, 215f),
         profile("necklace_set_18", "NECKLACE SET 18", Silhouette.PENDANT_SET, Mount.TOP_RAIL, 1.15f, 0.58f, 200f, 180f),
         profile("necklace_set_22", "NECKLACE SET 22", Silhouette.PENDANT_SET, Mount.TOP_RAIL, 1.15f, 0.58f, 200f, 180f),
         profile("pendent_18", "PENDENT 18", Silhouette.PENDANT, Mount.CLEAR_SUPPORT, 0.72f, 0.14f, 25f, 35f, "high"),

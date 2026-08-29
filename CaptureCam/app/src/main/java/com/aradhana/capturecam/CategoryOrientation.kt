@@ -41,12 +41,24 @@ object CategoryOrientation {
         "ladies_bracelet_22" to AspectRange(3.0f, 3.5f),
         "mangota_22" to AspectRange(2.5f, 3.5f),
         "baby_braclet_22" to AspectRange(2.5f, 3.5f),
-        "chain_22" to AspectRange(1.3f, 1.8f),
-        "fancy_mala_18" to AspectRange(1.2f, 1.6f),
-        "fancy_mala_22" to AspectRange(1.2f, 1.6f),
-        "ms_long_22" to AspectRange(1.3f, 1.7f),
-        "mss_short_20" to AspectRange(1.2f, 1.5f),
-        "mss_short_22" to AspectRange(1.2f, 1.5f),
+        // Corrected 2026-08-28 for these NECK_CURVE/TOP_RAIL categories:
+        // the old ranges (1.2-1.8, "wide") came from category_orientation.
+        // py's laid-flat-on-a-table convention, but this rig hangs TOP_RAIL
+        // items from a rail (tall in-frame, not wide) -- a first pass
+        // inverted the old ranges (reciprocal, ~0.6-0.8) but LIVE
+        // measurement on ms_long_22 pinned to max zoom-out showed the real
+        // ratio consistently at 0.25-0.29 (162 samples, ~72% in that
+        // band), well below even the inverted guess. This range is
+        // measured directly for ms_long_22; the siblings share identical
+        // physical mounting so get the same corrected band, but only
+        // ms_long_22 has live confirmation -- verify each sibling live
+        // when tested.
+        "chain_22" to AspectRange(0.24f, 0.34f),
+        "fancy_mala_18" to AspectRange(0.24f, 0.34f),
+        "fancy_mala_22" to AspectRange(0.24f, 0.34f),
+        "ms_long_22" to AspectRange(0.24f, 0.34f),
+        "mss_short_20" to AspectRange(0.24f, 0.34f),
+        "mss_short_22" to AspectRange(0.24f, 0.34f),
         "wati_22" to AspectRange(2.0f, 2.5f),
         "pendent_18" to AspectRange(0.6f, 0.85f),
         "pendent_22" to AspectRange(0.6f, 0.85f),

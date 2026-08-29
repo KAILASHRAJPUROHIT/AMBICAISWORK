@@ -486,6 +486,56 @@ object MaterialDetector {
             bestMaxCol = max(bestMaxCol, c.maxCol); bestMaxRow = max(bestMaxRow, c.maxRow)
             bestSize += c.size
         }
+        // Chain-strap extension (2026-08-28, live-confirmed on a necklace):
+        // a chain's thin straps sample as several SMALL disconnected
+        // components (the `step` stride skips over gaps in a thin line),
+        // each individually far below PAIR_SIZE_RATIO of the dense
+        // pendant/bead cluster that becomes `primary` -- so the pair-union
+        // above never picks them up, and `bounds` locks onto just the
+        // dense center, cropping the visible straps out entirely (a real
+        // capture showed exactly this: box on the pendant beads only, the
+        // chain running to both frame edges outside it). Distinct problem
+        // from the pair-union: not "two similarly-sized pieces", but "many
+        // small pieces that physically continue the primary blob outward".
+        // Chains in any real component whose bounding box is within a
+        // small gap of the union SO FAR -- iterated, since a strap segment
+        // two hops out only becomes "close" once the first hop is already
+        // unioned in. Capped iteration count is just a safety backstop
+        // (there are only ever a handful of real components per frame);
+        // it is not expected to bind in practice.
+        //
+        // Tolerance scales with the union box's OWN current span, not a
+        // flat frame fraction (a flat 5%-of-frame tolerance still cropped
+        // the top connector tabs on a real capture): a necklace already
+        // known to be large should get proportionally more reach to keep
+        // continuing itself (the last gap to a small, sparse connector tab
+        // can be wider than 5% of the whole frame on a piece this size),
+        // while a small ring's stray fleck still gets almost none, since
+        // 15% of a tiny union box is itself tiny. Recomputed every pass
+        // since the union box grows. minimumTolerance is the floor for a
+        // still-small union early in the chain.
+        val minimumTolerance = (0.05f * max(cols, rows)).toInt().coerceAtLeast(2)
+        var grew = true
+        var guard = 0
+        while (grew && guard < 8) {
+            grew = false
+            guard += 1
+            val unionSpan = max(bestMaxCol - bestMinCol, bestMaxRow - bestMinRow)
+            val gapTolerance = max(minimumTolerance, (0.18f * unionSpan).toInt())
+            for (c in real) {
+                if (c === primary) continue
+                if (c.minCol >= bestMinCol && c.maxCol <= bestMaxCol &&
+                    c.minRow >= bestMinRow && c.maxRow <= bestMaxRow
+                ) continue // already inside the union box
+                val colGap = max(0, max(bestMinCol - c.maxCol, c.minCol - bestMaxCol))
+                val rowGap = max(0, max(bestMinRow - c.maxRow, c.minRow - bestMaxRow))
+                if (colGap > gapTolerance || rowGap > gapTolerance) continue
+                bestMinCol = min(bestMinCol, c.minCol); bestMinRow = min(bestMinRow, c.minRow)
+                bestMaxCol = max(bestMaxCol, c.maxCol); bestMaxRow = max(bestMaxRow, c.maxRow)
+                bestSize += c.size
+                grew = true
+            }
+        }
 
         val bounds = Bounds(
             x0 = (startX + bestMinCol * step).toFloat() / width,
@@ -493,6 +543,13 @@ object MaterialDetector {
             x1 = (startX + (bestMaxCol + 1) * step).toFloat() / width,
             y1 = (startY + (bestMaxRow + 1) * step).toFloat() / height
         )
+        if (guard > 1) {
+            android.util.Log.d(
+                "MaterialDetector",
+                "chain-extend passes=${guard - 1} components=${components.size} real=${real.size} " +
+                    "primarySize=${primary.size} finalBounds=[${bounds.x0},${bounds.y0},${bounds.x1},${bounds.y1}]"
+            )
+        }
         // Candidate danglers: small relative to the main piece (a real
         // ghungroo/bead is a fraction of the body's size, not comparable
         // to it -- that's what separates this from the pair-union above,
@@ -562,7 +619,19 @@ object MaterialDetector {
         bitmap: Bitmap,
         step: Int = 6,
         fullFrame: Boolean = false,
-        region: Bounds? = null
+        region: Bounds? = null,
+        // Crops OUT a top strip in fullFrame mode only (2026-08-28,
+        // explicit request): a long TOP_RAIL item's ring light physically
+        // sits above the rail, and pinning long items to max zoom-out (see
+        // MainActivity's isLongItemCategory) now brings that light itself
+        // into frame. Left unexcluded it inflated sceneClipFraction (the
+        // light's own blown-out pixels, not the jewellery's) and drove
+        // applyAutoExposure() to step EV down repeatedly chasing a
+        // brightness problem that was never on the ornament, darkening the
+        // actual piece until tracking lost it. Does not affect the
+        // centered-ROI or default-region paths -- those already exclude
+        // the frame edges entirely.
+        excludeTopFraction: Float = 0f
     ): Result {
         val width = bitmap.width
         val height = bitmap.height
@@ -591,7 +660,7 @@ object MaterialDetector {
             else -> (width * 0.82).toInt()
         }.coerceAtLeast(startX + 1)
         val startY = when {
-            fullFrame -> 0
+            fullFrame -> (height * excludeTopFraction.coerceIn(0f, 0.4f)).toInt()
             validRegion != null -> (height * validRegion.y0.coerceIn(0f, 0.98f)).toInt()
             else -> (height * 0.16).toInt()
         }

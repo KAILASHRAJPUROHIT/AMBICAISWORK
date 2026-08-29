@@ -13,6 +13,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.hardware.camera2.CaptureResult
+import android.os.SystemClock
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -51,9 +52,6 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.objects.ObjectDetection
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
-import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -388,19 +386,19 @@ class MainActivity : AppCompatActivity() {
                 .build()
         )
     }
-    // Runs in parallel with barcodeScanner on the same frame (2026-08-26):
-    // an independent decode path for tags where the printed code is legible
-    // but the barcode/QR itself is reflective, low-contrast, or too small
-    // for that pass to lock onto -- see the tag-scan block in tickTag().
-    private val textRecognizer by lazy {
-        TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-    }
     // Conversion and Task listeners stay off the main/UI looper. Default ML
     // Kit listeners were starved behind the 25fps ImageView renderer, leaving
     // barcodeBusy latched for seconds even when native recognition had ended.
     private val barcodeExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread({
-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+            // THREAD_PRIORITY_DEFAULT, not _BACKGROUND (2026-08-28 fix): this
+            // was set low back when every scan also ran OCR in parallel and
+            // cost ~50ms -- now barcode-only (see the OCR-removal fix the
+            // same day), each scan is ~10-20ms, and BACKGROUND priority made
+            // the scheduler defer this thread behind other background work
+            // on a 12GB/Snapdragon-7-Gen-2 tablet with plenty of headroom to
+            // just run it promptly instead.
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT)
             runnable.run()
         }, "CaptureCamBarcode").apply { isDaemon = true }
     }
@@ -553,6 +551,19 @@ class MainActivity : AppCompatActivity() {
     // forever if the piece genuinely never gets moved back.
     private var tooCloseWarned = false
     private var readyStreak = 0
+    // Local-AI shape fallback (2026-08-28, AiAdvisor.kt) -- fires ONE
+    // advisory call after wrongShape has persisted a while (not every
+    // tick: that would hammer the shared local Ollama instance for no
+    // benefit), and if it agrees the framing roughly matches the
+    // category, temporarily lets capture proceed despite the geometric
+    // aspect-ratio mismatch. Scoped to wrongShape only, never edgeClipped
+    // -- a physically-clipped item needs a shorter distance, not a second
+    // opinion. Keyed to resolvedCategoryKey so a different item after this
+    // one never inherits a stale override.
+    private var wrongShapeSince = 0L
+    private var aiShapeAdviceInFlight = false
+    private var aiShapeAdviceCategory: String? = null
+    private var aiShapeOverrideUntil = 0L
     // True right after tag capture, before MAIN's auto-detect/hunt loop is
     // allowed to run -- per explicit request: placing the item under the
     // camera takes real time, and starting the hunt/timer immediately on
@@ -621,6 +632,8 @@ class MainActivity : AppCompatActivity() {
     @Volatile private var latestSonyPreviewBitmap: Bitmap? = null
     private val sonyPreviewUpdatePending = AtomicBoolean(false)
     private var displayedSonyPreviewBitmap: Bitmap? = null
+    private var lastPreviewRenderAtElapsed = 0L
+    private var nextPreviewRenderAtElapsed = 0L
     private val sonyPreviewRenderRunnable = object : Runnable {
         override fun run() {
             if (isDestroyed || activeCameraSource != ProductionCameraSource.SONY) {
@@ -632,10 +645,38 @@ class MainActivity : AppCompatActivity() {
                 binding.sonyPreviewView.setImageBitmap(newest)
                 displayedSonyPreviewBitmap = newest
             }
+            // fpsGraph samples THIS tick's own cadence, not Sony's raw
+            // arrival rate (2026-08-28 fix) -- this loop already holds the
+            // latest-wins frame at a fixed interval regardless of source
+            // jitter, so this is what the operator actually sees on
+            // screen. A real stall (GC pause, UI thread jank) still shows
+            // up here as a dip; source-side network/shutter jitter no
+            // longer does, since it's already absorbed by the latest-wins
+            // slot above.
+            // Handler.postAtTime schedules against SystemClock.uptimeMillis,
+            // NOT elapsedRealtime -- both timing and scheduling below use
+            // uptimeMillis so they stay on the same clock.
+            val nowUptime = SystemClock.uptimeMillis()
+            if (lastPreviewRenderAtElapsed != 0L) {
+                val deltaMs = nowUptime - lastPreviewRenderAtElapsed
+                if (deltaMs > 0) binding.fpsGraph.addSample(1000f / deltaMs)
+            }
+            lastPreviewRenderAtElapsed = nowUptime
             // Present latest-wins frames at an even 25fps cadence. Sony's
             // network JPEGs arrive in small bursts; posting every arrival
             // directly made 22-25 average FPS still look visibly jerky.
-            handler.postDelayed(this, SONY_PREVIEW_RENDER_INTERVAL_MS)
+            // Scheduled against a fixed absolute clock, not "40ms from
+            // whenever this run() happened to execute" (2026-08-28 fix):
+            // postDelayed's relative scheduling lets any single late tick
+            // (a GC pause, a busy main-looper queue) push every following
+            // tick back by the same amount, compounding into visible drift
+            // over time. postAtTime targets fixed points on the clock, so a
+            // late tick is a one-off blip that self-corrects on the next
+            // one instead of dragging the whole cadence off schedule.
+            if (nextPreviewRenderAtElapsed == 0L) nextPreviewRenderAtElapsed = nowUptime
+            nextPreviewRenderAtElapsed += SONY_PREVIEW_RENDER_INTERVAL_MS
+            if (nextPreviewRenderAtElapsed <= nowUptime) nextPreviewRenderAtElapsed = nowUptime + SONY_PREVIEW_RENDER_INTERVAL_MS
+            handler.postAtTime(this, nextPreviewRenderAtElapsed)
         }
     }
     // True while the post-capture preview (image + Retake/Cancel) is on
@@ -827,7 +868,18 @@ class MainActivity : AppCompatActivity() {
         private const val UNROTATED_MEAN_DIFF_THRESHOLD = 8.0
         // Larger closed-loop steps reduce costly Sony HTTP/control-pipeline
         // transitions while retaining detection feedback after every step.
-        private const val ZOOM_STEP_RATIO = 1.25f
+        // 1.4, not 1.25 (2026-08-28 fix): the zoom MOTOR itself is already
+        // continuous -- driveZoom is a single velocity-driven power-zoom
+        // pulse whose duration scales with distance (see
+        // setCameraZoomRatio's holdMs calc). The "robotic" feel reported
+        // live was the CLIMB pausing to re-evaluate after every 1.25x hop,
+        // each followed by a mandatory ZOOM_SETTLE_MS pause -- a real
+        // 4-5-stop climb from 1.0x to ~3x read as several visible
+        // start-stop jerks rather than one sweep. A larger per-step ratio
+        // means fewer hops (and fewer pauses) to cover the same distance,
+        // without removing the safety re-check between steps (coverage/
+        // focus/centering/edge-clip are still re-read after every one).
+        private const val ZOOM_STEP_RATIO = 1.4f
         private const val ZOOM_STEP_INTERVAL_MS = 250L
         private const val CAPTURE_PREVIEW_SECONDS = 2
         private const val PREVIEW_DECODE_MAX_EDGE = 4096
@@ -991,7 +1043,47 @@ class MainActivity : AppCompatActivity() {
         // same guard here. Requiring full centering before any zoom step
         // would stall framing progress on a target that's close-but-not-
         // perfect, hence looser than the capture deadband.
-        private const val ZOOM_ALLOW_DEADBAND = 0.15f
+        // Loosened 0.15 -> 0.25 (2026-08-28, requested: zoom and gimbal
+        // feeling like one coordinated operator instead of two sequenced
+        // ones): this guard's own doc comment above says the failure it
+        // exists to prevent IS an object getting clipped at the frame edge
+        // while zoom races ahead of centering -- that exact outcome is now
+        // caught directly by tickJewel's edgeClipped check (added the same
+        // day), which halts the zoom climb the moment a box touches an
+        // edge, regardless of this deadband. That doesn't make this guard
+        // pointless -- a target can still drift progressively worse off-
+        // center under zoom without ever touching an edge -- so this is a
+        // moderate loosening, not a removal: zoom joins the centering
+        // motion sooner (needs live confirmation it still converges
+        // smoothly, not oscillating, before loosening further).
+        private const val ZOOM_ALLOW_DEADBAND = 0.25f
+        // Follow-the-gold rule (2026-08-28): how far off-center the
+        // tracked box may be before zoom actively retreats to give
+        // centering room, instead of climbing in on a still-off-center
+        // target. Looser than ZOOM_ALLOW_DEADBAND (which only gates
+        // whether zoom-IN may proceed) -- this triggers an active zoom-OUT
+        // step, a stronger action reserved for genuinely bad offsets.
+        private const val FOLLOW_GOLD_ZOOM_OUT_DEADBAND = 0.32f
+        // Starting estimate, needs live tuning (2026-08-28): how much of
+        // the top of frame to exclude from material/exposure analysis for
+        // NECK_CURVE items pinned to max zoom-out, to keep the physical
+        // ring light above the rail out of sceneClipFraction and blob
+        // detection. Too small and the light still leaks in; too large
+        // and it starts cropping the necklace's own top connector tabs
+        // out of the ANALYSIS region (framing/capture itself is unaffected
+        // either way -- this only trims what gets analysed, not what the
+        // Sony sensor captures).
+        private const val RING_LIGHT_EXCLUDE_TOP_FRACTION = 0.12f
+        // AiAdvisor shape-fallback pacing (2026-08-28): wait this long into
+        // a continuous wrongShape run before spending a round trip on the
+        // shared local Ollama instance, then don't ask again for a full
+        // cooldown even if still wrong-shaped -- a transient misread
+        // shouldn't trigger a call, and a firm "no" shouldn't be re-asked
+        // every tick. AI_SHAPE_OVERRIDE_MS is how long a "yes" is trusted
+        // before the geometric gate resumes having the final word.
+        private const val WRONG_SHAPE_AI_FALLBACK_MS = 1_500L
+        private const val WRONG_SHAPE_AI_COOLDOWN_MS = 6_000L
+        private const val AI_SHAPE_OVERRIDE_MS = 4_000L
         // Max upright-normalized distance a newly-selected gold box may be
         // from the previously locked one and still be accepted as "the same
         // object" -- generous enough for real tick-to-tick movement/zoom,
@@ -1240,11 +1332,17 @@ class MainActivity : AppCompatActivity() {
             onFrame = ::onSonyFrame,
             onAvailabilityChanged = ::onSonyAvailabilityChanged
         )
-        // Fires on the live-loop background thread -- post to main before
-        // touching the View. See FpsGraphView's doc comment.
-        sonyProduction.onFrameTiming = { fps ->
-            handler.post { if (!isDestroyed) binding.fpsGraph.addSample(fps) }
-        }
+        // NOT wired to fpsGraph (2026-08-28 fix): this fires at Sony's raw
+        // frame-arrival cadence, which is inherently jittery -- network
+        // bursts plus the shutter-speed/live-view-rate link documented on
+        // SonyProductionCamera. Feeding that straight to the on-screen
+        // graph made a perfectly smooth preview look like it was stuttering
+        // (18-25fps swings) when the actual DISPLAYED image was already
+        // locked to a steady 25fps by sonyPreviewRenderRunnable below --
+        // confirmed live, the graph was reporting the wrong layer. Kept
+        // available for engineering logcat use if a future change needs
+        // raw source-side cadence again.
+        sonyProduction.onFrameTiming = { }
         // Persists a rediscovered camera IP (2026-08-28) so the NEXT launch
         // starts at the last-known-good address instead of a stale one --
         // see SonyCameraDiscovery's doc comment for why this is needed at
@@ -1254,6 +1352,10 @@ class MainActivity : AppCompatActivity() {
             prefs.edit().putString("sony_camera_ip", newIp).apply()
             Log.i(TAG, "Sony camera IP updated to $newIp after rediscovery")
         }
+        // Last-known-good capture_server.py address from a prior rediscovery
+        // sweep (see triggerServerRediscovery) -- tried before mDNS/static
+        // fallback on this launch too, not just after a fresh failure.
+        prefs.getString("capture_server_ip", null)?.let { UploadClient.discoveredServerIp = it }
         CaptureUploadQueue.resumePending(applicationContext)
         ensurePipelineStarted()
         applyRequestedCameraMode(allowPermissionPrompt = true)
@@ -1458,6 +1560,8 @@ class MainActivity : AppCompatActivity() {
                 sonyPreviewUpdatePending.set(false)
                 latestSonyPreviewBitmap = null
                 displayedSonyPreviewBitmap = null
+                lastPreviewRenderAtElapsed = 0L
+                nextPreviewRenderAtElapsed = 0L
                 binding.sonyPreviewView.setImageDrawable(null)
                 binding.sonyPreviewView.visibility = View.GONE
                 binding.previewView.visibility = View.VISIBLE
@@ -1545,6 +1649,8 @@ class MainActivity : AppCompatActivity() {
             } else {
                 handler.removeCallbacks(sonyPreviewRenderRunnable)
                 sonyPreviewUpdatePending.set(false)
+                lastPreviewRenderAtElapsed = 0L
+                nextPreviewRenderAtElapsed = 0L
                 if (phase != Phase.UPLOADING) setStatus(detail, ready = false)
             }
             configureExposureSlider()
@@ -1621,54 +1727,42 @@ class MainActivity : AppCompatActivity() {
                             barcodeFrame.bytes, barcodeFrame.width, barcodeFrame.height, 0,
                             InputImage.IMAGE_FORMAT_NV21
                         )
-                        // Barcode/QR and OCR text run SIMULTANEOUSLY on the
-                        // same frame, but OCR's raw per-frame reads are NOT
-                        // fed into the burst consensus directly (2026-08-26,
-                        // reverted after live testing): OCR misreads a
-                        // character (O/G/Z/2 confusion etc.) differently on
-                        // almost every frame, and each misread still happens
-                        // to match TAG_CODE_PATTERN's shape -- confirmed live,
-                        // this produced a stream of near-miss votes
-                        // (GR22/112, GRZ2/112, OR22/112, RZ2/112, ...) that
-                        // never agreed 3-of-5, so the burst rejected forever
-                        // and label detection stopped working entirely on a
-                        // tag whose barcode/QR never decoded either. OCR
-                        // still runs (telemetry only, textResults=N in the
-                        // log) so a future fix can require several IDENTICAL
-                        // OCR reads in a row before trusting one, instead of
-                        // trusting any single frame's read.
+                        // OCR (text recognizer) used to run alongside the
+                        // barcode scanner on every frame here, but live
+                        // testing (2026-08-28) showed its results were never
+                        // used for acceptance (see the burst-rejection
+                        // history below) while still doubling the per-frame
+                        // ML/JPEG-decode cost -- confirmed via logcat as the
+                        // direct cause of the tag-phase fps stutter and slow
+                        // detection the operator reported. Dropped back to
+                        // barcode-only. (Prior note, kept for context: OCR
+                        // misreads a character (O/G/Z/2 confusion etc.)
+                        // differently on almost every frame, and each misread
+                        // still matches TAG_CODE_PATTERN's shape, producing a
+                        // stream of near-miss votes that never agreed 3-of-5
+                        // -- so merging OCR into acceptance was already ruled
+                        // out before this fix removed it from the hot path
+                        // entirely.)
                         val barcodeTask = barcodeScanner.process(input)
-                        val textTask = textRecognizer.process(input)
-                        Tasks.whenAllComplete(barcodeTask, textTask)
-                            .addOnCompleteListener(barcodeExecutor) { _ ->
+                        barcodeTask.addOnCompleteListener(barcodeExecutor) { _ ->
                                 barcodeBusy = false
                                 val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L
                                 val prepMs = (preprocessedAt - startedAt) / 1_000_000L
                                 val mlMs = elapsedMs - prepMs
                                 val barcodes = if (barcodeTask.isSuccessful) barcodeTask.result.orEmpty() else emptyList()
                                 val barcodeCodes = barcodes.mapNotNull { it.rawValue?.trim()?.takeIf(String::isNotEmpty) }
-                                val textCodes = if (textTask.isSuccessful) {
-                                    textTask.result?.textBlocks.orEmpty()
-                                        .flatMap { it.lines }
-                                        .map { it.text.trim() }
-                                        .filter { TAG_CODE_PATTERN.matches(it) }
-                                } else emptyList()
                                 val codes = barcodeCodes.distinct()
                                 if (codes.isNotEmpty() || attempt % 25 == 0) {
                                     Log.i(
                                         TAG,
                                         "Sony tag scan attempt=$attempt totalMs=$elapsedMs " +
-                                            "prepMs=$prepMs mlMs=$mlMs barcodeResults=${barcodeCodes.size} " +
-                                            "textResults=${textCodes.size}"
+                                            "prepMs=$prepMs mlMs=$mlMs barcodeResults=${barcodeCodes.size}"
                                     )
                                 }
                                 if (!barcodeTask.isSuccessful) {
                                     Log.w(TAG, "Sony barcode scan failed after ${elapsedMs}ms", barcodeTask.exception)
                                 }
-                                if (!textTask.isSuccessful) {
-                                    Log.w(TAG, "Sony tag OCR failed after ${elapsedMs}ms", textTask.exception)
-                                }
-                                if (codes.isNotEmpty() || barcodeTask.isSuccessful || textTask.isSuccessful) {
+                                if (codes.isNotEmpty() || barcodeTask.isSuccessful) {
                                     val eligibleCodes = codes.filterNot { it == invalidTagCode }
                                     val outcome = consumeSonyTagBurst(eligibleCodes, sourceJpeg)
                                     handler.post {
@@ -1689,7 +1783,7 @@ class MainActivity : AppCompatActivity() {
                                         }
                                     }
                                 } else {
-                                    val error = barcodeTask.exception ?: textTask.exception
+                                    val error = barcodeTask.exception
                                     handler.post {
                                         lastBarcodeError = error?.message ?: error?.javaClass?.simpleName ?: "scan failed"
                                     }
@@ -1793,10 +1887,21 @@ class MainActivity : AppCompatActivity() {
         if (!supportsCenteredCompositionRoi) compositionRoiLocked = false
         val useCompositionRoi = armed && compositionRoiLocked &&
             compositionProfile != null && supportsCenteredCompositionRoi
+        // Long items (NECK_CURVE) pin to max zoom-out (see tickJewel's
+        // isLongItemCategory), which brings the physical ring light above
+        // the TOP_RAIL into frame -- excluded from analysis so it can
+        // neither feed sceneClipFraction (driving exposure down chasing a
+        // brightness problem that isn't on the ornament) nor get
+        // misclassified as part of the tracked blob (see this file's own
+        // history of a display box's bright trim doing exactly that).
+        val excludeTopFraction = if (compositionProfile?.silhouette ==
+            CaptureCompositionProfiles.Silhouette.NECK_CURVE
+        ) RING_LIGHT_EXCLUDE_TOP_FRACTION else 0f
         val result = MaterialDetector.analyse(
             bitmap,
             fullFrame = !useCompositionRoi,
-            region = if (useCompositionRoi) compositionProfile?.detectorRegion() else null
+            region = if (useCompositionRoi) compositionProfile?.detectorRegion() else null,
+            excludeTopFraction = excludeTopFraction
         )
         latestMaterial = result
         // For paired jewellery, judge detail on one actual gold lobe. The old
@@ -2581,6 +2686,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 logCaptureEvent("tag_category_server_unreachable", mapOf("code" to code, "error" to result.error))
                 setStatus("Catalogue server unavailable — retrying…", ready = false)
+                triggerServerRediscovery()
                 handler.postDelayed({
                     if (phase == Phase.TAG && stableTagCode == code && categoryResolutionCode == null) {
                         resolveCategoryForCurrentTag()
@@ -2588,6 +2694,49 @@ class MainActivity : AppCompatActivity() {
                 }, 1000L)
             }
         }
+    }
+
+    @Volatile private var serverRediscoveryInFlight = false
+
+    /** Hardwall for capture_server.py's own laptop IP drifting on this same
+     * LAN (2026-08-28) -- confirmed live the day this was added: the
+     * laptop moved off both addresses UploadClient's DNS fallback had
+     * hardcoded, and mDNS alone left the operator stuck on "Checking tag
+     * category..." with no visible recovery. Mirrors SonyCameraDiscovery's
+     * approach for the camera: sweep the tablet's own current subnet for
+     * a host that answers as capture_server.py, cache it for immediate
+     * reuse (UploadClient.discoveredServerIp) and persist it so the NEXT
+     * launch starts from the last-known-good address too. */
+    private fun triggerServerRediscovery() {
+        if (serverRediscoveryInFlight) return
+        serverRediscoveryInFlight = true
+        Thread({
+            try {
+                val port = try {
+                    java.net.URI(serverUrl()).port.takeIf { it > 0 } ?: 7660
+                } catch (_: Exception) {
+                    7660
+                }
+                val preferred = prefs.getString("capture_server_ip", null)
+                val found = ServerDiscovery.discoverServerIp(applicationContext, port, preferred)
+                if (found != null && found != UploadClient.discoveredServerIp) {
+                    Log.i(TAG, "capture_server.py rediscovered at $found")
+                    UploadClient.discoveredServerIp = found
+                    prefs.edit().putString("capture_server_ip", found).apply()
+                    handler.post {
+                        if (!isDestroyed && phase == Phase.TAG && stableTagCode != null &&
+                            categoryResolutionCode == null && resolvedCategoryKey == null
+                        ) {
+                            resolveCategoryForCurrentTag()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "capture_server.py rediscovery failed: ${e.message}", e)
+            } finally {
+                serverRediscoveryInFlight = false
+            }
+        }, "ServerRediscovery").start()
     }
 
     /** Fire-and-forget stud-flag lookup, same pattern/reasoning as category
@@ -2953,6 +3102,18 @@ class MainActivity : AppCompatActivity() {
             maxUsableZoom
         )
         val atZoomCeiling = zoom >= effectiveZoomCeiling - 0.02f
+        // Long items pin near the WIDEST zoom instead of climbing
+        // (2026-08-28, explicit request): a NECK_CURVE piece (chain/mala/
+        // necklace) genuinely needs close to max zoom-out just to fit
+        // end-to-end -- the dynamic coverage climb kept fighting the
+        // follow-gold zoom-out rule over it (climb pushes in chasing 75%
+        // area, follow-gold pulls back out once that growth reads as
+        // off-center/edge-clipped), a real live-confirmed oscillation loop
+        // that never settled. Skipping the climb for these categories
+        // entirely removes the fight instead of trying to tune it away.
+        val isLongItemCategory = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
+            ?.silhouette == CaptureCompositionProfiles.Silhouette.NECK_CURVE
+        val atZoomFloor = zoom <= zoomRange.start + 0.05f
         // At the ceiling, accept whatever coverage is on offer as "the best
         // framing available" -- but this must NOT mean skipping focus
         // verification. It previously called captureJewel() directly here,
@@ -2990,7 +3151,8 @@ class MainActivity : AppCompatActivity() {
         // enough" means.
         val colourOccupancy = result.bounds?.area() ?: result.coverage
         val coverageOk = (if (mlOccupancy != null) mlOccupancy >= CAPTURE_MIN_OCCUPANCY
-                          else colourOccupancy >= CAPTURE_MIN_OCCUPANCY) || atZoomCeiling
+                          else colourOccupancy >= CAPTURE_MIN_OCCUPANCY) || atZoomCeiling ||
+            (isLongItemCategory && atZoomFloor)
         // Sony exposes one serialized PTP control lane. Exposure used to run
         // before this framing decision and repeatedly occupied that lane,
         // causing every concurrent zoom request to fail busy while the UI
@@ -2998,6 +3160,61 @@ class MainActivity : AppCompatActivity() {
         // starts once coverage is sufficient and no zoom command is needed.
         if (coverageOk) applyAutoExposure(result)
         val b = result.bounds
+        // Long items (chains/malas/bracelets on TOP_RAIL/LOWER_RAIL) can run
+        // past the top/bottom frame edge at the current stand distance/zoom
+        // without ever failing coverageOk -- the visible slice is still
+        // "enough of the frame". The angle-capture wait loop already checks
+        // this (waitForStableFrame); tickJewel never did (2026-08-28 fix).
+        // Without it, a clipped long item fell straight through to the
+        // wrongShape check below, since a truncated box's aspect ratio no
+        // longer matches the category's full-length shape -- giving the
+        // misleading "Reposition -- tracking looks off" instead of the
+        // accurate, actionable message that matches what the on-screen
+        // StandDistanceGuide banner is already telling the operator.
+        val edgeClipped = MaterialDetector.touchesFrameEdge(b)
+        // UNIVERSAL FOLLOW-THE-GOLD RULE (2026-08-28, explicit top-priority
+        // request): wherever gold is visible in the frame -- top, bottom,
+        // left, right, doesn't matter -- getting the gimbal onto it takes
+        // precedence over every other framing decision below, and if it's
+        // badly off-center or already touching an edge, the correct first
+        // move is to zoom OUT (buy room to work with) rather than continue
+        // climbing zoom IN toward it. Checked before wrongShape, coverage,
+        // and the zoom-in climb -- none of those get a turn until this is
+        // satisfied. Centering itself already ran this same tick
+        // (attemptCenteringCorrection, above); this only decides whether
+        // zoom should retreat to give that correction room, instead of the
+        // climb below fighting it by pushing zoom in on a still-uncentered
+        // target.
+        //
+        // NOT gated on coverageOk (live-confirmed on a long mala/chain): the
+        // zoom-in climb below only stops once AREA occupancy crosses
+        // CAPTURE_MIN_OCCUPANCY, with no awareness of the box already
+        // touching an edge. A long thin item's clipped area can still read
+        // well under that threshold, so gating this on coverageOk let the
+        // climb keep zooming PAST the point of clipping, chasing an area
+        // target this item's own aspect ratio could never reach without
+        // running off the top/bottom first. Checking edgeClipped here,
+        // before the climb block below, stops the zoom-in the moment
+        // clipping starts -- matching what StandDistanceGuide's "MOVE
+        // STAND FARTHER" banner is already telling the operator, instead of
+        // the climb fighting that guidance every tick.
+        if (b != null) {
+            val gx = (b.x0 + b.x1) / 2f
+            val gy = (b.y0 + b.y1) / 2f
+            val goldOffCenter = max(abs(gx - 0.5f), abs(gy - 0.5f))
+            if ((edgeClipped || goldOffCenter > FOLLOW_GOLD_ZOOM_OUT_DEADBAND) &&
+                zoom > zoomRange.start + 0.05f &&
+                now - lastZoomChangeAt >= ZOOM_STEP_INTERVAL_MS
+            ) {
+                val next = (zoom / ZOOM_STEP_RATIO).coerceAtLeast(zoomRange.start)
+                if (next < zoom - 0.01f) {
+                    Log.i(TAG, "followGold zoomOut offCenter=$goldOffCenter edgeClipped=$edgeClipped zoom=$zoom->$next")
+                    smoothZoomTo(next)
+                    setStatus("Recentering…", ready = false)
+                    return
+                }
+            }
+        }
         val zoomSettled = now - lastZoomChangeAt >= ZOOM_SETTLE_MS
         val afState = cameraAfState()
         val focusLocked = isCameraFocusLocked(afState)
@@ -3048,7 +3265,11 @@ class MainActivity : AppCompatActivity() {
         // can hit the identical failure mode, a tracked box that's fully
         // inside frame and clears coverage/focus/sharp but is locked onto
         // the wrong sub-part of the piece.
-        val wrongShape = CategoryOrientation.looksWrongShape(resolvedCategoryKey, result.bounds)
+        val wrongShapeRaw = CategoryOrientation.looksWrongShape(resolvedCategoryKey, result.bounds)
+        val aiShapeOverrideActive = resolvedCategoryKey != null &&
+            resolvedCategoryKey == aiShapeAdviceCategory && now < aiShapeOverrideUntil
+        val wrongShape = wrongShapeRaw && !aiShapeOverrideActive
+        if (!wrongShapeRaw) wrongShapeSince = 0L
         // Exempt once EV compensation has already hit its floor -- that
         // means applyAutoExposure() has corrected as much as this device
         // physically allows and the highlight is still clipping (a genuine
@@ -3058,7 +3279,7 @@ class MainActivity : AppCompatActivity() {
         // instinct once its own corrective mechanism is exhausted.
         val exposureExhausted = cameraExposureControlAvailable() &&
             autoExposureEv <= max(cameraExposureRangeEv().start, EXPOSURE_MIN_EV) + 0.05f
-        if (coverageOk && !wrongShape && (!goldOverexposed || exposureExhausted) &&
+        if (coverageOk && !edgeClipped && !wrongShape && (!goldOverexposed || exposureExhausted) &&
             zoomSettled && focusLocked && sharpEnough && isCenteredNow()) {
             // Require this to hold for a few consecutive ticks, not just one
             // instant read -- a single tick can catch a momentarily-still
@@ -3101,11 +3322,70 @@ class MainActivity : AppCompatActivity() {
         // bad tick while still requiring sustained quality overall.
         readyStreak = (readyStreak - 1).coerceAtLeast(0)
 
+        if (edgeClipped) {
+            // NOT gated on coverageOk (2026-08-28 fix, live-confirmed on a
+            // long mala/chain): the zoom-in climb below only stops once
+            // AREA occupancy crosses CAPTURE_MIN_OCCUPANCY, with no
+            // awareness of the box already touching an edge. A long thin
+            // item's clipped area can still read well under that
+            // threshold, so gating this on coverageOk let the climb keep
+            // zooming PAST the point of clipping, chasing an area target
+            // this item's own aspect ratio could never reach without
+            // running off the top/bottom first. Checking edgeClipped here,
+            // before the climb block below, stops the zoom-in the moment
+            // clipping starts -- matching what StandDistanceGuide's "MOVE
+            // STAND FARTHER" banner is already telling the operator,
+            // instead of the climb fighting that guidance every tick.
+            Log.i(TAG, "edgeClipped category=$resolvedCategoryKey coverageOk=$coverageOk zoom=$zoom bounds=$b")
+            setStatus("Too close — zoom out or reposition", ready = false)
+            return
+        }
+
         if (coverageOk && wrongShape) {
             // Otherwise on track (coverage/focus climb wouldn't stall on
             // this) but the tracked box's own proportions don't match this
             // category -- give staff an explicit reason instead of a
             // silently-stuck "Framing…" they can't act on.
+            b?.let { bounds ->
+                val w = bounds.x1 - bounds.x0
+                val h = bounds.y1 - bounds.y0
+                val range = CategoryOrientation.GATE_WORTHY_ASPECT[resolvedCategoryKey]
+                Log.i(
+                    TAG,
+                    "wrongShape category=$resolvedCategoryKey ratio=${if (h > 0f) w / h else -1f} " +
+                        "w=$w h=$h expectedRange=$range"
+                )
+            }
+            // Local-AI fallback (AiAdvisor.kt) -- only after this has
+            // persisted a while, not on the first tick: a single noisy
+            // aspect-ratio read isn't worth a round trip to the shared
+            // local Ollama instance. One in-flight call at a time; a miss
+            // or timeout just leaves the geometric gate as the final word,
+            // since this is advisory only.
+            if (wrongShapeSince == 0L) wrongShapeSince = now
+            val categoryKey = resolvedCategoryKey
+            if (now - wrongShapeSince >= WRONG_SHAPE_AI_FALLBACK_MS &&
+                !aiShapeAdviceInFlight && categoryKey != null
+            ) {
+                val label = CaptureCompositionProfiles.forCategory(categoryKey)?.label ?: categoryKey
+                val jpeg = sonyProduction.currentLiveViewJpeg()
+                if (jpeg != null) {
+                    aiShapeAdviceInFlight = true
+                    wrongShapeSince = now + WRONG_SHAPE_AI_COOLDOWN_MS
+                    lifecycleScope.launch {
+                        val matches = try {
+                            AiAdvisor.adviseShape(serverUrl(), label, jpeg)
+                        } finally {
+                            aiShapeAdviceInFlight = false
+                        }
+                        Log.i(TAG, "AiAdvisor shape category=$categoryKey matches=$matches")
+                        if (matches == true && resolvedCategoryKey == categoryKey) {
+                            aiShapeAdviceCategory = categoryKey
+                            aiShapeOverrideUntil = System.currentTimeMillis() + AI_SHAPE_OVERRIDE_MS
+                        }
+                    }
+                }
+            }
             setStatus("Reposition — tracking looks off", ready = false)
             return
         }
@@ -3119,6 +3399,24 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (!coverageOk) {
+            // Long items go straight to the zoom floor instead of ever
+            // climbing in (2026-08-28): coverageOk already treats "at
+            // floor" as satisfied for these categories, but a long item
+            // that ARRIVES here still zoomed in from a previous item needs
+            // to actively retreat, not fall into the normal climb-in logic
+            // below (which would push zoom the wrong direction first).
+            if (isLongItemCategory && !atZoomFloor) {
+                if (now - lastZoomChangeAt < ZOOM_STEP_INTERVAL_MS) {
+                    setStatus("Zooming out…", ready = false)
+                    return
+                }
+                val next = (zoom / ZOOM_STEP_RATIO).coerceAtLeast(zoomRange.start)
+                if (next < zoom - 0.01f) {
+                    smoothZoomTo(next)
+                    setStatus("Zooming out…", ready = false)
+                    return
+                }
+            }
             // Too small to trust a focus verdict either way yet -- climb on
             // coverage alone, same reasoning as the web version's identical
             // branch (a crop this small would be judged on an upscaled,
@@ -4362,6 +4660,16 @@ class MainActivity : AppCompatActivity() {
                     angleStableStreak = 0
                 }
                 if ((edgeClipped || wrongShape) && now < deadline) {
+                    if (wrongShape) result?.bounds?.let { bounds ->
+                        val w = bounds.x1 - bounds.x0
+                        val h = bounds.y1 - bounds.y0
+                        val range = CategoryOrientation.GATE_WORTHY_ASPECT[resolvedCategoryKey]
+                        Log.i(
+                            TAG,
+                            "wrongShape(angle) category=$resolvedCategoryKey ratio=${if (h > 0f) w / h else -1f} " +
+                                "w=$w h=$h expectedRange=$range"
+                        )
+                    }
                     setStatus(
                         if (edgeClipped) "Too close — zoom out or reposition" else "Reposition — not fully in view",
                         ready = false
@@ -5499,6 +5807,9 @@ class MainActivity : AppCompatActivity() {
         invalidTagCode = null
         studFlagPersisted = null
         studAutoGuess = false
+        wrongShapeSince = 0L
+        aiShapeAdviceCategory = null
+        aiShapeOverrideUntil = 0L
         updateStudStatusUi()
         autoFired = false
         barcodeAttempts = 0
@@ -5954,6 +6265,9 @@ class MainActivity : AppCompatActivity() {
             invalidTagCode = null
             studFlagPersisted = null
             studAutoGuess = false
+            wrongShapeSince = 0L
+            aiShapeAdviceCategory = null
+            aiShapeOverrideUntil = 0L
             updateStudStatusUi()
             // Auto-exposure bias is per-item, not permanent -- a piece
             // that needed heavy negative EV shouldn't leave the NEXT
@@ -6452,7 +6766,6 @@ class MainActivity : AppCompatActivity() {
         // fire against this Activity once it's destroyed anyway.
         handler.removeCallbacksAndMessages(null)
         barcodeScanner.close()
-        textRecognizer.close()
         barcodeExecutor.shutdownNow()
         jewelAnalysisExecutor.shutdownNow()
         if (::sonyProduction.isInitialized) sonyProduction.stop()
