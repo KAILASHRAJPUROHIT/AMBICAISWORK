@@ -537,6 +537,11 @@ class MainActivity : AppCompatActivity() {
     private var focusTriggeredThisLevel = false
     // Long-item AF-retry deadlock fix (2026-08-29) -- see its use site.
     private var lastLongItemAfRetryAt = 0L
+    // Long-item detail-shot targeting (2026-08-29) -- see
+    // startLongItemDetailShots()/longItemDetailTargetBox() and
+    // analyseSonyJewelFrame's use of this to pin `bounds` to a frozen
+    // sub-region instead of the live-detected whole item.
+    @Volatile private var longItemDetailTargetBounds: MaterialDetector.Bounds? = null
     private var focusEvaluationNotBefore = 0L
     // Hard circuit breaker for automatic RemoteTouchOperation requests in
     // one physical pose. Detector/ROI oscillation must never restart Sony AF
@@ -2009,9 +2014,23 @@ class MainActivity : AppCompatActivity() {
         // at the LOWEST point of a TOP_RAIL item's drape, so its bottom
         // edge is used as the box's bottom reference, extending upward by
         // the category's own known height.
-        val result = if (compositionProfile?.silhouette == CaptureCompositionProfiles.Silhouette.NECK_CURVE) {
+        var result = if (compositionProfile?.silhouette == CaptureCompositionProfiles.Silhouette.NECK_CURVE) {
             categoryAnchoredResult(rawResult, compositionProfile) ?: rawResult
         } else rawResult
+        // Long-item detail-shot targeting (2026-08-29, explicit request):
+        // while longItemDetailTargetBounds is set, pin `bounds` to that
+        // frozen sub-region instead of the live-detected whole-item box.
+        // Everything else about this tick's result (points, sharpness
+        // inputs, focus signal) still comes from the real live frame --
+        // only the POSITION the existing, already-proven centering/zoom/
+        // capture-readiness machinery (centerThenCapture,
+        // attemptCenteringCorrection, meetsHardCaptureRules) reads is
+        // redirected, so a fixed sub-region gets the same closed-loop
+        // convergence a whole-item capture already gets, with no new
+        // gimbal-math to get wrong.
+        longItemDetailTargetBounds?.let { target ->
+            result = result.copy(bounds = target, coverage = target.area(), goldBoxArea = target.area())
+        }
         latestMaterial = result
         // For paired jewellery, judge detail on one actual gold lobe. The old
         // union rectangle included the empty gap and could report a misleading
@@ -4745,9 +4764,74 @@ class MainActivity : AppCompatActivity() {
 
     private fun onMainCaptureAcceptedWithGimbal() {
         inAngleSequence = true
+        val isLongItem = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
+            ?.silhouette == CaptureCompositionProfiles.Silhouette.NECK_CURVE
+        if (isLongItem) {
+            startLongItemDetailShots()
+            return
+        }
         promptForSideProfile("Turn the ornament to show a SIDE profile, then tap READY") {
             centerThenCapture { captureAngle1() }
         }
+    }
+
+    /** Long items (NECK_CURVE) aren't a rotatable object -- "turn to show
+     * the OTHER side" doesn't apply to a chain hanging from a rail.
+     * Explicit request (2026-08-29): angle1/angle2 become two zoomed
+     * DETAIL shots instead -- a representative section of the design/
+     * craftsmanship, then the item's own bottom (where a pendant, if any,
+     * sits). Reuses the existing centerThenCapture/
+     * attemptCenteringCorrection machinery by freezing a small synthetic
+     * target box (see longItemDetailTargetBounds and
+     * analyseSonyJewelFrame's use of it) instead of writing new gimbal
+     * math -- that machinery only ever reads whatever box latestMaterial
+     * currently reports, so a fixed sub-region gets the exact same
+     * closed-loop convergence a whole-item capture already gets. */
+    private fun startLongItemDetailShots() {
+        val fullBounds = latestMaterial?.bounds
+        if (fullBounds == null) {
+            // Nothing to anchor a sub-region to -- fail open to the normal
+            // (whole-item) angle flow rather than get stuck with no target.
+            promptForSideProfile("Turn the ornament to show a SIDE profile, then tap READY") {
+                centerThenCapture { captureAngle1() }
+            }
+            return
+        }
+        val cx = (fullBounds.x0 + fullBounds.x1) / 2f
+        val midY = (fullBounds.y0 + fullBounds.y1) / 2f
+        val bottomY = fullBounds.y1
+        longItemDetailTargetBounds = longItemDetailTargetBox(cx, midY)
+        setStatus("Capturing a design detail close-up…", ready = false)
+        centerThenCapture {
+            captureFullRes { bytes ->
+                angle1Jpeg = bytes
+                longItemDetailTargetBounds = longItemDetailTargetBox(cx, bottomY)
+                setStatus("Capturing the bottom / pendant area…", ready = false)
+                centerThenCapture {
+                    captureFullRes { bytes2 ->
+                        angle2Jpeg = bytes2
+                        longItemDetailTargetBounds = null
+                        setStatus("Returning to center…", ready = false)
+                        undoCenteringThenAdvance {
+                            inAngleSequence = false
+                            uploadCapturedSet()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Small target region around (cx, cy) for a long-item detail shot --
+     * centerThenCapture's own occupancy climb naturally zooms this in
+     * further once centered, same as it already does for a whole item
+     * that starts small. Unverified exact size -- needs live confirmation
+     * it frames a sensible amount of detail, not too tight or too wide. */
+    private fun longItemDetailTargetBox(cx: Float, cy: Float): MaterialDetector.Bounds {
+        val half = 0.12f
+        val x0 = (cx - half).coerceIn(0f, 1f - 2 * half)
+        val y0 = (cy - half).coerceIn(0f, 1f - 2 * half)
+        return MaterialDetector.Bounds(x0, y0, x0 + 2 * half, y0 + 2 * half)
     }
 
     /** Gate before MAIN's auto-detect/hunt loop is allowed to run at all --
@@ -6502,6 +6586,7 @@ class MainActivity : AppCompatActivity() {
         maxUsableZoomStuckSince = 0L
         autoFired = false
         latestMaterial = null
+        longItemDetailTargetBounds = null
         lastZoomChangeAt = 0L
         focusTriggeredThisLevel = false
         isZooming = false
