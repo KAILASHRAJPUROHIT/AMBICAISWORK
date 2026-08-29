@@ -1103,6 +1103,14 @@ class MainActivity : AppCompatActivity() {
         // so it can't turn into the AF-hammering the one-trigger-per-level
         // design exists to avoid.
         private const val LONG_ITEM_AF_RETRY_MS = 3_000L
+        // Physical sanity cap for categoryAnchoredResult's fallback height
+        // (2026-08-29 forensic-audit fix): Profile.targetFrame()'s own
+        // aspirational value for ms_long_22 works out to ~0.82 (a
+        // composition-GUIDE size, not a measurement) -- real logged reads
+        // of a genuinely fully-unioned necklace showed height ~0.6-0.68 of
+        // frame. Capping to that observed range keeps the fallback from
+        // synthesizing a box taller than what's actually achievable.
+        private const val TARGET_HEIGHT_CAP = 0.65f
         // Max upright-normalized distance a newly-selected gold box may be
         // from the previously locked one and still be accepted as "the same
         // object" -- generous enough for real tick-to-tick movement/zoom,
@@ -1894,18 +1902,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Background-only consumer of the newest Sony frame. */
-    /** Builds a tracked box from the category's own known target dimensions
-     * anchored to [MaterialDetector.Result.primaryBounds] (the reliably-
-     * found dense cluster), instead of trusting the empirical chain-strap
-     * union. Returns null when there's nothing to anchor to (no primary
-     * blob found this tick at all) -- callers should fall back to the raw
-     * detector result, same fail-open posture as every other gate here. */
+    /** FALLBACK ONLY for when the raw (chain-extension-corrected) `bounds`
+     * still looks like a partial read -- clearly just the dense cluster,
+     * not the whole item. Does NOT run unconditionally: forensic-audit
+     * finding (2026-08-29) that an earlier version of this always
+     * overrode `bounds`, using Profile.targetFrame() as if it were a
+     * real-time size estimate -- but that function computes an
+     * ASPIRATIONAL composition-guide size (an on-screen "aim for this"
+     * overlay target), not a measurement, and for ms_long_22 works out to
+     * ~82% of frame height. Anchoring a box that tall to the pendant's
+     * position pushed the computed centroid well above the necklace's
+     * real on-screen center, tilting the gimbal to chase a box far bigger
+     * than what was actually in frame ("way too high", live-confirmed).
+     * TARGET_HEIGHT_CAP keeps this fallback physically plausible instead
+     * of trusting the aspirational value outright. Returns null when
+     * there's nothing to anchor to, or when the raw bounds already looks
+     * like a legitimate full read -- callers keep the raw result then. */
     private fun categoryAnchoredResult(
         result: MaterialDetector.Result,
         profile: CaptureCompositionProfiles.Profile
     ): MaterialDetector.Result? {
         val anchor = result.primaryBounds ?: return null
-        val (targetW, targetH) = profile.targetFrame()
+        val raw = result.bounds
+        // Only intervene when raw bounds is missing OR barely bigger than
+        // the anchor itself (chain-strap linking clearly failed this tick
+        // -- the "partial" flicker state). A raw bounds that's already
+        // meaningfully larger than the anchor is trusted as-is: it found
+        // real strap pixels, which is real data this synthesized fallback
+        // can't improve on.
+        val rawArea = raw?.area() ?: 0f
+        val anchorArea = anchor.area()
+        if (raw != null && rawArea > anchorArea * 1.5f) return null
+        val (targetW, targetHRaw) = profile.targetFrame()
+        val targetH = targetHRaw.coerceAtMost(TARGET_HEIGHT_CAP)
         val anchorCx = (anchor.x0 + anchor.x1) / 2f
         // Small downward padding: beads/tassels can hang slightly past the
         // dense cluster's own detected edge without being part of the
@@ -3923,8 +3952,30 @@ class MainActivity : AppCompatActivity() {
         return abs(ecx - 0.5f) <= ZOOM_ALLOW_DEADBAND && abs(ecy - 0.5f) <= ZOOM_ALLOW_DEADBAND
     }
 
+    /** Forensic-audit finding (2026-08-29): CAPTURE_MIN_OCCUPANCY (0.75) is
+     * a flat, category-agnostic floor, but every NECK_CURVE category's own
+     * CaptureCompositionProfile.targetArea sits at 0.52-0.58 -- the
+     * system's OWN data says a correctly-framed long item occupies ~55%
+     * of frame, which can mathematically never reach 75%. The existing
+     * "at zoom ceiling, relax the floor" escape hatch doesn't help either:
+     * long items pin near the zoom FLOOR (isLongItemCategory), not the
+     * ceiling, so that hatch never engages. This made capture impossible
+     * for these categories regardless of tracking/AF/centering quality --
+     * confirmed by re-deriving the math, not by another live guess. Uses
+     * the category's own known target area (with slack) as the floor when
+     * one exists and is below the universal default; the universal 0.75
+     * still applies to every category without an unusually low target
+     * (rings/studs/etc., where filling most of the frame is both
+     * achievable and correct to require). */
+    private fun captureOccupancyFloor(): Float {
+        val categoryTarget = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)?.targetArea
+            ?: return CAPTURE_MIN_OCCUPANCY
+        return min(CAPTURE_MIN_OCCUPANCY, categoryTarget * 0.85f)
+    }
+
     private fun meetsHardCaptureRules(): Boolean {
         if (rsc2.isReady && rsc2.isMoving) return false
+        val occupancyFloor = captureOccupancyFloor()
         val mlBox = bestObjectBox()
         val occupancy: Float
         if (mlBox != null) {
@@ -3965,7 +4016,7 @@ class MainActivity : AppCompatActivity() {
         // hardware limit.
         val atHardwareZoomCeiling = zoom >= min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO) - 0.02f
         val atUsableZoomCeiling = zoom >= maxUsableZoom - 0.02f
-        if (occupancy < CAPTURE_MIN_OCCUPANCY) {
+        if (occupancy < occupancyFloor) {
             if (atUsableZoomCeiling && !atHardwareZoomCeiling) {
                 // Bounded grace window, not an outright block -- falls
                 // back to the old accept-anyway behaviour after
