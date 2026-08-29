@@ -1160,7 +1160,11 @@ class MainActivity : AppCompatActivity() {
         // publish a new AF indication after it.  This is a bounded physical
         // settle window, not an instant software "lock"; it prevents the
         // missing telemetry from restarting AF every 1.5 seconds forever.
-        private const val SONY_AF_ACK_SETTLE_MS = 5_000L
+        // Generic ring/angle stable-frame gate has a ~4.5s deadline. Keep
+        // this safely beyond the prior 215ms premature-shutter bug, but
+        // inside that deadline; 5s could never be reached and forced every
+        // compact item down the focus-backoff ladder.
+        private const val SONY_AF_ACK_SETTLE_MS = 3_000L
         // How long to wait for latestMaterial to repopulate after the MAIN
         // photo review dialog closes, before giving up and falling back to
         // the manual "turn the item" flow. 10 x 300ms = 3s total.
