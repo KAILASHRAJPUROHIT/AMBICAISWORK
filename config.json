@@ -202,21 +202,35 @@
         "label": "Kaka Gold (Silver Bar)",
         "gstFactor": 1.03,
         "url": "https://bcast.kakagold.xyz/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/kakasilverbar",
-        "target": {
-          "code": "4656",
-          "namePattern": "^SILVER\\s+999\\s+PETI",
-          "field": "sell"
-        },
         "refRows": {
-          "gst999": {
-            "code": "4650",
-            "namePattern": "SILVER\\s+999.*GST"
-          }
+          "gst999Candidates": [
+            {
+              "code": "4650",
+              "namePattern": "SILVER\\s+999.*GST"
+            }
+          ]
         },
         "refreshMs": 5000,
         "maxAgeMs": 120000,
         "warnPct": 1,
-        "failPct": 3
+        "failPct": 3,
+        "targetCandidates": [
+          {
+            "code": "4656",
+            "namePattern": "^SILVER\\s+999\\s+PETI",
+            "field": "sell"
+          },
+          {
+            "code": "4649",
+            "namePattern": "^SILVER\\s+999\\s+CUTTING",
+            "field": "sell"
+          },
+          {
+            "code": "4651",
+            "namePattern": "^SILVER\\s+999\\s+CHORSA",
+            "field": "sell"
+          }
+        ]
       },
       "temporal": {
         "enabled": true,
