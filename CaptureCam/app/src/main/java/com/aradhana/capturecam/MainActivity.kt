@@ -2028,9 +2028,22 @@ class MainActivity : AppCompatActivity() {
             CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
     ): JewelleryFocusTarget? {
         val bounds = result?.bounds ?: return null
+        // Smoothed centroid, not raw per-tick bounds (2026-08-29, live-
+        // confirmed on a long necklace at 1.0x zoom): a small, thin subject
+        // occupying a small fraction of frame makes MaterialDetector's
+        // colour-blob box genuinely jitter tick to tick (cy swinging
+        // 0.42-0.72 in real logs). Aiming AF at the raw center meant every
+        // retry targeted a DIFFERENT point before the previous one could
+        // even settle -- a real "AF keeps retargeting, capture stays
+        // stuck in FOCUSING/HOLDING forever" loop. smoothedCenter() is the
+        // same EMA already trusted for gimbal centering (see its own doc
+        // comment: raw bounds caused the identical problem there); reusing
+        // it here means one-tick flicker nudges the aim point a little
+        // instead of relocating it entirely.
+        val (smoothCx, smoothCy) = smoothedCenter(result) ?: ((bounds.x0 + bounds.x1) * 0.5f to (bounds.y0 + bounds.y1) * 0.5f)
         val fallback = JewelleryFocusTarget(
-            (bounds.x0 + bounds.x1) * 0.5f,
-            (bounds.y0 + bounds.y1) * 0.5f,
+            smoothCx,
+            smoothCy,
             bounds
         )
         if (!isSplitPairProfile(profile)) return fallback
