@@ -1076,12 +1076,17 @@ class MainActivity : AppCompatActivity() {
         // the top of frame to exclude from material/exposure analysis for
         // NECK_CURVE items pinned to max zoom-out, to keep the physical
         // ring light above the rail out of sceneClipFraction and blob
-        // detection. Too small and the light still leaks in; too large
-        // and it starts cropping the necklace's own top connector tabs
-        // out of the ANALYSIS region (framing/capture itself is unaffected
-        // either way -- this only trims what gets analysed, not what the
-        // Sony sensor captures).
-        private const val RING_LIGHT_EXCLUDE_TOP_FRACTION = 0.12f
+        // detection. Shrunk 0.12 -> 0.04 (2026-08-29, live-confirmed):
+        // trimming the analysis region does NOT just affect exposure --
+        // centering/framing decisions are derived from the analysed
+        // `bounds` too, so excluding real necklace material (the top
+        // connector tabs) let the gimbal/zoom logic center on the
+        // visible-only portion, pushing the actual top of the item out of
+        // the physical frame. That's the opposite of what this was meant
+        // to prevent. Smaller value trades some ring-light exposure
+        // protection for not cropping the real item -- needs live
+        // confirmation this is still enough to keep the light out.
+        private const val RING_LIGHT_EXCLUDE_TOP_FRACTION = 0.04f
         // AiAdvisor shape-fallback pacing (2026-08-28): wait this long into
         // a continuous wrongShape run before spending a round trip on the
         // shared local Ollama instance, then don't ask again for a full
@@ -3140,7 +3145,19 @@ class MainActivity : AppCompatActivity() {
         // entirely removes the fight instead of trying to tune it away.
         val isLongItemCategory = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
             ?.silhouette == CaptureCompositionProfiles.Silhouette.NECK_CURVE
-        val atZoomFloor = zoom <= zoomRange.start + 0.05f
+        // A small margin above the absolute minimum, not the raw floor
+        // (2026-08-29, live-confirmed): at exactly 1.0x this necklace's
+        // tracked box was rock-stable (smoothedCenter fix) but AF/sharpness
+        // kept oscillating right at the lock threshold and never held 3
+        // consecutive good ticks -- Sony doesn't expose real AF-lock state
+        // over this link, so "focused" is approximated from elapsed time +
+        // sharpness, and a small/thin subject at the absolute widest zoom
+        // gives that approximation very little signal. 20% more zoom is a
+        // meaningful resolution/contrast gain for AF while coverage still
+        // has enormous slack before risking edge-clipping again (measured
+        // ~0.08 against a 0.75 capture threshold at 1.0x).
+        val longItemTargetZoom = (zoomRange.start * 1.2f).coerceAtMost(zoomRange.endInclusive)
+        val atZoomFloor = zoom <= longItemTargetZoom + 0.05f
         // At the ceiling, accept whatever coverage is on offer as "the best
         // framing available" -- but this must NOT mean skipping focus
         // verification. It previously called captureJewel() directly here,
@@ -3437,7 +3454,7 @@ class MainActivity : AppCompatActivity() {
                     setStatus("Zooming out…", ready = false)
                     return
                 }
-                val next = (zoom / ZOOM_STEP_RATIO).coerceAtLeast(zoomRange.start)
+                val next = (zoom / ZOOM_STEP_RATIO).coerceAtLeast(longItemTargetZoom)
                 if (next < zoom - 0.01f) {
                     smoothZoomTo(next)
                     setStatus("Zooming out…", ready = false)
