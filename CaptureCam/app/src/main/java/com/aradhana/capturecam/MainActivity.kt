@@ -6381,6 +6381,29 @@ class MainActivity : AppCompatActivity() {
         exposureClipStreak = 0
         exposureClearStreak = 0
         manualExposureOverride = false
+        // Forensic-audit finding (2026-08-29): every OTHER piece of the
+        // exposure cycle's per-item state gets a clean slate here
+        // (exposureClipStreak/exposureClearStreak/manualExposureOverride
+        // above) but the actual accumulated EV value itself never did --
+        // confirmed live as a real deadlock: a previous item (or an
+        // earlier phase of this one) drove EV down toward its floor
+        // (-3.00 observed), that darkness carried into the NEXT item's
+        // tracking, made the piece too dark for MaterialDetector to find
+        // reliably ("Tracking ornament -- reacquiring..." forever), and
+        // since applyAutoExposure() only runs once coverage is already
+        // trustworthy, there was no path back to a usable brightness.
+        // Resetting EV here matches this function's own already-
+        // established intent for every other exposure-cycle field --
+        // the correction ALGORITHM is untouched, each new item just
+        // starts its own cycle from neutral like everything else already
+        // does here. Goes through queueAutoExposure(), NOT a direct field
+        // assignment: autoExposureEv is just the app's tracked belief
+        // about the camera's current EV, actually commanding the camera
+        // back to neutral requires the same queued hardware write every
+        // other correction step uses -- a direct assignment would desync
+        // the app's belief from the physical camera's real (still dark)
+        // setting, corrupting the next correction step's baseline.
+        if (autoExposureEv != 0f) queueAutoExposure(0f)
         lastTrackingLogAt = 0L
         lastCenterLimitLogAt = 0L
         jewelCaptureRetries = 0
