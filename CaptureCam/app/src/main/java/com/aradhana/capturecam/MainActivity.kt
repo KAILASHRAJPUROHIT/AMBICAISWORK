@@ -1108,6 +1108,14 @@ class MainActivity : AppCompatActivity() {
         // so it can't turn into the AF-hammering the one-trigger-per-level
         // design exists to avoid.
         private const val LONG_ITEM_AF_RETRY_MS = 3_000L
+        // Shared by tickJewel's longItemTargetZoom AND
+        // backOffOneZoomForFocus (2026-08-29) -- these must never drift
+        // apart: an earlier version hardcoded 1.2f separately in each
+        // place, and the focus-backoff copy used the absolute zoom floor
+        // instead, silently undoing the AF-margin fix every time
+        // sharpness dipped (a real zoom in/out "panic" cycle, confirmed
+        // live: 0% -> 9% -> 1% within 2.5 seconds).
+        private const val LONG_ITEM_ZOOM_MARGIN = 1.2f
         // Physical sanity cap for categoryAnchoredResult's fallback height
         // (2026-08-29 forensic-audit fix): Profile.targetFrame()'s own
         // aspirational value for ms_long_22 works out to ~0.82 (a
@@ -3251,7 +3259,7 @@ class MainActivity : AppCompatActivity() {
         // meaningful resolution/contrast gain for AF while coverage still
         // has enormous slack before risking edge-clipping again (measured
         // ~0.08 against a 0.75 capture threshold at 1.0x).
-        val longItemTargetZoom = (zoomRange.start * 1.2f).coerceAtMost(zoomRange.endInclusive)
+        val longItemTargetZoom = (zoomRange.start * LONG_ITEM_ZOOM_MARGIN).coerceAtMost(zoomRange.endInclusive)
         // Symmetric tolerance around the target, not a one-sided "anything
         // below target+margin counts" check (2026-08-29, live-confirmed
         // bug): the old `zoom <= longItemTargetZoom + 0.05f` accepted the
@@ -4062,7 +4070,14 @@ class MainActivity : AppCompatActivity() {
         if (profile.silhouette != CaptureCompositionProfiles.Silhouette.NECK_CURVE) {
             return CAPTURE_MIN_OCCUPANCY
         }
-        return min(CAPTURE_MIN_OCCUPANCY, profile.targetArea * 0.85f)
+        // targetArea is aspirational. For a 0.28 W:H curve, targetFrame()
+        // must scale down to fit the frame height, and the live anchored box
+        // is capped again at TARGET_HEIGHT_CAP. Use that actually achievable
+        // box area; targetArea*0.85 (~44-49%) is still mathematically
+        // impossible for these tall profiles (live full-chain reads ~8-12%).
+        val (targetWidth, targetHeight) = profile.targetFrame()
+        val achievableArea = targetWidth * targetHeight.coerceAtMost(TARGET_HEIGHT_CAP)
+        return min(CAPTURE_MIN_OCCUPANCY, achievableArea * 0.85f)
     }
 
     private fun meetsHardCaptureRules(): Boolean {
@@ -4823,8 +4838,14 @@ class MainActivity : AppCompatActivity() {
         // ANGLE_ZOOM_MAX_ROUNDS); re-centers after each step since zooming
         // shifts framing, hence looping back through centerThenCapture
         // rather than just re-checking here.
+        // ML object detection is production-disabled, so a ML-only occupancy
+        // read is always null. Use the same fallback and category floor as
+        // meetsHardCaptureRules(); otherwise every side pose blindly burns
+        // the full zoom budget, including long items that must stay wide.
         val occupancy = bestObjectBox()?.let { it.width() * it.height() }
-        if ((occupancy == null || occupancy < CAPTURE_MIN_OCCUPANCY) && angleZoomRounds < ANGLE_ZOOM_MAX_ROUNDS) {
+            ?: latestMaterial?.bounds?.area()
+        val occupancyFloor = captureOccupancyFloor()
+        if ((occupancy == null || occupancy < occupancyFloor) && angleZoomRounds < ANGLE_ZOOM_MAX_ROUNDS) {
             val zoom = cameraZoomRatio()
             val zoomRange = cameraZoomRange()
             val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(
@@ -5634,7 +5655,23 @@ class MainActivity : AppCompatActivity() {
      * new ceiling; no path can immediately climb back and repeat it. */
     private fun backOffOneZoomForFocus(onDone: (() -> Unit)? = null): Boolean {
         val zoom = cameraZoomRatio()
-        val floor = cameraZoomRange().start
+        // For long items, never back off below the AF-margin target
+        // (2026-08-29, live-confirmed "panicking"): this function backed
+        // off toward the ABSOLUTE zoom floor on any soft-focus tick,
+        // undoing the small zoom-in margin given specifically so AF has
+        // enough resolution to work with on a long item -- the two
+        // mechanisms fought each other every time sharpness dipped even
+        // slightly, a real zoom in/out cycle (logcat: 0% -> 9% -> back to
+        // 1% within 2.5 seconds). Long items simply have no focus-recovery
+        // room below their own target; the periodic AF retry
+        // (LONG_ITEM_AF_RETRY_MS) is their actual recovery mechanism.
+        val isLongItem = CaptureCompositionProfiles.forCategory(resolvedCategoryKey)
+            ?.silhouette == CaptureCompositionProfiles.Silhouette.NECK_CURVE
+        val floor = if (isLongItem) {
+            (cameraZoomRange().start * LONG_ITEM_ZOOM_MARGIN).coerceAtMost(cameraZoomRange().endInclusive)
+        } else {
+            cameraZoomRange().start
+        }
         if (zoom <= floor + 0.03f) return false
         val next = (zoom / ZOOM_STEP_RATIO).coerceAtLeast(floor)
         if (next >= zoom - 0.01f) return false
