@@ -530,6 +530,8 @@ class MainActivity : AppCompatActivity() {
     // zoom level -- the single-shot discipline that stops AF being
     // re-triggered every tick while waiting for its result.
     private var focusTriggeredThisLevel = false
+    // Long-item AF-retry deadlock fix (2026-08-29) -- see its use site.
+    private var lastLongItemAfRetryAt = 0L
     private var focusEvaluationNotBefore = 0L
     // Hard circuit breaker for automatic RemoteTouchOperation requests in
     // one physical pose. Detector/ROI oscillation must never restart Sony AF
@@ -1090,6 +1092,12 @@ class MainActivity : AppCompatActivity() {
         private const val WRONG_SHAPE_AI_FALLBACK_MS = 1_500L
         private const val WRONG_SHAPE_AI_COOLDOWN_MS = 6_000L
         private const val AI_SHAPE_OVERRIDE_MS = 4_000L
+        // Long items pinned to the zoom floor have no zoom axis left to
+        // retry focus on (2026-08-29, live-confirmed permanent stall) --
+        // this is how often to retry AF at the SAME level instead, bounded
+        // so it can't turn into the AF-hammering the one-trigger-per-level
+        // design exists to avoid.
+        private const val LONG_ITEM_AF_RETRY_MS = 3_000L
         // Max upright-normalized distance a newly-selected gold box may be
         // from the previously locked one and still be accepted as "the same
         // object" -- generous enough for real tick-to-tick movement/zoom,
@@ -3510,6 +3518,33 @@ class MainActivity : AppCompatActivity() {
                 // the failed level a hard ceiling so the climb cannot undo
                 // the backoff and oscillate.
                 if (backOffOneZoomForFocus()) {
+                    return
+                }
+                // Long items pinned to the zoom floor have nowhere to back
+                // off TO (backOffOneZoomForFocus always fails there --
+                // "already at floor") -- live-confirmed 2026-08-29 as a
+                // genuine permanent deadlock: focusTriggeredThisLevel never
+                // got reset again for these categories since the only
+                // other reset path is a zoom-level change, which no longer
+                // happens once pinned. Without zoom as a retry axis, retry
+                // the SAME level periodically instead of giving up forever
+                // -- still bounded (not every tick, that's the AF-hammering
+                // this design exists to avoid), just the only option left
+                // when "try a different zoom" isn't available.
+                if (isLongItemCategory && atZoomFloor) {
+                    if (now - lastLongItemAfRetryAt >= LONG_ITEM_AF_RETRY_MS) {
+                        lastLongItemAfRetryAt = now
+                        focusTriggeredThisLevel = false
+                        // Also resets sonyAutomaticAfCommandsForPose -- without
+                        // this the per-pose AF budget (7 commands) exhausts
+                        // after a handful of retries and triggerCameraAutoFocus
+                        // silently refuses every attempt after that, recreating
+                        // the exact same permanent stall from a different cause.
+                        resetSonyAutomaticAfBudget()
+                        setStatus("Refocusing…", ready = false)
+                        return
+                    }
+                    setStatus("Focusing…", ready = false)
                     return
                 }
                 focusTriggeredThisLevel = true
