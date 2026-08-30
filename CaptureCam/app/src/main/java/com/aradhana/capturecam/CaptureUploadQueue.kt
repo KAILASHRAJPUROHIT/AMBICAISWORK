@@ -274,10 +274,9 @@ object CaptureUploadQueue {
 
     /** Permanently discards a needs_review item -- e.g. a genuine duplicate
      * staff confirm should not be saved. Deletes the staged originals. */
-    fun discard(dir: File) {
+    fun discard(context: Context, dir: File) {
         readManifest(dir)?.optString("id")?.takeIf { it.isNotBlank() }?.let { id ->
-            // No Context here by design; the history card remains an honest
-            // failed/unsaved capture rather than pretending it reached laptop.
+            updatePipelineRecord(context.applicationContext, id, state = "recapture")
             Log.i(TAG, "Discarded staged job id=$id")
         }
         dir.deleteRecursively()

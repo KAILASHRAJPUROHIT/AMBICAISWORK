@@ -125,6 +125,16 @@ object UploadClient {
         val error: String?
     )
 
+    /** Exact pre-capture duplicate check. This uses the same server-side
+     * dedup registry that ultimately saves the item, so the tablet never
+     * wastes a Sony capture cycle on a tag already delivered. */
+    data class DuplicateResolution(
+        val duplicate: Boolean,
+        val prior: JSONObject?,
+        val serverReached: Boolean,
+        val error: String?
+    )
+
     data class SaveResult(
         val ok: Boolean,
         val error: String?,
@@ -236,6 +246,34 @@ object UploadClient {
             }
         } catch (e: Exception) {
             CategoryResolution(category = null, serverReached = false, error = e.message)
+        }
+    }
+
+    suspend fun checkDuplicate(baseUrl: String, tagCode: String): DuplicateResolution = withContext(Dispatchers.IO) {
+        try {
+            val encoded = java.net.URLEncoder.encode(tagCode, "UTF-8")
+            val request = Request.Builder()
+                .url("${baseUrl.trimEnd('/')}/api/capture/check_duplicate?tag_code=$encoded")
+                .get()
+                .build()
+            metadataClient.newCall(request).execute().use { response ->
+                val text = response.body?.string() ?: "{}"
+                val json = try { JSONObject(text) } catch (_: Exception) { JSONObject() }
+                if (!response.isSuccessful) {
+                    return@withContext DuplicateResolution(
+                        duplicate = false, prior = null, serverReached = false,
+                        error = "duplicate check HTTP ${response.code}"
+                    )
+                }
+                DuplicateResolution(
+                    duplicate = json.optBoolean("duplicate", false),
+                    prior = json.optJSONObject("prior"),
+                    serverReached = true,
+                    error = null
+                )
+            }
+        } catch (e: Exception) {
+            DuplicateResolution(duplicate = false, prior = null, serverReached = false, error = e.message)
         }
     }
 

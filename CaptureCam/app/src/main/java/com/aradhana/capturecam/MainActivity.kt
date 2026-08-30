@@ -380,9 +380,14 @@ class MainActivity : AppCompatActivity() {
     private val capturePipelineRefreshRunnable = object : Runnable {
         override fun run() {
             renderCapturePipeline()
+            maybeGateNeedsReview()
             handler.postDelayed(this, CAPTURE_PIPELINE_REFRESH_MS)
         }
     }
+    // A review result belongs to the item that just completed. Never let the
+    // operator start another tag while a known rejected set is waiting for a
+    // clear approve-or-recapture decision.
+    private var reviewGateShowing = false
     // Restrict ML Kit to formats used by stock labels. Scanning every format
     // made one Sony bitmap analysis occupy the scanner for roughly 5 seconds.
     private val barcodeScanner by lazy {
@@ -557,6 +562,10 @@ class MainActivity : AppCompatActivity() {
     // re-triggered every tick while waiting for its result.
     private var focusTriggeredThisLevel = false
     private var focusEvaluationNotBefore = 0L
+    // Sony needs two deliberate RemoteTouch AF requests at a settled zoom.
+    // Keep this counter per zoom pose so detector flicker can never turn AF
+    // into a framing/focus/zoom loop.
+    private var sonyFocusTapsThisLevel = 0
     // Hard circuit breaker for automatic RemoteTouchOperation requests in
     // one physical pose. Detector/ROI oscillation must never restart Sony AF
     // indefinitely. Staff tap-to-focus bypasses this budget deliberately.
@@ -669,6 +678,10 @@ class MainActivity : AppCompatActivity() {
     private var categoryResolutionCode: String? = null
     private var categoryResolutionError: String? = null
     private var invalidTagCode: String? = null
+    // A valid stock label that is already saved. Unlike an unknown label,
+    // this must be impossible to tap through into the camera workflow.
+    private var duplicateTagCode: String? = null
+    private var duplicateTagWarningShowing = false
     // Stud/rhodium-accent status (2026-08-19, explicit request). Null
     // means "not yet fetched/no correction on record" -- the live UI falls
     // back to studAutoGuess in that case. Once studFlagPersisted is
@@ -943,7 +956,8 @@ class MainActivity : AppCompatActivity() {
         // 50->16mm in 1/1.25 backoff steps needs at most six AF checks.
         // Seven remains a finite hard wall while allowing the full ladder.
         private const val MAX_AUTOMATIC_AF_COMMANDS_PER_POSE = 7
-        private const val FOCUS_EVALUATION_DELAY_MS = 1_000L
+        private const val FOCUS_EVALUATION_DELAY_MS = 700L
+        private const val SONY_FOCUS_SECOND_TAP_DELAY_MS = 350L
         private const val ZOOM_BACKOFF_RATIO = 0.8f
         // Below this zoom, a "lost the piece" reading only pauses the climb
         // (holds current zoom, waits) instead of backing off -- at low zoom
@@ -976,8 +990,11 @@ class MainActivity : AppCompatActivity() {
         // focus/centering/edge-clip are still re-read after every one).
         private const val ZOOM_STEP_RATIO = 1.4f
         private const val ZOOM_STEP_INTERVAL_MS = 250L
-        private const val CAPTURE_PREVIEW_SECONDS = 2
-        private const val PREVIEW_DECODE_MAX_EDGE = 4096
+        // Review remains available, but it must not hold production for a
+        // multi-second full-resolution decode/countdown. The source JPEG is
+        // never resized or recompressed; only this screen-sized preview is.
+        private const val CAPTURE_PREVIEW_SECONDS = 1
+        private const val PREVIEW_DECODE_MAX_EDGE = 2048
         private const val ANGLE_CAPTURE_MAX_RETRIES = 6
         private const val ANGLE_CAPTURE_RETRY_DELAY_MS = 350L
         // Auto-exposure (2026-08-18): steps exposure compensation down
@@ -2255,7 +2272,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun acceptSonyTagBurst(outcome: TagBurstOutcome) {
         val code = outcome.winner?.trim()?.takeIf(String::isNotEmpty) ?: return
-        if (phase != Phase.TAG || stableTagCode != null || code == invalidTagCode) return
+        if (phase != Phase.TAG || stableTagCode != null || code == invalidTagCode || code == duplicateTagCode) return
+        duplicateTagCode = null
         confirmedTagEvidenceJpeg = outcome.evidenceJpeg
         invalidTagCode = null
         tagCodeHistory = mutableListOf(code)
@@ -3133,6 +3151,12 @@ class MainActivity : AppCompatActivity() {
         // Do not hammer the server every analysis frame for the same known-
         // bad decode. A different decoded value immediately releases it.
         if (trimmed == invalidTagCode) return
+        if (trimmed == duplicateTagCode) {
+            setStatus("DUPLICATE TAG — choose another label", ready = false)
+            return
+        }
+        // A different physical label releases the previous duplicate lock.
+        duplicateTagCode = null
         invalidTagCode = null
         // A strict stock-label-shaped decode can go directly to the
         // authoritative catalogue lookup. Requiring it twice made a real
@@ -3172,6 +3196,24 @@ class MainActivity : AppCompatActivity() {
             categoryResolutionCode = null
             val category = result.category
             if (category != null) {
+                // Category correctness alone is not enough. Query the
+                // authoritative dedup registry before camera capture starts.
+                val duplicate = UploadClient.checkDuplicate(deliveryServerUrl(), code)
+                if (stableTagCode != code) return@launch
+                if (!duplicate.serverReached) {
+                    categoryResolutionError = duplicate.error
+                    setStatus("Checking duplicate tag…", ready = false)
+                    handler.postDelayed({
+                        if (phase == Phase.TAG && stableTagCode == code && categoryResolutionCode == null) {
+                            resolveCategoryForCurrentTag()
+                        }
+                    }, 750L)
+                    return@launch
+                }
+                if (duplicate.duplicate) {
+                    blockDuplicateTag(code, duplicate.prior)
+                    return@launch
+                }
                 resolvedCategoryKey = category.key
                 if (tagFirstSeenAtMs != 0L) {
                     Log.i(
@@ -3208,6 +3250,39 @@ class MainActivity : AppCompatActivity() {
                 }, 1000L)
             }
         }
+    }
+
+    /** Hard pre-capture duplicate gate. No category/phase transition is made
+     * here, so the Sony/gimbal workflow cannot start for the duplicate. */
+    private fun blockDuplicateTag(code: String, prior: org.json.JSONObject?) {
+        duplicateTagCode = code
+        stableTagCode = null
+        confirmedTagEvidenceJpeg = null
+        resolvedCategoryKey = null
+        categoryResolutionCode = null
+        categoryResolutionError = null
+        tagCodeHistory = mutableListOf()
+        autoFired = false
+        val priorText = prior?.let {
+            listOfNotNull(
+                it.optString("category").takeIf(String::isNotBlank),
+                it.optString("folder").takeIf(String::isNotBlank),
+                it.optString("filename").takeIf(String::isNotBlank)
+            ).joinToString(" · ")
+        }?.takeIf(String::isNotBlank)
+        setStatus("DUPLICATE TAG — CHOOSE OTHER", ready = false)
+        logCaptureEvent("tag_rejected_duplicate", mapOf("code" to code, "prior" to (priorText ?: "known")))
+        if (duplicateTagWarningShowing || isFinishing) return
+        duplicateTagWarningShowing = true
+        AlertDialog.Builder(this)
+            .setTitle("DUPLICATE TAG")
+            .setMessage("$code is already captured.${priorText?.let { "\n\nExisting: $it" } ?: ""}\n\nChoose another label. Camera capture is blocked.")
+            .setPositiveButton("SCAN OTHER TAG") { _, _ ->
+                duplicateTagWarningShowing = false
+                setStatus("DUPLICATE TAG — CHOOSE OTHER", ready = false)
+            }
+            .setCancelable(false)
+            .show()
     }
 
     @Volatile private var serverRediscoveryInFlight = false
@@ -3392,6 +3467,7 @@ class MainActivity : AppCompatActivity() {
         binding.tagCodeText.text = when {
             validated -> "Tag: $stableTagCode · ${resolvedCategoryKey} · ready"
             stableTagCode != null -> "Tag: $stableTagCode · checking catalogue…"
+            duplicateTagCode != null -> "DUPLICATE: $duplicateTagCode · choose other tag"
             invalidTagCode != null -> "Unknown label: $invalidTagCode · show another label"
             else -> "Show the tag QR/barcode…"
         }
@@ -3400,6 +3476,7 @@ class MainActivity : AppCompatActivity() {
                 validated -> "Tag validated. Capturing…"
                 stableTagCode != null -> "Checking tag category…"
                 tagBurstActive -> "Confirming label $tagBurstProgress/$SONY_TAG_BURST_FRAMES…"
+                duplicateTagCode != null -> "DUPLICATE TAG — CHOOSE OTHER"
                 invalidTagCode != null -> "Unknown stock label — show the correct label"
                 else -> "Scanning tag…"
             },
@@ -3802,6 +3879,19 @@ class MainActivity : AppCompatActivity() {
         val focusLocked = isCameraFocusLocked(afState)
         val focusFailed = isCameraFocusFailed(afState)
         val sharpEnough = latestSharpness >= SHARPNESS_THRESHOLD
+        // Sony's camera-native AF lock is the authority. The live-view
+        // sharpness estimate is low resolution and can flicker even while
+        // Sony reports a fresh focus lock; letting it veto the lock caused
+        // the live framing/focus/zoom dance. Non-Sony capture keeps its
+        // existing dual gate.
+        val focusReadyForCapture = if (activeCameraSource == ProductionCameraSource.SONY) {
+            // This gate appears before the AF dispatcher below. Require the
+            // second touch request to have actually been dispatched, even if
+            // Sony locks very quickly after the first one.
+            sonyFocusTapsThisLevel >= 2 && focusLocked
+        } else {
+            focusLocked && sharpEnough
+        }
         // Standing rule: no blown-out white on the gold at all -- any
         // clipped highlight there is already-lost design detail (engraving,
         // texture) that no post-processing gets back. applyAutoExposure()
@@ -3824,7 +3914,7 @@ class MainActivity : AppCompatActivity() {
             !coverageOk -> "APPROACHING"
             !zoomSettled -> "SETTLING"
             !focusLocked -> "FOCUSING"
-            !sharpEnough -> "SHARPENING"
+            !focusReadyForCapture -> "SHARPENING"
             readyStreak > 0 -> "HOLDING(${readyStreak}/${REQUIRED_READY_TICKS})"
             else -> "FRAMING"
         }
@@ -3869,7 +3959,7 @@ class MainActivity : AppCompatActivity() {
         // focus, exposure) -- see the wrongShape block below, which now
         // only logs for diagnostics and never blocks.
         if (coverageOk && !edgeClipped && (!goldOverexposed || exposureExhausted) &&
-            zoomSettled && focusLocked && sharpEnough && isCenteredNow()) {
+            zoomSettled && focusReadyForCapture && isCenteredNow()) {
             // Require this to hold for a few consecutive ticks, not just one
             // instant read -- a single tick can catch a momentarily-still
             // hand between small shakes, and the few hundred ms the shutter
@@ -4032,9 +4122,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (!focusTriggeredThisLevel) {
-            // One decisive trigger per zoom level -- not re-fired every
-            // tick while waiting for its result, that restart-storm was
-            // the other half of the hunting complaint.
+            // First of two deliberate Sony AF taps. The second follows on a
+            // fixed short cadence, never from detector jitter.
             val focusTarget = jewelleryFocusTarget(result)
             focusTriggeredThisLevel = triggerCameraAutoFocus(
                 physicalSony = activeCameraSource == ProductionCameraSource.SONY,
@@ -4042,9 +4131,33 @@ class MainActivity : AppCompatActivity() {
                 normalizedY = focusTarget?.y
             )
             if (focusTriggeredThisLevel) {
-                focusEvaluationNotBefore = now + FOCUS_EVALUATION_DELAY_MS
+                if (activeCameraSource == ProductionCameraSource.SONY) {
+                    sonyFocusTapsThisLevel = 1
+                    focusEvaluationNotBefore = now + SONY_FOCUS_SECOND_TAP_DELAY_MS
+                } else {
+                    focusEvaluationNotBefore = now + FOCUS_EVALUATION_DELAY_MS
+                }
             }
-            setStatus("Focusing…", ready = false)
+            setStatus(if (activeCameraSource == ProductionCameraSource.SONY) "Focusing 1/2…" else "Focusing…", ready = false)
+            return
+        }
+
+        if (activeCameraSource == ProductionCameraSource.SONY && sonyFocusTapsThisLevel < 2) {
+            if (now < focusEvaluationNotBefore) {
+                setStatus("Focusing 1/2…", ready = false)
+                return
+            }
+            val focusTarget = jewelleryFocusTarget(result)
+            if (triggerCameraAutoFocus(physicalSony = true, normalizedX = focusTarget?.x, normalizedY = focusTarget?.y)) {
+                sonyFocusTapsThisLevel = 2
+                focusEvaluationNotBefore = now + FOCUS_EVALUATION_DELAY_MS
+                setStatus("Focusing 2/2…", ready = false)
+            } else {
+                // Transport failure is handled by the existing bounded AF
+                // retry/backoff path; never spin immediately here.
+                focusEvaluationNotBefore = now + FOCUS_EVALUATION_DELAY_MS
+                setStatus("Focusing…", ready = false)
+            }
             return
         }
 
@@ -4059,8 +4172,8 @@ class MainActivity : AppCompatActivity() {
             setStatus("Focusing…", ready = false)
             return
         }
-        if (!focusLocked || !sharpEnough) {
-            if (focusFailed || !sharpEnough) {
+        if (!focusReadyForCapture) {
+            if (focusFailed || (activeCameraSource != ProductionCameraSource.SONY && !sharpEnough)) {
                 // Never hammer AF repeatedly at an unfocusable magnification.
                 // Step optically wider, settle, aim at the same real-gold
                 // target and try once at the new level. maxUsableZoom makes
@@ -4085,6 +4198,7 @@ class MainActivity : AppCompatActivity() {
                 if (now - lastStuckZoomFloorAfRetryAt >= STUCK_AF_RETRY_INTERVAL_MS) {
                     lastStuckZoomFloorAfRetryAt = now
                     focusTriggeredThisLevel = false
+                    sonyFocusTapsThisLevel = 0
                     focusEvaluationNotBefore = 0L
                     sonyAfRequestedAt = 0L
                     sonyAfRequestedAtNanos = 0L
@@ -5075,11 +5189,6 @@ class MainActivity : AppCompatActivity() {
             // which ARE trustworthy.
             jewelCaptureRetries = 0
             jewelJpeg = bytes
-            // Remember the zoom the MAIN shot was actually taken at, keyed by
-            // category (explicit request, 2026-08-30). The next item of the
-            // same category starts from here instead of crawling back up from
-            // full-wide, which is pure repeated work on a fixed-distance rig.
-            rememberMainZoomForCategory()
             // Calibration only. Never hold the UI or captured-image choice
             // behind a full 26MP bitmap decode; the original JPEG bytes stay
             // untouched for saving/uploading.
@@ -5117,6 +5226,10 @@ class MainActivity : AppCompatActivity() {
      */
     private fun onMainCaptureAccepted() {
         Log.i(TAG, "onMainCaptureAccepted: rsc2.isReady=${rsc2.isReady}")
+        // Commit category zoom memory only after staff accept the MAIN
+        // image. A retaken provisional shot must never teach the next item
+        // the wrong lens position.
+        rememberMainZoomForCategory()
         // rsc2.isReady is a live BLE-state check (commandCharacteristic !=
         // null && gatt != null), not debounced -- a momentary BLE blip
         // exactly at this instant used to permanently fall back to a
@@ -6883,6 +6996,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun resetSonyAutomaticAfBudget() {
         sonyAutomaticAfCommandsForPose = 0
+        sonyFocusTapsThisLevel = 0
         focusEvaluationNotBefore = 0L
         sonyAfRequestedAt = 0L
         sonyAfRequestedAtNanos = 0L
@@ -7325,6 +7439,8 @@ class MainActivity : AppCompatActivity() {
         categoryResolutionCode = null
         categoryResolutionError = null
         invalidTagCode = null
+        duplicateTagCode = null
+        duplicateTagWarningShowing = false
         studFlagPersisted = null
         studAutoGuess = false
         wrongShapeSince = 0L
@@ -7840,6 +7956,8 @@ class MainActivity : AppCompatActivity() {
             categoryResolutionCode = null
             categoryResolutionError = null
             invalidTagCode = null
+            duplicateTagCode = null
+            duplicateTagWarningShowing = false
             studFlagPersisted = null
             studAutoGuess = false
             wrongShapeSince = 0L
@@ -7872,7 +7990,16 @@ class MainActivity : AppCompatActivity() {
             jewelJpeg = null
             angle1Jpeg = null; angle1Validated = false; angle1NeedsRetake = false
             angle2Jpeg = null
-            setCameraZoomRatio(1f)
+            val rememberedMainZoom = rememberedMainZoom(resolvedCategoryKey)
+            if (rememberedMainZoom != null) {
+                Log.i(
+                    TAG,
+                    "Preparing next ${resolvedCategoryKey} at remembered MAIN zoom=$rememberedMainZoom"
+                )
+                setCameraZoomRatio(rememberedMainZoom)
+            } else {
+                setCameraZoomRatio(1f)
+            }
         }
         applySonyFocusAreaForPhase()
         setStatus(if (next == Phase.JEWEL) "Center the ornament, front side up…" else "Show the tag QR/barcode…", ready = false)
@@ -8295,6 +8422,64 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    /** Production gate. A rejected background upload must be decided before
+     * this idle TAG screen accepts another item. We deliberately wait until
+     * TAG is completely idle, so an upload rejection never interrupts an
+     * item currently being captured. */
+    private fun maybeGateNeedsReview() {
+        if (reviewGateShowing || !mainScreenActive || isFinishing ||
+            phase != Phase.TAG || stableTagCode != null || tagJpeg != null ||
+            categoryResolutionCode != null
+        ) return
+        val item = CaptureUploadQueue.listNeedsReview(this).firstOrNull() ?: return
+        reviewGateShowing = true
+        armed = false
+        setStatus("Review required: ${item.tagCode}", ready = false)
+        showMandatoryReviewDialog(item)
+    }
+
+    private fun showMandatoryReviewDialog(item: CaptureUploadQueue.ReviewItem) {
+        val approveAction = when (item.error) {
+            "duplicate" -> "Approve & save (replace existing)"
+            "blurry" -> "Approve & save (blur override)"
+            "not_clearly_visible" -> "Approve & save (visibility override)"
+            else -> "Retry validation"
+        }
+        fun approve() {
+            when (item.error) {
+                "duplicate" -> CaptureUploadQueue.retryWithOverride(this, item.dir, overrideDuplicate = true)
+                "blurry" -> CaptureUploadQueue.retryWithOverride(this, item.dir, overrideBlur = true)
+                "not_clearly_visible" -> CaptureUploadQueue.retryWithOverride(this, item.dir, overrideVisibility = true)
+                else -> CaptureUploadQueue.retryWithOverride(this, item.dir)
+            }
+            Toast.makeText(this, "Approved: ${item.tagCode} saving in background", Toast.LENGTH_SHORT).show()
+            resumeAfterReviewDecision()
+        }
+        fun recapture() {
+            CaptureUploadQueue.discard(this, item.dir)
+            Toast.makeText(this, "Recapture ${item.tagCode}", Toast.LENGTH_SHORT).show()
+            resumeAfterReviewDecision()
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Review required — ${item.tagCode}")
+            .setMessage("Server result: ${item.error ?: "unknown"}\n\nChoose approval or recapture before starting the next item.")
+            .setCancelable(false)
+            // AlertController suppresses list items when a message is also
+            // present on this tablet theme. Explicit buttons are always
+            // rendered, so a mandatory review can never become a dead end.
+            .setPositiveButton(approveAction) { _, _ -> approve() }
+            .setNegativeButton("Recapture this item") { _, _ -> recapture() }
+            .show()
+    }
+
+    private fun resumeAfterReviewDecision() {
+        reviewGateShowing = false
+        renderCapturePipeline()
+        // The decision changes needs_review synchronously. Return to a
+        // fresh tag only after the explicit decision is recorded.
+        resetForNewItem(Phase.TAG)
+    }
+
     private fun showUploadReviewActionDialog(item: CaptureUploadQueue.ReviewItem) {
         val actions = mutableListOf("Retry as-is", "Discard (delete originals)")
         // Only offer the specific override that matches what the server
@@ -8315,7 +8500,7 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this, "Retrying ${item.tagCode}", Toast.LENGTH_SHORT).show()
                     }
                     "Discard (delete originals)" -> {
-                        CaptureUploadQueue.discard(item.dir)
+                        CaptureUploadQueue.discard(this, item.dir)
                         Toast.makeText(this, "Discarded ${item.tagCode}", Toast.LENGTH_SHORT).show()
                     }
                     "Save anyway (duplicate)" -> {
