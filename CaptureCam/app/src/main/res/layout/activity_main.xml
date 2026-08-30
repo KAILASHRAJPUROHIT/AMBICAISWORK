@@ -93,6 +93,34 @@
                     android:textSize="11sp"
                     android:textStyle="bold" />
 
+                <!-- Durable capture-to-laptop pipeline. Newest card is left;
+                     swipe horizontally for the previous nine. Values are fed
+                     only from the disk-backed upload queue: Laptop flips YES
+                     only after the server accepts the originals; Stitched
+                     flips YES only after a successful 3-angle save. -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"
+                    android:text="LAST 10 CAPTURE PIPELINE"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:fillViewport="true"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/capturePipelineContainer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
                 <TextView
                     android:id="@+id/statusText"
                     android:layout_width="match_parent"

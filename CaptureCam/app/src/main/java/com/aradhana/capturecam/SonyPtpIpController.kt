@@ -621,6 +621,21 @@ class SonyPtpIpController {
             // Populate Sony property state after authentication.
             var propertyBootstrap = readSonyProperties()
             Log.i(TAG, "Sony property bootstrap parsed ${propertyBootstrap.size} properties")
+            // Capability audit (2026-08-30): the body advertises ~366 device
+            // properties while this app defines 33. Log which of the
+            // advertised ones are WRITABLE and currently ENABLED, so unused
+            // camera capability can be identified from the camera's own
+            // report rather than guessed at. Writable+enabled is the subset
+            // that could actually be driven right now.
+            val actionable = propertyBootstrap.values
+                .filter { it.writable && it.enabled }
+                .map { it.code }
+                .sorted()
+            Log.i(
+                TAG,
+                "Sony capability audit: writable+enabled=${actionable.size}/${propertyBootstrap.size} " +
+                    "codes=" + actionable.joinToString(",") { "0x%04X".format(it) }
+            )
             if (propertyBootstrap.isEmpty()) return false
             currentZoomScale = propertyBootstrap[PROP_ZoomScale]?.currentValue?.toInt() ?: 1_000
             currentOpticalZoomPercent = opticalZoomPercent(

@@ -146,3 +146,7 @@ config/azure_flux2_pro_key.dpapi
 config/azure_flux2_pro_key.clixml
 config/cloudflare_tunnel_token.dpapi
 config/email_2fa_smtp.dpapi
+
+# Local forensic/debug captures and APK dumps (2026-08-30): large binaries,
+# never source. A 261MB APK was sitting untracked here.
+CaptureCam/reports/

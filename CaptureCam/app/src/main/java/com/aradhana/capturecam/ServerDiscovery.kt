@@ -3,6 +3,7 @@ package com.aradhana.capturecam
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.LinkAddress
+import android.net.NetworkCapabilities
 import android.util.Log
 import java.net.HttpURLConnection
 import java.net.InetAddress
@@ -15,6 +16,7 @@ import java.util.concurrent.TimeUnit
 import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 import org.json.JSONObject
@@ -97,22 +99,40 @@ object ServerDiscovery {
      * always carries "capture_version", a key nothing else on a normal
      * shop LAN is expected to return, so a match is trustworthy without
      * needing a fixed IP or a certificate to check. */
-    private fun isCaptureServer(ip: String, port: Int): Boolean = try {
-        val url = java.net.URL("https://$ip:$port/api/heartbeat")
-        (url.openConnection() as HttpsURLConnection).apply {
-            sslSocketFactory = trustAllSocketFactory
-            hostnameVerifier = HostnameVerifier { _, _ -> true }
-            connectTimeout = HTTP_PROBE_TIMEOUT_MS
-            readTimeout = HTTP_PROBE_TIMEOUT_MS
-            requestMethod = "POST"
-            doOutput = true
-            setRequestProperty("Content-Length", "0")
-        }.use { conn ->
-            if (conn.responseCode != HttpURLConnection.HTTP_OK) return false
-            val body = conn.inputStream.bufferedReader().readText()
-            JSONObject(body).has("capture_version")
+    private fun lanSocketFactory(context: Context): javax.net.SocketFactory? {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return null
+        // NET_CAPABILITY_INTERNET only means "intended to provide internet"
+        // and is set on ANY Wi-Fi network -- including the Sony camera AP the
+        // PTP route binds to, which is exactly the network this must avoid.
+        // NET_CAPABILITY_VALIDATED is only granted after Android confirms
+        // real connectivity, so it actually distinguishes the shop LAN.
+        return cm.allNetworks.firstOrNull { network ->
+            cm.getNetworkCapabilities(network)?.let { caps ->
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            } == true
+        }?.socketFactory
+    }
+
+    private fun isCaptureServer(context: Context, ip: String, port: Int): Boolean = try {
+        // HttpsURLConnection sometimes re-enters the platform trust policy
+        // during its lazy output-stream handshake on Android 16, despite its
+        // per-connection trust-all factory. Use one explicit TLS socket for
+        // the tiny LAN-only identity probe, with the same trust factory.
+        val raw = (lanSocketFactory(context) ?: javax.net.SocketFactory.getDefault()).createSocket()
+        raw.connect(InetSocketAddress(ip, port), HTTP_PROBE_TIMEOUT_MS)
+        (trustAllSocketFactory.createSocket(raw, ip, port, true) as SSLSocket).use { socket ->
+            socket.soTimeout = HTTP_PROBE_TIMEOUT_MS
+            socket.startHandshake()
+            val out = socket.outputStream.bufferedWriter(Charsets.US_ASCII)
+            out.write("POST /api/heartbeat HTTP/1.1\r\nHost: $ip:$port\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            out.flush()
+            val response = socket.inputStream.bufferedReader(Charsets.UTF_8).readText()
+            response.startsWith("HTTP/1.1 200") && response.contains("\"capture_version\"")
         }
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        Log.w(TAG, "capture_server.py identity probe failed for $ip:$port: ${e.message}")
         false
     }
 
@@ -130,7 +150,7 @@ object ServerDiscovery {
      * was found anywhere on the subnet. */
     fun discoverServerIp(context: Context, port: Int, preferredIp: String?): String? {
         if (!preferredIp.isNullOrBlank() && hasOpenPort(preferredIp, port) &&
-            isCaptureServer(preferredIp, port)
+            isCaptureServer(context, preferredIp, port)
         ) {
             return preferredIp
         }
@@ -149,7 +169,7 @@ object ServerDiscovery {
             pool.shutdown()
         }
         Log.i(TAG, "capture_server.py IP rediscovery: ${openHosts.size} host(s) with port $port open: $openHosts")
-        val match = openHosts.firstOrNull { isCaptureServer(it, port) }
+        val match = openHosts.firstOrNull { isCaptureServer(context, it, port) }
         if (match != null) {
             Log.i(TAG, "capture_server.py IP rediscovery: found server at $match")
         } else {

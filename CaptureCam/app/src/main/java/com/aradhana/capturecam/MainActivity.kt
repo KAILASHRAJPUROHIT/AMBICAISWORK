@@ -25,8 +25,10 @@ import android.view.ScaleGestureDetector
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Spinner
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -60,7 +62,10 @@ import org.json.JSONObject
 import org.opencv.core.Mat
 import java.io.File
 import java.nio.ByteBuffer
+import java.text.SimpleDateFormat
 import java.util.Arrays
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -95,7 +100,7 @@ class MainActivity : AppCompatActivity() {
     private var imageCapture: ImageCapture? = null
     private var camera: Camera? = null
     private enum class ProductionCameraSource { PHONE, SONY }
-    private enum class RequestedCameraMode { DSLR, SMARTPHONE }
+    private enum class RequestedCameraMode { DSLR, SMARTPHONE, HYBRID }
     @Volatile private var activeCameraSource = ProductionCameraSource.SONY
     private lateinit var sonyProduction: SonyProductionCamera
     private var appliedCameraMode: RequestedCameraMode? = null
@@ -372,6 +377,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
     private val handler = Handler(Looper.getMainLooper())
+    private val capturePipelineRefreshRunnable = object : Runnable {
+        override fun run() {
+            renderCapturePipeline()
+            handler.postDelayed(this, CAPTURE_PIPELINE_REFRESH_MS)
+        }
+    }
     // Restrict ML Kit to formats used by stock labels. Scanning every format
     // made one Sony bitmap analysis occupy the scanner for roughly 5 seconds.
     private val barcodeScanner by lazy {
@@ -462,6 +473,16 @@ class MainActivity : AppCompatActivity() {
     // resetForNewItem) so a piece that needed a heavy negative bias
     // doesn't leave the NEXT item starting under-exposed.
     private var autoExposureEv = 0f
+
+    /** Explicit request (2026-08-30): the pre-shoot default must sit on the
+     * LOW side of the slider, not dead centre. Expressed as a fraction of the
+     * camera's real EV travel rather than a hardcoded EV so it lands in the
+     * same visual place whatever range the bound camera reports. */
+    private fun defaultPreShootExposureEv(): Float {
+        if (!cameraExposureControlAvailable()) return 0f
+        val range = cameraExposureRangeEv()
+        return range.start + (range.endInclusive - range.start) * DEFAULT_EXPOSURE_SLIDER_FRACTION
+    }
     private var lastExposureAdjustAt = 0L
     private var exposureClipStreak = 0
     private var exposureClearStreak = 0
@@ -659,6 +680,36 @@ class MainActivity : AppCompatActivity() {
     private var studFlagFetchInFlight = false
     private var autoFired = false
     private var lastAnalysisAt = 0L
+    // See the TAG-phase autofocus fix in onSonyFrame().
+    private var lastTagAutoFocusAt = 0L
+    // Auto acquisition zoom state -- see maybeStepAcquisitionZoom().
+    // Tag-scan instrumentation (2026-08-30). Phase-level TIMING for TAG is
+    // dominated by the operator physically picking up the piece and
+    // presenting the label, which no code change can shorten. These measure
+    // the SCANNER only: first frame a code is decoded at all -> code locked
+    // -> catalogue category confirmed.
+    private var tagFirstSeenAtMs = 0L
+    private var lastLoggedAfRequestNanos = 0L
+    private var acquisitionZoomSteps = 0
+    private var acquisitionZoomStartedAt = 0L
+    // Capture-time instrumentation (2026-08-30). Wall-clock per section so
+    // optimisation targets measured cost instead of guesswork -- the
+    // per-item total is ~2.4min today and it is not yet known how that
+    // splits between operator handling, AF, zoom settling and PTP transfer.
+    private var itemStartedAt = 0L
+    private var sectionStartedAt = 0L
+
+    private fun markCaptureSection(name: String) {
+        val now = System.currentTimeMillis()
+        if (sectionStartedAt != 0L) {
+            Log.i(TAG, "TIMING section=$name prevSectionMs=${now - sectionStartedAt} " +
+                "itemElapsedMs=${if (itemStartedAt == 0L) 0 else now - itemStartedAt}")
+        } else {
+            Log.i(TAG, "TIMING section=$name (item start)")
+        }
+        sectionStartedAt = now
+        if (name == "TAG" || itemStartedAt == 0L) itemStartedAt = now
+    }
     @Volatile private var latestSonyPreviewBitmap: Bitmap? = null
     private val sonyPreviewUpdatePending = AtomicBoolean(false)
     private var displayedSonyPreviewBitmap: Bitmap? = null
@@ -741,6 +792,7 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "CaptureCam"
         private val TAG_CODE_PATTERN = Regex("^[A-Za-z]{1,8}[0-9]{0,4}[/_-][0-9]+$")
         private const val PREF_CAMERA_MODE = "camera_mode_index"
+        private const val PREF_MAIN_ZOOM_PREFIX = "main_zoom_"
         private const val PREF_SHOW_GUIDANCE = "show_shape_stand_guidance"
         // Fallback seed only, used when no IP has been discovered/persisted
         // yet (a truly fresh install) -- SonyCameraDiscovery tries this
@@ -752,7 +804,8 @@ class MainActivity : AppCompatActivity() {
         private const val SONY_SSH_USER = "pkANY7"
         private val CAMERA_MODE_LABELS = arrayOf(
             "DSLR — Sony ZV-E10 II",
-            "Smartphone camera"
+            "Smartphone camera",
+            "Hybrid — tablet tag + Sony DSLR"
         )
         private const val SONY_MIN_ZOOM_RATIO = 1f
         // 16-50mm PZ lens fitted to the deployed ZV-E10 II: 50/16.
@@ -1000,6 +1053,7 @@ class MainActivity : AppCompatActivity() {
         // live 2026-08-19: an earlier empty Settings save left the key
         // sitting at "" forever, so the intended default never took over).
         private const val TICK_INTERVAL_MS = 150L
+        private const val CAPTURE_PIPELINE_REFRESH_MS = 1_000L
         private const val SONY_PREVIEW_RENDER_INTERVAL_MS = 40L
         // 8.3fps keeps the Sony preview at its 25fps target. Live testing at
         // 80ms reduced preview to 20-21fps; focus, not scan cadence, was the
@@ -1008,10 +1062,19 @@ class MainActivity : AppCompatActivity() {
         // Preserve the Sony stream's full width. Small printed labels lost
         // too many finder/edge pixels when reduced to 640px.
         private const val SONY_TAG_ANALYSIS_LONG_EDGE = 1024
-        private const val SONY_TAG_BURST_FRAMES = 5
-        private const val SONY_TAG_BURST_MAJORITY = 3
+        // A clean QR/barcode is deterministic. Two matching live frames
+        // reject a one-frame misread while cutting tag-lock latency by about
+        // 120ms versus the earlier 3-of-5 policy.
+        private const val SONY_TAG_BURST_FRAMES = 3
+        private const val SONY_TAG_BURST_MAJORITY = 2
         private const val SONY_JEWEL_ANALYSIS_INTERVAL_MS = 80L
         private const val SONY_TAG_FOCUS_AREA_WIDE = 1
+        // Long enough that repeated tag-phase AF can never saturate the
+        // single Sony PTP command lane, short enough that presenting a label
+        // is followed by a real focus attempt within a couple of frames.
+        private const val TAG_AF_RETRY_INTERVAL_MS = 2_000L
+        // 0.35 = 35% along the EV slider, i.e. below centre (0.5).
+        private const val DEFAULT_EXPOSURE_SLIDER_FRACTION = 0.35f
         private const val SHARPNESS_THRESHOLD = 40f
         // physId=4 from logCameraDiagnostics's real dump on this exact
         // phone (2026-08-19): 5.56mm, closestFocus~10cm -- the macro-
@@ -1320,6 +1383,13 @@ class MainActivity : AppCompatActivity() {
         // for controlled diagnostics, but production waits stationary for a
         // real detection; target-guided fine centering remains enabled.
         private const val AUTONOMOUS_BLIND_HUNT_ENABLED = false
+        // Auto acquisition zoom (2026-08-30). Bounded hard: a small ring
+        // needs one or two steps to become trustworthy, and stopping well
+        // below the hardware ceiling keeps room for the normal coverage
+        // climb that runs once the item is actually detected.
+        private const val ACQUISITION_ZOOM_MAX_STEPS = 3
+        private const val ACQUISITION_ZOOM_MAX_RATIO = 2.4f
+        private const val ACQUISITION_ZOOM_GRACE_MS = 1_200L
         // Blind search (huntStep()) -- only runs before anything has ever
         // been detected for this item. Bigger, longer steps than fine
         // centering (CENTERING_*) since this is covering ground, not
@@ -1462,6 +1532,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        renderCapturePipeline()
         OpenCvKcfProbe.run()
         // This is a kiosk-style capture station -- the operator's hands are
         // usually busy holding jewellery/tags, not touching the screen, so
@@ -1525,6 +1596,11 @@ class MainActivity : AppCompatActivity() {
         // sweep (see triggerServerRediscovery) -- tried before mDNS/static
         // fallback on this launch too, not just after a fresh failure.
         prefs.getString("capture_server_ip", null)?.let { UploadClient.discoveredServerIp = it }
+        UploadClient.refreshLanRoute(applicationContext)
+        // Verify/refresh the laptop route on every launch. DHCP changes must
+        // be healed before the operator starts an item, not after its images
+        // are already queued for upload.
+        triggerServerRediscovery()
         CaptureUploadQueue.resumePending(applicationContext)
         ensurePipelineStarted()
         applyRequestedCameraMode(allowPermissionPrompt = true)
@@ -1626,6 +1702,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         mainScreenActive = true
+        handler.removeCallbacks(capturePipelineRefreshRunnable)
+        handler.post(capturePipelineRefreshRunnable)
         // Coming back to this screen (e.g. from the BLE diagnostics screen,
         // or after turning the gimbal on) is exactly when a previously
         // failed/never-attempted connect should be retried -- onCreate's
@@ -1638,8 +1716,52 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         mainScreenActive = false
+        handler.removeCallbacks(capturePipelineRefreshRunnable)
         super.onPause()
     }
+
+    /** Last ten items in the left-to-right capture pipeline. The worker owns
+     * delivery state, so this view merely reads its durable records. It never
+     * declares a laptop save or stitch based on a locally captured JPEG. */
+    private fun renderCapturePipeline() {
+        if (!::binding.isInitialized) return
+        val container = binding.capturePipelineContainer
+        container.removeAllViews()
+        val records = CaptureUploadQueue.listPipelineHistory(applicationContext).take(10)
+        if (records.isEmpty()) {
+            container.addView(pipelineCard("No captures yet\nWaiting for first item"))
+            return
+        }
+        val timestampFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+        records.forEach { record ->
+            val state = record.state.replaceFirstChar { char ->
+                if (char.isLowerCase()) char.titlecase(Locale.getDefault()) else char.toString()
+            }
+            container.addView(pipelineCard(
+                "${timestampFormat.format(Date(record.capturedAt))}\n" +
+                    "${record.tagCode}\n" +
+                    "Stitched: ${if (record.stitched) "YES" else "NO"}\n" +
+                    "Laptop: ${if (record.savedOnLaptop) "YES" else "NO"}\n" +
+                    state,
+                saved = record.savedOnLaptop
+            ))
+        }
+    }
+
+    private fun pipelineCard(text: String, saved: Boolean = false): TextView = TextView(this).apply {
+        layoutParams = LinearLayout.LayoutParams(154.dp, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            marginEnd = 6.dp
+        }
+        setBackgroundResource(if (saved) R.drawable.bg_card_ready else R.drawable.bg_card)
+        setPadding(9.dp, 8.dp, 9.dp, 8.dp)
+        setTextColor(getColor(if (saved) R.color.white else R.color.text_muted))
+        textSize = 10f
+        typeface = android.graphics.Typeface.MONOSPACE
+        this.text = text
+    }
+
+    private val Int.dp: Int
+        get() = (this * resources.displayMetrics.density).roundToInt()
 
     // ---------------------------------------------------------------- Camera setup
 
@@ -1701,11 +1823,46 @@ class MainActivity : AppCompatActivity() {
      * a missing Sony blocks capture while SonyProductionCamera self-heals.
      * Smartphone mode stops Sony completely and binds CameraX exclusively.
      */
+    /**
+     * Hybrid mode (explicit request, 2026-08-30): the Sony cannot resolve a
+     * small printed label at the ornament working distance -- measured live,
+     * barcode decode itself costs only 11-25ms, so the delay was never
+     * compute, it was optics. The tablet's own back camera focuses to 10cm
+     * and reads a held-up tag almost instantly. TAG therefore runs on the
+     * tablet and every jewel frame stays on the Sony.
+     *
+     * The Sony transport is deliberately NOT stopped while the tablet holds
+     * the TAG phase: a full stop/start costs seconds of reconnect per item,
+     * which would give back the very time this mode exists to save.
+     * onSonyFrame() already returns immediately when activeCameraSource is
+     * not SONY, so its frames are cheaply dropped instead.
+     */
+    private fun hybridSourceForPhase(): ProductionCameraSource =
+        if (phase == Phase.TAG) ProductionCameraSource.PHONE else ProductionCameraSource.SONY
+
+    /** Re-evaluates the active camera after a phase change. No-op unless
+     * hybrid mode actually needs to hand the preview over. */
+    private fun syncHybridCameraForPhase() {
+        if (requestedCameraMode() != RequestedCameraMode.HYBRID) return
+        if (activeCameraSource == hybridSourceForPhase()) return
+        applyRequestedCameraMode(allowPermissionPrompt = false)
+    }
+
     private fun applyRequestedCameraMode(allowPermissionPrompt: Boolean) {
         val requestedMode = requestedCameraMode()
         val modeChanged = appliedCameraMode != requestedMode
         appliedCameraMode = requestedMode
-        when (requestedMode) {
+        val effective = when (requestedMode) {
+            RequestedCameraMode.DSLR -> RequestedCameraMode.DSLR
+            RequestedCameraMode.SMARTPHONE -> RequestedCameraMode.SMARTPHONE
+            RequestedCameraMode.HYBRID ->
+                if (hybridSourceForPhase() == ProductionCameraSource.PHONE) {
+                    RequestedCameraMode.SMARTPHONE
+                } else {
+                    RequestedCameraMode.DSLR
+                }
+        }
+        when (effective) {
             RequestedCameraMode.DSLR -> {
                 activeCameraSource = ProductionCameraSource.SONY
                 binding.previewView.visibility = View.GONE
@@ -1715,16 +1872,33 @@ class MainActivity : AppCompatActivity() {
                     if (phase != Phase.UPLOADING) {
                         setStatus("Sony camera restoring…", ready = false)
                     }
+                } else {
+                    // Real bug found live (2026-08-30): sonyPreviewView was
+                    // only ever made VISIBLE inside onSonyAvailabilityChanged.
+                    // In hybrid the Sony goes available DURING the tablet-owned
+                    // TAG phase, where that callback returns early by design,
+                    // and no further availability edge fires afterwards -- so
+                    // handing over to MAIN left a black screen over a
+                    // perfectly healthy 25fps stream. Take ownership of
+                    // visibility here instead of depending on an edge that has
+                    // already passed.
+                    binding.sonyPreviewView.visibility = View.VISIBLE
+                    sonyPreviewUpdatePending.set(false)
+                    latestSonyPreviewBitmap?.let { binding.sonyPreviewView.setImageBitmap(it) }
                 }
                 startSonyProduction()
                 Log.i(TAG, "Camera mode=DSLR; phone fallback hard-disabled")
             }
 
-            RequestedCameraMode.SMARTPHONE -> {
+            else -> {
                 activeCameraSource = ProductionCameraSource.PHONE
                 // Stop once on entry. Repeated onResume/apply calls must not
                 // generate redundant stop callbacks or transport churn.
-                if (modeChanged) sonyProduction.stop()
+                // Hybrid keeps the Sony connected across the TAG phase on
+                // purpose -- see hybridSourceForPhase()'s doc comment.
+                if (modeChanged && requestedMode == RequestedCameraMode.SMARTPHONE) {
+                    sonyProduction.stop()
+                }
                 handler.removeCallbacks(sonyPreviewRenderRunnable)
                 sonyPreviewUpdatePending.set(false)
                 latestSonyPreviewBitmap = null
@@ -1735,14 +1909,23 @@ class MainActivity : AppCompatActivity() {
                 binding.sonyPreviewView.visibility = View.GONE
                 binding.previewView.visibility = View.VISIBLE
                 ensurePhoneCameraStarted(allowPermissionPrompt)
-                Log.i(TAG, "Camera mode=SMARTPHONE; Sony transport stopped")
+                if (requestedMode == RequestedCameraMode.HYBRID) {
+                    // Keep the DSLR warming in the background while the
+                    // tablet reads the label, so handing over to MAIN is
+                    // instant instead of paying a multi-second PTP/SSH
+                    // connect at the exact moment the operator is ready.
+                    startSonyProduction()
+                    Log.i(TAG, "Camera mode=HYBRID; tablet holds TAG, Sony kept warm")
+                } else {
+                    Log.i(TAG, "Camera mode=SMARTPHONE; Sony transport stopped")
+                }
             }
         }
         configureExposureSlider()
     }
 
     private fun ensurePhoneCameraStarted(allowPermissionPrompt: Boolean) {
-        if (requestedCameraMode() != RequestedCameraMode.SMARTPHONE) return
+        if (requestedCameraMode() == RequestedCameraMode.DSLR) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
         ) {
@@ -1761,7 +1944,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startSonyProduction() {
-        if (requestedCameraMode() != RequestedCameraMode.DSLR) return
+        if (requestedCameraMode() == RequestedCameraMode.SMARTPHONE) return
         val password = prefs.getString("sony_ssh_password", BuildConfig.SONY_SSH_PASSWORD)
             ?.takeIf { it.isNotBlank() }
             ?: BuildConfig.SONY_SSH_PASSWORD
@@ -1787,9 +1970,21 @@ class MainActivity : AppCompatActivity() {
 
     /** Availability changes never cross the operator-selected hard boundary. */
     private fun onSonyAvailabilityChanged(available: Boolean, detail: String) {
-        if (requestedCameraMode() != RequestedCameraMode.DSLR) {
+        val mode = requestedCameraMode()
+        if (mode == RequestedCameraMode.SMARTPHONE) {
             activeCameraSource = ProductionCameraSource.PHONE
             Log.i(TAG, "Ignoring Sony availability in Smartphone mode: $detail")
+            return
+        }
+        if (mode == RequestedCameraMode.HYBRID && hybridSourceForPhase() == ProductionCameraSource.PHONE) {
+            // The Sony is intentionally warm during the tablet-owned TAG
+            // phase. Its availability callbacks must NOT drag the preview
+            // back to the Sony here, and equally must not force PHONE while
+            // a jewel phase is running -- the phase decides, not the
+            // transport. Without this the callback slammed the source back
+            // to PHONE mid-capture, mixing sources within one item.
+            activeCameraSource = ProductionCameraSource.PHONE
+            Log.i(TAG, "Sony availability during tablet TAG phase (kept warm): $detail")
             return
         }
         // Remain SONY even while reconnecting. This is the hardwall that
@@ -1841,7 +2036,7 @@ class MainActivity : AppCompatActivity() {
         // 67% app CPU and visibly starved the preview/UI. Detection remains
         // responsive at 8.3fps (tag) / 12.5fps (jewellery).
         val analysisInterval = if (phase == Phase.TAG && tagBurstActive) {
-            // During the bounded five-frame burst, decode every next distinct
+            // During the bounded three-frame burst, decode every next distinct
             // frame as soon as the preceding ML task completes.
             0L
         } else if (phase == Phase.TAG) {
@@ -1866,6 +2061,22 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
+            // Real bug found live (2026-08-30): this when() had branches for
+            // JEWEL and TAG only. Kotlin does not require a statement-when to
+            // be exhaustive, so UPLOADING silently fell through and NOTHING
+            // cleared boundsOverlay -- while the live preview was back on
+            // screen still painted with the last JEWEL frame's gold points
+            // and target box. resetForNewItem() does not cover it either: it
+            // nulls latestMaterial and calls clearStandDistanceGuide(), which
+            // only clears the stand guide, not the point scatter/target box.
+            Phase.UPLOADING -> {
+                handler.post {
+                    if (!isDestroyed) {
+                        binding.boundsOverlay.update(emptyList(), 0, 0, 0)
+                        clearStandDistanceGuide()
+                    }
+                }
+            }
             Phase.TAG -> {
                 handler.post {
                     if (!isDestroyed) {
@@ -1878,6 +2089,23 @@ class MainActivity : AppCompatActivity() {
                 // the simultaneous PTP zoom operation causes avoidable source
                 // cadence gaps.
                 if (!wideResetComplete || wideResetInFlight || barcodeBusy) return
+                // Real bug found live (2026-08-30): NO code path anywhere
+                // triggered autofocus during the TAG phase -- every
+                // triggerCameraAutoFocus() call site belonged to the jewel,
+                // angle or manual-tap flows. Tag focus therefore relied purely
+                // on the AF-C mode set once at connect, which leaves the lens
+                // parked at the PREVIOUS item's focus distance, so the
+                // operator had to press the camera's physical focus button
+                // before a label would ever resolve. Drive a decisive AF at
+                // frame centre (where the label is presented) until a tag is
+                // actually locked, rate-limited so it can never hammer the
+                // shared PTP command lane.
+                if (stableTagCode == null &&
+                    System.currentTimeMillis() - lastTagAutoFocusAt >= TAG_AF_RETRY_INTERVAL_MS
+                ) {
+                    lastTagAutoFocusAt = System.currentTimeMillis()
+                    triggerCameraAutoFocus(physicalSony = true, manualRequest = true)
+                }
                 barcodeBusy = true
                 barcodeAttempts += 1
                 val attempt = barcodeAttempts
@@ -1908,7 +2136,7 @@ class MainActivity : AppCompatActivity() {
                         // misreads a character (O/G/Z/2 confusion etc.)
                         // differently on almost every frame, and each misread
                         // still matches TAG_CODE_PATTERN's shape, producing a
-                        // stream of near-miss votes that never agreed 3-of-5
+                        // stream of near-miss votes that never agreed reliably
                         // -- so merging OCR into acceptance was already ruled
                         // out before this fix removed it from the hot path
                         // entirely.)
@@ -1969,8 +2197,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** First readable label starts a five-frame burst. Each incoming frame is
-     * decoded immediately; no queue or five-frame wait is introduced. */
+    /** First readable label starts a three-frame burst. Each incoming frame is
+     * decoded immediately; no queue or multi-frame wait is introduced. */
     private fun consumeSonyTagBurst(codes: List<String>, jpeg: ByteArray?): TagBurstOutcome =
         synchronized(tagBurstLock) {
             var started = false
@@ -1980,7 +2208,8 @@ class MainActivity : AppCompatActivity() {
                 tagBurstActive = true
                 tagBurstProgress = 0
                 started = true
-                Log.i(TAG, "Sony tag five-frame burst started firstCodes=$codes")
+                if (tagFirstSeenAtMs == 0L) tagFirstSeenAtMs = System.currentTimeMillis()
+                Log.i(TAG, "TAGSCAN first-code-seen (burst) codes=$codes")
             }
 
             val preferred = codes.firstOrNull { TAG_CODE_PATTERN.matches(it) }
@@ -2140,14 +2369,39 @@ class MainActivity : AppCompatActivity() {
             }
         }
         val focus = sonyProduction.currentFocusIndication()
+        // Measure EVERY af trigger->lock, not just the first of the item
+        // (2026-08-30): sonyFocusLockedForItem latches, so shots 2 and 3 of
+        // each item were never timed and AF cost was being sized from one
+        // third of the evidence.
+        val afPending = sonyAfRequestedAtNanos != 0L && sonyAfRequestedAtNanos != lastLoggedAfRequestNanos
+        if (present && afPending && (focus == 2 || focus == 6)) {
+            lastLoggedAfRequestNanos = sonyAfRequestedAtNanos
+            Log.i(
+                TAG,
+                "AFLOCK triggerToLockMs=${(System.nanoTime() - sonyAfRequestedAtNanos) / 1_000_000L} " +
+                    "focusIndication=$focus sharpness=$latestSharpness"
+            )
+        }
         if (present && !sonyFocusLockedForItem && (focus == 2 || focus == 6)) {
             val detectedAt = sonyItemDetectedAtNanos
             if (detectedAt != 0L) {
                 sonyFocusLockedForItem = true
+                // detectToLockMs spans DETECTION -> lock, so it includes our
+                // own zoom climb, centering, settle waits and AF budget
+                // gating -- it is NOT the camera's autofocus speed. Log the
+                // AF-trigger -> lock span alongside it (2026-08-30): that is
+                // the only number that says whether the ZV-E10 II's own
+                // hybrid phase-detect AF is performing as it does in the
+                // Creators' App, or whether our pipeline is the delay.
+                val afRequestedAt = sonyAfRequestedAtNanos
+                val triggerToLockMs = if (afRequestedAt != 0L) {
+                    (System.nanoTime() - afRequestedAt) / 1_000_000L
+                } else -1L
                 Log.i(
                     TAG,
                     "Sony item focus locked detectToLockMs=" +
                         "${(System.nanoTime() - detectedAt) / 1_000_000L} " +
+                        "triggerToLockMs=$triggerToLockMs " +
                         "focusIndication=$focus sharpness=$latestSharpness"
                 )
             }
@@ -2487,7 +2741,47 @@ class MainActivity : AppCompatActivity() {
      * regardless of how big the item is or how far/high the gimbal sits,
      * since none of that changes which physical sensor gets used. */
     private fun bindUseCases() {
-        bindUseCasesPinned(MACRO_PHYSICAL_CAMERA_ID)
+        bindUseCasesPinned(macroPhysicalCameraIdIfSupported())
+    }
+
+    /**
+     * Real bug found live (2026-08-30): MACRO_PHYSICAL_CAMERA_ID was pinned
+     * unconditionally. On this tablet camera 0 has no physical id "4", and
+     * the rejection is ASYNCHRONOUS -- bindToLifecycle() returns fine and the
+     * failure only surfaces later as
+     *   "Camera 0: Camera doesn't support physicalCameraId 4"
+     *   CameraCaptureSession: Failed to create capture session
+     * so bindUseCasesPinned()'s try/catch (which only catches a synchronous
+     * throw) never ran its fallback and the preview stayed black forever at
+     * 0.0fps. Verify the id actually exists on this device's back camera
+     * before pinning, instead of relying on an error path that this class of
+     * failure never reaches.
+     */
+    private fun macroPhysicalCameraIdIfSupported(): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+        return try {
+            val manager = getSystemService(android.hardware.camera2.CameraManager::class.java)
+                ?: return null
+            val backId = manager.cameraIdList.firstOrNull { id ->
+                manager.getCameraCharacteristics(id)
+                    .get(android.hardware.camera2.CameraCharacteristics.LENS_FACING) ==
+                    android.hardware.camera2.CameraMetadata.LENS_FACING_BACK
+            } ?: return null
+            val available = manager.getCameraCharacteristics(backId).physicalCameraIds
+            if (available.contains(MACRO_PHYSICAL_CAMERA_ID)) {
+                MACRO_PHYSICAL_CAMERA_ID
+            } else {
+                Log.w(
+                    "CameraDiag",
+                    "Macro physical camera id $MACRO_PHYSICAL_CAMERA_ID absent on back camera " +
+                        "$backId (has $available) -- binding default sensor instead"
+                )
+                null
+            }
+        } catch (e: Exception) {
+            Log.w("CameraDiag", "Could not verify macro physical camera id; using default", e)
+            null
+        }
     }
 
     /** Sony and CameraX were previously left running together. INVISIBLE
@@ -2740,7 +3034,7 @@ class MainActivity : AppCompatActivity() {
             Log.i("VisionServo", "Local-AI detector disabled; deterministic gold detector active")
             return
         }
-        val serverUrl = serverUrl()
+        val serverUrl = deliveryServerUrl()
         val host = try { java.net.URI(serverUrl).host } catch (e: Exception) { null }
         if (host.isNullOrBlank()) return
         val wsUrl = "ws://$host:8765"
@@ -2832,6 +3126,10 @@ class MainActivity : AppCompatActivity() {
         if (code == null) return
         val trimmed = code.trim()
         if (trimmed.isEmpty()) return
+        if (tagFirstSeenAtMs == 0L) {
+            tagFirstSeenAtMs = System.currentTimeMillis()
+            Log.i(TAG, "TAGSCAN first-code-seen value=$trimmed")
+        }
         // Do not hammer the server every analysis frame for the same known-
         // bad decode. A different decoded value immediately releases it.
         if (trimmed == invalidTagCode) return
@@ -2855,11 +3153,18 @@ class MainActivity : AppCompatActivity() {
     private fun resolveCategoryForCurrentTag() {
         val code = stableTagCode ?: return
         if (categoryResolutionCode == code) return
+        if (tagFirstSeenAtMs != 0L) {
+            Log.i(
+                TAG,
+                "TAGSCAN locked code=$code firstSeenToLockMs=" +
+                    "${System.currentTimeMillis() - tagFirstSeenAtMs}"
+            )
+        }
         resolvedCategoryKey = null
         categoryResolutionError = null
         categoryResolutionCode = code
         lifecycleScope.launch {
-            val result = UploadClient.resolveCategory(serverUrl(), code)
+            val result = UploadClient.resolveCategory(deliveryServerUrl(), code)
             if (stableTagCode != code) {
                 if (categoryResolutionCode == code) categoryResolutionCode = null
                 return@launch
@@ -2868,6 +3173,14 @@ class MainActivity : AppCompatActivity() {
             val category = result.category
             if (category != null) {
                 resolvedCategoryKey = category.key
+                if (tagFirstSeenAtMs != 0L) {
+                    Log.i(
+                        TAG,
+                        "TAGSCAN validated key=${category.key} firstSeenToValidatedMs=" +
+                            "${System.currentTimeMillis() - tagFirstSeenAtMs}"
+                    )
+                    tagFirstSeenAtMs = 0L
+                }
                 categoryResolutionError = null
                 logCaptureEvent("tag_category_resolved", mapOf("code" to code, "category" to category.key))
                 fetchStudFlagForCurrentTag(code)
@@ -2975,7 +3288,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val staffName = prefs.getString("staff_name", "") ?: ""
             val saved = try {
-                UploadClient.setStudFlag(serverUrl(), code, next, staffName)
+                UploadClient.setStudFlag(deliveryServerUrl(), code, next, staffName)
             } catch (e: Exception) {
                 null
             }
@@ -3194,6 +3507,20 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     huntStartedAt = 0L
                 }
+                // Auto acquisition zoom (explicit request, 2026-08-30).
+                // A small ring at full-wide can sit under
+                // MIN_TRUSTED_GOLD_POINTS / MIN_TRUSTED_TARGET_AREA simply
+                // because it is too few pixels to trust -- not because it is
+                // absent. The operator was compensating by hand: zoom in a
+                // little, then tap RESUME AUTO, at which point detection
+                // caught it immediately. Do that automatically instead:
+                // step the zoom in on a bounded ladder while nothing is
+                // detected, and stop the moment something is, handing back
+                // to the normal climb/centre/capture path untouched.
+                // Deliberately does NOT move the gimbal -- blind movement
+                // stays disabled (AUTONOMOUS_BLIND_HUNT_ENABLED); this only
+                // makes an item already in frame large enough to see.
+                if (!manualModeActive && maybeStepAcquisitionZoom(now)) return
                 setStatus("Waiting for a verified ornament target…", ready = false)
                 return
             }
@@ -4549,6 +4876,83 @@ class MainActivity : AppCompatActivity() {
         undoCenteringPan { undoCenteringTilt { onDone() } }
     }
 
+    /**
+     * A completed set leaves the gimbal at home but Sony can still be focused
+     * at the last off-centre detail. Re-target the nearest visible gold point
+     * before the next-item wide reset uses the command lane. The callback has
+     * a bounded escape hatch so a camera-side AF acknowledgement can never
+     * hold the production flow.
+     */
+    private fun refocusNearestVisibleItemAfterCenter(onDone: () -> Unit) {
+        if (activeCameraSource != ProductionCameraSource.SONY || !sonyProduction.isAvailable) {
+            onDone()
+            return
+        }
+        val target = jewelleryFocusTarget(latestMaterial)
+        var continued = false
+        fun continueOnce() {
+            if (continued) return
+            continued = true
+            onDone()
+        }
+        val issued = triggerCameraAutoFocus(
+            physicalSony = true,
+            normalizedX = target?.x,
+            normalizedY = target?.y,
+            manualRequest = true,
+            onResult = { ok ->
+                Log.i(TAG, "Post-set nearest-item AF acknowledged=$ok")
+                continueOnce()
+            }
+        )
+        if (!issued) {
+            continueOnce()
+        } else {
+            handler.postDelayed({
+                Log.w(TAG, "Post-set nearest-item AF acknowledgement timed out; continuing")
+                continueOnce()
+            }, 900L)
+        }
+    }
+
+    /**
+     * Upload work can outlive this Activity. Persist the already verified
+     * capture-server IP into each queue manifest, instead of relying on mDNS
+     * or stale fallback addresses after Android recreates the worker process.
+     */
+    /**
+     * Real production incident (2026-08-30): the configured Settings URL was
+     * a hardcoded, stale 192.168.0.7 while the laptop had moved to .12. The
+     * previous version only substituted the live IP when the configured host
+     * was literally "ARADHANA.local", so a stale hardcoded IP was never
+     * healed and the app hung on "checking catalogue" forever.
+     *
+     * discoveredServerIp / capture_server_ip are only ever written after a
+     * capture_server.py heartbeat has actually answered on that address, so
+     * a known-live IP is strictly better evidence than whatever a human
+     * once typed into Settings. Prefer it for ANY host, keeping the
+     * configured scheme and port.
+     */
+    private fun deliveryServerUrl(): String {
+        val configured = serverUrl()
+        val liveIp = UploadClient.discoveredServerIp
+            ?: prefs.getString("capture_server_ip", null)
+            ?: return configured
+        return try {
+            val uri = java.net.URI(configured)
+            val port = uri.port.takeIf { it > 0 } ?: 7660
+            if (uri.host.equals(liveIp, ignoreCase = true)) {
+                configured
+            } else {
+                val healed = "${uri.scheme ?: "https"}://$liveIp:$port"
+                Log.i(TAG, "Delivery URL healed: configured=$configured -> $healed")
+                healed
+            }
+        } catch (_: Exception) {
+            configured
+        }
+    }
+
     private fun undoCenteringPan(onDone: () -> Unit) {
         if (centeringPanMs == 0) { onDone(); return }
         val undoPan = if (centeringPanMs > 0) DumlProtocol.AXIS_CENTER - CENTERING_DEFLECTION else DumlProtocol.AXIS_CENTER + CENTERING_DEFLECTION
@@ -4671,6 +5075,11 @@ class MainActivity : AppCompatActivity() {
             // which ARE trustworthy.
             jewelCaptureRetries = 0
             jewelJpeg = bytes
+            // Remember the zoom the MAIN shot was actually taken at, keyed by
+            // category (explicit request, 2026-08-30). The next item of the
+            // same category starts from here instead of crawling back up from
+            // full-wide, which is pure repeated work on a fixed-distance rig.
+            rememberMainZoomForCategory()
             // Calibration only. Never hold the UI or captured-image choice
             // behind a full 26MP bitmap decode; the original JPEG bytes stay
             // untouched for saving/uploading.
@@ -4739,7 +5148,7 @@ class MainActivity : AppCompatActivity() {
         Log.i(TAG, "completeAfterMainCapture: operator selected single-angle item")
         inAngleSequence = false
         setStatus("Completing item…", ready = false)
-        undoCenteringThenAdvance { uploadCapturedSet() }
+        undoCenteringThenAdvance { refocusNearestVisibleItemAfterCenter { uploadCapturedSet() } }
     }
 
     private fun waitForGimbalReady(attemptsLeft: Int = GIMBAL_READY_GRACE_ATTEMPTS, onResult: (Boolean) -> Unit) {
@@ -4767,9 +5176,16 @@ class MainActivity : AppCompatActivity() {
             startLongItemDetailShots()
             return
         }
-        promptForSideProfile("Turn the ornament to show a SIDE profile, then tap READY") {
-            centerThenCapture { captureAngle1() }
-        }
+        // One gate per capture section (explicit request, 2026-08-30). This
+        // used to be a SECOND interaction immediately after the MAIN review
+        // dialog the operator had just dismissed: Proceed, then READY, with
+        // nothing happening in between. The review dialog is itself the
+        // "turn the ornament now" moment -- it stays on screen while the
+        // operator repositions -- so its Proceed doubles as the READY.
+        // promptRotateIfUnmoved() still catches a tap-through where the
+        // piece was never actually turned, so removing the extra gate does
+        // not remove the safety net.
+        centerThenCapture { captureAngle1() }
     }
 
     /** Real bug found live (2026-08-29): smoothZoomTo() calls onDone()
@@ -5034,6 +5450,57 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * Bounded zoom-in ladder used ONLY while nothing is detected yet. Returns
+     * true when it consumed this tick (a zoom step is in flight), false when
+     * it has nothing left to do so the caller falls through to its normal
+     * waiting status. Resets per item via resetForNewItem().
+     */
+    private fun maybeStepAcquisitionZoom(now: Long): Boolean {
+        if (activeCameraSource != ProductionCameraSource.SONY) return false
+        if (isZooming || now - lastZoomChangeAt < ZOOM_STEP_INTERVAL_MS) return false
+        if (acquisitionZoomSteps >= ACQUISITION_ZOOM_MAX_STEPS) return false
+        // Give the detector a moment at full-wide first; most items are
+        // found immediately and must not be zoomed into needlessly.
+        if (acquisitionZoomStartedAt == 0L) {
+            acquisitionZoomStartedAt = now
+            return false
+        }
+        if (now - acquisitionZoomStartedAt < ACQUISITION_ZOOM_GRACE_MS) return false
+        val zoom = cameraZoomRatio()
+        val ceiling = min(
+            min(cameraZoomRange().endInclusive, MAX_LIVE_ZOOM_RATIO),
+            ACQUISITION_ZOOM_MAX_RATIO
+        )
+        val next = (zoom * ZOOM_STEP_RATIO).coerceAtMost(ceiling)
+        if (next <= zoom + 0.01f) return false
+        acquisitionZoomSteps += 1
+        Log.i(
+            TAG,
+            "Acquisition zoom step=$acquisitionZoomSteps from=$zoom to=$next " +
+                "(nothing detected yet)"
+        )
+        setStatus("Looking closer for the item…", ready = false)
+        smoothZoomTo(next)
+        return true
+    }
+
+    private fun rememberMainZoomForCategory() {
+        if (activeCameraSource != ProductionCameraSource.SONY) return
+        val key = resolvedCategoryKey ?: return
+        val zoom = cameraZoomRatio()
+        if (zoom <= SONY_MIN_ZOOM_RATIO + 0.02f) return
+        prefs.edit().putFloat("$PREF_MAIN_ZOOM_PREFIX$key", zoom).apply()
+        Log.i(TAG, "Remembered MAIN zoom=$zoom for category=$key")
+    }
+
+    private fun rememberedMainZoom(categoryKey: String?): Float? {
+        val key = categoryKey ?: return null
+        val zoom = prefs.getFloat("$PREF_MAIN_ZOOM_PREFIX$key", 0f)
+        if (zoom <= SONY_MIN_ZOOM_RATIO + 0.02f) return null
+        return zoom.coerceAtMost(min(cameraZoomRange().endInclusive, MAX_LIVE_ZOOM_RATIO))
+    }
+
     private fun isLongItemCategory(): Boolean =
         CaptureCompositionProfiles.forCategory(resolvedCategoryKey)?.silhouette ==
             CaptureCompositionProfiles.Silhouette.NECK_CURVE
@@ -5205,6 +5672,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun captureLongItemAngle1(sideAnchor: LongItemAnchor, terminalAnchor: LongItemAnchor) {
+        markCaptureSection("ANGLE1")
         centeringAttempts = 0
         setStatus("Capturing design detail…", ready = false)
         captureLongItemDetailAt(LongItemDetailPose.SIDE_DETAIL, sideAnchor, longItemMainZoom) { bytes ->
@@ -5232,6 +5700,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun captureLongItemAngle2(terminalAnchor: LongItemAnchor) {
+        markCaptureSection("ANGLE2")
         centeringAttempts = 0
         setStatus("Capturing bottom / pendant area…", ready = false)
         captureLongItemDetailAt(LongItemDetailPose.TERMINAL_END, terminalAnchor, longItemMainZoom) { bytes2 ->
@@ -5247,7 +5716,7 @@ class MainActivity : AppCompatActivity() {
                     setStatus("Returning to center…", ready = false)
                     undoCenteringThenAdvance {
                         inAngleSequence = false
-                        uploadCapturedSet()
+                        refocusNearestVisibleItemAfterCenter { uploadCapturedSet() }
                     }
                 },
                 onRetake = { captureLongItemAngle2(terminalAnchor) },
@@ -5763,6 +6232,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun captureAngle1() {
+        markCaptureSection("ANGLE1")
         if (angleCaptureInFlight) return
         angleCaptureInFlight = true
         setStatus("Capturing angle 1…", ready = false)
@@ -5854,6 +6324,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun captureAngle2() {
+        markCaptureSection("ANGLE2")
         if (angleCaptureInFlight) return
         angleCaptureInFlight = true
         setStatus("Capturing angle 2…", ready = false)
@@ -5895,7 +6366,7 @@ class MainActivity : AppCompatActivity() {
                     // 3 jewel shots are now done, upload instead of restarting.
                     undoCenteringThenAdvance {
                         inAngleSequence = false
-                        uploadCapturedSet()
+                        refocusNearestVisibleItemAfterCenter { uploadCapturedSet() }
                     }
                 },
                 onRetake = { captureAngle2() },
@@ -5989,11 +6460,19 @@ class MainActivity : AppCompatActivity() {
                     continueButton.isEnabled = false
                     continueButton.text = "Checking…"
                     lifecycleScope.launch {
-                        val result = UploadClient.resolveCategory(serverUrl(), code)
+                        val result = UploadClient.resolveCategory(deliveryServerUrl(), code)
                         val category = result.category
                         if (category != null) {
                             stableTagCode = code
                             resolvedCategoryKey = category.key
+                if (tagFirstSeenAtMs != 0L) {
+                    Log.i(
+                        TAG,
+                        "TAGSCAN validated key=${category.key} firstSeenToValidatedMs=" +
+                            "${System.currentTimeMillis() - tagFirstSeenAtMs}"
+                    )
+                    tagFirstSeenAtMs = 0L
+                }
                             categoryResolutionError = null
                             logCaptureEvent(
                                 "manual_tag_code_entered",
@@ -6102,7 +6581,8 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (onComplete != null) {
-                binding.previewCountdown.text = "Choose: capture more angles or complete this item"
+                binding.previewCountdown.text =
+                    "Turn the ornament to a SIDE profile, then choose: more angles, or complete"
             } else if (requireManualConfirm) {
                 binding.previewCountdown.text = "Still soft after retries — tap Retake"
             } else {
@@ -6289,17 +6769,25 @@ class MainActivity : AppCompatActivity() {
         physicalSony: Boolean = false,
         normalizedX: Float? = null,
         normalizedY: Float? = null,
-        manualRequest: Boolean = false
+        manualRequest: Boolean = false,
+        onResult: ((Boolean) -> Unit)? = null
     ): Boolean {
         if (activeCameraSource != ProductionCameraSource.SONY) {
             focusZoom.triggerAutoFocus()
+            onResult?.invoke(true)
             return true
         }
         // AF-C/Pre-AF remains the non-disruptive baseline. A decisive focus
         // gate explicitly requests physicalSony=true once per zoom level.
-        if (!physicalSony) return false
+        if (!physicalSony) {
+            onResult?.invoke(false)
+            return false
+        }
         val now = System.currentTimeMillis()
-        if (now - sonyAfRequestedAt < 650L) return false
+        if (now - sonyAfRequestedAt < 650L) {
+            onResult?.invoke(false)
+            return false
+        }
         if (!manualRequest &&
             sonyAutomaticAfCommandsForPose >= MAX_AUTOMATIC_AF_COMMANDS_PER_POSE
         ) {
@@ -6308,6 +6796,7 @@ class MainActivity : AppCompatActivity() {
                 "Sony automatic AF suppressed: pose budget=" +
                     "$sonyAutomaticAfCommandsForPose/$MAX_AUTOMATIC_AF_COMMANDS_PER_POSE"
             )
+            onResult?.invoke(false)
             return false
         }
         if (!manualRequest) sonyAutomaticAfCommandsForPose += 1
@@ -6357,6 +6846,7 @@ class MainActivity : AppCompatActivity() {
                 // existed before this exact touch-focus command.
                 sonyAfRequestedAtNanos = System.nanoTime()
             }
+            onResult?.invoke(ok)
         }
         return true
     }
@@ -6658,6 +7148,16 @@ class MainActivity : AppCompatActivity() {
         val span = ((evRange.endInclusive - evRange.start) * sliderStepsPerEv)
             .roundToInt().coerceAtLeast(1)
         binding.exposureSeekBar.max = span
+        // Seed the low-side pre-shoot default the first time this camera's
+        // real EV range becomes known. Only when the operator has not taken
+        // manual control and nothing has already biased exposure.
+        if (!manualExposureOverride && autoExposureEv == 0f) {
+            val seeded = defaultPreShootExposureEv()
+            if (seeded != 0f) {
+                autoExposureEv = seeded
+                setCameraExposureCompensationEv(seeded)
+            }
+        }
         binding.exposureSeekBar.progress =
             ((autoExposureEv - evRange.start) * sliderStepsPerEv).roundToInt().coerceIn(0, span)
         binding.exposureSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
@@ -6781,6 +7281,9 @@ class MainActivity : AppCompatActivity() {
         longItemMainShotInFlight = false
         longItemMainShotDone = false
         longItemMainPreShutterCorrectionDone = false
+        acquisitionZoomSteps = 0
+        acquisitionZoomStartedAt = 0L
+        tagFirstSeenAtMs = 0L
         latestMaterial = null
         autoFired = false
         armedAt = System.currentTimeMillis()
@@ -6977,6 +7480,24 @@ class MainActivity : AppCompatActivity() {
      * beyond measured full travel guarantees the lens reaches its own 16mm
      * stop. Failed/busy PTP commands retry without blocking local staging. */
     private fun resetSonyZoomFullyWideForNextTag() {
+        // The full-wide reset exists so the SONY can see a whole label during
+        // the TAG phase. In hybrid the tablet owns TAG, so the Sony has no
+        // reason to go wide at all -- park it at the zoom this category's
+        // MAIN shot actually used, so the next item is already framed
+        // (explicit request, 2026-08-30). DSLR-only mode still resets wide,
+        // because there the Sony really does have to read the label.
+        if (requestedCameraMode() == RequestedCameraMode.HYBRID &&
+            activeCameraSource == ProductionCameraSource.SONY
+        ) {
+            val hold = rememberedMainZoom(resolvedCategoryKey)
+            if (hold != null) {
+                wideResetComplete = true
+                wideResetInFlight = false
+                Log.i(TAG, "Holding MAIN zoom=$hold for next item (category=$resolvedCategoryKey)")
+                smoothZoomToConfirmed(hold) {}
+                return
+            }
+        }
         if (activeCameraSource != ProductionCameraSource.SONY) {
             setCameraZoomRatio(SONY_MIN_ZOOM_RATIO)
             return
@@ -7050,7 +7571,9 @@ class MainActivity : AppCompatActivity() {
                 showUploadFailedPopup("Could not secure photos locally: ${e.message}")
                 return@launch
             }
+            markCaptureSection("UPLOAD_QUEUED")
             logCaptureEvent("upload_multi_queued", mapOf("job_id" to staged.id))
+            renderCapturePipeline()
             jewelJpeg = null
             angle1Jpeg = null; angle1Validated = false; angle1NeedsRetake = false
             angle2Jpeg = null
@@ -7078,7 +7601,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val result = try {
                 UploadClient.saveMulti(
-                    serverUrl(), tagCode, staffName, main, angle1, angle2,
+                    deliveryServerUrl(), tagCode, staffName, main, angle1, angle2,
                     overrideDuplicate, overrideBlur, overrideVisibility
                 )
             } catch (e: Exception) {
@@ -7125,7 +7648,7 @@ class MainActivity : AppCompatActivity() {
         }
         phase = Phase.UPLOADING
         setStatus("Securing photos locally…", ready = false)
-        val serverUrl = serverUrl()
+        val serverUrl = deliveryServerUrl()
         val staffName = prefs.getString("staff_name", "") ?: ""
         if (serverUrl.isBlank()) {
             logCaptureEvent("upload_blocked_no_server_url")
@@ -7147,6 +7670,7 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
             logCaptureEvent("upload_pair_queued", mapOf("job_id" to staged.id))
+            renderCapturePipeline()
             jewelJpeg = null
             tagJpeg = null
             Toast.makeText(this@MainActivity, "Queued $tagCode — uploading in background", Toast.LENGTH_SHORT).show()
@@ -7162,7 +7686,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val result = try {
                 UploadClient.savePair(
-                    serverUrl(), tagCode, staffName, jewel, tag,
+                    deliveryServerUrl(), tagCode, staffName, jewel, tag,
                     overrideDuplicate, overrideBlur, overrideVisibility
                 )
             } catch (e: Exception) {
@@ -7239,6 +7763,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun resetForNewItem(next: Phase) {
         phase = next
+        if (next == Phase.TAG) { itemStartedAt = 0L; sectionStartedAt = 0L; markCaptureSection("TAG") }
+        if (next == Phase.JEWEL) markCaptureSection("MAIN")
+        // Hybrid mode hands the preview between tablet (TAG) and Sony
+        // (MAIN/angles); the phase has just changed, so re-evaluate.
+        syncHybridCameraForPhase()
         armed = next == Phase.TAG
         armedAt = System.currentTimeMillis()
         stepFocusAttempts = 0
@@ -7248,6 +7777,9 @@ class MainActivity : AppCompatActivity() {
         longItemMainShotInFlight = false
         longItemMainShotDone = false
         longItemMainPreShutterCorrectionDone = false
+        acquisitionZoomSteps = 0
+        acquisitionZoomStartedAt = 0L
+        tagFirstSeenAtMs = 0L
         autoFired = false
         latestMaterial = null
         lastZoomChangeAt = 0L
@@ -7316,8 +7848,9 @@ class MainActivity : AppCompatActivity() {
             updateStudStatusUi()
             // Auto-exposure bias is per-item, not permanent -- a piece
             // that needed heavy negative EV shouldn't leave the NEXT
-            // item starting under-exposed.
-            queueAutoExposure(0f)
+            // item starting under-exposed. Returns to the low-side
+            // pre-shoot default, not slider centre.
+            queueAutoExposure(defaultPreShootExposureEv())
             // Defensive path for cancellations, browser handoffs and app
             // re-entry. Normal successful capture already starts this reset
             // inside uploadCapturedSet(), where it overlaps local staging.

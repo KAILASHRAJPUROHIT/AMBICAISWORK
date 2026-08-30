@@ -21,8 +21,10 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.locks.ReentrantLock
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.withLock
 
 /**
  * Disk-backed hand-off between capture and upload.
@@ -40,8 +42,23 @@ object CaptureUploadQueue {
     internal const val TYPE_PAIR = "pair"
     private const val WORK_PREFIX = "capture-upload-"
     private const val WORK_TAG = "capture-upload"
+    private const val HISTORY_FILE = "capture_pipeline_history.json"
+    private const val HISTORY_LIMIT = 10
+    private val historyLock = ReentrantLock()
 
     data class Staged(val id: String, val tagCode: String)
+
+    /** Operator-visible, durable summary of the most recent captures.
+     * `savedOnLaptop` changes only after the catalogue server accepts the
+     * originals. This deliberately does not infer a save from local staging. */
+    data class PipelineRecord(
+        val id: String,
+        val capturedAt: Long,
+        val tagCode: String,
+        val stitched: Boolean,
+        val savedOnLaptop: Boolean,
+        val state: String
+    )
 
     suspend fun stageMulti(
         context: Context,
@@ -102,9 +119,93 @@ object CaptureUploadQueue {
             temp.deleteRecursively()
             throw e
         }
+        // The capture job is already durable. A diagnostics-card write must
+        // never turn a valid capture into a failed one.
+        runCatching { addPipelineRecord(context.applicationContext, id, tagCode, type) }
+            .onFailure { Log.w(TAG, "Could not record capture pipeline card id=$id", it) }
         enqueue(context.applicationContext, target)
         Log.i(TAG, "Staged background upload id=$id tag=$tagCode type=$type bytes=${files.values.sumOf { it.size.toLong() }}")
         Staged(id, tagCode)
+    }
+
+    fun listPipelineHistory(context: Context): List<PipelineRecord> = historyLock.withLock {
+        readHistory(context).sortedByDescending { it.capturedAt }
+    }
+
+    internal fun updatePipelineRecord(
+        context: Context,
+        id: String,
+        stitched: Boolean? = null,
+        savedOnLaptop: Boolean? = null,
+        state: String? = null
+    ) = historyLock.withLock {
+        val records = readHistory(context).toMutableList()
+        val index = records.indexOfFirst { it.id == id }
+        if (index < 0) return@withLock
+        val old = records[index]
+        records[index] = old.copy(
+            stitched = stitched ?: old.stitched,
+            savedOnLaptop = savedOnLaptop ?: old.savedOnLaptop,
+            state = state ?: old.state
+        )
+        writeHistory(context, records)
+    }
+
+    private fun addPipelineRecord(context: Context, id: String, tagCode: String, type: String) = historyLock.withLock {
+        val records = readHistory(context).toMutableList()
+        records.removeAll { it.id == id }
+        records += PipelineRecord(
+            id = id,
+            capturedAt = System.currentTimeMillis(),
+            tagCode = tagCode,
+            stitched = false,
+            savedOnLaptop = false,
+            state = if (type == TYPE_MULTI) "queued for stitch" else "queued"
+        )
+        writeHistory(context, records.sortedByDescending { it.capturedAt }.take(HISTORY_LIMIT))
+    }
+
+    private fun readHistory(context: Context): List<PipelineRecord> {
+        return try {
+            val file = File(context.filesDir, HISTORY_FILE)
+            if (!file.isFile) emptyList() else {
+                val rows = JSONObject(file.readText()).optJSONArray("records")
+                if (rows == null) emptyList() else buildList {
+                    for (index in 0 until rows.length()) {
+                        val row = rows.optJSONObject(index) ?: continue
+                        add(PipelineRecord(
+                            id = row.optString("id"),
+                            capturedAt = row.optLong("captured_at"),
+                            tagCode = row.optString("tag_code"),
+                            stitched = row.optBoolean("stitched", false),
+                            savedOnLaptop = row.optBoolean("saved_on_laptop", false),
+                            state = row.optString("state", "queued")
+                        ))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Ignoring unreadable capture pipeline history", e)
+            emptyList()
+        }
+    }
+
+    private fun writeHistory(context: Context, records: List<PipelineRecord>) {
+        val data = JSONObject().put("records", org.json.JSONArray().apply {
+            records.forEach { row -> put(JSONObject().apply {
+                put("id", row.id)
+                put("captured_at", row.capturedAt)
+                put("tag_code", row.tagCode)
+                put("stitched", row.stitched)
+                put("saved_on_laptop", row.savedOnLaptop)
+                put("state", row.state)
+            }) }
+        })
+        val file = File(context.filesDir, HISTORY_FILE)
+        val temp = File(context.filesDir, "$HISTORY_FILE.tmp")
+        durableWrite(temp, data.toString().toByteArray(Charsets.UTF_8))
+        if (file.exists() && !file.delete()) error("Cannot replace capture pipeline history")
+        check(temp.renameTo(file)) { "Cannot commit capture pipeline history" }
     }
 
     /** Re-enqueue durable jobs after an app/process restart. WorkManager KEEP
@@ -167,12 +268,18 @@ object CaptureUploadQueue {
         if (overrideBlur) json.put("override_blur", true)
         if (overrideVisibility) json.put("override_visibility", true)
         writeManifest(dir, json)
+        updatePipelineRecord(context.applicationContext, json.optString("id"), state = "queued")
         enqueue(context.applicationContext, dir)
     }
 
     /** Permanently discards a needs_review item -- e.g. a genuine duplicate
      * staff confirm should not be saved. Deletes the staged originals. */
     fun discard(dir: File) {
+        readManifest(dir)?.optString("id")?.takeIf { it.isNotBlank() }?.let { id ->
+            // No Context here by design; the history card remains an honest
+            // failed/unsaved capture rather than pretending it reached laptop.
+            Log.i(TAG, "Discarded staged job id=$id")
+        }
         dir.deleteRecursively()
     }
 
@@ -237,45 +344,62 @@ class CaptureUploadWorker(
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = uploadMutex.withLock {
+        UploadClient.refreshLanRoute(applicationContext)
         val path = inputData.getString("job_dir") ?: return@withLock Result.failure()
         val dir = File(path)
         if (!dir.isDirectory) return@withLock Result.success()
         val manifest = CaptureUploadQueue.readManifest(dir) ?: return@withLock Result.failure()
         val tag = manifest.optString("tag_code")
+        val jobId = manifest.optString("id")
+        val jobType = manifest.optString("type")
         val attempts = runAttemptCount + 1
         val overrideDuplicate = manifest.optBoolean("override_duplicate", false)
         val overrideBlur = manifest.optBoolean("override_blur", false)
         val overrideVisibility = manifest.optBoolean("override_visibility", false)
+        val deliveryUrl = UploadClient.resolveDeliveryBaseUrl(
+            applicationContext, manifest.getString("server_url")
+        )
         CaptureUploadQueue.updateState(dir, "uploading", attempts = attempts)
+        CaptureUploadQueue.updatePipelineRecord(applicationContext, jobId, state = "uploading")
         try {
-            val result = when (manifest.optString("type")) {
+            val result = when (jobType) {
                 CaptureUploadQueue.TYPE_MULTI -> UploadClient.saveMultiFiles(
-                    manifest.getString("server_url"), tag, manifest.optString("staff_name"),
+                    deliveryUrl, tag, manifest.optString("staff_name"),
                     File(dir, "main.jpg"), File(dir, "angle1.jpg"), File(dir, "angle2.jpg"),
                     overrideDuplicate, overrideBlur, overrideVisibility
                 )
                 CaptureUploadQueue.TYPE_PAIR -> UploadClient.savePairFiles(
-                    manifest.getString("server_url"), tag, manifest.optString("staff_name"),
+                    deliveryUrl, tag, manifest.optString("staff_name"),
                     File(dir, "jewel.jpg"), File(dir, "tag.jpg"),
                     overrideDuplicate, overrideBlur, overrideVisibility
                 )
                 else -> {
                     CaptureUploadQueue.updateState(dir, "needs_review", "unknown_job_type", attempts)
+                    CaptureUploadQueue.updatePipelineRecord(applicationContext, jobId, state = "needs review")
                     return@withLock Result.success(workDataOf("status" to "needs_review", "tag" to tag))
                 }
             }
             if (result.ok) {
                 Log.i(TAG, "Background upload saved tag=$tag attempt=$attempts")
+                CaptureUploadQueue.updatePipelineRecord(
+                    applicationContext,
+                    jobId,
+                    stitched = jobType == CaptureUploadQueue.TYPE_MULTI,
+                    savedOnLaptop = true,
+                    state = "saved"
+                )
                 dir.deleteRecursively()
                 CaptureUploadQueue.toast(applicationContext, "Saved in background: $tag")
                 Result.success(workDataOf("status" to "saved", "tag" to tag))
             } else if (result.error == null) {
                 CaptureUploadQueue.updateState(dir, "queued", "empty_or_invalid_server_response", attempts)
+                CaptureUploadQueue.updatePipelineRecord(applicationContext, jobId, state = "queued")
                 Result.retry()
             } else {
                 // Duplicate/blur/visibility and any catalogue rejection need a
                 // human decision. Preserve originals and let later jobs run.
                 CaptureUploadQueue.updateState(dir, "needs_review", result.error, attempts)
+                CaptureUploadQueue.updatePipelineRecord(applicationContext, jobId, state = "needs review")
                 Log.e(TAG, "Background upload needs review tag=$tag error=${result.error}")
                 CaptureUploadQueue.toast(
                     applicationContext,
@@ -286,9 +410,11 @@ class CaptureUploadWorker(
             }
         } catch (e: CancellationException) {
             CaptureUploadQueue.updateState(dir, "queued", "cancelled", attempts)
+            CaptureUploadQueue.updatePipelineRecord(applicationContext, jobId, state = "queued")
             throw e
         } catch (e: Exception) {
             CaptureUploadQueue.updateState(dir, "queued", e.message ?: e.javaClass.simpleName, attempts)
+            CaptureUploadQueue.updatePipelineRecord(applicationContext, jobId, state = "retrying")
             Log.w(TAG, "Background upload retry tag=$tag attempt=$attempts: ${e.message}")
             Result.retry()
         }

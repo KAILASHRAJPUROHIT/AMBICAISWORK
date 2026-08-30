@@ -19,6 +19,9 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 import java.util.concurrent.TimeUnit
 import java.io.File
+import javax.net.SocketFactory
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 
 /**
  * Talks to capture_server.py's existing /api/capture/save -- the SAME
@@ -42,6 +45,74 @@ object UploadClient {
     // fixed today) -- consulted BEFORE mDNS and the static fallback in the
     // Dns override below, since it's the most recently live-verified route.
     @Volatile var discoveredServerIp: String? = null
+    @Volatile private var lanSocketFactory: SocketFactory? = null
+
+    /**
+     * Indirection so the shared OkHttpClient below can stay a singleton while
+     * still honouring a route that changes at runtime. Rebuilding the client
+     * per request (an earlier attempt at this) gave every call its own
+     * connection pool and dispatcher threads and re-ran the TLS setup each
+     * time -- on a path that uploads 12-17MB originals, that meant no
+     * keep-alive and constant thread churn. Resolving the current factory
+     * per socket costs nothing and keeps the pool intact.
+     */
+    private object RouteAwareSocketFactory : SocketFactory() {
+        private fun delegate(): SocketFactory = lanSocketFactory ?: SocketFactory.getDefault()
+        override fun createSocket(): java.net.Socket = delegate().createSocket()
+        override fun createSocket(host: String?, port: Int): java.net.Socket =
+            delegate().createSocket(host, port)
+        override fun createSocket(
+            host: String?, port: Int, localHost: java.net.InetAddress?, localPort: Int
+        ): java.net.Socket = delegate().createSocket(host, port, localHost, localPort)
+        override fun createSocket(host: java.net.InetAddress?, port: Int): java.net.Socket =
+            delegate().createSocket(host, port)
+        override fun createSocket(
+            address: java.net.InetAddress?, port: Int,
+            localAddress: java.net.InetAddress?, localPort: Int
+        ): java.net.Socket = delegate().createSocket(address, port, localAddress, localPort)
+    }
+
+    /** Keep catalogue traffic on the ordinary Wi-Fi with Internet, even when
+     * SonyWifiConnectionManager binds the PTP process route to the camera AP. */
+    fun refreshLanRoute(context: android.content.Context) {
+        val cm = context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            ?: return
+        // NET_CAPABILITY_INTERNET only means "intended to provide internet"
+        // and is set on ANY Wi-Fi network -- including the Sony camera AP the
+        // PTP route binds to, which is exactly the network this must avoid.
+        // NET_CAPABILITY_VALIDATED is only granted after Android confirms
+        // real connectivity, so it actually distinguishes the shop LAN.
+        val route = cm.allNetworks.firstOrNull { network ->
+            cm.getNetworkCapabilities(network)?.let { caps ->
+                caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+            } == true
+        } ?: return
+        lanSocketFactory = route.socketFactory
+    }
+
+    /**
+     * Resolve the capture service immediately before a queued job uploads.
+     * WorkManager may run hours after a job was staged, after DHCP has changed
+     * both tablet and laptop addresses. A manifest address is only a hint;
+     * verify it first, then sweep the tablet's current subnet when needed.
+     */
+    suspend fun resolveDeliveryBaseUrl(context: android.content.Context, baseUrl: String): String =
+        withContext(Dispatchers.IO) {
+            val uri = try { java.net.URI(baseUrl) } catch (_: Exception) { return@withContext baseUrl }
+            val port = uri.port.takeIf { it > 0 } ?: 7660
+            val preferred = discoveredServerIp
+                ?: context.getSharedPreferences("capturecam", android.content.Context.MODE_PRIVATE)
+                    .getString("capture_server_ip", null)
+                ?: uri.host
+            val found = ServerDiscovery.discoverServerIp(context.applicationContext, port, preferred)
+                ?: return@withContext baseUrl
+            discoveredServerIp = found
+            context.getSharedPreferences("capturecam", android.content.Context.MODE_PRIVATE)
+                .edit().putString("capture_server_ip", found).apply()
+            "${uri.scheme ?: "https"}://$found:$port"
+        }
 
     data class CategoryResult(val key: String, val label: String, val prefix: String)
 
@@ -72,6 +143,7 @@ object UploadClient {
         val sslContext = SSLContext.getInstance("TLS")
         sslContext.init(null, trustAllCerts, SecureRandom())
         OkHttpClient.Builder()
+            .socketFactory(RouteAwareSocketFactory)
             .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
             .hostnameVerifier(HostnameVerifier { _, _ -> true })
             // ARADHANA runs capture_server.py on both active adapters. Real
