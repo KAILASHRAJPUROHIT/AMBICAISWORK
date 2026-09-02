@@ -25,11 +25,11 @@ Register-ScheduledTask -TaskName "AradhanaBankActivityNotifier" -Action $action 
 Compress-Archive -Path "$stage\*" -DestinationPath $zip -Force
 $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($zip))
 $chunks = for ($i=0; $i -lt $b64.Length; $i += 6000) { $b64.Substring($i, [Math]::Min(6000, $b64.Length - $i)) }
-$lines = @('@echo off','setlocal EnableExtensions','set "TARGET=%ProgramData%\AradhanaBankActivityNotifier\release-%RANDOM%%RANDOM%"')
+$lines = @('@echo off','setlocal EnableExtensions','fltmc >nul 2>&1','if errorlevel 1 (','  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -Verb RunAs -FilePath ''%ComSpec%'' -ArgumentList ''/c ""%~f0"" elevated''"','  exit /b',')','set "TARGET=%ProgramData%\AradhanaBankActivityNotifier\release-%RANDOM%%RANDOM%"')
 for ($i=0; $i -lt $chunks.Count; $i++) { $lines += "set `"ARADHANA_PAYLOAD_$i=$($chunks[$i])`"" }
 $join = (0..($chunks.Count - 1) | ForEach-Object { "`$env:ARADHANA_PAYLOAD_$_" }) -join '+'
 $lines += 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$b=' + $join + '; $z=Join-Path $env:TEMP ''aradhana-notifier.zip''; [IO.File]::WriteAllBytes($z,[Convert]::FromBase64String($b)); New-Item -ItemType Directory -Path $env:TARGET -Force | Out-Null; Expand-Archive -Path $z -DestinationPath $env:TARGET -Force"'
-$lines += 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList ''-NoProfile -ExecutionPolicy Bypass -File ""%TARGET%\install.ps1""''"'
+$lines += 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%TARGET%\install.ps1"'
 $lines += 'pause'
 Set-Content -LiteralPath $out -Value $lines -Encoding ASCII
 Write-Output $out
