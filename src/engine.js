@@ -8,7 +8,7 @@
  * stacked, so a slow upstream can't build a backlog of in-flight requests.
  */
 
-import { fetchFeed, selectRow } from './feed.js';
+import { fetchFeed, selectRow, selectRowAny } from './feed.js';
 import { checkInternal, checkKaka, checkParity, checkTemporal, summarise } from './validate.js';
 import { deriveRates, deriveSilverRates } from './store.js';
 import { inMarketHours } from './time.js';
@@ -62,14 +62,17 @@ export class Engine {
     const feed = await fetchFeed(cfg.primary.url, cfg.poll.timeoutMs);
     this.store.clearFetchError();
 
-    // Resolve the target row and every internal reference row.
-    const sel = selectRow(feed.rows, cfg.primary.target);
+    // Resolve the target row (trying every known catalog shape - Safari has
+    // reshuffled "GOLD INDIAN-BIS 999" to "GOLD IMPORTED 999" before) and
+    // every internal reference row.
+    const sel = selectRowAny(feed.rows, cfg.primary.targetCandidates);
+    const targetField = sel.usedCandidate >= 0 ? cfg.primary.targetCandidates[sel.usedCandidate].field : 'sell';
     const refs = {};
     for (const [key, spec] of Object.entries(cfg.primary.refRows)) {
       refs[key] = selectRow(feed.rows, spec);
     }
 
-    const value = sel.row ? sel.row[cfg.primary.target.field] : null;
+    const value = sel.row ? sel.row[targetField] : null;
     const feedSpot = refs.spotUsd && refs.spotUsd.row ? refs.spotUsd.row.sell : null;
     const feedFx = refs.usdInr && refs.usdInr.row ? refs.usdInr.row.sell : null;
 
@@ -78,7 +81,7 @@ export class Engine {
     const marketOpen = inMarketHours(cfg);
 
     // ---- run all four groups -------------------------------------------
-    let checks = checkInternal(sel, refs, cfg);
+    let checks = checkInternal(sel, refs, cfg, targetField);
 
     const usable = typeof value === 'number' && Number.isFinite(value) && value > 0;
     let quarantine = this.store.quarantine;

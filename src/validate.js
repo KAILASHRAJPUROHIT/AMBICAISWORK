@@ -20,13 +20,13 @@ const pctDiff = (a, b) => (b === 0 ? Infinity : Math.abs(a - b) / Math.abs(b) * 
 
 /* ---------------------------------------------------------------- group 1 */
 
-export function checkInternal(sel, refs, cfg) {
+export function checkInternal(sel, refs, cfg, field) {
   const c = cfg.validation.internal;
   const out = [];
   if (!c.enabled) return out;
   const lvl = c.blocking ? 'blocking' : 'advisory';
 
-  // Row identity: is this really the 999 BIS product?
+  // Row identity: is this really the 999 product (whichever candidate matched)?
   if (!sel.row) {
     out.push(mk('INT_ROW_IDENTITY', 'internal', 'blocking', false,
       sel.note || 'Target row not found in feed.'));
@@ -37,13 +37,13 @@ export function checkInternal(sel, refs, cfg) {
     sel.confident ? `Matched by ${sel.matchedBy}: "${sel.row.name}"` : sel.note,
     { observed: sel.row.name, matchedBy: sel.matchedBy }));
 
-  const v = sel.row[cfg.primary.target.field];
+  const v = sel.row[field];
   const valueOk = typeof v === 'number' && Number.isFinite(v) && v > 0;
 
   out.push(mk('INT_VALUE_PRESENT', 'internal', 'blocking', valueOk,
     valueOk
-      ? `${cfg.primary.target.field.toUpperCase()} = ${v}`
-      : `${cfg.primary.target.field.toUpperCase()} missing or non-numeric (raw "${sel.row.rawSell}")`,
+      ? `${field.toUpperCase()} = ${v}`
+      : `${field.toUpperCase()} missing or non-numeric (raw "${sel.row.rawSell}")`,
     { observed: v }));
 
   if (!valueOk) return out;

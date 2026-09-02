@@ -8,11 +8,6 @@
   "primary": {
     "label": "Safari Bullions",
     "url": "https://bcast.safaribullions.com/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/safari",
-    "target": {
-      "code": "2287",
-      "namePattern": "^GOLD\\s+INDIAN[\\s-]*BIS\\s+999\\b",
-      "field": "sell"
-    },
     "refRows": {
       "gst999": {
         "code": "2365",
@@ -34,7 +29,24 @@
         "code": "2149",
         "namePattern": "^INR$"
       }
-    }
+    },
+    "targetCandidates": [
+      {
+        "code": "2287",
+        "namePattern": "^GOLD\\s+INDIAN[\\s-]*BIS\\s+999\\b",
+        "field": "sell"
+      },
+      {
+        "code": "2157",
+        "namePattern": "^GOLD\\s+IMPORTED\\s+999\\b",
+        "field": "sell"
+      },
+      {
+        "code": "2154",
+        "namePattern": "^GOLD\\s+IMPORTED\\s+999\\b",
+        "field": "sell"
+      }
+    ]
   },
   "business": {
     "purityFactor": 0.95,
