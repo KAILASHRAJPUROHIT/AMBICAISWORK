@@ -23,7 +23,9 @@ class RelayWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
         val store = RelayConfigStore(applicationContext)
         val config = store.load()
 
-        if (!config.enabled || !store.isValid(config) || !matchesApprovedSender(sender, config.senderWhitelist)) {
+        if (!config.enabled || !store.isValid(config) ||
+            (!config.forwardAllMessages && !matchesApprovedSender(sender, config.senderWhitelist))
+        ) {
             return Result.success()
         }
 

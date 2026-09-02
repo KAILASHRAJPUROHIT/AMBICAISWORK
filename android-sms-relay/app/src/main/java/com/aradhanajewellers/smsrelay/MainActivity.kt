@@ -19,6 +19,7 @@ import com.google.android.material.materialswitch.MaterialSwitch
 
 class MainActivity : AppCompatActivity() {
     private lateinit var enabled: MaterialSwitch
+    private lateinit var forwardAll: MaterialSwitch
     private lateinit var smtpHost: EditText
     private lateinit var smtpPort: EditText
     private lateinit var smtpUser: EditText
@@ -52,6 +53,14 @@ class MainActivity : AppCompatActivity() {
 
         enabled = MaterialSwitch(this).apply { text = "Enable bank SMS forwarding" }
         column.addView(enabled)
+        forwardAll = MaterialSwitch(this).apply {
+            text = "Forward every incoming SMS (includes OTPs and personal messages)"
+            setOnCheckedChangeListener { _, checked ->
+                whitelist.isEnabled = !checked
+                whitelist.alpha = if (checked) 0.45f else 1f
+            }
+        }
+        column.addView(forwardAll)
         smtpHost = field("SMTP host", "smtp.gmail.com")
         smtpPort = field("SMTP port", "465", InputType.TYPE_CLASS_NUMBER)
         smtpUser = field("SMTP username / Gmail address", "relay@example.com", InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
@@ -119,11 +128,14 @@ class MainActivity : AppCompatActivity() {
     private fun loadConfig() {
         val config = store.load()
         enabled.isChecked = config.enabled
+        forwardAll.isChecked = config.forwardAllMessages
         smtpHost.setText(config.smtpHost)
         smtpPort.setText(config.smtpPort.toString())
         smtpUser.setText(config.smtpUsername)
         recipient.setText(config.recipient)
         whitelist.setText(config.senderWhitelist.joinToString("\n"))
+        whitelist.isEnabled = !config.forwardAllMessages
+        whitelist.alpha = if (config.forwardAllMessages) 0.45f else 1f
         // Never render an existing encrypted app password back into the UI.
     }
 
@@ -131,6 +143,7 @@ class MainActivity : AppCompatActivity() {
         val existing = store.load()
         val config = RelayConfig(
             enabled = enableRelay,
+            forwardAllMessages = forwardAll.isChecked,
             smtpHost = smtpHost.text.toString(),
             smtpPort = smtpPort.text.toString().toIntOrNull() ?: 0,
             smtpUsername = smtpUser.text.toString(),
@@ -139,7 +152,7 @@ class MainActivity : AppCompatActivity() {
             senderWhitelist = whitelist.text.lines().map { it.trim() }.filter { it.isNotEmpty() },
         )
         if (!store.isValid(config)) {
-            toast("Complete SMTP settings, recipient, app password and at least one approved bank sender.")
+            toast("Complete SMTP settings, recipient and app password. Add an approved sender unless Forward every incoming SMS is enabled.")
             return false
         }
         store.save(config)

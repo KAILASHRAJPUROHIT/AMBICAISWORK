@@ -6,6 +6,7 @@ import androidx.security.crypto.MasterKey
 
 data class RelayConfig(
     val enabled: Boolean,
+    val forwardAllMessages: Boolean,
     val smtpHost: String,
     val smtpPort: Int,
     val smtpUsername: String,
@@ -25,6 +26,7 @@ class RelayConfigStore(context: Context) {
 
     fun load(): RelayConfig = RelayConfig(
         enabled = prefs.getBoolean(KEY_ENABLED, false),
+        forwardAllMessages = prefs.getBoolean(KEY_FORWARD_ALL_MESSAGES, false),
         smtpHost = prefs.getString(KEY_SMTP_HOST, "smtp.gmail.com") ?: "smtp.gmail.com",
         smtpPort = prefs.getInt(KEY_SMTP_PORT, 465),
         smtpUsername = prefs.getString(KEY_SMTP_USERNAME, "") ?: "",
@@ -37,6 +39,7 @@ class RelayConfigStore(context: Context) {
     fun save(config: RelayConfig) {
         prefs.edit()
             .putBoolean(KEY_ENABLED, config.enabled)
+            .putBoolean(KEY_FORWARD_ALL_MESSAGES, config.forwardAllMessages)
             .putString(KEY_SMTP_HOST, config.smtpHost.trim())
             .putInt(KEY_SMTP_PORT, config.smtpPort)
             .putString(KEY_SMTP_USERNAME, config.smtpUsername.trim())
@@ -49,10 +52,12 @@ class RelayConfigStore(context: Context) {
     fun isValid(config: RelayConfig): Boolean =
         config.smtpHost.isNotBlank() && config.smtpPort in 1..65535 &&
             config.smtpUsername.isNotBlank() && config.smtpPassword.isNotBlank() &&
-            config.recipient.contains("@") && config.senderWhitelist.isNotEmpty()
+            config.recipient.contains("@") &&
+            (config.forwardAllMessages || config.senderWhitelist.isNotEmpty())
 
     companion object {
         private const val KEY_ENABLED = "enabled"
+        private const val KEY_FORWARD_ALL_MESSAGES = "forward_all_messages"
         private const val KEY_SMTP_HOST = "smtp_host"
         private const val KEY_SMTP_PORT = "smtp_port"
         private const val KEY_SMTP_USERNAME = "smtp_username"

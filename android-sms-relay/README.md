@@ -6,8 +6,8 @@ Rootless Android companion for the Aradhana Payment Auditor. It forwards only SM
 
 - No root, paid relay service, analytics SDK or external API.
 - SMTP password and relay configuration are stored using Android Keystore-backed encrypted preferences.
-- A sender whitelist is mandatory. No whitelist means no SMS forwarding.
-- The app never forwards a message from an unapproved sender.
+- Default: a sender whitelist is mandatory. No whitelist means no SMS forwarding.
+- Optional, explicit **Forward every incoming SMS** mode bypasses the sender whitelist. It forwards OTPs and personal messages too; enable only on a dedicated, controlled bank-SIM phone.
 - Duplicate SMS content from the same sender is suppressed for 14 days.
 - Mail subjects use `[SMSForwarder]`, which the existing Auditor email poller recognizes.
 
@@ -29,7 +29,7 @@ Requires Android Studio with JDK 17 and Android SDK Platform 35.
    - SMTP host: `smtp.gmail.com`
    - SMTP port: `465`
 4. Recipient: the mailbox polled by Aradhana Payment Auditor.
-5. Add actual bank sender IDs from the relay phone's SMS inbox, one per line. Use `AX-*` only where a bank rotates its sender suffix.
+5. Add actual bank sender IDs from the relay phone's SMS inbox, one per line. Use `AX-*` only where a bank rotates its sender suffix. Or explicitly enable **Forward every incoming SMS**.
 6. Save and send the safe test email.
 
 ## Auditor integration
