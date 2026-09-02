@@ -83,13 +83,10 @@ class MainActivity : AppCompatActivity() {
             text = "Send safe test email"
             setOnClickListener {
                 if (saveConfig(enableRelay = enabled.isChecked)) {
-                    val sender = whitelist.text.lines().firstOrNull { it.trim().isNotEmpty() }?.trim()?.removeSuffix("*")
-                    if (sender.isNullOrBlank()) {
-                        toast("Add an approved sender first.")
-                    } else {
-                        RelayScheduler.enqueue(this@MainActivity, sender, "Test relay message. No bank payment was processed.", System.currentTimeMillis())
-                        toast("Test queued. Check the recipient mailbox shortly.")
-                    }
+                    val sender = whitelist.text.lines().firstOrNull { it.trim().isNotEmpty() }
+                        ?.trim()?.removeSuffix("*") ?: "TEST-RELAY"
+                    RelayScheduler.enqueue(this@MainActivity, sender, "Test relay message. No bank payment was processed.", System.currentTimeMillis())
+                    toast("Test queued. Check the recipient mailbox shortly.")
                 }
             }
         }
