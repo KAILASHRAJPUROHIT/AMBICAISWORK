@@ -8,5 +8,5 @@ if errorlevel 1 (
   exit /b 1
 )
 echo Aradhana Bank Activity always-on setup complete.
-call "%~dp0configure_bank_activity_notifier.cmd"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\start_bank_activity_notifier.ps1" -Configure
 pause
