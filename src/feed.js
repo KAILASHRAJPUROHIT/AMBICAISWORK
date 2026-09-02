@@ -108,17 +108,27 @@ export function selectRow(rows, spec) {
  * code. Rather than hardcode to whichever shape happens to exist today, try
  * each known shape and use the first one that resolves.
  *
+ * A CONFIDENT match (code+name both agree) anywhere in the list always wins
+ * over a LOW-CONFIDENCE match (name-only, because the code moved) earlier in
+ * the list - a dealer can carry an old, renumbered row alongside a new one
+ * that matches a later candidate cleanly, and the clean match is the one to
+ * trust. Only when nothing in the list is confident do we fall back to the
+ * first low-confidence hit, and only when nothing matches at all do we fail.
+ *
  * Returns the same shape as selectRow(), plus `usedCandidate` (the index of
  * the candidate that matched, for logging) when a candidate matched, or a
  * combined note listing every candidate's failure when none did.
  */
 export function selectRowAny(rows, candidates) {
   const attempts = [];
+  let fallback = null;
   for (let i = 0; i < candidates.length; i++) {
     const sel = selectRow(rows, candidates[i]);
-    if (sel.row) return { ...sel, usedCandidate: i };
-    attempts.push(`candidate ${i} (code ${candidates[i].code}): ${sel.note}`);
+    if (sel.row && sel.confident) return { ...sel, usedCandidate: i };
+    if (sel.row && !fallback) fallback = { ...sel, usedCandidate: i };
+    if (!sel.row) attempts.push(`candidate ${i} (code ${candidates[i].code}): ${sel.note}`);
   }
+  if (fallback) return fallback;
   return {
     row: null,
     matchedBy: 'none',
