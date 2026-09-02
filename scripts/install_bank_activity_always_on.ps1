@@ -40,6 +40,7 @@ foreach ($port in 5173, 8000) {
 
 & $control -Mode start-prod
 & $notifier -ServerUrl $ServerUrl
+& $notifier -ServerUrl $ServerUrl -Configure
 
 Write-Host "Installed successfully."
 Write-Host "Backend service: starts at Windows boot, including before logon."
