@@ -21,8 +21,25 @@ interface BankActivityResponse {
 
 const money = (amount: number) => `₹${Number(amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
+const copyText = async (value: string) => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const input = document.createElement('textarea');
+  input.value = value;
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  document.body.appendChild(input);
+  input.select();
+  const copied = document.execCommand('copy');
+  input.remove();
+  if (!copied) throw new Error('Copy unavailable');
+};
+
 const ActivityTable = ({ type, records }: { type: 'credit' | 'debit'; records: Activity[] }) => {
   const credit = type === 'credit';
+  const [copiedId, setCopiedId] = useState<number | null>(null);
   const headers = credit
     ? ['Bank', 'Credited to', 'Customer / Remitter', 'Date', 'Time', 'Amount', 'Ref / UTR', 'Mode']
     : ['Bank', 'Debited from', 'Debited by / To', 'Date', 'Time', 'Amount', 'Ref / UTR', 'Mode'];
@@ -45,7 +62,22 @@ const ActivityTable = ({ type, records }: { type: 'credit' | 'debit'; records: A
               <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.date}</td>
               <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.time}</td>
               <td className={`px-4 py-3 text-sm font-black whitespace-nowrap ${credit ? 'text-emerald-700' : 'text-rose-700'}`}>{money(row.amount)}</td>
-              <td className="px-4 py-3 text-xs font-mono text-gray-600 whitespace-nowrap">{row.reference}</td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono font-black text-gray-950">{row.reference}</span>
+                  {row.reference !== 'Not recorded' && <button
+                    onClick={async () => {
+                      try {
+                        await copyText(row.reference);
+                        setCopiedId(row.id);
+                        window.setTimeout(() => setCopiedId(current => current === row.id ? null : current), 1500);
+                      } catch { window.prompt('Copy Ref / UTR:', row.reference); }
+                    }}
+                    className="rounded-md bg-gray-900 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-white hover:bg-black"
+                    aria-label={`Copy reference ${row.reference}`}
+                  >{copiedId === row.id ? 'Copied' : 'Copy'}</button>}
+                </div>
+              </td>
               <td className="px-4 py-3 text-xs font-black text-gray-600 whitespace-nowrap">{row.mode}</td>
             </tr>)}</tbody>
           </table>
