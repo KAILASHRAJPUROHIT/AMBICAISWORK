@@ -8,6 +8,7 @@ import PrimeExtractionReviewPage from './pages/PrimeExtractionReviewPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import MasterConsolePage from './pages/MasterConsolePage';
 import LoginPage from './pages/LoginPage';
+import BankActivityPage from './pages/BankActivityPage';
 import { getMe, logout } from './api/client';
 import './index.css';
 
@@ -106,6 +107,11 @@ function App() {
                         Reconciliation
                       </NavLink>
                     )}
+                    {['admin', 'owner', 'accountant'].includes(role) && (
+                      <NavLink to="/bank-activity" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
+                        Bank Activity
+                      </NavLink>
+                    )}
                     {['admin', 'owner'].includes(role) && (
                       <NavLink to="/escalations" className={({ isActive }) => `flex items-center p-4 rounded-2xl text-xs font-black uppercase tracking-widest transition-all ${isActive ? 'bg-white text-black shadow-lg shadow-white/10' : 'text-gray-500 hover:text-white'}`}>
                         Escalations
@@ -156,6 +162,9 @@ function App() {
                     } />
                     <Route path="/reconciliation" element={
                         <ProtectedRoute roles={['admin', 'accountant', 'owner']}><ReconciliationQueuePage /></ProtectedRoute>
+                    } />
+                    <Route path="/bank-activity" element={
+                        <ProtectedRoute roles={['admin', 'accountant', 'owner']}><BankActivityPage /></ProtectedRoute>
                     } />
                     <Route path="/escalations" element={
                         <ProtectedRoute roles={['admin', 'owner']}><EscalationsPage /></ProtectedRoute>

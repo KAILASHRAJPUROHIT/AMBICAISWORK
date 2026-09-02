@@ -165,6 +165,13 @@ export async function getOpenEscalations() {
   return handleResponse(response, 'Failed to fetch open escalations');
 }
 
+export async function getBankActivity() {
+  const response = await fetch(`${BASE_URL}/api/bank-activity`, {
+    headers: getHeaders()
+  });
+  return handleJsonResponse(response, 'Failed to fetch bank activity');
+}
+
 export async function getOwnerReport() {
   let response = await fetch(`${BASE_URL}/api/reports/owner`, {
     headers: getHeaders()

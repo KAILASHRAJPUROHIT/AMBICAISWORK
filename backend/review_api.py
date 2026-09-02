@@ -63,6 +63,7 @@ from backend.pdf_ingestion import (
 from backend.email_poller import start_email_poller, process_emails, email_status
 from backend.sms_poller import start_sms_poller, process_sms, sms_status
 from backend.reconciliation.logic import calculate_payment_proof_status
+from backend.sms_parser import detect_credit_or_debit, extract_account_display, extract_counterparty, extract_payment_mode, parse_bank_sms
 from backend.api_routes import router as api_router
 from backend.invoice_lifecycle import start_lifecycle_automation
 
@@ -644,6 +645,46 @@ async def get_bank_events(db: Session = Depends(get_db)):
 @app.get("/api/sms-events")
 async def get_sms_events(db: Session = Depends(get_db)):
     return db.query(SMSAlert).order_by(SMSAlert.transaction_timestamp.desc()).limit(50).all()
+
+def _bank_activity_row(alert: SMSAlert, direction: str) -> dict:
+    """Sanitised live-view record. Deliberately never exposes the raw SMS body."""
+    raw_body = alert.raw_body or ""
+    parsed = parse_bank_sms(raw_body)
+    account = extract_account_display(raw_body) or alert.account_suffix or parsed.account_suffix or "Not recorded"
+    counterparty = extract_counterparty(raw_body, direction) or alert.payer_name or parsed.payer_name or "Not recorded"
+    timestamp = alert.transaction_timestamp or alert.created_at
+    return {
+        "id": alert.id,
+        "bank_name": alert.bank_name or parsed.sender_bank or "Not recorded",
+        "account": account,
+        "counterparty": counterparty,
+        "amount": float(alert.amount or 0),
+        "date": timestamp.strftime("%d %b %Y") if timestamp else "Not recorded",
+        "time": timestamp.strftime("%H:%M:%S") if timestamp else "Not recorded",
+        "reference": alert.utr_reference or parsed.utr_reference or "Not recorded",
+        "mode": extract_payment_mode(raw_body) or "Not recorded",
+        "recorded_at": timestamp.isoformat() if timestamp else None,
+    }
+
+@app.get("/api/bank-activity")
+async def get_bank_activity(request: Request, db: Session = Depends(get_db)):
+    """Latest credited/debited bank SMS records for the internal cash-flow view."""
+    require_valid_session(request, db)
+    alerts = db.query(SMSAlert).order_by(SMSAlert.transaction_timestamp.desc()).limit(500).all()
+    credits, debits = [], []
+    for alert in alerts:
+        # Re-evaluate old records from their source body. Earlier versions saved
+        # every relay message as CREDIT, including debit notifications.
+        direction = detect_credit_or_debit(alert.raw_body) or (alert.credit_or_debit or "").upper()
+        if direction == "CREDIT":
+            credits.append(_bank_activity_row(alert, direction))
+        elif direction == "DEBIT":
+            debits.append(_bank_activity_row(alert, direction))
+    return {
+        "generated_at": datetime.now().isoformat(),
+        "credits": credits,
+        "debits": debits,
+    }
 
 @app.get("/api/live-payment-events")
 async def get_live_payment_events(db: Session = Depends(get_db)):

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
 from backend.models import BankAlert, Bill, AuditLog, Payment, Cheque, SMSAlert, SystemSetting
-from backend.sms_parser import parse_bank_sms
+from backend.sms_parser import detect_credit_or_debit, parse_bank_sms
 import json
 from dotenv import load_dotenv
 
@@ -243,6 +243,11 @@ def process_emails():
                 if not parsed_sms.amount or parsed_sms.amount <= 0:
                     logger.warning(f"SMSForwarder skip: No amount found or amount <= 0. Body: {body[:100]}...")
                     continue
+
+                direction = detect_credit_or_debit(body)
+                if not direction:
+                    logger.warning("SMSForwarder skip: transaction direction could not be determined")
+                    continue
                 
                 exists = db.query(SMSAlert).filter(SMSAlert.email_message_id == email_data["message_id"]).first()
                 if not exists and parsed_sms.utr_reference:
@@ -272,7 +277,7 @@ def process_emails():
                     transaction_timestamp=ts,
                     bank_name=parsed_sms.sender_bank or "ICICI",
                     account_suffix=parsed_sms.account_suffix,
-                    credit_or_debit="CREDIT", 
+                    credit_or_debit=direction,
                     amount=parsed_sms.amount,
                     utr_reference=parsed_sms.utr_reference,
                     payer_name=parsed_sms.payer_name,
@@ -283,6 +288,12 @@ def process_emails():
                 db.add(new_sms)
                 db.flush()
                 
+                # Debits are archived for the cash-flow view only. They must never
+                # be offered to the customer-payment reconciliation engine.
+                if direction == "DEBIT":
+                    logger.info("Stored SMS_FORWARDER debit outside reconciliation: %s", new_sms.utr_reference or new_sms.id)
+                    continue
+
                 utr_to_use = new_sms.utr_reference if new_sms.utr_reference else f"SMS_{email_data['message_id']}"
                 
                 # Deduplicate BankAlert as well

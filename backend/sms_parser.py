@@ -6,6 +6,50 @@ logger = logging.getLogger("SMS_Parser")
 
 from backend.schemas import ParsedBankSMS
 
+
+def detect_credit_or_debit(body: str) -> Optional[str]:
+    """Classify a bank transaction without treating unknown messages as money in."""
+    text = (body or "").upper()
+    if re.search(r"\b(DEBIT(?:ED)?|WITHDRAWN|SPENT|PAID|PURCHASED)\b", text):
+        return "DEBIT"
+    if re.search(r"\b(CREDIT(?:ED)?|RECEIVED|DEPOSITED)\b", text):
+        return "CREDIT"
+    return None
+
+
+def extract_payment_mode(body: str) -> Optional[str]:
+    text = (body or "").upper()
+    for mode in ("UPI", "IMPS", "NEFT", "RTGS", "NACH", "ECS", "CHEQUE", "ATM", "POS", "CARD", "NET BANKING", "CASH"):
+        if mode in text:
+            return mode
+    return None
+
+
+def extract_account_display(body: str) -> Optional[str]:
+    """Return only the account/customer identifier printed by the bank SMS."""
+    match = re.search(
+        r"(?:A/?C(?:COUNT)?|ACCT|CARD|CUST(?:OMER)?\s*ID)\s*(?:NO\.?|NUMBER)?\s*[:#-]?\s*([X*\d][X*\d\s-]{2,})",
+        body or "",
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    return re.sub(r"\s+", "", match.group(1)).strip("-:") or None
+
+
+def extract_counterparty(body: str, direction: str) -> Optional[str]:
+    """Best-effort counterparty from common Indian bank SMS templates."""
+    labels = r"(?:from|by|remitter|sender)" if direction == "CREDIT" else r"(?:to|at|merchant|beneficiary|towards|by)"
+    match = re.search(
+        rf"\b{labels}\b\s*[:.-]?\s*([^\n.;]{2,80})",
+        body or "",
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    candidate = re.sub(r"\s+", " ", match.group(1)).strip(" -:.")
+    return candidate or None
+
 def parse_bank_sms(body: str) -> ParsedBankSMS:
     """
     Deterministic regex parser for bank SMS alerts.
@@ -86,7 +130,7 @@ def parse_sms_body(body: str):
     return {
         "bank_name": parsed.sender_bank or "UNKNOWN",
         "account_suffix": parsed.account_suffix,
-        "credit_or_debit": "CREDIT" if any(x in body.upper() for x in ["CREDITED", "RECEIVED", "DEPOSITED"]) else "DEBIT",
+        "credit_or_debit": detect_credit_or_debit(body),
         "amount": parsed.amount or 0.0,
         "utr_reference": parsed.utr_reference,
         "payer_name": parsed.payer_name,
