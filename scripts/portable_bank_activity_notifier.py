@@ -36,7 +36,19 @@ def register_task(installed_exe):
     subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], check=True)
 
 
+def retire_legacy_notifiers():
+    """Prevent the former green Python notifier from running beside this build."""
+    command = (
+        "Get-CimInstance Win32_Process -Filter \"name = 'pythonw.exe'\" | "
+        "Where-Object { $_.CommandLine -like '*bank_activity_notifier.py*' } | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; "
+        "Unregister-ScheduledTask -TaskName 'AradhanaBankActivityNotifier' -Confirm:$false -ErrorAction SilentlyContinue"
+    )
+    subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], check=False)
+
+
 def install():
+    retire_legacy_notifiers()
     release_dir = os.path.join(INSTALL_DIR, f"release-{datetime.now().strftime('%Y%m%d%H%M%S')}")
     os.makedirs(release_dir, exist_ok=True)
     installed_exe = os.path.join(release_dir, "AradhanaBankActivityNotifier.exe")
