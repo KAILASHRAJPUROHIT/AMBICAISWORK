@@ -61,13 +61,20 @@ const BankActivityPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const loadingRequest = useRef(false);
+  const completedInitialLoad = useRef(false);
   const load = useCallback(async (manual = false) => {
     if (loadingRequest.current) return;
     loadingRequest.current = true;
-    manual ? setRefreshing(true) : setLoading(true);
+    const initialLoad = !completedInitialLoad.current;
+    if (manual) setRefreshing(true);
+    if (initialLoad) setLoading(true);
     try { setData(await getBankActivity() as BankActivityResponse); setError(null); }
     catch (err: any) { setError(err?.message || 'Could not load bank activity.'); }
-    finally { loadingRequest.current = false; setLoading(false); setRefreshing(false); }
+    finally {
+      loadingRequest.current = false;
+      if (initialLoad) { completedInitialLoad.current = true; setLoading(false); }
+      setRefreshing(false);
+    }
   }, []);
   useEffect(() => { load(); const timer = window.setInterval(() => load(), 1000); return () => window.clearInterval(timer); }, [load]);
   if (loading) return <div className="p-20 text-center text-gray-400 font-black uppercase tracking-widest animate-pulse">Loading bank activity…</div>;
