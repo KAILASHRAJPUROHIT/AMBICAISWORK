@@ -1,4 +1,5 @@
 """Single-file Windows installer/runtime for Aradhana Bank Activity Notifier."""
+import ctypes  # Bundled notifier uses this for active-monitor placement.
 import json  # Dynamic bundled scripts import this at runtime.
 import os
 import runpy
