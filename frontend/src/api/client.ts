@@ -172,6 +172,15 @@ export async function getBankActivity() {
   return handleJsonResponse(response, 'Failed to fetch bank activity');
 }
 
+export async function saveBankActivityCorrection(id: number, correction: Record<string, string>) {
+  const response = await fetch(`${BASE_URL}/api/bank-activity/${id}/correction`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(correction),
+  });
+  return handleJsonResponse(response, 'Failed to save bank activity correction');
+}
+
 export async function getOwnerReport() {
   let response = await fetch(`${BASE_URL}/api/reports/owner`, {
     headers: getHeaders()

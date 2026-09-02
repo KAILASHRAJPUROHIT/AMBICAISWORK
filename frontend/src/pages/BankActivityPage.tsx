@@ -1,120 +1,39 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { getBankActivity } from '../api/client';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getBankActivity, saveBankActivityCorrection } from '../api/client';
 
-interface Activity {
-  id: number;
-  bank_name: string;
-  account: string;
-  counterparty: string;
-  amount: number;
-  date: string;
-  time: string;
-  reference: string;
-  mode: string;
-}
-
-interface BankActivityResponse {
-  generated_at: string;
-  credits: Activity[];
-  debits: Activity[];
-}
+interface Activity { id: number; bank_name: string; account: string; counterparty: string; amount: number; date: string; time: string; reference: string; mode: string; recorded_at: string | null; is_corrected: boolean; flags: { duplicate_reference: boolean; reversal_or_refund: boolean }; }
+interface Health { last_relay_transaction_at: string | null; last_email_sync: string | null; email_sync_running: boolean; email_error: string | null; }
+interface BankActivityResponse { generated_at: string; credits: Activity[]; debits: Activity[]; health: Health; }
 
 const money = (amount: number) => `₹${Number(amount || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const stamp = (value: string | null) => value ? new Date(value).toLocaleString('en-IN') : 'No activity recorded';
+const copyText = async (value: string) => { if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(value); const input = document.createElement('textarea'); input.value = value; input.style.position = 'fixed'; input.style.opacity = '0'; document.body.appendChild(input); input.select(); const copied = document.execCommand('copy'); input.remove(); if (!copied) throw new Error('Copy unavailable'); };
 
-const copyText = async (value: string) => {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return;
-  }
-  const input = document.createElement('textarea');
-  input.value = value;
-  input.style.position = 'fixed';
-  input.style.opacity = '0';
-  document.body.appendChild(input);
-  input.select();
-  const copied = document.execCommand('copy');
-  input.remove();
-  if (!copied) throw new Error('Copy unavailable');
-};
-
-const ActivityTable = ({ type, records }: { type: 'credit' | 'debit'; records: Activity[] }) => {
-  const credit = type === 'credit';
-  const [copiedId, setCopiedId] = useState<number | null>(null);
-  const headers = credit
-    ? ['Bank', 'Credited to', 'Customer / Remitter', 'Date', 'Time', 'Amount', 'Ref / UTR', 'Mode']
-    : ['Bank', 'Debited from', 'Debited by / To', 'Date', 'Time', 'Amount', 'Ref / UTR', 'Mode'];
-  return (
-    <section className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className={`px-6 py-5 flex items-center justify-between ${credit ? 'bg-emerald-50' : 'bg-rose-50'}`}>
-        <div>
-          <h2 className={`text-lg font-black ${credit ? 'text-emerald-900' : 'text-rose-900'}`}>{credit ? 'Credits' : 'Debits'}</h2>
-          <p className="text-xs font-semibold text-gray-500">{records.length} recorded transaction{records.length === 1 ? '' : 's'}</p>
-        </div>
-      </div>
-      {records.length === 0 ? <div className="p-10 text-center text-sm font-bold text-gray-400">No {type} transactions received yet.</div> : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead><tr className="bg-gray-50 border-y border-gray-100">{headers.map(h => <th key={h} className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-400 whitespace-nowrap">{h}</th>)}</tr></thead>
-            <tbody className="divide-y divide-gray-100">{records.map(row => <tr key={row.id} className="hover:bg-gray-50">
-              <td className="px-4 py-3 text-sm font-bold text-gray-900 whitespace-nowrap">{row.bank_name}</td>
-              <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account}</td>
-              <td className="px-4 py-3 text-sm text-gray-700 max-w-56 truncate">{row.counterparty}</td>
-              <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.date}</td>
-              <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">{row.time}</td>
-              <td className={`px-4 py-3 text-sm font-black whitespace-nowrap ${credit ? 'text-emerald-700' : 'text-rose-700'}`}>{money(row.amount)}</td>
-              <td className="px-4 py-3 whitespace-nowrap">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-black text-gray-950">{row.reference}</span>
-                  {row.reference !== 'Not recorded' && <button
-                    onClick={async () => {
-                      try {
-                        await copyText(row.reference);
-                        setCopiedId(row.id);
-                        window.setTimeout(() => setCopiedId(current => current === row.id ? null : current), 1500);
-                      } catch { window.prompt('Copy Ref / UTR:', row.reference); }
-                    }}
-                    className="rounded-md bg-gray-900 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-white hover:bg-black"
-                    aria-label={`Copy reference ${row.reference}`}
-                  >{copiedId === row.id ? 'Copied' : 'Copy'}</button>}
-                </div>
-              </td>
-              <td className="px-4 py-3 text-xs font-black text-gray-600 whitespace-nowrap">{row.mode}</td>
-            </tr>)}</tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
+const ActivityTable = ({ type, records, newIds, monitor, onCorrect }: { type: 'credit' | 'debit'; records: Activity[]; newIds: Set<number>; monitor: boolean; onCorrect: (row: Activity) => void }) => {
+  const credit = type === 'credit'; const [copiedId, setCopiedId] = useState<number | null>(null);
+  const headers = credit ? ['Bank', 'Credited to', 'Customer / Remitter', 'Date / Time', 'Amount', 'Ref / UTR', 'Mode', 'Flags'] : ['Bank', 'Debited from', 'Debited by / To', 'Date / Time', 'Amount', 'Ref / UTR', 'Mode', 'Flags'];
+  return <section className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"><div className={`px-6 py-4 flex items-center justify-between ${credit ? 'bg-emerald-50' : 'bg-rose-50'}`}><div><h2 className={`text-lg font-black ${credit ? 'text-emerald-900' : 'text-rose-900'}`}>{credit ? 'Credits' : 'Debits'}</h2><p className="text-xs font-semibold text-gray-500">{records.length} transaction{records.length === 1 ? '' : 's'}</p></div></div>
+    {!records.length ? <div className="p-10 text-center text-sm font-bold text-gray-400">No {type} transactions match these filters.</div> : <div className="overflow-x-auto"><table className="w-full text-left"><thead><tr className="bg-gray-50 border-y border-gray-100">{headers.map(h => <th key={h} className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-gray-400 whitespace-nowrap">{h}</th>)}</tr></thead><tbody className="divide-y divide-gray-100">{records.map(row => <tr key={row.id} className={`${newIds.has(row.id) ? (credit ? 'bg-emerald-100 animate-pulse' : 'bg-rose-100 animate-pulse') : 'hover:bg-gray-50'} transition-colors`}>
+      <td className="px-4 py-3 text-sm font-bold text-gray-900 whitespace-nowrap">{row.bank_name}</td><td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.account}</td><td className="px-4 py-3 text-sm text-gray-700 max-w-56 truncate">{row.counterparty}</td><td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">{row.date}<br />{row.time}</td><td className={`px-4 py-3 text-sm font-black whitespace-nowrap ${credit ? 'text-emerald-700' : 'text-rose-700'}`}>{money(row.amount)}</td>
+      <td className="px-4 py-3 whitespace-nowrap"><div className="flex items-center gap-2"><span className="text-xs font-mono font-black text-gray-950">{row.reference}</span>{row.reference !== 'Not recorded' && <button onClick={async () => { try { await copyText(row.reference); setCopiedId(row.id); window.setTimeout(() => setCopiedId(current => current === row.id ? null : current), 1500); } catch { window.prompt('Copy Ref / UTR:', row.reference); } }} className="rounded-md bg-gray-900 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-white">{copiedId === row.id ? 'Copied' : 'Copy'}</button>}</div></td>
+      <td className="px-4 py-3 text-xs font-black text-gray-700 whitespace-nowrap">{row.mode}</td><td className="px-4 py-3"><div className="flex flex-wrap gap-1">{newIds.has(row.id) && <span className="rounded bg-blue-600 px-2 py-1 text-[9px] font-black text-white">NEW</span>}{row.flags.duplicate_reference && <span className="rounded bg-amber-500 px-2 py-1 text-[9px] font-black text-white">DUPLICATE</span>}{row.flags.reversal_or_refund && <span className="rounded bg-red-600 px-2 py-1 text-[9px] font-black text-white">REVERSAL</span>}{row.is_corrected && <span className="rounded bg-violet-600 px-2 py-1 text-[9px] font-black text-white">CORRECTED</span>}{!monitor && <button onClick={() => onCorrect(row)} className="rounded border border-gray-300 px-2 py-1 text-[9px] font-black text-gray-700">Correct</button>}</div></td>
+    </tr>)}</tbody></table></div>}</section>;
 };
 
 const BankActivityPage: React.FC = () => {
-  const [data, setData] = useState<BankActivityResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const loadingRequest = useRef(false);
-  const completedInitialLoad = useRef(false);
-  const load = useCallback(async (manual = false) => {
-    if (loadingRequest.current) return;
-    loadingRequest.current = true;
-    const initialLoad = !completedInitialLoad.current;
-    if (manual) setRefreshing(true);
-    if (initialLoad) setLoading(true);
-    try { setData(await getBankActivity() as BankActivityResponse); setError(null); }
-    catch (err: any) { setError(err?.message || 'Could not load bank activity.'); }
-    finally {
-      loadingRequest.current = false;
-      if (initialLoad) { completedInitialLoad.current = true; setLoading(false); }
-      setRefreshing(false);
-    }
-  }, []);
+  const [data, setData] = useState<BankActivityResponse | null>(null); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false); const [search, setSearch] = useState(''); const [bank, setBank] = useState(''); const [date, setDate] = useState(''); const [monitor, setMonitor] = useState(false); const [sound, setSound] = useState(() => localStorage.getItem('bank_activity_sound') === 'true'); const [newIds, setNewIds] = useState<Set<number>>(new Set());
+  const loadingRequest = useRef(false); const completedInitialLoad = useRef(false); const knownIds = useRef<Set<number>>(new Set());
+  const tone = useCallback(() => { try { const audio = new AudioContext(); const oscillator = audio.createOscillator(); oscillator.frequency.value = 880; oscillator.connect(audio.destination); oscillator.start(); oscillator.stop(audio.currentTime + 0.15); } catch {} }, []);
+  const load = useCallback(async (manual = false) => { if (loadingRequest.current) return; loadingRequest.current = true; const initial = !completedInitialLoad.current; if (manual) setRefreshing(true); if (initial) setLoading(true); try { const next = await getBankActivity() as BankActivityResponse; const incoming = [...next.credits, ...next.debits].filter(row => !knownIds.current.has(row.id)); if (!initial && incoming.length) { setNewIds(new Set(incoming.map(row => row.id))); window.setTimeout(() => setNewIds(new Set()), 5000); if (sound && incoming.some(row => row.amount >= 100000)) tone(); } knownIds.current = new Set([...next.credits, ...next.debits].map(row => row.id)); setData(next); setError(null); } catch (err: any) { setError(err?.message || 'Could not load bank activity.'); } finally { loadingRequest.current = false; if (initial) { completedInitialLoad.current = true; setLoading(false); } setRefreshing(false); } }, [sound, tone]);
   useEffect(() => { load(); const timer = window.setInterval(() => load(), 1000); return () => window.clearInterval(timer); }, [load]);
+  const filtered = useCallback((rows: Activity[]) => rows.filter(row => { const text = `${row.bank_name} ${row.account} ${row.counterparty} ${row.reference} ${row.mode}`.toLowerCase(); return (!search || text.includes(search.toLowerCase())) && (!bank || row.bank_name === bank) && (!date || row.recorded_at?.startsWith(date)); }), [search, bank, date]);
+  const credits = filtered(data?.credits || []); const debits = filtered(data?.debits || []); const banks = useMemo(() => [...new Set([...(data?.credits || []), ...(data?.debits || [])].map(row => row.bank_name))].sort(), [data]);
+  const correct = async (row: Activity) => { const counterparty = window.prompt('Customer / remitter / merchant:', row.counterparty); if (counterparty === null) return; const reference = window.prompt('Ref / UTR:', row.reference); if (reference === null) return; const mode = window.prompt('Payment mode:', row.mode); if (mode === null) return; const note = window.prompt('Correction note for audit log:', '') ?? ''; try { await saveBankActivityCorrection(row.id, { counterparty, reference, mode, note }); await load(true); } catch (err: any) { window.alert(err?.message || 'Could not save correction.'); } };
+  const toggleMonitor = async () => { if (!monitor) { try { await document.documentElement.requestFullscreen(); } catch {} } else if (document.fullscreenElement) await document.exitFullscreen(); setMonitor(!monitor); };
   if (loading) return <div className="p-20 text-center text-gray-400 font-black uppercase tracking-widest animate-pulse">Loading bank activity…</div>;
-  return <div className="p-6 bg-gray-50 min-h-screen">
-    <header className="mb-7 flex justify-between items-start"><div><h1 className="text-3xl font-black text-gray-900">Bank Activity</h1><p className="mt-1 text-sm text-gray-500">Live records from bank-alert SMS emails. Screen refreshes every second; raw SMS is never shown here.</p></div><button onClick={() => load(true)} disabled={refreshing} className="px-5 py-2.5 rounded-xl bg-white border border-gray-200 text-[10px] font-black uppercase tracking-widest text-gray-700 disabled:opacity-50">{refreshing ? 'Refreshing…' : 'Refresh'}</button></header>
-    {error ? <div className="mb-6 p-5 rounded-2xl border border-red-200 bg-red-50 text-red-700 font-bold">{error}</div> : null}
-    <div className="space-y-7"><ActivityTable type="credit" records={data?.credits || []} /><ActivityTable type="debit" records={data?.debits || []} /></div>
-  </div>;
+  return <div className={`min-h-screen bg-gray-50 ${monitor ? 'p-3' : 'p-6'}`}><header className="mb-5 flex flex-wrap gap-4 justify-between items-start"><div><h1 className="text-3xl font-black text-gray-900">Bank Activity</h1><p className="mt-1 text-sm text-gray-500">Live LAN console. Updates in place every second; original SMS is never shown.</p></div><div className="flex gap-2"><button onClick={() => { const next = !sound; setSound(next); localStorage.setItem('bank_activity_sound', String(next)); }} className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-[10px] font-black uppercase">Sound: {sound ? 'On' : 'Off'}</button><button onClick={toggleMonitor} className="rounded-xl bg-gray-900 px-4 py-2 text-[10px] font-black uppercase text-white">{monitor ? 'Exit Monitor' : 'Monitor Mode'}</button><button onClick={() => load(true)} disabled={refreshing} className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-[10px] font-black uppercase">{refreshing ? 'Refreshing…' : 'Refresh'}</button></div></header>
+    <div className="mb-5 grid gap-3 md:grid-cols-4"><div className="rounded-xl bg-white border border-gray-200 p-4"><p className="text-[10px] font-black uppercase text-gray-400">Credits shown</p><p className="text-xl font-black text-emerald-700">{money(credits.reduce((sum, row) => sum + row.amount, 0))}</p></div><div className="rounded-xl bg-white border border-gray-200 p-4"><p className="text-[10px] font-black uppercase text-gray-400">Debits shown</p><p className="text-xl font-black text-rose-700">{money(debits.reduce((sum, row) => sum + row.amount, 0))}</p></div><div className="rounded-xl bg-white border border-gray-200 p-4"><p className="text-[10px] font-black uppercase text-gray-400">Last relay transaction</p><p className="text-xs font-bold text-gray-800">{stamp(data?.health.last_relay_transaction_at || null)}</p></div><div className="rounded-xl bg-white border border-gray-200 p-4"><p className="text-[10px] font-black uppercase text-gray-400">Email ingestion</p><p className={`text-xs font-black ${data?.health.email_error ? 'text-red-600' : 'text-emerald-700'}`}>{data?.health.email_error ? 'ERROR' : data?.health.email_sync_running ? 'SYNCING' : 'HEALTHY'}</p><p className="text-[10px] text-gray-500">{stamp(data?.health.last_email_sync || null)}</p></div></div>
+    {!monitor && <div className="mb-5 grid gap-3 md:grid-cols-3"><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search bank, account, name, UTR, mode" className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm" /><select value={bank} onChange={e => setBank(e.target.value)} className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm"><option value="">All banks</option>{banks.map(item => <option key={item}>{item}</option>)}</select><input type="date" value={date} onChange={e => setDate(e.target.value)} className="rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm" /></div>}
+    {error && <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 font-bold text-red-700">{error}</div>}<div className="space-y-6"><ActivityTable type="credit" records={credits} newIds={newIds} monitor={monitor} onCorrect={correct} /><ActivityTable type="debit" records={debits} newIds={newIds} monitor={monitor} onCorrect={correct} /></div></div>;
 };
-
 export default BankActivityPage;

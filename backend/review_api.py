@@ -3,6 +3,7 @@ import json
 import logging
 import sys
 import ipaddress
+import re
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel
@@ -647,14 +648,23 @@ async def get_bank_events(db: Session = Depends(get_db)):
 async def get_sms_events(db: Session = Depends(get_db)):
     return db.query(SMSAlert).order_by(SMSAlert.transaction_timestamp.desc()).limit(50).all()
 
-def _bank_activity_row(alert: SMSAlert, direction: str) -> dict:
+def _require_lan_bank_activity(request: Request):
+    client_host = request.client.host if request.client else ""
+    try:
+        client_ip = ipaddress.ip_address(client_host)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Bank activity is available only on the local network.")
+    if not (client_ip.is_loopback or client_ip.is_private):
+        raise HTTPException(status_code=403, detail="Bank activity is available only on the local network.")
+
+def _bank_activity_row(alert: SMSAlert, direction: str, duplicate: bool = False, correction: Optional[dict] = None) -> dict:
     """Sanitised live-view record. Deliberately never exposes the raw SMS body."""
     raw_body = alert.raw_body or ""
     parsed = parse_bank_sms(raw_body)
     account = extract_account_display(raw_body) or alert.account_suffix or parsed.account_suffix or "Not recorded"
     counterparty = extract_counterparty(raw_body, direction) or alert.payer_name or parsed.payer_name or "Not recorded"
     timestamp = alert.transaction_timestamp or alert.created_at
-    return {
+    row = {
         "id": alert.id,
         "bank_name": alert.bank_name or parsed.sender_bank or "Not recorded",
         "account": account,
@@ -665,33 +675,93 @@ def _bank_activity_row(alert: SMSAlert, direction: str) -> dict:
         "reference": alert.utr_reference or parsed.utr_reference or "Not recorded",
         "mode": extract_payment_mode(raw_body) or "Not recorded",
         "recorded_at": timestamp.isoformat() if timestamp else None,
+        "flags": {
+            "duplicate_reference": duplicate,
+            "reversal_or_refund": bool(re.search(r"\b(revers(?:ed|al)?|refund|chargeback)\b", raw_body, re.IGNORECASE)),
+        },
+        "is_corrected": bool(correction),
     }
+    for key in ("bank_name", "account", "counterparty", "reference", "mode"):
+        value = (correction or {}).get(key)
+        if isinstance(value, str) and value.strip():
+            row[key] = value.strip()
+    return row
+
+def _activity_corrections(db: Session) -> Dict[int, dict]:
+    corrections = {}
+    for setting in db.query(SystemSetting).filter(SystemSetting.key.like("bank_activity_correction:%")).all():
+        try:
+            corrections[int(setting.key.rsplit(":", 1)[1])] = json.loads(setting.value)
+        except (ValueError, json.JSONDecodeError):
+            continue
+    return corrections
 
 @app.get("/api/bank-activity")
 async def get_bank_activity(request: Request, db: Session = Depends(get_db)):
     """Latest credited/debited bank SMS records for the LAN-only cash-flow view."""
-    client_host = request.client.host if request.client else ""
-    try:
-        client_ip = ipaddress.ip_address(client_host)
-    except ValueError:
-        raise HTTPException(status_code=403, detail="Bank activity is available only on the local network.")
-    if not (client_ip.is_loopback or client_ip.is_private):
-        raise HTTPException(status_code=403, detail="Bank activity is available only on the local network.")
+    _require_lan_bank_activity(request)
     alerts = db.query(SMSAlert).order_by(SMSAlert.transaction_timestamp.desc()).limit(500).all()
+    reference_counts: Dict[str, int] = {}
+    for alert in alerts:
+        if alert.utr_reference:
+            reference_counts[alert.utr_reference] = reference_counts.get(alert.utr_reference, 0) + 1
+    corrections = _activity_corrections(db)
     credits, debits = [], []
     for alert in alerts:
         # Re-evaluate old records from their source body. Earlier versions saved
         # every relay message as CREDIT, including debit notifications.
         direction = detect_credit_or_debit(alert.raw_body) or (alert.credit_or_debit or "").upper()
         if direction == "CREDIT":
-            credits.append(_bank_activity_row(alert, direction))
+            credits.append(_bank_activity_row(alert, direction, reference_counts.get(alert.utr_reference or "", 0) > 1, corrections.get(alert.id)))
         elif direction == "DEBIT":
-            debits.append(_bank_activity_row(alert, direction))
+            debits.append(_bank_activity_row(alert, direction, reference_counts.get(alert.utr_reference or "", 0) > 1, corrections.get(alert.id)))
+    latest = max((alert.transaction_timestamp for alert in alerts if alert.transaction_timestamp), default=None)
     return {
         "generated_at": datetime.now().isoformat(),
         "credits": credits,
         "debits": debits,
+        "health": {
+            "last_relay_transaction_at": latest.isoformat() if latest else None,
+            "last_email_sync": email_status.get("last_sync"),
+            "email_sync_running": bool(email_status.get("is_running")),
+            "email_error": email_status.get("last_error"),
+        },
     }
+
+class BankActivityCorrectionInput(BaseModel):
+    bank_name: Optional[str] = None
+    account: Optional[str] = None
+    counterparty: Optional[str] = None
+    reference: Optional[str] = None
+    mode: Optional[str] = None
+    note: Optional[str] = None
+
+@app.post("/api/bank-activity/{alert_id}/correction")
+async def correct_bank_activity(alert_id: int, correction: BankActivityCorrectionInput, request: Request, db: Session = Depends(get_db)):
+    """LAN-only display correction. Original SMS and reconciliation evidence stay immutable."""
+    _require_lan_bank_activity(request)
+    alert = db.query(SMSAlert).filter(SMSAlert.id == alert_id).first()
+    if not alert:
+        raise HTTPException(status_code=404, detail="Bank activity record not found.")
+    values = {key: (getattr(correction, key) or "").strip() for key in ("bank_name", "account", "counterparty", "reference", "mode")}
+    values = {key: value[:160] for key, value in values.items() if value}
+    if not values:
+        raise HTTPException(status_code=400, detail="Enter at least one corrected value.")
+    values["note"] = (correction.note or "").strip()[:500]
+    key = f"bank_activity_correction:{alert_id}"
+    previous = get_setting(db, key)
+    set_setting(db, key, json.dumps(values))
+    db.add(AuditLog(
+        entity_type="BankActivity",
+        entity_id=alert_id,
+        action="LAN_DISPLAY_CORRECTION",
+        old_status=previous,
+        new_status=json.dumps(values),
+        actor="LAN_BANK_ACTIVITY",
+        metadata_json=json.dumps({"source": "BankActivityLAN", "note": values["note"], "timestamp": datetime.now().isoformat()}),
+    ))
+    db.commit()
+    return {"status": "saved", "alert_id": alert_id}
 
 @app.get("/api/live-payment-events")
 async def get_live_payment_events(db: Session = Depends(get_db)):
