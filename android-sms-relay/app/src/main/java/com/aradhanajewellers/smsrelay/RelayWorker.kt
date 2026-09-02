@@ -24,8 +24,7 @@ class RelayWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
         val config = store.load()
 
         if (!config.enabled || !store.isValid(config) ||
-            (!config.forwardAllMessages && !matchesApprovedSender(sender, config.senderWhitelist))
-        ) {
+            !isBankTransactionMessage(sender, body, config.senderWhitelist)) {
             return Result.success()
         }
 

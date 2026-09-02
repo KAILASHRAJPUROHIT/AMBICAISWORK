@@ -27,7 +27,9 @@ class RelayConfigStore(context: Context) {
 
     fun load(): RelayConfig = RelayConfig(
         enabled = prefs.getBoolean(KEY_ENABLED, false),
-        forwardAllMessages = prefs.getBoolean(KEY_FORWARD_ALL_MESSAGES, false),
+        // Older releases could enable all-SMS forwarding. Never restore that
+        // setting: the relay is strictly limited to bank transactions.
+        forwardAllMessages = false,
         smtpHost = prefs.getString(KEY_SMTP_HOST, "smtp.gmail.com") ?: "smtp.gmail.com",
         smtpPort = prefs.getInt(KEY_SMTP_PORT, 465),
         smtpUsername = prefs.getString(KEY_SMTP_USERNAME, "") ?: "",
@@ -40,7 +42,7 @@ class RelayConfigStore(context: Context) {
     fun save(config: RelayConfig) {
         prefs.edit()
             .putBoolean(KEY_ENABLED, config.enabled)
-            .putBoolean(KEY_FORWARD_ALL_MESSAGES, config.forwardAllMessages)
+            .putBoolean(KEY_FORWARD_ALL_MESSAGES, false)
             .putString(KEY_SMTP_HOST, config.smtpHost.trim())
             .putInt(KEY_SMTP_PORT, config.smtpPort)
             .putString(KEY_SMTP_USERNAME, config.smtpUsername.trim())
@@ -53,8 +55,7 @@ class RelayConfigStore(context: Context) {
     fun isValid(config: RelayConfig): Boolean =
         config.smtpHost.isNotBlank() && config.smtpPort in 1..65535 &&
             config.smtpUsername.isNotBlank() && config.smtpPassword.isNotBlank() &&
-            config.recipient.contains("@") &&
-            (config.forwardAllMessages || config.senderWhitelist.isNotEmpty())
+            config.recipient.contains("@")
 
     fun pairingCode(): String {
         val existing = prefs.getString(KEY_PAIRING_CODE, "") ?: ""
@@ -92,4 +93,17 @@ fun matchesApprovedSender(sender: String, patterns: List<String>): Boolean {
             else -> value == pattern
         }
     }
+}
+
+/**
+ * Bank alerts vary widely by issuer. Require a transaction direction and an
+ * amount, then either a banking identifier in the body or an approved sender.
+ * This catches unknown-bank alerts while excluding OTPs and ordinary SMS.
+ */
+fun isBankTransactionMessage(sender: String, body: String, trustedSenders: List<String>): Boolean {
+    val text = body.uppercase()
+    val direction = Regex("\\b(CREDIT(?:ED)?|DEBIT(?:ED)?|WITHDRAWN|SPENT|PAID)\\b").containsMatchIn(text)
+    val amount = Regex("(?:INR|RS\\.?|₹)\\s*[0-9][0-9,]*(?:\\.[0-9]{1,2})?|\\b(?:AMOUNT(?:\\s+OF)?|CREDIT(?:ED)?|DEBIT(?:ED)?)\\b[^\\n]{0,40}?\\b[0-9][0-9,]*(?:\\.[0-9]{1,2})?").containsMatchIn(text)
+    val bankEvidence = Regex("\\b(A/?C|ACCOUNT|UPI|IMPS|NEFT|RTGS|UTR|REF(?:ERENCE)?|TRANSACTION|TXN|CARD|ATM|POS|NACH|ECS|IFSC|BANK)\\b").containsMatchIn(text)
+    return direction && amount && (bankEvidence || matchesApprovedSender(sender, trustedSenders))
 }

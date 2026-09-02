@@ -56,11 +56,9 @@ class MainActivity : AppCompatActivity() {
         enabled = MaterialSwitch(this).apply { text = "Enable bank SMS forwarding" }
         column.addView(enabled)
         forwardAll = MaterialSwitch(this).apply {
-            text = "Forward every incoming SMS (includes OTPs and personal messages)"
-            setOnCheckedChangeListener { _, checked ->
-                whitelist.isEnabled = !checked
-                whitelist.alpha = if (checked) 0.45f else 1f
-            }
+            text = "Bank credit/debit transactions only"
+            isChecked = true
+            isEnabled = false
         }
         column.addView(forwardAll)
         smtpHost = field("SMTP host", "smtp.gmail.com")
@@ -68,10 +66,10 @@ class MainActivity : AppCompatActivity() {
         smtpUser = field("SMTP username / Gmail address", "relay@example.com", InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
         smtpPassword = field("SMTP app password", "Leave blank to keep existing password", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
         recipient = field("Auditor mailbox recipient", "bankalerts@example.com", InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
-        whitelist = field("Approved bank sender IDs", "One per line. Exact value or prefix ending in *", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE, 5)
+        whitelist = field("Optional known bank sender IDs", "Helps recognise unusual bank formats; one per line", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE, 5)
 
         listOf(smtpHost, smtpPort, smtpUser, smtpPassword, recipient, whitelist).forEach(column::addView)
-        column.addView(note("Examples: VM-ICICIB, AD-HDFCBK, AX-*, SBI*. Do not leave this empty. Personal messages and OTPs are not forwarded unless their sender is explicitly allowed."))
+        column.addView(note("Forwarding requires credit/debit language, a money amount, and banking evidence. OTPs and ordinary personal messages are never forwarded. Examples of optional sender IDs: VM-ICICIB, AD-HDFCBK, AX-*, SBI*."))
 
         val permissionButton = Button(this).apply {
             text = "Grant SMS permissions"
@@ -148,14 +146,12 @@ class MainActivity : AppCompatActivity() {
     private fun loadConfig() {
         val config = store.load()
         enabled.isChecked = config.enabled
-        forwardAll.isChecked = config.forwardAllMessages
+        forwardAll.isChecked = true
         smtpHost.setText(config.smtpHost)
         smtpPort.setText(config.smtpPort.toString())
         smtpUser.setText(config.smtpUsername)
         recipient.setText(config.recipient)
         whitelist.setText(config.senderWhitelist.joinToString("\n"))
-        whitelist.isEnabled = !config.forwardAllMessages
-        whitelist.alpha = if (config.forwardAllMessages) 0.45f else 1f
         // Never render an existing encrypted app password back into the UI.
     }
 
@@ -163,7 +159,7 @@ class MainActivity : AppCompatActivity() {
         val existing = store.load()
         val config = RelayConfig(
             enabled = enableRelay,
-            forwardAllMessages = forwardAll.isChecked,
+            forwardAllMessages = false,
             smtpHost = smtpHost.text.toString(),
             smtpPort = smtpPort.text.toString().toIntOrNull() ?: 0,
             smtpUsername = smtpUser.text.toString(),
@@ -172,7 +168,7 @@ class MainActivity : AppCompatActivity() {
             senderWhitelist = whitelist.text.lines().map { it.trim() }.filter { it.isNotEmpty() },
         )
         if (!store.isValid(config)) {
-            toast("Complete SMTP settings, recipient and app password. Add an approved sender unless Forward every incoming SMS is enabled.")
+            toast("Complete SMTP settings, recipient and app password.")
             return false
         }
         store.save(config)

@@ -69,7 +69,7 @@ class WifiConfigServer(private val context: Context) {
                 val old = store.load()
                 val next = RelayConfig(
                     enabled = fields["enabled"] == "on",
-                    forwardAllMessages = fields["forwardAllMessages"] == "on",
+                    forwardAllMessages = false,
                     smtpHost = fields["smtpHost"]?.trim().orEmpty(),
                     smtpPort = fields["smtpPort"]?.toIntOrNull() ?: 0,
                     smtpUsername = fields["smtpUsername"]?.trim().orEmpty(),
@@ -101,7 +101,7 @@ class WifiConfigServer(private val context: Context) {
             <p>This page changes relay settings only. It never displays SMS messages, email contents, or saved passwords.</p>
             <form method="post" action="/save?code=$code">
             <label><input type="checkbox" name="enabled" ${checked(c.enabled)}> Enable forwarding</label><br>
-            <label><input type="checkbox" name="forwardAllMessages" ${checked(c.forwardAllMessages)}> Forward every SMS</label><br>
+            <p>Only bank credit/debit transaction messages are forwarded. OTPs and personal messages are excluded.</p>
             <label>SMTP host <input name="smtpHost" value="${esc(c.smtpHost)}"></label><br>
             <label>SMTP port <input name="smtpPort" inputmode="numeric" value="${c.smtpPort}"></label><br>
             <label>SMTP username <input name="smtpUsername" value="${esc(c.smtpUsername)}"></label><br>
