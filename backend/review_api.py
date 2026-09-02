@@ -700,7 +700,14 @@ def _activity_corrections(db: Session) -> Dict[int, dict]:
 async def get_bank_activity(request: Request, db: Session = Depends(get_db)):
     """Latest credited/debited bank SMS records for the LAN-only cash-flow view."""
     _require_lan_bank_activity(request)
-    alerts = db.query(SMSAlert).order_by(SMSAlert.transaction_timestamp.desc()).limit(500).all()
+    history_start = datetime.now() - timedelta(days=30)
+    alerts = (
+        db.query(SMSAlert)
+        .filter(SMSAlert.transaction_timestamp >= history_start)
+        .order_by(SMSAlert.transaction_timestamp.desc())
+        .limit(500)
+        .all()
+    )
     reference_counts: Dict[str, int] = {}
     for alert in alerts:
         if alert.utr_reference:
@@ -718,6 +725,7 @@ async def get_bank_activity(request: Request, db: Session = Depends(get_db)):
     latest = max((alert.transaction_timestamp for alert in alerts if alert.transaction_timestamp), default=None)
     return {
         "generated_at": datetime.now().isoformat(),
+        "history_start": history_start.isoformat(),
         "credits": credits,
         "debits": debits,
         "health": {
