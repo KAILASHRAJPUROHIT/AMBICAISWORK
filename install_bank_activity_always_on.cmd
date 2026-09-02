@@ -8,4 +8,5 @@ if errorlevel 1 (
   exit /b 1
 )
 echo Aradhana Bank Activity always-on setup complete.
+call "%~dp0configure_bank_activity_notifier.cmd"
 pause

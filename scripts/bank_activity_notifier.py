@@ -8,11 +8,18 @@ import os
 import tkinter as tk
 from urllib.request import urlopen
 
-API_URL = os.getenv("BANK_ACTIVITY_URL", "http://127.0.0.1:8000/api/bank-activity")
-POLL_MS = 1000
-DISPLAY_MS = 30_000
+SETTINGS_PATH = os.path.join(os.getenv("APPDATA", os.path.expanduser("~")), "AradhanaBankActivityNotifier", "settings.json")
+DEFAULTS = {"server_url": "http://127.0.0.1:8000/api/bank-activity", "poll_seconds": 1, "display_seconds": 30, "opacity": 92, "max_alerts": 3, "sound": False, "sound_threshold": 100000, "position": "centre-right"}
+try:
+    with open(SETTINGS_PATH, encoding="utf-8") as settings_file:
+        SETTINGS = {**DEFAULTS, **json.load(settings_file)}
+except (OSError, json.JSONDecodeError):
+    SETTINGS = DEFAULTS
+API_URL = os.getenv("BANK_ACTIVITY_URL", SETTINGS["server_url"])
+POLL_MS = max(1, int(SETTINGS["poll_seconds"])) * 1000
+DISPLAY_MS = max(1, int(SETTINGS["display_seconds"])) * 1000
 WIDTH, HEIGHT = 360, 188
-MAX_ALERTS = 3
+MAX_ALERTS = max(1, min(5, int(SETTINGS["max_alerts"])))
 
 
 class Notifier:
@@ -51,7 +58,7 @@ class Notifier:
         popup = tk.Toplevel(self.root)
         popup.overrideredirect(True)
         popup.attributes("-topmost", True)
-        popup.attributes("-alpha", 0.92)
+        popup.attributes("-alpha", max(0.5, min(1.0, float(SETTINGS["opacity"]) / 100)))
         credit = item.get("direction") == "CREDIT"
         background = "#e8f8ef" if credit else "#fff0f1"
         accent = "#047857" if credit else "#be123c"
@@ -69,6 +76,8 @@ class Notifier:
         tk.Button(row, text="Copy", command=lambda: self.copy(reference), font=("Segoe UI", 8, "bold"), bg="#111827", fg="white", relief="flat", padx=8).pack(side="right")
         tk.Button(frame, text="×", command=lambda: self.close(item_id), bg=background, fg="#4b5563", relief="flat", font=("Segoe UI", 12, "bold")).place(relx=1, x=-3, y=-8, anchor="ne")
         self.windows[item_id] = popup
+        if SETTINGS.get("sound") and float(item.get("amount", 0)) >= float(SETTINGS.get("sound_threshold", 100000)):
+            self.root.bell()
         self.reposition()
         popup.after(DISPLAY_MS, lambda: self.close(item_id))
 
@@ -88,7 +97,7 @@ class Notifier:
         screen_x = self.root.winfo_screenwidth() - WIDTH - 28
         count = len(self.windows)
         group_height = count * HEIGHT + max(0, count - 1) * 12
-        start_y = max(120, (self.root.winfo_screenheight() - group_height) // 3)
+        start_y = max(120, (self.root.winfo_screenheight() - group_height) // (2 if SETTINGS.get("position") == "bottom-right" else 3))
         for index, popup in enumerate(self.windows.values()):
             if popup.winfo_exists():
                 popup.geometry(f"{WIDTH}x{HEIGHT}+{screen_x}+{start_y + index * (HEIGHT + 12)}")
