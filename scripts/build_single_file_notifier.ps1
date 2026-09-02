@@ -13,6 +13,8 @@ if (Test-Path $logo) { Copy-Item $logo "$stage\scripts\assets\logo.png" }
 $ErrorActionPreference = "Stop"
 $target = Split-Path -Parent $PSScriptRoot
 $start = Join-Path $target "scripts\start_bank_activity_notifier.ps1"
+Get-CimInstance Win32_Process -Filter "name = 'pythonw.exe'" | Where-Object { $_.CommandLine -like "*bank_activity_notifier.py*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Unregister-ScheduledTask -TaskName "AradhanaBankActivityNotifier" -Confirm:$false -ErrorAction SilentlyContinue
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$start`""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
@@ -23,10 +25,10 @@ Register-ScheduledTask -TaskName "AradhanaBankActivityNotifier" -Action $action 
 Compress-Archive -Path "$stage\*" -DestinationPath $zip -Force
 $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($zip))
 $chunks = for ($i=0; $i -lt $b64.Length; $i += 6000) { $b64.Substring($i, [Math]::Min(6000, $b64.Length - $i)) }
-$lines = @('@echo off','setlocal EnableExtensions','set "TARGET=%ProgramData%\AradhanaBankActivityNotifier"')
+$lines = @('@echo off','setlocal EnableExtensions','set "TARGET=%ProgramData%\AradhanaBankActivityNotifier\release-%RANDOM%%RANDOM%"')
 for ($i=0; $i -lt $chunks.Count; $i++) { $lines += "set `"ARADHANA_PAYLOAD_$i=$($chunks[$i])`"" }
 $join = (0..($chunks.Count - 1) | ForEach-Object { "`$env:ARADHANA_PAYLOAD_$_" }) -join '+'
-$lines += 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$b=' + $join + '; $z=Join-Path $env:TEMP ''aradhana-notifier.zip''; [IO.File]::WriteAllBytes($z,[Convert]::FromBase64String($b)); Remove-Item $env:TARGET -Recurse -Force -ErrorAction SilentlyContinue; Expand-Archive -Path $z -DestinationPath $env:TARGET -Force"'
+$lines += 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$b=' + $join + '; $z=Join-Path $env:TEMP ''aradhana-notifier.zip''; [IO.File]::WriteAllBytes($z,[Convert]::FromBase64String($b)); New-Item -ItemType Directory -Path $env:TARGET -Force | Out-Null; Expand-Archive -Path $z -DestinationPath $env:TARGET -Force"'
 $lines += 'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList ''-NoProfile -ExecutionPolicy Bypass -File ""%TARGET%\install.ps1""''"'
 $lines += 'pause'
 Set-Content -LiteralPath $out -Value $lines -Encoding ASCII
