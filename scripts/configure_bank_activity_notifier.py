@@ -10,6 +10,7 @@ NAVY, GOLD, LIGHT_GOLD = "#23519D", "#CCA137", "#F7CA5B"
 APP_DIR = os.path.join(os.getenv("APPDATA", os.path.expanduser("~")), "AradhanaBankActivityNotifier")
 PATH = os.path.join(APP_DIR, "settings.json")
 LOGO = r"C:\Content\Logos\Logo Dimensions in Reel 30% x=220 y=200.png"
+if not os.path.exists(LOGO): LOGO = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
 DEFAULTS = {"server_url": "http://127.0.0.1:8000/api/bank-activity", "poll_seconds": 1, "display_seconds": 30, "opacity": 92, "max_alerts": 3, "sound": False, "sound_threshold": 100000, "position": "centre-right", "enabled": True, "paused_until": None, "popup_width": 360, "popup_height": 188}
 try:
     with open(PATH, encoding="utf-8") as source: values = {**DEFAULTS, **json.load(source)}
