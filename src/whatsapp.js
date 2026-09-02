@@ -30,10 +30,11 @@ export class WhatsAppSender {
   }
 
   async start() {
-    let Client, LocalAuth, qrcode;
+    let Client, LocalAuth, qrcode, qrcodePng;
     try {
       ({ Client, LocalAuth } = require('whatsapp-web.js'));
       qrcode = require('qrcode-terminal');
+      qrcodePng = require('qrcode');
     } catch (err) {
       this.lastError = 'whatsapp-web.js not installed - run: npm install';
       this.log(`[whatsapp] ${this.lastError}`);
@@ -55,6 +56,11 @@ export class WhatsAppSender {
       this.log('\n[whatsapp] Scan this QR with the phone that should SEND the updates:');
       this.log('           WhatsApp > Settings > Linked Devices > Link a Device\n');
       qrcode.generate(qr, { small: true });
+      const pngPath = path.join(this.rootDir, 'data', 'wa-qr.png');
+      qrcodePng.toFile(pngPath, qr, { width: 500 }, (err) => {
+        if (err) this.log(`[whatsapp] could not write QR image: ${err.message}`);
+        else this.log(`[whatsapp] QR image also saved to ${pngPath}`);
+      });
     });
 
     this.client.on('authenticated', () => this.log('[whatsapp] authenticated'));

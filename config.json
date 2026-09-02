@@ -177,7 +177,9 @@
     "alertOnBlocked": true,
     "alertCooldownMinutes": 30,
     "groupNames": [],
-    "numbers": [],
+    "numbers": [
+      "8956143245"
+    ],
     "businessName": "Aradhana Jewellers"
   },
   "server": {
