@@ -1,0 +1,74 @@
+package com.aradhanajewellers.smsrelay
+
+import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+
+data class RelayConfig(
+    val enabled: Boolean,
+    val smtpHost: String,
+    val smtpPort: Int,
+    val smtpUsername: String,
+    val smtpPassword: String,
+    val recipient: String,
+    val senderWhitelist: List<String>,
+)
+
+class RelayConfigStore(context: Context) {
+    private val prefs = EncryptedSharedPreferences.create(
+        context,
+        "aradhana_sms_relay",
+        MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
+
+    fun load(): RelayConfig = RelayConfig(
+        enabled = prefs.getBoolean(KEY_ENABLED, false),
+        smtpHost = prefs.getString(KEY_SMTP_HOST, "smtp.gmail.com") ?: "smtp.gmail.com",
+        smtpPort = prefs.getInt(KEY_SMTP_PORT, 465),
+        smtpUsername = prefs.getString(KEY_SMTP_USERNAME, "") ?: "",
+        smtpPassword = prefs.getString(KEY_SMTP_PASSWORD, "") ?: "",
+        recipient = prefs.getString(KEY_RECIPIENT, "") ?: "",
+        senderWhitelist = (prefs.getString(KEY_SENDER_WHITELIST, "") ?: "")
+            .lines().map { it.trim() }.filter { it.isNotEmpty() },
+    )
+
+    fun save(config: RelayConfig) {
+        prefs.edit()
+            .putBoolean(KEY_ENABLED, config.enabled)
+            .putString(KEY_SMTP_HOST, config.smtpHost.trim())
+            .putInt(KEY_SMTP_PORT, config.smtpPort)
+            .putString(KEY_SMTP_USERNAME, config.smtpUsername.trim())
+            .putString(KEY_SMTP_PASSWORD, config.smtpPassword)
+            .putString(KEY_RECIPIENT, config.recipient.trim())
+            .putString(KEY_SENDER_WHITELIST, config.senderWhitelist.joinToString("\n"))
+            .apply()
+    }
+
+    fun isValid(config: RelayConfig): Boolean =
+        config.smtpHost.isNotBlank() && config.smtpPort in 1..65535 &&
+            config.smtpUsername.isNotBlank() && config.smtpPassword.isNotBlank() &&
+            config.recipient.contains("@") && config.senderWhitelist.isNotEmpty()
+
+    companion object {
+        private const val KEY_ENABLED = "enabled"
+        private const val KEY_SMTP_HOST = "smtp_host"
+        private const val KEY_SMTP_PORT = "smtp_port"
+        private const val KEY_SMTP_USERNAME = "smtp_username"
+        private const val KEY_SMTP_PASSWORD = "smtp_password"
+        private const val KEY_RECIPIENT = "recipient"
+        private const val KEY_SENDER_WHITELIST = "sender_whitelist"
+    }
+}
+
+fun matchesApprovedSender(sender: String, patterns: List<String>): Boolean {
+    val value = sender.trim().uppercase()
+    return patterns.any { raw ->
+        val pattern = raw.trim().uppercase()
+        when {
+            pattern.endsWith("*") -> value.startsWith(pattern.dropLast(1))
+            else -> value == pattern
+        }
+    }
+}
