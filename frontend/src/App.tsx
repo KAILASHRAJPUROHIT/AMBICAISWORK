@@ -78,6 +78,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/bank-activity" element={<BankActivityPage />} />
         
         <Route path="/*" element={
           <ProtectedRoute>
@@ -162,9 +163,6 @@ function App() {
                     } />
                     <Route path="/reconciliation" element={
                         <ProtectedRoute roles={['admin', 'accountant', 'owner']}><ReconciliationQueuePage /></ProtectedRoute>
-                    } />
-                    <Route path="/bank-activity" element={
-                        <ProtectedRoute roles={['admin', 'accountant', 'owner']}><BankActivityPage /></ProtectedRoute>
                     } />
                     <Route path="/escalations" element={
                         <ProtectedRoute roles={['admin', 'owner']}><EscalationsPage /></ProtectedRoute>

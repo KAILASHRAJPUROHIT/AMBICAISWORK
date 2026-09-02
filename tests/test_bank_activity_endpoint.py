@@ -27,12 +27,18 @@ def make_client(monkeypatch):
     review_api.app.dependency_overrides.clear()
     monkeypatch.setitem(review_api.app.dependency_overrides, review_api.get_db, override_get_db)
     monkeypatch.setattr(review_api, "validate_session", lambda _db, token: "OWNER-01" if token == "owner-token" else None)
-    return TestClient(review_api.app)
+    return TestClient(review_api.app, client=("192.168.0.50", 50000))
 
 
-def test_bank_activity_requires_session(monkeypatch):
+def test_bank_activity_is_available_without_login_on_lan(monkeypatch):
     client = make_client(monkeypatch)
-    assert client.get("/api/bank-activity").status_code == 401
+    assert client.get("/api/bank-activity").status_code == 200
+
+
+def test_bank_activity_rejects_non_lan_client(monkeypatch):
+    client = make_client(monkeypatch)
+    client = TestClient(review_api.app, client=("8.8.8.8", 50000))
+    assert client.get("/api/bank-activity").status_code == 403
 
 
 def test_bank_activity_splits_credits_and_debits_without_raw_sms(monkeypatch):

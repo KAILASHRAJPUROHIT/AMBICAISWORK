@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import sys
+import ipaddress
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel
@@ -668,8 +669,14 @@ def _bank_activity_row(alert: SMSAlert, direction: str) -> dict:
 
 @app.get("/api/bank-activity")
 async def get_bank_activity(request: Request, db: Session = Depends(get_db)):
-    """Latest credited/debited bank SMS records for the internal cash-flow view."""
-    require_valid_session(request, db)
+    """Latest credited/debited bank SMS records for the LAN-only cash-flow view."""
+    client_host = request.client.host if request.client else ""
+    try:
+        client_ip = ipaddress.ip_address(client_host)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Bank activity is available only on the local network.")
+    if not (client_ip.is_loopback or client_ip.is_private):
+        raise HTTPException(status_code=403, detail="Bank activity is available only on the local network.")
     alerts = db.query(SMSAlert).order_by(SMSAlert.transaction_timestamp.desc()).limit(500).all()
     credits, debits = [], []
     for alert in alerts:
@@ -1930,6 +1937,7 @@ async def security_middleware(request: Request, call_next):
         "/api/auth/",
         "/api/version",
         "/api/reports/payment-bifurcation",
+        "/api/bank-activity",
         "/api/debug/",
         "/debug/",
         "/status-colors",
