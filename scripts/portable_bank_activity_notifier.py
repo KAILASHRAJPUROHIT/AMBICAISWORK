@@ -1,5 +1,6 @@
 """Single-file Windows installer/runtime for Aradhana Bank Activity Notifier."""
 import ctypes
+import json  # Dynamic bundled scripts import this at runtime.
 import os
 import runpy
 import shutil
@@ -8,6 +9,8 @@ import sys
 import tkinter  # Ensures the frozen executable bundles the Windows UI runtime.
 import tkinter.messagebox
 import tkinter.ttk
+from datetime import datetime, timedelta, timezone  # Bundled notifier/config imports.
+from urllib.request import urlopen  # Bundled notifier imports.
 
 
 APP_NAME = "Aradhana Bank Activity Notifier"
