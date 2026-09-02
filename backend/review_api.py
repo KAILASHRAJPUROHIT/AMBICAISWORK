@@ -4,6 +4,7 @@ import logging
 import sys
 import ipaddress
 import re
+from uuid import uuid4
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel
@@ -696,6 +697,19 @@ def _activity_corrections(db: Session) -> Dict[int, dict]:
             continue
     return corrections
 
+def _active_bank_activity_test_popups(db: Session) -> List[dict]:
+    """Transient, LAN-only test notices. They never become payment records."""
+    now = datetime.now()
+    active = []
+    for setting in db.query(SystemSetting).filter(SystemSetting.key.like("bank_activity_test_popup:%")).all():
+        try:
+            notice = json.loads(setting.value)
+            if datetime.fromisoformat(notice["expires_at"]) > now:
+                active.append(notice["alert"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+    return active
+
 @app.get("/api/bank-activity")
 async def get_bank_activity(request: Request, db: Session = Depends(get_db)):
     """Latest credited/debited bank SMS records for the LAN-only cash-flow view."""
@@ -728,6 +742,7 @@ async def get_bank_activity(request: Request, db: Session = Depends(get_db)):
         "history_start": history_start.isoformat(),
         "credits": credits,
         "debits": debits,
+        "test_alerts": _active_bank_activity_test_popups(db),
         "health": {
             "last_relay_transaction_at": latest.isoformat() if latest else None,
             "last_email_sync": email_status.get("last_sync"),
@@ -735,6 +750,34 @@ async def get_bank_activity(request: Request, db: Session = Depends(get_db)):
             "email_error": email_status.get("last_error"),
         },
     }
+
+@app.post("/api/bank-activity/test-popup")
+async def send_bank_activity_test_popup(request: Request, db: Session = Depends(get_db)):
+    """Send a harmless test popup to every enabled LAN notifier for one minute."""
+    _require_lan_bank_activity(request)
+    test_id = f"test-{uuid4().hex}"
+    alert = {
+        "id": test_id,
+        "direction": "CREDIT",
+        "bank_name": "ARADHANA TEST",
+        "account": "TEST ONLY",
+        "counterparty": "Popup verification",
+        "amount": 1.00,
+        "date": datetime.now().strftime("%d %b %Y"),
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "reference": "TEST-POPUP-001",
+        "mode": "TEST",
+        "recorded_at": datetime.now().isoformat(),
+        "flags": {"duplicate_reference": False, "reversal_or_refund": False},
+        "is_corrected": False,
+    }
+    db.add(SystemSetting(
+        key=f"bank_activity_test_popup:{test_id}",
+        value=json.dumps({"expires_at": (datetime.now() + timedelta(seconds=60)).isoformat(), "alert": alert}),
+    ))
+    db.add(AuditLog(entity_type="BankActivity", entity_id=0, action="TEST_POPUP_SENT", actor="LAN_BANK_ACTIVITY", metadata_json=json.dumps({"test_id": test_id})))
+    db.commit()
+    return {"status": "sent", "test_id": test_id, "expires_in_seconds": 60}
 
 class BankActivityCorrectionInput(BaseModel):
     bank_name: Optional[str] = None

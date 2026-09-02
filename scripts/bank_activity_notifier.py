@@ -41,6 +41,7 @@ class Notifier:
                 data = json.loads(response.read().decode("utf-8"))
             rows = [dict(item, direction="CREDIT") for item in data.get("credits", [])]
             rows += [dict(item, direction="DEBIT") for item in data.get("debits", [])]
+            rows += data.get("test_alerts", [])
             current_ids = {item["id"] for item in rows}
             if self.ready:
                 for item in rows:

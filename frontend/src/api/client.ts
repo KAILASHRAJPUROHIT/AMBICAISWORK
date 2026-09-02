@@ -181,6 +181,14 @@ export async function saveBankActivityCorrection(id: number, correction: Record<
   return handleJsonResponse(response, 'Failed to save bank activity correction');
 }
 
+export async function sendBankActivityTestPopup() {
+  const response = await fetch(`${BASE_URL}/api/bank-activity/test-popup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  return handleJsonResponse(response, 'Failed to send test popup');
+}
+
 export async function getOwnerReport() {
   let response = await fetch(`${BASE_URL}/api/reports/owner`, {
     headers: getHeaders()
