@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { getBankActivity } from '../api/client';
 
 interface Activity {
@@ -60,16 +60,19 @@ const BankActivityPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const loadingRequest = useRef(false);
   const load = useCallback(async (manual = false) => {
+    if (loadingRequest.current) return;
+    loadingRequest.current = true;
     manual ? setRefreshing(true) : setLoading(true);
     try { setData(await getBankActivity() as BankActivityResponse); setError(null); }
     catch (err: any) { setError(err?.message || 'Could not load bank activity.'); }
-    finally { setLoading(false); setRefreshing(false); }
+    finally { loadingRequest.current = false; setLoading(false); setRefreshing(false); }
   }, []);
-  useEffect(() => { load(); const timer = window.setInterval(() => load(), 60000); return () => window.clearInterval(timer); }, [load]);
+  useEffect(() => { load(); const timer = window.setInterval(() => load(), 1000); return () => window.clearInterval(timer); }, [load]);
   if (loading) return <div className="p-20 text-center text-gray-400 font-black uppercase tracking-widest animate-pulse">Loading bank activity…</div>;
   return <div className="p-6 bg-gray-50 min-h-screen">
-    <header className="mb-7 flex justify-between items-start"><div><h1 className="text-3xl font-black text-gray-900">Bank Activity</h1><p className="mt-1 text-sm text-gray-500">Live records from bank-alert SMS emails. Raw SMS is never shown here.</p></div><button onClick={() => load(true)} disabled={refreshing} className="px-5 py-2.5 rounded-xl bg-white border border-gray-200 text-[10px] font-black uppercase tracking-widest text-gray-700 disabled:opacity-50">{refreshing ? 'Refreshing…' : 'Refresh'}</button></header>
+    <header className="mb-7 flex justify-between items-start"><div><h1 className="text-3xl font-black text-gray-900">Bank Activity</h1><p className="mt-1 text-sm text-gray-500">Live records from bank-alert SMS emails. Screen refreshes every second; raw SMS is never shown here.</p></div><button onClick={() => load(true)} disabled={refreshing} className="px-5 py-2.5 rounded-xl bg-white border border-gray-200 text-[10px] font-black uppercase tracking-widest text-gray-700 disabled:opacity-50">{refreshing ? 'Refreshing…' : 'Refresh'}</button></header>
     {error ? <div className="mb-6 p-5 rounded-2xl border border-red-200 bg-red-50 text-red-700 font-bold">{error}</div> : null}
     <div className="space-y-7"><ActivityTable type="credit" records={data?.credits || []} /><ActivityTable type="debit" records={data?.debits || []} /></div>
   </div>;

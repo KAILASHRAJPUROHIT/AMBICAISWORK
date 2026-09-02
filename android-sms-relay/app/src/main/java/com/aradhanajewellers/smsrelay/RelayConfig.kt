@@ -1,6 +1,7 @@
 package com.aradhanajewellers.smsrelay
 
 import android.content.Context
+import java.security.SecureRandom
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
@@ -55,6 +56,20 @@ class RelayConfigStore(context: Context) {
             config.recipient.contains("@") &&
             (config.forwardAllMessages || config.senderWhitelist.isNotEmpty())
 
+    fun pairingCode(): String {
+        val existing = prefs.getString(KEY_PAIRING_CODE, "") ?: ""
+        if (existing.isNotBlank()) return existing
+        return rotatePairingCode()
+    }
+
+    fun rotatePairingCode(): String {
+        val alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+        val random = SecureRandom()
+        val code = (1..8).joinToString("") { alphabet[random.nextInt(alphabet.length)].toString() }
+        prefs.edit().putString(KEY_PAIRING_CODE, code).apply()
+        return code
+    }
+
     companion object {
         private const val KEY_ENABLED = "enabled"
         private const val KEY_FORWARD_ALL_MESSAGES = "forward_all_messages"
@@ -64,6 +79,7 @@ class RelayConfigStore(context: Context) {
         private const val KEY_SMTP_PASSWORD = "smtp_password"
         private const val KEY_RECIPIENT = "recipient"
         private const val KEY_SENDER_WHITELIST = "sender_whitelist"
+        private const val KEY_PAIRING_CODE = "pairing_code"
     }
 }
 

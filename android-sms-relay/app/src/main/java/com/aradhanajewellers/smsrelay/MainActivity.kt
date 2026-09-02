@@ -27,6 +27,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var recipient: EditText
     private lateinit var whitelist: EditText
     private lateinit var status: TextView
+    private lateinit var wifiStatus: TextView
     private lateinit var store: RelayConfigStore
 
     private val permissionRequest = registerForActivityResult(
@@ -39,6 +40,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(buildContent())
         loadConfig()
         updatePermissionStatus()
+        updateWifiStatus()
     }
 
     private fun buildContent(): ScrollView {
@@ -93,6 +95,27 @@ class MainActivity : AppCompatActivity() {
         column.addView(permissionButton)
         column.addView(saveButton)
         column.addView(testButton)
+        val wifiButton = Button(this).apply {
+            text = "Start Wi-Fi settings access"
+            setOnClickListener { WifiConfigService.start(this@MainActivity); updateWifiStatus() }
+        }
+        val stopWifiButton = Button(this).apply {
+            text = "Stop Wi-Fi settings access"
+            setOnClickListener { WifiConfigService.stop(this@MainActivity); updateWifiStatus() }
+        }
+        val rotateCodeButton = Button(this).apply {
+            text = "Change Wi-Fi pairing code"
+            setOnClickListener {
+                store.rotatePairingCode()
+                updateWifiStatus()
+                toast("Pairing code changed. Share it only with trusted staff.")
+            }
+        }
+        column.addView(wifiButton)
+        column.addView(stopWifiButton)
+        column.addView(rotateCodeButton)
+        wifiStatus = note("")
+        column.addView(wifiStatus)
         status = note("")
         status.setPadding(0, padding, 0, 0)
         column.addView(status)
@@ -171,6 +194,15 @@ class MainActivity : AppCompatActivity() {
             "SMS permission: granted. Next: set Battery usage to Unrestricted and allow Auto-start in the phone settings."
         } else {
             "SMS permission: missing. Tap ‘Grant SMS permissions’; the relay cannot receive bank alerts until it is granted."
+        }
+    }
+
+    private fun updateWifiStatus() {
+        val url = WifiConfigServer.localUrl()
+        wifiStatus.text = if (WifiConfigService.running) {
+            "Wi-Fi settings: ACTIVE\nOpen ${url ?: "the relay phone's Wi-Fi IP on port 8765"}\nPairing code: ${store.pairingCode()}\nOnly private-LAN devices with this code can change settings. No SMS data is shared."
+        } else {
+            "Wi-Fi settings: OFF\nStart it when you need to edit the relay from another device. Pairing code: ${store.pairingCode()}."
         }
     }
 

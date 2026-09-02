@@ -17,6 +17,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Serial worker: a slow IMAP fetch completes before the next one begins.
+EMAIL_POLL_INTERVAL_SECONDS = max(1, int(os.getenv("EMAIL_POLL_INTERVAL_SECONDS", "1")))
+
 logger = logging.getLogger("Email_Poller")
 
 email_status = {
@@ -366,7 +369,7 @@ def process_emails():
         db.commit()
         update_email_status(
             last_sync=datetime.now().isoformat(),
-            next_sync=(datetime.now().timestamp() + 300),
+            next_sync=(datetime.now().timestamp() + EMAIL_POLL_INTERVAL_SECONDS),
             events_found=events_found
         )
     except Exception as e:
@@ -381,7 +384,7 @@ def start_email_poller():
     def run():
         while True:
             process_emails()
-            time.sleep(300) 
+            time.sleep(EMAIL_POLL_INTERVAL_SECONDS)
             
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
