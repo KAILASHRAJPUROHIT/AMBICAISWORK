@@ -6,10 +6,11 @@ URL when the notifier is not running on the Billing PC itself.
 import json
 import os
 import tkinter as tk
+from datetime import datetime, timezone
 from urllib.request import urlopen
 
 SETTINGS_PATH = os.path.join(os.getenv("APPDATA", os.path.expanduser("~")), "AradhanaBankActivityNotifier", "settings.json")
-DEFAULTS = {"server_url": "http://127.0.0.1:8000/api/bank-activity", "poll_seconds": 1, "display_seconds": 30, "opacity": 92, "max_alerts": 3, "sound": False, "sound_threshold": 100000, "position": "centre-right"}
+DEFAULTS = {"server_url": "http://127.0.0.1:8000/api/bank-activity", "poll_seconds": 1, "display_seconds": 30, "opacity": 92, "max_alerts": 3, "sound": False, "sound_threshold": 100000, "position": "centre-right", "enabled": True, "paused_until": None, "popup_width": 360, "popup_height": 188}
 try:
     with open(SETTINGS_PATH, encoding="utf-8") as settings_file:
         SETTINGS = {**DEFAULTS, **json.load(settings_file)}
@@ -18,7 +19,7 @@ except (OSError, json.JSONDecodeError):
 API_URL = os.getenv("BANK_ACTIVITY_URL", SETTINGS["server_url"])
 POLL_MS = max(1, int(SETTINGS["poll_seconds"])) * 1000
 DISPLAY_MS = max(1, int(SETTINGS["display_seconds"])) * 1000
-WIDTH, HEIGHT = 360, 188
+WIDTH, HEIGHT = max(360, int(SETTINGS["popup_width"])), max(188, int(SETTINGS["popup_height"]))
 MAX_ALERTS = max(1, min(5, int(SETTINGS["max_alerts"])))
 
 
@@ -32,6 +33,9 @@ class Notifier:
         self.root.after(0, self.poll)
 
     def poll(self):
+        if not self.is_enabled():
+            self.root.after(POLL_MS, self.poll)
+            return
         try:
             with urlopen(API_URL, timeout=2) as response:
                 data = json.loads(response.read().decode("utf-8"))
@@ -48,6 +52,17 @@ class Notifier:
             # Remain silent while the local server is restarting or unavailable.
             pass
         self.root.after(POLL_MS, self.poll)
+
+    def is_enabled(self):
+        if not SETTINGS.get("enabled", True):
+            return False
+        paused_until = SETTINGS.get("paused_until")
+        if not paused_until:
+            return True
+        try:
+            return datetime.now(timezone.utc) >= datetime.fromisoformat(paused_until)
+        except ValueError:
+            return True
 
     def show(self, item):
         item_id = item["id"]
