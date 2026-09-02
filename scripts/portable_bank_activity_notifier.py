@@ -1,5 +1,4 @@
 """Single-file Windows installer/runtime for Aradhana Bank Activity Notifier."""
-import ctypes
 import json  # Dynamic bundled scripts import this at runtime.
 import os
 import runpy
@@ -14,9 +13,8 @@ from urllib.request import urlopen  # Bundled notifier imports.
 
 
 APP_NAME = "Aradhana Bank Activity Notifier"
-TASK_NAME = "AradhanaBankActivityNotifier"
-INSTALL_DIR = os.path.join(os.environ.get("PROGRAMDATA", r"C:\ProgramData"), "AradhanaBankActivityNotifier")
-INSTALL_EXE = os.path.join(INSTALL_DIR, "AradhanaBankActivityNotifier.exe")
+TASK_NAME = "AradhanaBankActivityNotifierUser"
+INSTALL_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "AradhanaBankActivityNotifier", "releases")
 
 
 def bundled_path(relative_path):
@@ -24,24 +22,8 @@ def bundled_path(relative_path):
     return os.path.join(root, relative_path)
 
 
-def is_admin():
-    try:
-        return bool(ctypes.windll.shell32.IsUserAnAdmin())
-    except Exception:
-        return False
-
-
-def elevate_install():
-    executable = sys.executable if getattr(sys, "frozen", False) else sys.executable
-    script = "" if getattr(sys, "frozen", False) else os.path.abspath(__file__)
-    arguments = '"--install"' if not script else f'"{script}" --install'
-    result = ctypes.windll.shell32.ShellExecuteW(None, "runas", executable, arguments, None, 1)
-    if result <= 32:
-        raise RuntimeError("Administrator approval is required to install the notifier.")
-
-
-def register_task():
-    action = f'New-ScheduledTaskAction -Execute "{INSTALL_EXE}" -Argument "--notifier"'
+def register_task(installed_exe):
+    action = f'New-ScheduledTaskAction -Execute "{installed_exe}" -Argument "--notifier"'
     command = (
         "$ErrorActionPreference='Stop'; "
         f"$action={action}; "
@@ -54,16 +36,14 @@ def register_task():
 
 
 def install():
-    if not is_admin():
-        elevate_install()
-        return
-    os.makedirs(INSTALL_DIR, exist_ok=True)
+    release_dir = os.path.join(INSTALL_DIR, f"release-{datetime.now().strftime('%Y%m%d%H%M%S')}")
+    os.makedirs(release_dir, exist_ok=True)
+    installed_exe = os.path.join(release_dir, "AradhanaBankActivityNotifier.exe")
     source = os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__)
-    if os.path.normcase(source) != os.path.normcase(INSTALL_EXE):
-        shutil.copy2(source, INSTALL_EXE)
-    register_task()
-    subprocess.Popen([INSTALL_EXE, "--notifier"], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    subprocess.Popen([INSTALL_EXE, "--configure"])
+    shutil.copy2(source, installed_exe)
+    register_task(installed_exe)
+    subprocess.Popen([installed_exe, "--notifier"], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    subprocess.Popen([installed_exe, "--configure"])
 
 
 def run_bundled(script_name):
