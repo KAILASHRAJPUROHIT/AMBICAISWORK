@@ -19,6 +19,8 @@ function Register-AradhanaTask([string[]]$Arguments) {
 }
 
 Register-AradhanaTask @("/Create", "/TN", "AradhanaAuditorServer", "/TR", $TaskCommand, "/SC", "ONSTART", "/RU", "SYSTEM", "/RL", "HIGHEST", "/F")
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
+Set-ScheduledTask -TaskName "AradhanaAuditorServer" -Settings $settings | Out-Null
 & schtasks.exe /Delete /TN "AradhanaAuditorServerWatchdog" /F 2>$null | Out-Null
 & schtasks.exe /Run /TN "AradhanaAuditorServer" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Could not start AradhanaAuditorServer after installation." }

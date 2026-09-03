@@ -144,7 +144,14 @@ function Test-ManagedListener($Port, $PidPath, $IsBackend) {
     # Port is occupied. Check if it is our managed process.
     $managedPid = Read-PidFile $PidPath
     if ($managedPid -and $managedPid -eq $listenerPid) {
-        return $true # Yes, already running and managed by us.
+        # A listening port alone is not healthy. The watchdog must repair a
+        # stuck API or Vite process rather than adopting it forever.
+        $healthy = if ($IsBackend) { Test-AradhanaHealth $Port } else { Test-AradhanaFrontendHealth $Port }
+        if ($healthy) { return $true }
+        Write-StartupLog (Split-Path $PidPath -Parent) "Managed listener on port $Port is unhealthy; restarting it."
+        Stop-Process -Id $listenerPid -Force -ErrorAction SilentlyContinue
+        Remove-Item $PidPath -Force -ErrorAction SilentlyContinue
+        return $false
     }
 
     # Port is occupied by an unmanaged process. Check if it's a healthy Aradhana instance.

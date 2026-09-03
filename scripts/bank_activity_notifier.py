@@ -17,16 +17,14 @@ if not os.path.exists(LOGO_PATH):
     LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
 NAVY, GOLD, LIGHT_GOLD, INK = "#23519D", "#CCA137", "#F7CA5B", "#10254A"
 DEFAULTS = {"server_url": "http://ARADHANA:8000/api/bank-activity", "poll_seconds": 1, "display_seconds": 30, "opacity": 92, "max_alerts": 3, "sound": False, "sound_threshold": 100000, "position": "centre-right", "enabled": True, "paused_until": None, "popup_width": 360, "popup_height": 188}
-try:
-    with open(SETTINGS_PATH, encoding="utf-8") as settings_file:
-        SETTINGS = {**DEFAULTS, **json.load(settings_file)}
-except (OSError, json.JSONDecodeError):
-    SETTINGS = DEFAULTS
-API_URL = os.getenv("BANK_ACTIVITY_URL", SETTINGS["server_url"])
-POLL_MS = max(1, int(SETTINGS["poll_seconds"])) * 1000
-DISPLAY_MS = max(1, int(SETTINGS["display_seconds"])) * 1000
-WIDTH, HEIGHT = max(360, int(SETTINGS["popup_width"])), max(188, int(SETTINGS["popup_height"]))
-MAX_ALERTS = max(1, min(5, int(SETTINGS["max_alerts"])))
+def load_settings():
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as settings_file:
+            return {**DEFAULTS, **json.load(settings_file)}
+    except (OSError, json.JSONDecodeError):
+        return dict(DEFAULTS)
+
+SETTINGS = load_settings()
 
 def log(message):
     try:
@@ -59,15 +57,18 @@ class Notifier:
         self.seen = set()
         self.ready = False
         self.windows = {}
-        log(f"started api={API_URL}")
+        self.settings_mtime = None
+        self.failure_count = 0
+        log(f"started api={self.api_url}")
         self.root.after(0, self.poll)
 
     def poll(self):
+        self.reload_settings()
         if not self.is_enabled():
-            self.root.after(POLL_MS, self.poll)
+            self.root.after(self.poll_ms, self.poll)
             return
         try:
-            with urlopen(API_URL, timeout=2) as response:
+            with urlopen(self.api_url, timeout=2) as response:
                 data = json.loads(response.read().decode("utf-8"))
             rows = [dict(item, direction="CREDIT") for item in data.get("credits", [])]
             rows += [dict(item, direction="DEBIT") for item in data.get("debits", [])]
@@ -80,9 +81,33 @@ class Notifier:
                         self.show(item)
             self.seen = current_ids
             self.ready = True
+            if self.failure_count:
+                log("poll recovered")
+                self.failure_count = 0
         except Exception as error:
-            log(f"poll failed: {error}")
-        self.root.after(POLL_MS, self.poll)
+            self.failure_count += 1
+            if self.failure_count in (1, 5, 30):
+                log(f"poll failed count={self.failure_count}: {error}")
+        self.root.after(self.poll_ms, self.poll)
+
+    @property
+    def api_url(self):
+        return os.getenv("BANK_ACTIVITY_URL", SETTINGS["server_url"])
+
+    @property
+    def poll_ms(self):
+        return max(1, int(SETTINGS["poll_seconds"])) * 1000
+
+    def reload_settings(self):
+        global SETTINGS
+        try:
+            mtime = os.path.getmtime(SETTINGS_PATH)
+        except OSError:
+            mtime = None
+        if mtime != self.settings_mtime:
+            SETTINGS = load_settings()
+            self.settings_mtime = mtime
+            log(f"settings reloaded api={self.api_url}")
 
     def is_enabled(self):
         if not SETTINGS.get("enabled", True):
@@ -119,7 +144,8 @@ class Notifier:
                 logo_label = tk.Label(header, image=logo, bg=NAVY); logo_label.image = logo; logo_label.pack(side="left", padx=(0, 8))
             except tk.TclError:
                 pass
-        tk.Label(header, text="ARADHANA JEWELLERS", bg=NAVY, fg=LIGHT_GOLD, font=("Segoe UI", 8, "bold")).pack(side="left")
+        party_name = str(item.get("counterparty") or item.get("payer_name") or "BANK TRANSACTION").strip()
+        tk.Label(header, text=party_name[:34].upper(), bg=NAVY, fg=LIGHT_GOLD, font=("Segoe UI", 8, "bold")).pack(side="left")
         tk.Label(header, text=f"NEW {item.get('direction', 'PAYMENT')}", bg=semantic, fg="white", font=("Segoe UI", 8, "bold"), padx=7, pady=2).pack(side="right")
         tk.Label(frame, text=f"₹{float(item.get('amount', 0)):,.2f}", bg=NAVY, fg=LIGHT_GOLD, font=("Segoe UI", 21, "bold")).pack(anchor="w", pady=(7, 0))
         tk.Label(frame, text=item.get("bank_name", "Bank not recorded"), bg=NAVY, fg="white", font=("Segoe UI", 11, "bold")).pack(anchor="w")

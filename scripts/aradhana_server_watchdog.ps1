@@ -11,7 +11,9 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 while ($true) {
     try {
-        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Control start-prod *> $LogFile
+        $stamp = Get-Date -Format s
+        Add-Content -Encoding UTF8 -Path $LogFile -Value "[$stamp] watchdog health cycle"
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Control start-prod *>> $LogFile
     }
     catch {
         Add-Content -Encoding UTF8 -Path $LogFile -Value "[$(Get-Date -Format s)] watchdog error: $($_.Exception.Message)"
