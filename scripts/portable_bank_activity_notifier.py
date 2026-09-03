@@ -24,16 +24,34 @@ def bundled_path(relative_path):
 
 
 def register_task(installed_exe):
-    action = f'New-ScheduledTaskAction -Execute "{installed_exe}" -Argument "--notifier"'
+    escaped_exe = installed_exe.replace("'", "''")
+    action = f"New-ScheduledTaskAction -Execute '{escaped_exe}' -Argument '--notifier'"
     command = (
         "$ErrorActionPreference='Stop'; "
         f"$action={action}; "
         "$trigger=New-ScheduledTaskTrigger -AtLogOn; "
-        "$principal=New-ScheduledTaskPrincipal -UserId \"$env:USERDOMAIN\\$env:USERNAME\" -LogonType Interactive -RunLevel Limited; "
-        f"Register-ScheduledTask -TaskName '{TASK_NAME}' -Action $action -Trigger $trigger -Principal $principal "
+        f"Register-ScheduledTask -TaskName '{TASK_NAME}' -Action $action -Trigger $trigger "
         "-Description 'Aradhana native bank transaction popups.' -Force | Out-Null"
     )
-    subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command], check=True)
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        text=True, capture_output=True, check=False,
+    )
+    if result.returncode == 0:
+        return "scheduled-task"
+
+    # Some managed PCs prohibit per-user task creation. HKCU Run is scoped to
+    # the current Windows account and needs no administrator access.
+    run_value = f'"{installed_exe}" --notifier'
+    fallback = subprocess.run(
+        ["reg.exe", "add", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run", "/v", TASK_NAME,
+         "/t", "REG_SZ", "/d", run_value, "/f"],
+        text=True, capture_output=True, check=False,
+    )
+    if fallback.returncode != 0:
+        detail = (result.stderr or result.stdout or fallback.stderr or fallback.stdout).strip()
+        raise RuntimeError(f"Could not register startup: {detail}")
+    return "login-startup"
 
 
 def retire_legacy_notifiers():
@@ -54,9 +72,10 @@ def install():
     installed_exe = os.path.join(release_dir, "AradhanaBankActivityNotifier.exe")
     source = os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__)
     shutil.copy2(source, installed_exe)
-    register_task(installed_exe)
+    startup_mode = register_task(installed_exe)
     subprocess.Popen([installed_exe, "--notifier"], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     subprocess.Popen([installed_exe, "--configure"])
+    return startup_mode
 
 
 def run_bundled(script_name):

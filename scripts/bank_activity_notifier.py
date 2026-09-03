@@ -25,6 +25,7 @@ def load_settings():
         return dict(DEFAULTS)
 
 SETTINGS = load_settings()
+REPLAY_COUNT = max(0, int(os.getenv("BANK_ACTIVITY_REPLAY_COUNT", "0")))
 
 def log(message):
     try:
@@ -75,6 +76,12 @@ class Notifier:
             rows += data.get("test_alerts", [])
             log(f"poll rows={len(rows)} tests={len(data.get('test_alerts', []))}")
             current_ids = {item["id"] for item in rows}
+            if not self.ready and REPLAY_COUNT:
+                # Explicit local replay for operator review. Never posts data
+                # back to the server and exits once the popups have elapsed.
+                for item in rows[:REPLAY_COUNT]:
+                    self.show(item)
+                self.root.after(self.display_ms + 1000, self.root.destroy)
             if self.ready:
                 for item in rows:
                     if item["id"] not in self.seen:
@@ -97,6 +104,22 @@ class Notifier:
     @property
     def poll_ms(self):
         return max(1, int(SETTINGS["poll_seconds"])) * 1000
+
+    @property
+    def display_ms(self):
+        return max(1, int(SETTINGS["display_seconds"])) * 1000
+
+    @property
+    def width(self):
+        return max(360, int(SETTINGS["popup_width"]))
+
+    @property
+    def height(self):
+        return max(188, int(SETTINGS["popup_height"]))
+
+    @property
+    def max_alerts(self):
+        return max(1, min(5, int(SETTINGS["max_alerts"])))
 
     def reload_settings(self):
         global SETTINGS
@@ -124,7 +147,7 @@ class Notifier:
         item_id = item["id"]
         if item_id in self.windows:
             return
-        while len(self.windows) >= MAX_ALERTS:
+        while len(self.windows) >= self.max_alerts:
             self.close(next(iter(self.windows)))
         popup = tk.Toplevel(self.root)
         popup.overrideredirect(True)
@@ -133,7 +156,7 @@ class Notifier:
         credit = item.get("direction") == "CREDIT"
         semantic = "#146C43" if credit else "#B42332"
         popup.configure(bg=NAVY, highlightbackground=GOLD, highlightthickness=3)
-        popup.geometry(f"{WIDTH}x{HEIGHT}+0+0")
+        popup.geometry(f"{self.width}x{self.height}+0+0")
         frame = tk.Frame(popup, bg=NAVY, padx=16, pady=12)
         frame.pack(fill="both", expand=True)
         header = tk.Frame(frame, bg=NAVY); header.pack(fill="x")
@@ -160,7 +183,7 @@ class Notifier:
         if SETTINGS.get("sound") and float(item.get("amount", 0)) >= float(SETTINGS.get("sound_threshold", 100000)):
             self.root.bell()
         self.reposition()
-        popup.after(DISPLAY_MS, lambda: self.close(item_id))
+        popup.after(self.display_ms, lambda: self.close(item_id))
 
     def copy(self, value):
         self.root.clipboard_clear()
@@ -176,16 +199,16 @@ class Notifier:
     def reposition(self):
         """Keep the newest three notifications vertically stacked, never overlapping."""
         left, top, right, bottom = active_work_area(self.root)
-        screen_x = right - WIDTH - 28
+        screen_x = right - self.width - 28
         count = len(self.windows)
-        group_height = count * HEIGHT + max(0, count - 1) * 12
+        group_height = count * self.height + max(0, count - 1) * 12
         if SETTINGS.get("position") == "bottom-right":
             start_y = bottom - group_height - 28
         else:
             start_y = max(top + 120, top + ((bottom - top - group_height) // 3))
         for index, popup in enumerate(self.windows.values()):
             if popup.winfo_exists():
-                popup.geometry(f"{WIDTH}x{HEIGHT}+{screen_x}+{start_y + index * (HEIGHT + 12)}")
+                popup.geometry(f"{self.width}x{self.height}+{screen_x}+{start_y + index * (self.height + 12)}")
 
     def run(self):
         self.root.mainloop()
