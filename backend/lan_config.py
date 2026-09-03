@@ -7,7 +7,9 @@ from fastapi import Request, HTTPException
 logger = logging.getLogger("LAN_Check")
 
 # Approved Subnets for Aradhana LAN
-APPROVED_SUBNETS = ["192.168.1.", "10.0.0.", "172.16.0."] 
+# Production uses 192.168.0.x.  Keep the former private ranges for existing
+# installations, otherwise valid shop PCs are falsely logged as unauthorised.
+APPROVED_SUBNETS = ["192.168.0.", "192.168.1.", "10.0.0.", "172.16.0."]
 
 def is_physical_lan_connected() -> bool:
     """
