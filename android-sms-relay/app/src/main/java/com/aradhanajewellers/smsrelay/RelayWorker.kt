@@ -20,11 +20,12 @@ class RelayWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
         val sender = inputData.getString(KEY_SENDER).orEmpty()
         val body = inputData.getString(KEY_BODY).orEmpty()
         val timestamp = inputData.getLong(KEY_TIMESTAMP, System.currentTimeMillis())
+        val allowTest = inputData.getBoolean(KEY_ALLOW_TEST, false)
         val store = RelayConfigStore(applicationContext)
         val config = store.load()
 
-        if (!config.enabled || !store.isValid(config) ||
-            !isBankTransactionMessage(sender, body, config.senderWhitelist)) {
+        if (!config.enabled || !store.isValid(config) || (!allowTest &&
+            !isBankTransactionMessage(sender, body, config.senderWhitelist))) {
             return Result.success()
         }
 
@@ -80,6 +81,7 @@ class RelayWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
         const val KEY_SENDER = "sender"
         const val KEY_BODY = "body"
         const val KEY_TIMESTAMP = "timestamp"
+        const val KEY_ALLOW_TEST = "allow_test"
         private const val DEDUPE_WINDOW_MS = 14L * 24 * 60 * 60 * 1000
     }
 }

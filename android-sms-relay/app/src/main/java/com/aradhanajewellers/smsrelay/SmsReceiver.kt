@@ -25,11 +25,12 @@ class SmsReceiver : BroadcastReceiver() {
 }
 
 object RelayScheduler {
-    fun enqueue(context: Context, sender: String, body: String, timestampMillis: Long) {
+    fun enqueue(context: Context, sender: String, body: String, timestampMillis: Long, allowTest: Boolean = false) {
         val data = Data.Builder()
             .putString(RelayWorker.KEY_SENDER, sender)
             .putString(RelayWorker.KEY_BODY, body)
             .putLong(RelayWorker.KEY_TIMESTAMP, timestampMillis)
+            .putBoolean(RelayWorker.KEY_ALLOW_TEST, allowTest)
             .build()
         val request = OneTimeWorkRequestBuilder<RelayWorker>().setInputData(data).build()
         WorkManager.getInstance(context).enqueueUniqueWork(

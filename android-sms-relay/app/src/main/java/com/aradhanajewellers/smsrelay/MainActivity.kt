@@ -3,6 +3,7 @@ package com.aradhanajewellers.smsrelay
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Build
 import android.text.InputType
 import android.view.Gravity
 import android.view.ViewGroup
@@ -85,7 +86,7 @@ class MainActivity : AppCompatActivity() {
                 if (saveConfig(enableRelay = enabled.isChecked)) {
                     val sender = whitelist.text.lines().firstOrNull { it.trim().isNotEmpty() }
                         ?.trim()?.removeSuffix("*") ?: "TEST-RELAY"
-                    RelayScheduler.enqueue(this@MainActivity, sender, "Test relay message. No bank payment was processed.", System.currentTimeMillis())
+                    RelayScheduler.enqueue(this@MainActivity, sender, "Test relay message. No bank payment was processed.", System.currentTimeMillis(), allowTest = true)
                     toast("Test queued. Check the recipient mailbox shortly.")
                 }
             }
@@ -173,6 +174,7 @@ class MainActivity : AppCompatActivity() {
         }
         store.save(config)
         enabled.isChecked = enableRelay
+        if (enableRelay) RelayKeepAliveService.start(this) else RelayKeepAliveService.stop(this)
         toast(if (enableRelay) "Relay enabled." else "Settings saved. Relay remains disabled.")
         return true
     }
@@ -180,6 +182,7 @@ class MainActivity : AppCompatActivity() {
     private fun requestPermissionsIfNeeded() {
         val required = buildList {
             if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.RECEIVE_SMS)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.POST_NOTIFICATIONS)
         }
         if (required.isEmpty()) updatePermissionStatus() else permissionRequest.launch(required.toTypedArray())
     }
