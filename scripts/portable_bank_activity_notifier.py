@@ -31,7 +31,8 @@ def register_task(installed_exe):
         f"$action={action}; "
         "$trigger=New-ScheduledTaskTrigger -AtLogOn; "
         f"Register-ScheduledTask -TaskName '{TASK_NAME}' -Action $action -Trigger $trigger "
-        "-Description 'Aradhana native bank transaction popups.' -Force | Out-Null"
+        "-Description 'Aradhana native bank transaction popups.' -Force | Out-Null; "
+        f"Enable-ScheduledTask -TaskName '{TASK_NAME}' | Out-Null"
     )
     result = subprocess.run(
         ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
