@@ -4,6 +4,7 @@ import logging
 import sys
 import ipaddress
 import re
+import hashlib
 from uuid import uuid4
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, Union
@@ -658,7 +659,29 @@ def _require_lan_bank_activity(request: Request):
     if not (client_ip.is_loopback or client_ip.is_private):
         raise HTTPException(status_code=403, detail="Bank activity is available only on the local network.")
 
-def _bank_activity_row(alert: SMSAlert, direction: str, duplicate: bool = False, correction: Optional[dict] = None) -> dict:
+def _normalise_bank_activity_reference(reference: str) -> str:
+    return re.sub(r"\s+", "", (reference or "").strip()).upper()
+
+def _bank_activity_copy_key(reference: str) -> str:
+    return f"bank_activity_copy_state:{hashlib.sha256(_normalise_bank_activity_reference(reference).encode('utf-8')).hexdigest()}"
+
+def _bank_activity_copy_states(db: Session) -> Dict[str, int]:
+    states: Dict[str, int] = {}
+    for setting in db.query(SystemSetting).filter(SystemSetting.key.like("bank_activity_copy_state:%")).all():
+        try:
+            state = json.loads(setting.value)
+            reference = _normalise_bank_activity_reference(str(state.get("reference", "")))
+            count = max(0, int(state.get("count", 0)))
+            if reference:
+                states[reference] = count
+        except (AttributeError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+    return states
+
+def _bank_activity_copy_colour(count: int) -> str:
+    return "red" if count >= 2 else "green" if count == 1 else "blue"
+
+def _bank_activity_row(alert: SMSAlert, direction: str, duplicate: bool = False, correction: Optional[dict] = None, copy_counts: Optional[Dict[str, int]] = None) -> dict:
     """Sanitised live-view record. Deliberately never exposes the raw SMS body."""
     raw_body = alert.raw_body or ""
     parsed = parse_bank_sms(raw_body)
@@ -686,6 +709,9 @@ def _bank_activity_row(alert: SMSAlert, direction: str, duplicate: bool = False,
         value = (correction or {}).get(key)
         if isinstance(value, str) and value.strip():
             row[key] = value.strip()
+    copy_count = (copy_counts or {}).get(_normalise_bank_activity_reference(row["reference"]), 0)
+    row["copy_count"] = copy_count
+    row["copy_state"] = _bank_activity_copy_colour(copy_count)
     return row
 
 def _activity_corrections(db: Session) -> Dict[int, dict]:
@@ -727,15 +753,16 @@ async def get_bank_activity(request: Request, db: Session = Depends(get_db)):
         if alert.utr_reference:
             reference_counts[alert.utr_reference] = reference_counts.get(alert.utr_reference, 0) + 1
     corrections = _activity_corrections(db)
+    copy_counts = _bank_activity_copy_states(db)
     credits, debits = [], []
     for alert in alerts:
         # Re-evaluate old records from their source body. Earlier versions saved
         # every relay message as CREDIT, including debit notifications.
         direction = detect_credit_or_debit(alert.raw_body) or (alert.credit_or_debit or "").upper()
         if direction == "CREDIT":
-            credits.append(_bank_activity_row(alert, direction, reference_counts.get(alert.utr_reference or "", 0) > 1, corrections.get(alert.id)))
+            credits.append(_bank_activity_row(alert, direction, reference_counts.get(alert.utr_reference or "", 0) > 1, corrections.get(alert.id), copy_counts))
         elif direction == "DEBIT":
-            debits.append(_bank_activity_row(alert, direction, reference_counts.get(alert.utr_reference or "", 0) > 1, corrections.get(alert.id)))
+            debits.append(_bank_activity_row(alert, direction, reference_counts.get(alert.utr_reference or "", 0) > 1, corrections.get(alert.id), copy_counts))
     latest = max((alert.transaction_timestamp for alert in alerts if alert.transaction_timestamp), default=None)
     return {
         "generated_at": datetime.now().isoformat(),
@@ -770,6 +797,8 @@ async def send_bank_activity_test_popup(request: Request, db: Session = Depends(
         "recorded_at": datetime.now().isoformat(),
         "flags": {"duplicate_reference": False, "reversal_or_refund": False},
         "is_corrected": False,
+        "copy_count": 0,
+        "copy_state": "blue",
     }
     db.add(SystemSetting(
         key=f"bank_activity_test_popup:{test_id}",
@@ -786,6 +815,42 @@ class BankActivityCorrectionInput(BaseModel):
     reference: Optional[str] = None
     mode: Optional[str] = None
     note: Optional[str] = None
+
+class BankActivityReferenceCopiedInput(BaseModel):
+    reference: str
+    source: str = "dashboard"
+
+@app.post("/api/bank-activity/reference-copied")
+async def record_bank_activity_reference_copy(payload: BankActivityReferenceCopiedInput, request: Request, db: Session = Depends(get_db)):
+    """Persist reference/UTR copy state centrally for every trusted LAN display."""
+    _require_lan_bank_activity(request)
+    reference = _normalise_bank_activity_reference(payload.reference)
+    if not reference or reference == "NOTRECORDED" or len(reference) > 160:
+        raise HTTPException(status_code=400, detail="A valid Ref / UTR is required.")
+    source = (payload.source or "dashboard").strip().lower()[:40]
+    key = _bank_activity_copy_key(reference)
+    setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+    previous_count = 0
+    if setting:
+        try:
+            previous_count = max(0, int(json.loads(setting.value).get("count", 0)))
+        except (AttributeError, TypeError, ValueError, json.JSONDecodeError):
+            previous_count = 0
+    count = previous_count + 1
+    state = {"reference": reference, "count": count, "first_copied_at": datetime.now().isoformat() if previous_count == 0 else None, "last_copied_at": datetime.now().isoformat()}
+    if setting:
+        setting.value = json.dumps(state)
+    else:
+        db.add(SystemSetting(key=key, value=json.dumps(state)))
+    db.add(AuditLog(
+        entity_type="BankActivityReference",
+        entity_id=0,
+        action="REFERENCE_COPIED",
+        actor="LAN_BANK_ACTIVITY",
+        metadata_json=json.dumps({"reference": reference, "copy_count": count, "source": source, "client_ip": request.client.host if request.client else None}),
+    ))
+    db.commit()
+    return {"reference": reference, "copy_count": count, "copy_state": _bank_activity_copy_colour(count)}
 
 @app.post("/api/bank-activity/{alert_id}/correction")
 async def correct_bank_activity(alert_id: int, correction: BankActivityCorrectionInput, request: Request, db: Session = Depends(get_db)):

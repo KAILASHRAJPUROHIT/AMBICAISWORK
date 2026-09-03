@@ -8,7 +8,7 @@ import os
 import tkinter as tk
 import ctypes
 from datetime import datetime, timezone
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 SETTINGS_PATH = os.path.join(os.getenv("APPDATA", os.path.expanduser("~")), "AradhanaBankActivityNotifier", "settings.json")
 LOG_PATH = os.path.join(os.path.dirname(SETTINGS_PATH), "runtime.log")
@@ -175,8 +175,14 @@ class Notifier:
         reference = item.get("reference", "Not recorded")
         row = tk.Frame(frame, bg=NAVY)
         row.pack(fill="x", pady=(10, 0))
-        tk.Label(row, text=reference, bg=NAVY, fg="white", font=("Consolas", 9, "bold"), anchor="w").pack(side="left", fill="x", expand=True)
-        tk.Button(row, text="COPY", command=lambda: self.copy(reference), font=("Segoe UI", 8, "bold"), bg=GOLD, fg=INK, activebackground=LIGHT_GOLD, relief="flat", padx=8).pack(side="right")
+        copy_colours = {"blue": "#2563EB", "green": "#15803D", "red": "#DC2626"}
+        copy_state = item.get("copy_state", "blue")
+        copy_colour = copy_colours.get(copy_state, copy_colours["blue"])
+        reference_label = tk.Label(row, text=reference, bg=NAVY, fg=copy_colour, font=("Consolas", 9, "bold"), anchor="w")
+        reference_label.pack(side="left", fill="x", expand=True)
+        copy_button = tk.Button(row, text="COPY", font=("Segoe UI", 8, "bold"), bg=copy_colour, fg="white", activebackground=copy_colour, relief="flat", padx=8)
+        copy_button.configure(command=lambda: self.copy(item, reference_label, copy_button))
+        copy_button.pack(side="right")
         tk.Button(frame, text="×", command=lambda: self.close(item_id), bg=NAVY, fg=LIGHT_GOLD, activebackground=NAVY, activeforeground="white", relief="flat", font=("Segoe UI", 12, "bold")).place(relx=1, x=-3, y=-8, anchor="ne")
         self.windows[item_id] = popup
         log(f"shown id={item_id} amount={item.get('amount', 0)}")
@@ -185,10 +191,26 @@ class Notifier:
         self.reposition()
         popup.after(self.display_ms, lambda: self.close(item_id))
 
-    def copy(self, value):
+    def copy(self, item, reference_label, copy_button):
+        value = str(item.get("reference", "")).strip()
         self.root.clipboard_clear()
         self.root.clipboard_append(value)
         self.root.update()
+        if not value or value.lower() == "not recorded":
+            return
+        endpoint = f"{self.api_url.rstrip('/').rsplit('/api/bank-activity', 1)[0]}/api/bank-activity/reference-copied"
+        try:
+            request = Request(endpoint, data=json.dumps({"reference": value, "source": "popup"}).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
+            with urlopen(request, timeout=2) as response:
+                state = json.loads(response.read().decode("utf-8"))
+            colour = {"blue": "#2563EB", "green": "#15803D", "red": "#DC2626"}.get(state.get("copy_state"), "#2563EB")
+            item["copy_count"] = state.get("copy_count", 0)
+            item["copy_state"] = state.get("copy_state", "blue")
+            reference_label.configure(fg=colour)
+            copy_button.configure(bg=colour, activebackground=colour)
+            log(f"reference copied state={item['copy_state']} reference={value}")
+        except Exception as error:
+            log(f"reference copy state failed: {error}")
 
     def close(self, item_id):
         popup = self.windows.pop(item_id, None)

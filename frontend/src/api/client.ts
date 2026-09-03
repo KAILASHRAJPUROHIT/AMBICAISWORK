@@ -172,6 +172,15 @@ export async function getBankActivity() {
   return handleJsonResponse(response, 'Failed to fetch bank activity');
 }
 
+export async function recordBankActivityReferenceCopy(reference: string, source: 'dashboard' | 'popup' = 'dashboard') {
+  const response = await fetch(`${BASE_URL}/api/bank-activity/reference-copied`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reference, source }),
+  });
+  return handleJsonResponse(response, 'Failed to record Ref / UTR copy');
+}
+
 export async function saveBankActivityCorrection(id: number, correction: Record<string, string>) {
   const response = await fetch(`${BASE_URL}/api/bank-activity/${id}/correction`, {
     method: 'POST',
