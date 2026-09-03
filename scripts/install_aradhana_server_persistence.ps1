@@ -8,10 +8,10 @@ param()
 
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$Control = Join-Path $Root "scripts\aradhana_service_control.ps1"
-if (-not (Test-Path -LiteralPath $Control)) { throw "Missing service control script: $Control" }
+$Watchdog = Join-Path $Root "scripts\aradhana_server_watchdog.ps1"
+if (-not (Test-Path -LiteralPath $Watchdog)) { throw "Missing server watchdog script: $Watchdog" }
 
-$TaskCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Control`" start-prod"
+$TaskCommand = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$Watchdog`""
 
 function Register-AradhanaTask([string[]]$Arguments) {
     & schtasks.exe @Arguments | Out-Null
@@ -19,6 +19,8 @@ function Register-AradhanaTask([string[]]$Arguments) {
 }
 
 Register-AradhanaTask @("/Create", "/TN", "AradhanaAuditorServer", "/TR", $TaskCommand, "/SC", "ONSTART", "/RU", "SYSTEM", "/RL", "HIGHEST", "/F")
-Register-AradhanaTask @("/Create", "/TN", "AradhanaAuditorServerWatchdog", "/TR", $TaskCommand, "/SC", "MINUTE", "/MO", "5", "/RU", "SYSTEM", "/RL", "HIGHEST", "/F")
+& schtasks.exe /Delete /TN "AradhanaAuditorServerWatchdog" /F 2>$null | Out-Null
+& schtasks.exe /Run /TN "AradhanaAuditorServer" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Could not start AradhanaAuditorServer after installation." }
 
-Write-Host "Installed AradhanaAuditorServer (boot) and AradhanaAuditorServerWatchdog (every 5 minutes)."
+Write-Host "Installed AradhanaAuditorServer: SYSTEM startup task with a 60-second watchdog."
