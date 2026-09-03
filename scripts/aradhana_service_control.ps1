@@ -6,9 +6,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$PythonExe = "C:\Users\kaila\AppData\Local\Programs\Python\Python311\python.exe"
+$BundledPython = Join-Path $Root "runtime\python\python.exe"
+$PythonExe = if ($env:ARADHANA_PYTHON_EXE -and (Test-Path $env:ARADHANA_PYTHON_EXE)) {
+    $env:ARADHANA_PYTHON_EXE
+} elseif (Test-Path $BundledPython) {
+    $BundledPython
+} else {
+    "C:\Users\kaila\AppData\Local\Programs\Python\Python311\python.exe"
+}
 $PythonArgsPrefix = @("-m", "uvicorn", "backend.review_api:app", "--host", "0.0.0.0")
-$NodeExe = (Get-Command "node.exe" -ErrorAction Stop).Source
+$BundledNode = Join-Path $Root "runtime\node\node.exe"
+$NodeExe = if (Test-Path $BundledNode) { $BundledNode } else { (Get-Command "node.exe" -ErrorAction Stop).Source }
 
 function Ensure-Directory($Path) {
     if (-not (Test-Path $Path)) {

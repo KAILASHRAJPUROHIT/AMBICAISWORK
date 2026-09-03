@@ -23,4 +23,10 @@ Register-AradhanaTask @("/Create", "/TN", "AradhanaAuditorServer", "/TR", $TaskC
 & schtasks.exe /Run /TN "AradhanaAuditorServer" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Could not start AradhanaAuditorServer after installation." }
 
+foreach ($port in 8000, 5173) {
+    $name = "Aradhana Payment Auditor TCP $port"
+    Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    New-NetFirewallRule -DisplayName $name -Direction Inbound -Action Allow -Protocol TCP -LocalPort $port -Profile Private | Out-Null
+}
+
 Write-Host "Installed AradhanaAuditorServer: SYSTEM startup task with a 60-second watchdog."

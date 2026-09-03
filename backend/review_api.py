@@ -45,9 +45,9 @@ else:
     logger.info(f"STARTUP: ENV_LOADED=true")
 
 # PART A — DATABASE & TABLE VALIDATION
-from backend.database import DB_PATH, DATABASE_URL, SessionLocal, check_db_integrity, engine
+from backend.database import DB_PATH, DATABASE_URL, DATABASE_LABEL, IS_SQLITE, SessionLocal, check_db_integrity, engine
 db_integrity_ok, db_error = check_db_integrity()
-logger.info(f"STARTUP: DATABASE_PATH={DB_PATH} (Integrity: {db_integrity_ok})")
+logger.info(f"STARTUP: DATABASE={DATABASE_LABEL} (Integrity: {db_integrity_ok})")
 
 if not db_integrity_ok:
     logger.critical(f"FATAL STARTUP ERROR: {db_error}")
@@ -100,10 +100,10 @@ async def debug_live_feed(db: Session = Depends(get_db)):
                     "ingested_at": b.ingested_at.isoformat()
                 } for b in last_5
             ],
-            "database_path": DB_PATH
+            "database_path": DATABASE_LABEL
         }
     except Exception as e:
-        return {"error": str(e), "database_path": DB_PATH}
+        return {"error": str(e), "database_path": DATABASE_LABEL}
 
 # VERSIONING
 APP_VERSION = "1.2.0-STABLE"
@@ -193,8 +193,8 @@ async def get_startup_debug():
     
     return {
         "project_root": BASE_DIR,
-        "database_path": DB_PATH,
-        "database_exists": os.path.exists(DB_PATH),
+        "database_path": DATABASE_LABEL,
+        "database_exists": os.path.exists(DB_PATH) if IS_SQLITE else True,
         "env_path": ENV_PATH,
         "env_file_found": env_found,
         "env_loaded": os.getenv("EMAIL_USERNAME") is not None,
@@ -216,7 +216,7 @@ async def get_runtime_debug(db: Session = Depends(get_db)):
     try: data["cwd"] = os.getcwd()
     except Exception as e: data["cwd"] = f"ERROR: {str(e)}"
         
-    data["database_path"] = DB_PATH
+    data["database_path"] = DATABASE_LABEL
     data["env_file_path"] = ENV_PATH
     data["env_loaded"] = os.getenv("EMAIL_USERNAME") is not None
     
