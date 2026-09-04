@@ -1,0 +1,536 @@
+<title>Ornate Print Routing Handover</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --paper: #F6F3EC;
+    --paper-dim: #EDE8DA;
+    --paper-card: #FCFAF4;
+    --ink-900: #16232F;
+    --ink-700: #3A4F60;
+    --ink-500: #647082;
+    --line: rgba(22,35,47,.14);
+    --line-strong: rgba(22,35,47,.28);
+    --cyan: #146A76;
+    --cyan-soft: #E4EFEE;
+    --amber: #A8641F;
+    --amber-soft: #F5E9D8;
+    --green: #386B48;
+    --green-soft: #E3EEE4;
+    --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+    --sans: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+    --serif: 'Newsreader', Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper: #12191F;
+      --paper-dim: #182129;
+      --paper-card: #182129;
+      --ink-900: #EDEDE6;
+      --ink-700: #B9C2C6;
+      --ink-500: #869299;
+      --line: rgba(237,237,230,.14);
+      --line-strong: rgba(237,237,230,.26);
+      --cyan: #6FC3CC;
+      --cyan-soft: #1A2F32;
+      --amber: #E0A057;
+      --amber-soft: #2E2417;
+      --green: #7FBE93;
+      --green-soft: #1A2A20;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper: #12191F;
+    --paper-dim: #182129;
+    --paper-card: #182129;
+    --ink-900: #EDEDE6;
+    --ink-700: #B9C2C6;
+    --ink-500: #869299;
+    --line: rgba(237,237,230,.14);
+    --line-strong: rgba(237,237,230,.26);
+    --cyan: #6FC3CC;
+    --cyan-soft: #1A2F32;
+    --amber: #E0A057;
+    --amber-soft: #2E2417;
+    --green: #7FBE93;
+    --green-soft: #1A2A20;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    background:var(--paper);
+    color:var(--ink-900);
+    font-family:var(--sans);
+    margin:0;
+    line-height:1.55;
+  }
+  ::selection{ background:var(--cyan-soft); }
+
+  .wrap{
+    max-width:840px;
+    margin:0 auto;
+    padding:56px 24px 96px;
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    padding-bottom:28px;
+    border-bottom:1px solid var(--line-strong);
+    margin-bottom:32px;
+  }
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.09em;
+    text-transform:uppercase;
+    color:var(--cyan);
+  }
+  h1{
+    font-family:var(--serif);
+    font-weight:500;
+    font-size:clamp(30px,4.4vw,42px);
+    line-height:1.12;
+    margin:2px 0 4px;
+    text-wrap:balance;
+    letter-spacing:-.01em;
+  }
+  .dek{
+    font-size:15.5px;
+    color:var(--ink-700);
+    max-width:62ch;
+  }
+  .meta-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px 18px;
+    margin-top:14px;
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--ink-500);
+  }
+  .meta-row b{ color:var(--ink-700); font-weight:500; }
+
+  /* ---------- Status strip ---------- */
+  .status-strip{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:1px;
+    background:var(--line);
+    border:1px solid var(--line);
+    border-radius:10px;
+    overflow:hidden;
+    margin-bottom:40px;
+  }
+  .status-cell{
+    background:var(--paper-card);
+    padding:16px 18px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .status-cell .machine{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.04em;
+    color:var(--ink-500);
+    text-transform:uppercase;
+  }
+  .status-cell .role{
+    font-size:14px;
+    color:var(--ink-700);
+  }
+  .pill{
+    align-self:flex-start;
+    font-family:var(--mono);
+    font-size:11.5px;
+    font-weight:600;
+    letter-spacing:.03em;
+    padding:3px 9px;
+    border-radius:999px;
+  }
+  .pill.done{ background:var(--green-soft); color:var(--green); }
+  .pill.pending{ background:var(--amber-soft); color:var(--amber); }
+
+  /* ---------- Section rhythm ---------- */
+  section{ margin-bottom:44px; }
+  .section-head{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    margin-bottom:16px;
+  }
+  .section-num{
+    font-family:var(--mono);
+    font-size:12px;
+    color:var(--cyan);
+    letter-spacing:.04em;
+  }
+  h2{
+    font-family:var(--serif);
+    font-weight:500;
+    font-size:22px;
+    margin:0;
+    letter-spacing:-.005em;
+  }
+  h3{
+    font-family:var(--sans);
+    font-weight:600;
+    font-size:14.5px;
+    margin:0 0 10px;
+    color:var(--ink-900);
+  }
+  p{ margin:0 0 12px; max-width:70ch; }
+  .lede{ color:var(--ink-700); font-size:15px; max-width:68ch; }
+
+  code, .mono{
+    font-family:var(--mono);
+    font-size:.92em;
+    background:var(--paper-dim);
+    padding:.12em .4em;
+    border-radius:4px;
+    color:var(--ink-900);
+  }
+  .path{ word-break:break-all; }
+
+  /* ---------- Diagram ---------- */
+  .diagram-card{
+    background:var(--paper-card);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:22px 20px 18px;
+  }
+  .diagram-card svg{ width:100%; height:auto; display:block; }
+  .diagram-caption{
+    font-family:var(--mono);
+    font-size:11.5px;
+    color:var(--ink-500);
+    margin-top:12px;
+    line-height:1.6;
+  }
+
+  /* ---------- Machine cards ---------- */
+  .machine-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+  }
+  @media (max-width:640px){ .machine-grid{ grid-template-columns:1fr; } }
+  .machine-card{
+    background:var(--paper-card);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:18px 18px 16px;
+  }
+  .machine-card .card-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    margin-bottom:12px;
+    gap:10px;
+  }
+  .machine-card h3{ margin:0; }
+  dl.kv{ margin:0; display:grid; grid-template-columns:auto 1fr; gap:7px 12px; font-size:13.5px; }
+  dl.kv dt{ color:var(--ink-500); font-family:var(--mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.03em; padding-top:2px; }
+  dl.kv dd{ margin:0; color:var(--ink-900); }
+
+  /* ---------- Config table ---------- */
+  .table-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
+  table{ width:100%; border-collapse:collapse; font-size:13.5px; min-width:560px; }
+  thead th{
+    text-align:left;
+    font-family:var(--mono);
+    font-size:11px;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    color:var(--ink-500);
+    background:var(--paper-dim);
+    padding:10px 14px;
+    border-bottom:1px solid var(--line);
+    white-space:nowrap;
+  }
+  tbody td{
+    padding:10px 14px;
+    border-bottom:1px solid var(--line);
+    vertical-align:top;
+    color:var(--ink-700);
+  }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody td:first-child{ font-family:var(--mono); font-size:12.5px; color:var(--ink-900); white-space:nowrap; }
+  td.diff{ color:var(--amber); }
+
+  /* ---------- Lessons list ---------- */
+  .lessons{ display:flex; flex-direction:column; gap:14px; counter-reset:lesson; }
+  .lesson{
+    display:grid;
+    grid-template-columns:34px 1fr;
+    gap:14px;
+    padding-bottom:14px;
+    border-bottom:1px solid var(--line);
+  }
+  .lesson:last-child{ border-bottom:none; padding-bottom:0; }
+  .lesson .num{
+    counter-increment:lesson;
+    font-family:var(--mono);
+    font-size:13px;
+    color:var(--cyan);
+    padding-top:2px;
+  }
+  .lesson .num::before{ content: counter(lesson, decimal-leading-zero); }
+  .lesson h4{
+    font-size:14.5px;
+    font-weight:600;
+    margin:0 0 4px;
+  }
+  .lesson p{ font-size:13.8px; color:var(--ink-700); margin:0; }
+
+  /* ---------- Callout ---------- */
+  .callout{
+    background:var(--amber-soft);
+    border:1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+    border-radius:10px;
+    padding:14px 16px;
+    font-size:13.8px;
+    color:var(--ink-900);
+    display:flex;
+    gap:10px;
+  }
+  .callout .mark{ color:var(--amber); font-family:var(--mono); font-weight:600; }
+
+  /* ---------- Footer ---------- */
+  footer{
+    margin-top:56px;
+    padding-top:20px;
+    border-top:1px solid var(--line);
+    font-family:var(--mono);
+    font-size:11.5px;
+    color:var(--ink-500);
+    display:flex;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+</style>
+
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="eyebrow">Internal handover — printing infrastructure</div>
+    <h1>Ornate smart print routing</h1>
+    <div class="dek">One tray app, three machines, two physical printers with opposite constraints. Here's what shipped, what's configured where, and every AV fight that got in the way.</div>
+    <div class="meta-row">
+      <span><b>Prepared</b> 4 Sep 2026</span>
+      <span><b>Scope</b> PC2 (hub) · Dell server (relay) · laptop (on hold)</span>
+      <span><b>Binary</b> <span class="mono">AradhanaOrnateAutoPrint.exe</span></span>
+    </div>
+  </div>
+
+  <div class="status-strip">
+    <div class="status-cell">
+      <span class="machine">PC2 — hub</span>
+      <span class="pill done">Live &amp; tested</span>
+      <span class="role">P1007 attached here. Prints copy 1 directly + receives relayed jobs from other machines.</span>
+    </div>
+    <div class="status-cell">
+      <span class="machine">Dell server — relay</span>
+      <span class="pill done">Live &amp; tested</span>
+      <span class="role">Relays copy 1 to PC2 over the network share. Overlays + duplex-prints copy 2 locally.</span>
+    </div>
+    <div class="status-cell">
+      <span class="machine">Laptop</span>
+      <span class="pill pending">On hold</span>
+      <span class="role">Not deployed. Same pattern as the Dell server when resumed — no new design work needed.</span>
+    </div>
+  </div>
+
+  <section>
+    <div class="section-head"><span class="section-num">01</span><h2>The problem, in one sentence</h2></div>
+    <p class="lede">Ornate fires two separate Windows print dialogs per bill — one for the office copy, one for the customer copy — and someone had to sit there picking the right printer for each, every single bill, on every machine.</p>
+    <p class="lede">The two printers have opposite constraints: <b>P1007</b> already has real letterhead paper loaded but can't duplex, so it only ever needs the raw bill printed straight onto it. <b>355sdnw</b> can duplex but sits on blank paper, so the customer copy needs the letterhead composited on digitally, front and back, before it prints.</p>
+  </section>
+
+  <section>
+    <div class="section-head"><span class="section-num">02</span><h2>How a bill actually routes</h2></div>
+    <div class="diagram-card">
+      <svg viewBox="0 0 800 260" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flow diagram: Ornate print dialogs route to P1007 directly or to a letterhead overlay pipeline that prints on 355">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-500)"></path>
+          </marker>
+        </defs>
+        <style>
+          .node-title{ font-family:'IBM Plex Sans',sans-serif; font-weight:600; font-size:13px; fill:var(--ink-900); }
+          .node-sub{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; fill:var(--ink-500); }
+          .edge-label{ font-family:'IBM Plex Mono',monospace; font-size:10px; fill:var(--ink-500); }
+          .edge{ stroke:var(--ink-500); stroke-width:1.3; fill:none; marker-end:url(#arrow); }
+          .node-box{ fill:var(--paper-card); stroke:var(--line-strong); stroke-width:1.2; rx:8; }
+          .node-box.cyan{ stroke:var(--cyan); }
+          .node-box.amber{ stroke:var(--amber); }
+        </style>
+
+        <!-- Ornate -->
+        <rect x="330" y="10" width="140" height="46" class="node-box cyan"></rect>
+        <text x="400" y="30" text-anchor="middle" class="node-title">Ornate print</text>
+        <text x="400" y="45" text-anchor="middle" class="node-sub">2 dialogs, one bill</text>
+
+        <!-- lines down to two branches -->
+        <path d="M368,56 C368,80 210,80 210,100" class="edge"></path>
+        <text x="255" y="72" class="edge-label">1st dialog</text>
+        <path d="M432,56 C432,80 590,80 590,100" class="edge"></path>
+        <text x="560" y="72" class="edge-label">2nd dialog</text>
+
+        <!-- P1007 branch -->
+        <rect x="120" y="100" width="180" height="46" class="node-box"></rect>
+        <text x="210" y="120" text-anchor="middle" class="node-title">Select P1007</text>
+        <text x="210" y="135" text-anchor="middle" class="node-sub">real letterhead loaded</text>
+
+        <path d="M210,146 L210,175" class="edge"></path>
+        <rect x="110" y="175" width="200" height="52" class="node-box"></rect>
+        <text x="210" y="197" text-anchor="middle" class="node-title">Prints as-is</text>
+        <text x="210" y="212" text-anchor="middle" class="node-sub">single-sided, office copy</text>
+
+        <!-- 355 branch -->
+        <rect x="500" y="100" width="180" height="46" class="node-box amber"></rect>
+        <text x="590" y="120" text-anchor="middle" class="node-title">Select capture printer</text>
+        <text x="590" y="135" text-anchor="middle" class="node-sub">silent local PDF</text>
+
+        <path d="M590,146 L590,175" class="edge"></path>
+        <rect x="480" y="175" width="220" height="52" class="node-box amber"></rect>
+        <text x="590" y="193" text-anchor="middle" class="node-title">Letterhead overlay</text>
+        <text x="590" y="208" text-anchor="middle" class="node-sub">front: bill + header · back: terms</text>
+        <text x="590" y="221" text-anchor="middle" class="node-sub">→ duplex to 355sdnw</text>
+
+        <!-- relay note -->
+        <path d="M155,175 C60,150 60,60 155,40" class="edge" stroke-dasharray="3 3"></path>
+        <text x="30" y="105" class="edge-label" transform="rotate(-90 30 105)">on Dell server / laptop only</text>
+      </svg>
+      <div class="diagram-caption">Copy order is the only signal available — Ornate doesn't expose which copy is which, so the app infers it from timing (2nd dialog within 20s of the 1st). On relay machines, the P1007 branch copies the raw file to <span class="mono">\\PC2\PrintBridge\incoming</span> instead of printing directly, since P1007 is only physically attached to PC2.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><span class="section-num">03</span><h2>What's configured where</h2></div>
+    <p class="lede">Same binary everywhere — behavior comes entirely from <span class="mono">config.txt</span> per machine. Fields that differ are the ones that actually matter.</p>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Field</th><th>PC2 (hub)</th><th>Dell server (relay)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>PcRole</td><td>PC2 (Hub)</td><td>Dell Server (Relay)</td></tr>
+          <tr><td>Relay1007Enabled</td><td>false</td><td class="diff">true</td></tr>
+          <tr><td>Copy1Printer</td><td>HP LaserJet P1007</td><td class="diff">P1007 Relay Capture</td></tr>
+          <tr><td>Copy2Printer</td><td>355 Letterhead Capture</td><td>355 Letterhead Capture</td></tr>
+          <tr><td>Overlay355TargetPrinterOverride</td><td class="diff">HP Laser MFP 355sdnw (05:32:A7)</td><td class="diff">HPF8EDFC0532A7(HP Laser MFP 330)</td></tr>
+          <tr><td>OrnateExecutablePathOverride</td><td>D:\Ornnx\ONX.exe <em>(default)</em></td><td>D:\Ornnx\ONX.exe <em>(default)</em></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:10px; font-size:13px; color:var(--ink-500);">Same physical 355 printer, two different Windows names — worth knowing before assuming a config typo. The laptop will need its own override: <span class="mono">C:\Ornnx\ONX.exe</span> is at <span class="mono">C:\</span> there, not <span class="mono">D:\</span>.</p>
+  </section>
+
+  <section>
+    <div class="section-head"><span class="section-num">04</span><h2>Machine detail</h2></div>
+    <div class="machine-grid">
+      <div class="machine-card">
+        <div class="card-top"><h3>PC2 — hub</h3><span class="pill done">done</span></div>
+        <dl class="kv">
+          <dt>Role</dt><dd>P1007 physically attached (USB). Prints its own copy 1 directly; also receives relayed copy-1 jobs from other machines and prints those too.</dd>
+          <dt>Default printer</dt><dd>355sdnw — catches all non-Ornate prints</dd>
+          <dt>AV</dt><dd>NPAV primary, Defender fully excluded (blanket <span class="mono">C:\</span>)</dd>
+          <dt>Autostart</dt><dd>HKCU Run key, confirmed surviving reboot</dd>
+        </dl>
+      </div>
+      <div class="machine-card">
+        <div class="card-top"><h3>Dell server — relay</h3><span class="pill done">done</span></div>
+        <dl class="kv">
+          <dt>Role</dt><dd>No direct P1007 access. Captures copy 1 locally, copies raw file to PC2's share for printing there.</dd>
+          <dt>Default printer</dt><dd>355-equivalent — set and confirmed</dd>
+          <dt>AV</dt><dd>Windows Defender primary — explicit exclusions added for <span class="mono">C:\PrintBridge</span>, <span class="mono">C:\ProgramData\Aradhana</span>, <span class="mono">C:\ProgramData\PDF Writer</span></dd>
+          <dt>Autostart</dt><dd>HKCU Run key, confirmed surviving an actual reboot</dd>
+        </dl>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><span class="section-num">05</span><h2>File &amp; path reference</h2></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Path</th><th>What it is</th></tr></thead>
+        <tbody>
+          <tr><td class="path">C:\ProgramData\Aradhana\OrnateAutoPrintTray\</td><td>App install dir — exe, <span class="mono">config.txt</span>, <span class="mono">OrnateAutoPrint.log</span></td></tr>
+          <tr><td class="path">C:\PrintBridge\overlay_merge.py</td><td>PyMuPDF script that composites the letterhead — front image + bill on top, back image as a second page</td></tr>
+          <tr><td class="path">C:\PrintBridge\letterhead_front.jpeg / _back.jpeg</td><td>The two letterhead images (optimized, ~130–280KB each — full-res originals are too slow to print)</td></tr>
+          <tr><td class="path">C:\PrintBridge\incoming_355 / done_355 / failed_355</td><td>355 pipeline: captured → processed → quarantined-on-error</td></tr>
+          <tr><td class="path">C:\PrintBridge\incoming_1007relay / done_1007relay</td><td>Relay machines only — copy-1 jobs waiting to ship to PC2</td></tr>
+          <tr><td class="path">\\PC2\PrintBridge\deploy</td><td>Staging share — every new build lands here first, both machines pull from it</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><span class="section-num">06</span><h2>What actually went wrong</h2></div>
+    <p class="lede">In build order — each one cost real time, so they're worth reading before touching this system again.</p>
+    <div class="lessons">
+      <div class="lesson">
+        <span class="num"></span>
+        <div>
+          <h4>Ornate's printer picker is a ListView, not a dropdown</h4>
+          <p>It looks like the classic Win32 print dialog, but the printer list is an icon grid — the same control .NET's <span class="mono">PrintDialog</span> uses. Selecting an item needs cross-process memory access (<span class="mono">VirtualAllocEx</span> / <span class="mono">WriteProcessMemory</span>) into Ornate's own process, since that message type doesn't auto-marshal the way a combo box's does.</p>
+        </div>
+      </div>
+      <div class="lesson">
+        <span class="num"></span>
+        <div>
+          <h4>NPAV deletes any .exe that PowerShell itself wrote to disk</h4>
+          <p>Silent, no popup, regardless of folder exclusions. The tell was a log line in <span class="mono">ZVMON\&lt;date&gt;.log</span> naming <span class="mono">POWERSHELL.EXE</span> as the writing process. Fix: deploy every build with <span class="mono">robocopy</span>, never <span class="mono">Copy-Item</span>.</p>
+        </div>
+      </div>
+      <div class="lesson">
+        <span class="num"></span>
+        <div>
+          <h4>A second, content-based heuristic hit the standalone watcher exe</h4>
+          <p>Even robocopy-deployed and folder-excluded, a separate background-watcher binary got flagged (spawning hidden child processes reads as a dropper pattern to NPAV). The fix wasn't a better exclusion — it was merging the watcher into the tray app, a binary that had never been touched all session.</p>
+        </div>
+      </div>
+      <div class="lesson">
+        <span class="num"></span>
+        <div>
+          <h4>Ghostscript draws an invisible full-page white rectangle first</h4>
+          <p>Ornate's captured PDF pages open with an opaque white fill covering the entire page before any content — normal for report-generator output, invisible in any viewer, but it defeats a naive "draw the letterhead behind everything" overlay. Fixed by stripping that specific fill from the raw content stream before compositing.</p>
+        </div>
+      </div>
+      <div class="lesson">
+        <span class="num"></span>
+        <div>
+          <h4>pypdf silently mishandled that same file; PyMuPDF didn't</h4>
+          <p><span class="mono">pypdf</span>'s content-stream reader returned nothing for the exact page PyMuPDF read correctly — no error, just a corrupted merge. Overlay logic now runs entirely on PyMuPDF.</p>
+        </div>
+      </div>
+      <div class="lesson">
+        <span class="num"></span>
+        <div>
+          <h4>A failed overlay left its output sitting in the watched folder</h4>
+          <p>Which meant the next scan reprocessed it as if it were new input — <span class="mono">merged_merged_merged_…pdf</span>, growing one prefix every 3 seconds. Fixed by writing intermediate output outside the watched folder and quarantining any input that fails, instead of leaving it to retry forever.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="callout">
+      <span class="mark">→</span>
+      <div>Whenever the laptop rollout resumes: same pattern as the Dell server exactly — install Bullzip twice (355 capture + P1007 relay capture), Python + PyMuPDF, add AV exclusions <em>before</em> deploying, set <span class="mono">OrnateExecutablePathOverride=C:\Ornnx\ONX.exe</span>. No new design decisions needed, just repetition.</div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Aradhana Jewellers — internal</span>
+    <span>Source in session scratchpad, not yet committed to a repo</span>
+  </footer>
+
+</div>

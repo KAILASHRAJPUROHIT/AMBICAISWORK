@@ -1,0 +1,4 @@
+# build artifacts if rebuilt locally
+bin/
+obj/
+*.pdb
