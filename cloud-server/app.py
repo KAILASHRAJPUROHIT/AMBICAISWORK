@@ -84,6 +84,112 @@ def save_printer_config(config: dict) -> None:
     db.session.commit()
 
 
+# ── KYC document OCR (fully isolated from PrintJob / the printing pipeline) ─
+# Deliberately a SEPARATE table and SEPARATE routes from PrintJob/upload/
+# /api/agent/jobs/* -- the printing pipeline must never share a code path
+# with this, so nothing here can ever regress printing.
+KYC_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+class KYCDocument(db.Model):
+    __tablename__ = "kyc_documents"
+    id = db.Column(db.String(32), primary_key=True)
+    status = db.Column(db.String(32), default="pending", nullable=False)  # pending, processing, completed, failed
+    file_path = db.Column(db.String(255), nullable=False)
+    error_message = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+def _generate_kyc_id():
+    today = datetime.now().strftime("%Y%m%d")
+    for _ in range(1000):
+        doc_id = f"KYC-{today}-{random.randint(1, 999):03d}"
+        if not KYCDocument.query.get(doc_id):
+            return doc_id
+    raise RuntimeError("Unable to generate KYC document ID. Try again.")
+
+
+@app.route("/api/kyc-ocr/upload", methods=["POST"])
+def kyc_ocr_upload():
+    """Separate from /upload (print jobs) on purpose -- this never touches
+    PrintJob or the print queue at all."""
+    uploaded = request.files.get("file")
+    if not uploaded or not uploaded.filename:
+        return jsonify({"error": "No file selected."}), 400
+    if Path(uploaded.filename).suffix.lower() not in KYC_ALLOWED_EXTENSIONS:
+        return jsonify({"error": f"Unsupported file type: {uploaded.filename}"}), 400
+
+    doc_id = _generate_kyc_id()
+    doc_dir = UPLOAD_DIR / "kyc" / doc_id
+    doc_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = secure_filename(uploaded.filename) or "document.jpg"
+    destination = doc_dir / safe_name
+    uploaded.save(destination)
+
+    doc = KYCDocument(id=doc_id, status="pending", file_path=f"{doc_id}/{safe_name}")
+    db.session.add(doc)
+    db.session.commit()
+    return jsonify({"success": True, "doc_id": doc_id, "status": doc.status})
+
+
+@app.route("/api/kyc-ocr/pending", methods=["GET"])
+def kyc_ocr_pending():
+    """Polled by ARADHANA -- returns documents waiting for OCR."""
+    docs = KYCDocument.query.filter_by(status="pending").order_by(KYCDocument.created_at.asc()).limit(5).all()
+    response = [
+        {
+            "doc_id": d.id,
+            # d.file_path is stored as "<doc_id>/<filename>" -- split back into
+            # the two URL segments the route below actually expects.
+            "url": request.url_root.rstrip("/") + f"/kyc-media/{d.file_path.split('/', 1)[0]}/{d.file_path.split('/', 1)[1]}",
+            "created_at": d.created_at.isoformat(),
+        }
+        for d in docs
+    ]
+    return jsonify({"documents": response})
+
+
+@app.route("/api/kyc-ocr/<doc_id>/status", methods=["POST", "PATCH"])
+def kyc_ocr_update_status(doc_id):
+    doc = KYCDocument.query.get_or_404(doc_id)
+    data = request.get_json(silent=True) or {}
+    status = data.get("status")
+    if status not in {"pending", "processing", "completed", "failed"}:
+        return jsonify({"error": "Invalid status."}), 400
+    doc.status = status
+    doc.updated_at = datetime.utcnow()
+    error_message = data.get("error") or data.get("error_message")
+    if error_message:
+        doc.error_message = str(error_message)[:2000]
+    db.session.commit()
+    return jsonify({"success": True, "doc_id": doc.id, "status": doc.status})
+
+
+@app.route("/kyc-media/<doc_id>/<path:filename>", methods=["GET"])
+def kyc_media(doc_id, filename):
+    # Same safe pattern as the existing /media/<job_id>/<path:filename> route:
+    # sanitize the (short, server-generated) doc_id segment, let
+    # send_from_directory's own path-traversal protection handle filename.
+    return send_from_directory(UPLOAD_DIR / "kyc" / secure_filename(doc_id), filename)
+
+
+# ── KYC-OCR model warm-up signal ─────────────────────────────────────────────
+# The local vision model that OCRs Aadhaar/PAN/bank documents (on ARADHANA,
+# not this cloud server) stays unloaded from GPU memory by default -- a cold
+# load takes ~80s, which a customer would feel as a frozen page. Rather than
+# keeping it warm all day (wasting GPU memory the rest of the system also
+# needs), ARADHANA polls this single timestamp at a fast interval and warms
+# the model the moment a customer reaches the print page, well before they've
+# actually selected/uploaded a document. Same row-1-only pattern as
+# PrinterConfig above, for the same reason (works correctly even if this
+# service ever runs as more than one instance).
+class WarmupSignal(db.Model):
+    __tablename__ = "warmup_signal"
+    id = db.Column(db.Integer, primary_key=True)
+    requested_at = db.Column(db.DateTime, nullable=True)
+
+
 def init_db():
     with app.app_context():
         db.create_all()
@@ -98,6 +204,10 @@ def init_db():
 
         if not PrinterConfig.query.get(1):
             db.session.add(PrinterConfig(id=1, printer_name="", available_printers="[]"))
+            db.session.commit()
+
+        if not WarmupSignal.query.get(1):
+            db.session.add(WarmupSignal(id=1, requested_at=None))
             db.session.commit()
 
 def allowed_file(filename):
@@ -121,7 +231,34 @@ def index():
 @app.route("/print", methods=["GET"])
 def print_page():
     production_mode = os.environ.get("PRODUCTION_MODE", "false").lower() == "true"
+    _record_warmup_signal()
     return render_template("upload.html", production_mode=production_mode)
+
+
+def _record_warmup_signal() -> None:
+    """Best-effort -- a warm-up hint is never worth failing the actual page load over."""
+    try:
+        row = WarmupSignal.query.get(1)
+        if not row:
+            row = WarmupSignal(id=1)
+            db.session.add(row)
+        row.requested_at = datetime.utcnow()
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+@app.route("/api/kyc-ocr/warmup-signal", methods=["GET"])
+def get_kyc_ocr_warmup_signal():
+    """Polled by ARADHANA (not by browsers) to decide whether to warm the
+    local OCR model. Returns how many seconds ago a customer last reached
+    /print, so the poller can apply its own freshness window without this
+    endpoint needing to know that policy."""
+    row = WarmupSignal.query.get(1)
+    if not row or not row.requested_at:
+        return jsonify({"requested_at": None, "seconds_ago": None})
+    seconds_ago = (datetime.utcnow() - row.requested_at).total_seconds()
+    return jsonify({"requested_at": row.requested_at.isoformat(), "seconds_ago": seconds_ago})
 
 
 @app.route("/upload", methods=["POST"])
