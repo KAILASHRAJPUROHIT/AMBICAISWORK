@@ -7,6 +7,7 @@ import json
 import os
 import tkinter as tk
 import ctypes
+import re
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 
@@ -34,6 +35,16 @@ def log(message):
             output.write(f"{datetime.now().isoformat(timespec='seconds')} {message}\n")
     except OSError:
         pass
+
+def reference_only(value):
+    """Return only the transaction identifier; never copy labels or popup text."""
+    raw = str(value or "").strip()
+    labelled = re.search(r"(?:utr|ref(?:erence)?|txn|transaction)\s*(?:no|number|id)?\s*[:#-]*\s*([A-Za-z0-9][A-Za-z0-9/-]{5,})", raw, re.IGNORECASE)
+    if labelled:
+        return labelled.group(1)
+    candidates = re.findall(r"(?<![A-Za-z0-9])[A-Za-z0-9][A-Za-z0-9/-]{5,}(?![A-Za-z0-9])", raw)
+    numeric_candidates = [candidate for candidate in candidates if any(char.isdigit() for char in candidate)]
+    return (numeric_candidates[-1] if numeric_candidates else raw.splitlines()[0]).strip()
 
 def active_work_area(root):
     """Use the monitor under the user's mouse, not a fixed primary display."""
@@ -172,7 +183,7 @@ class Notifier:
         tk.Label(header, text=f"NEW {item.get('direction', 'PAYMENT')}", bg=semantic, fg="white", font=("Segoe UI", 8, "bold"), padx=7, pady=2).pack(side="right")
         tk.Label(frame, text=f"₹{float(item.get('amount', 0)):,.2f}", bg=NAVY, fg=LIGHT_GOLD, font=("Segoe UI", 21, "bold")).pack(anchor="w", pady=(7, 0))
         tk.Label(frame, text=item.get("bank_name", "Bank not recorded"), bg=NAVY, fg="white", font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        reference = item.get("reference", "Not recorded")
+        reference = reference_only(item.get("reference", "Not recorded"))
         row = tk.Frame(frame, bg=NAVY)
         row.pack(fill="x", pady=(10, 0))
         copy_colours = {"blue": "#2563EB", "green": "#15803D", "red": "#DC2626"}
@@ -192,7 +203,7 @@ class Notifier:
         popup.after(self.display_ms, lambda: self.close(item_id))
 
     def copy(self, item, reference_label, copy_button):
-        value = str(item.get("reference", "")).strip()
+        value = reference_only(item.get("reference", ""))
         self.root.clipboard_clear()
         self.root.clipboard_append(value)
         self.root.update()
