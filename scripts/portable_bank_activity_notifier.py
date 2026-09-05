@@ -56,10 +56,12 @@ def register_task(installed_exe):
 
 
 def retire_legacy_notifiers():
-    """Prevent the former green Python notifier from running beside this build."""
+    """Leave exactly one notifier runtime after upgrades or repeat installs."""
     command = (
         "Get-CimInstance Win32_Process -Filter \"name = 'pythonw.exe'\" | "
         "Where-Object { $_.CommandLine -like '*bank_activity_notifier.py*' } | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; "
+        "Get-CimInstance Win32_Process -Filter \"name = 'AradhanaBankActivityNotifier.exe'\" | "
         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }; "
         "Unregister-ScheduledTask -TaskName 'AradhanaBankActivityNotifier' -Confirm:$false -ErrorAction SilentlyContinue"
     )

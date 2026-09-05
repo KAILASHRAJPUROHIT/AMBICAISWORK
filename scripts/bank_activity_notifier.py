@@ -18,12 +18,56 @@ if not os.path.exists(LOGO_PATH):
     LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
 NAVY, GOLD, LIGHT_GOLD, INK = "#23519D", "#CCA137", "#F7CA5B", "#10254A"
 DEFAULTS = {"server_url": "http://ARADHANA:8000/api/bank-activity", "poll_seconds": 1, "display_seconds": 30, "opacity": 92, "max_alerts": 3, "sound": False, "sound_threshold": 100000, "position": "centre-right", "enabled": True, "paused_until": None, "popup_width": 360, "popup_height": 188}
+
+def _bounded_int(value, default, minimum, maximum):
+    try:
+        return max(minimum, min(maximum, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+def _bounded_float(value, default, minimum):
+    try:
+        return max(minimum, float(value))
+    except (TypeError, ValueError):
+        return default
+
+def _as_bool(value, default):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.strip().lower() in ("true", "1", "yes", "on"):
+        return True
+    if isinstance(value, str) and value.strip().lower() in ("false", "0", "no", "off"):
+        return False
+    return default
+
 def load_settings():
     try:
         with open(SETTINGS_PATH, encoding="utf-8") as settings_file:
-            return {**DEFAULTS, **json.load(settings_file)}
+            raw = json.load(settings_file)
     except (OSError, json.JSONDecodeError):
-        return dict(DEFAULTS)
+        raw = {}
+    raw = raw if isinstance(raw, dict) else {}
+    server_url = str(raw.get("server_url", DEFAULTS["server_url"])).strip()
+    paused_until = raw.get("paused_until")
+    try:
+        if paused_until:
+            datetime.fromisoformat(str(paused_until))
+    except ValueError:
+        paused_until = None
+    return {
+        "server_url": server_url if server_url.startswith(("http://", "https://")) else DEFAULTS["server_url"],
+        "poll_seconds": _bounded_int(raw.get("poll_seconds"), DEFAULTS["poll_seconds"], 1, 60),
+        "display_seconds": _bounded_int(raw.get("display_seconds"), DEFAULTS["display_seconds"], 1, 300),
+        "opacity": _bounded_int(raw.get("opacity"), DEFAULTS["opacity"], 50, 100),
+        "max_alerts": _bounded_int(raw.get("max_alerts"), DEFAULTS["max_alerts"], 1, 5),
+        "sound": _as_bool(raw.get("sound"), DEFAULTS["sound"]),
+        "sound_threshold": _bounded_float(raw.get("sound_threshold"), DEFAULTS["sound_threshold"], 0),
+        "position": raw.get("position") if raw.get("position") in ("centre-right", "bottom-right") else DEFAULTS["position"],
+        "enabled": _as_bool(raw.get("enabled"), DEFAULTS["enabled"]),
+        "paused_until": paused_until,
+        "popup_width": _bounded_int(raw.get("popup_width"), DEFAULTS["popup_width"], 360, 1200),
+        "popup_height": _bounded_int(raw.get("popup_height"), DEFAULTS["popup_height"], 188, 900),
+    }
 
 SETTINGS = load_settings()
 REPLAY_COUNT = max(0, int(os.getenv("BANK_ACTIVITY_REPLAY_COUNT", "0")))
@@ -75,17 +119,15 @@ class Notifier:
         self.root.after(0, self.poll)
 
     def poll(self):
-        self.reload_settings()
-        if not self.is_enabled():
-            self.root.after(self.poll_ms, self.poll)
-            return
         try:
+            self.reload_settings()
+            if not self.is_enabled():
+                return
             with urlopen(self.api_url, timeout=2) as response:
                 data = json.loads(response.read().decode("utf-8"))
             rows = [dict(item, direction="CREDIT") for item in data.get("credits", [])]
             rows += [dict(item, direction="DEBIT") for item in data.get("debits", [])]
             rows += data.get("test_alerts", [])
-            log(f"poll rows={len(rows)} tests={len(data.get('test_alerts', []))}")
             current_ids = {item["id"] for item in rows}
             if not self.ready and REPLAY_COUNT:
                 # Explicit local replay for operator review. Never posts data
@@ -97,6 +139,11 @@ class Notifier:
                 for item in rows:
                     if item["id"] not in self.seen:
                         self.show(item)
+            else:
+                # A currently-active test alert must display even when this
+                # notifier was started after the test was sent.
+                for item in data.get("test_alerts", []):
+                    self.show(item)
             self.seen = current_ids
             self.ready = True
             if self.failure_count:
@@ -106,7 +153,8 @@ class Notifier:
             self.failure_count += 1
             if self.failure_count in (1, 5, 30):
                 log(f"poll failed count={self.failure_count}: {error}")
-        self.root.after(self.poll_ms, self.poll)
+        finally:
+            self.root.after(self.poll_ms, self.poll)
 
     @property
     def api_url(self):
