@@ -251,6 +251,50 @@ def get_document_bundle(bundle_id):
     })
 
 
+@app.route("/api/document-bundles/<bundle_id>/print-standalone", methods=["POST"])
+def print_document_bundle_standalone(bundle_id):
+    """Explicitly queue one held bundle using the ordinary QR print agent.
+
+    This route is bridge-authenticated and accepts only still-pending bundles,
+    so an unattended document can never be printed or attached by accident.
+    """
+    denied = _require_document_bridge()
+    if denied:
+        return denied
+    bundle = DocumentBundle.query.get_or_404(bundle_id)
+    if bundle.status != "pending":
+        return jsonify({"error": "This document bundle is no longer pending.", "status": bundle.status}), 409
+    filenames = json.loads(bundle.file_paths or "[]")
+    if not filenames:
+        return jsonify({"error": "This document bundle has no printable files."}), 409
+    source_dir = UPLOAD_DIR / "document-bundles" / secure_filename(bundle.id)
+    job_id = generate_queue_id()
+    job_dir = UPLOAD_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=False)
+    copied = []
+    try:
+        for filename in filenames:
+            safe_name = secure_filename(filename)
+            source = source_dir / safe_name
+            if not safe_name or not source.is_file():
+                raise FileNotFoundError(filename)
+            destination = job_dir / safe_name
+            if destination.exists():
+                destination = job_dir / f"{destination.stem}_{len(copied) + 1}{destination.suffix}"
+            shutil.copy2(source, destination)
+            copied.append(destination.name)
+        job = PrintJob(id=job_id, status="pending", print_mode="pdf", copies=1, file_paths=json.dumps(copied))
+        db.session.add(job)
+        bundle.status = "standalone_queued"
+        db.session.commit()
+    except Exception as error:
+        db.session.rollback()
+        shutil.rmtree(job_dir, ignore_errors=True)
+        return jsonify({"error": f"Could not queue document bundle: {error}"}), 409
+    return jsonify({"success": True, "bundle_id": bundle.id, "queue_id": job_id,
+                    "status": "pending", "file_count": len(copied)})
+
+
 @app.route("/document-media/<bundle_id>/<path:filename>", methods=["GET"])
 def document_bundle_media(bundle_id, filename):
     denied = _require_document_bridge()
