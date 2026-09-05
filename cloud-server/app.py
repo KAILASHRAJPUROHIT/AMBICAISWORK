@@ -379,6 +379,34 @@ def kyc_ocr_pending():
     return jsonify({"documents": response})
 
 
+@app.route("/api/kyc-ocr/backfill-print-jobs", methods=["POST"])
+def backfill_print_job_ocr():
+    """One controlled recovery path for QR jobs created before OCR queueing.
+
+    It never creates a PrintJob or talks to an agent/printer. Re-run only when
+    explicitly needed, since old jobs are intentionally re-queued for OCR.
+    """
+    denied = _require_document_bridge()
+    if denied:
+        return denied
+    data = request.get_json(silent=True) or {}
+    try:
+        minutes = int(data.get("minutes", 30))
+    except (TypeError, ValueError):
+        return jsonify({"error": "minutes must be an integer"}), 400
+    minutes = max(1, min(minutes, 24 * 60))
+    cutoff = datetime.utcnow() - timedelta(minutes=minutes)
+    queued = 0
+    for job in PrintJob.query.filter(PrintJob.created_at >= cutoff).order_by(PrintJob.created_at.asc()).all():
+        job_dir = UPLOAD_DIR / secure_filename(job.id)
+        for filename in json.loads(job.file_paths or "[]"):
+            source = job_dir / secure_filename(filename)
+            if source.is_file() and _enqueue_ocr_copy(source):
+                queued += 1
+    db.session.commit()
+    return jsonify({"success": True, "queued": queued, "window_minutes": minutes})
+
+
 @app.route("/api/kyc-ocr/<doc_id>/status", methods=["POST", "PATCH"])
 def kyc_ocr_update_status(doc_id):
     doc = KYCDocument.query.get_or_404(doc_id)
