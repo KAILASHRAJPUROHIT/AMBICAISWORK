@@ -28,6 +28,10 @@ db = SQLAlchemy(app)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
 VALID_PRINT_MODES = {"pdf", "id_card"}
+DOCUMENT_RETENTION_DAYS = max(1, int(os.environ.get("QR_DOCUMENT_RETENTION_DAYS", "365")))
+DOCUMENT_QUEUE_MINUTES = max(1, int(os.environ.get("QR_DOCUMENT_QUEUE_MINUTES", "30")))
+# QR documents are never sent to an arbitrary desktop printer.
+QR_REQUIRED_PRINTER = os.environ.get("QR_REQUIRED_PRINTER", "HP Laser MFP 355sdnw (05:32:A7)").strip()
 
 
 class PrintJob(db.Model):
@@ -63,9 +67,9 @@ class PrinterConfig(db.Model):
 def load_printer_config() -> dict:
     row = PrinterConfig.query.get(1)
     if not row:
-        return {"printer_name": "", "available_printers": [], "printers_reported_at": None}
+        return {"printer_name": QR_REQUIRED_PRINTER, "available_printers": [], "printers_reported_at": None}
     return {
-        "printer_name": row.printer_name or "",
+        "printer_name": QR_REQUIRED_PRINTER,
         "available_printers": json.loads(row.available_printers or "[]"),
         "printers_reported_at": row.printers_reported_at.isoformat() if row.printers_reported_at else None,
     }
@@ -90,7 +94,7 @@ def save_printer_config(config: dict) -> None:
 # Deliberately a SEPARATE table and SEPARATE routes from PrintJob/upload/
 # /api/agent/jobs/* -- the printing pipeline must never share a code path
 # with this, so nothing here can ever regress printing.
-KYC_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+KYC_ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
 
 
 class KYCDocument(db.Model):
@@ -175,6 +179,34 @@ def _generate_document_bundle_id():
     raise RuntimeError("Unable to generate document bundle ID. Try again.")
 
 
+def expire_document_bundles() -> int:
+    """Remove unattended documents from the live queue, retaining archive data."""
+    cutoff = datetime.utcnow() - timedelta(minutes=DOCUMENT_QUEUE_MINUTES)
+    expired = DocumentBundle.query.filter(
+        DocumentBundle.status == "pending", DocumentBundle.created_at < cutoff
+    ).update({"status": "expired"}, synchronize_session=False)
+    if expired:
+        db.session.commit()
+    return expired
+
+
+def _enqueue_ocr_copy(source: Path) -> str | None:
+    """Copy an image into the isolated local-OCR queue.
+
+    Printing must remain independent: a copy/queue failure is deliberately not
+    allowed to reject or delay a PrintJob.
+    """
+    if source.suffix.lower() not in KYC_ALLOWED_EXTENSIONS:
+        return None
+    doc_id = _generate_kyc_id()
+    kyc_dir = UPLOAD_DIR / "kyc" / doc_id
+    kyc_dir.mkdir(parents=True, exist_ok=True)
+    target = kyc_dir / source.name
+    shutil.copy2(source, target)
+    db.session.add(KYCDocument(id=doc_id, status="pending", file_path=f"{doc_id}/{target.name}"))
+    return doc_id
+
+
 @app.route("/api/document-bundles/upload", methods=["POST"])
 def upload_document_bundle():
     """QR Scanner attachment mode. Creates a pending bundle and OCR items;
@@ -203,15 +235,7 @@ def upload_document_bundle():
             destination = bundle_dir / f"{destination.stem}_{len(saved)+1}{destination.suffix}"
         uploaded.save(destination)
         saved.append(destination.name)
-        # Existing local OCR accepts images only. PDFs remain printable but are
-        # not falsely represented as OCR-complete.
-        if destination.suffix.lower() in KYC_ALLOWED_EXTENSIONS:
-            doc_id = _generate_kyc_id()
-            kyc_dir = UPLOAD_DIR / "kyc" / doc_id
-            kyc_dir.mkdir(parents=True, exist_ok=True)
-            kyc_target = kyc_dir / destination.name
-            shutil.copy2(destination, kyc_target)
-            db.session.add(KYCDocument(id=doc_id, status="pending", file_path=f"{doc_id}/{kyc_target.name}"))
+        _enqueue_ocr_copy(destination)
     if not saved:
         return jsonify({"error": "No valid files uploaded."}), 400
     bundle = DocumentBundle(id=bundle_id, display_name=display_name[:160], status="pending", file_paths=json.dumps(saved))
@@ -227,7 +251,8 @@ def pending_document_bundles():
     denied = _require_document_bridge()
     if denied:
         return denied
-    bundles = DocumentBundle.query.filter_by(status="pending").order_by(DocumentBundle.created_at.asc()).limit(50).all()
+    expire_document_bundles()
+    bundles = DocumentBundle.query.filter_by(status="pending").order_by(DocumentBundle.created_at.desc()).limit(50).all()
     return jsonify({"bundles": [{
         "bundle_id": bundle.id,
         "display_name": bundle.display_name,
@@ -261,6 +286,7 @@ def print_document_bundle_standalone(bundle_id):
     denied = _require_document_bridge()
     if denied:
         return denied
+    expire_document_bundles()
     bundle = DocumentBundle.query.get_or_404(bundle_id)
     if bundle.status != "pending":
         return jsonify({"error": "This document bundle is no longer pending.", "status": bundle.status}), 409
@@ -346,6 +372,7 @@ def kyc_ocr_pending():
             # the two URL segments the route below actually expects.
             "url": request.url_root.rstrip("/") + f"/kyc-media/{d.file_path.split('/', 1)[0]}/{d.file_path.split('/', 1)[1]}",
             "created_at": d.created_at.isoformat(),
+            "filename": Path(d.file_path).name,
         }
         for d in docs
     ]
@@ -498,6 +525,9 @@ def upload():
             destination = job_dir / f"{destination.stem}_{len(saved_files)+1}{destination.suffix}"
         uploaded.save(destination)
         saved_files.append(destination.name)
+        # QR Print Now and Attach to Bill must have identical OCR visibility.
+        # This is a copy-only side path: print queue behavior stays unchanged.
+        _enqueue_ocr_copy(destination)
 
     if not saved_files:
         return jsonify({"error": "No valid files uploaded."}), 400
@@ -750,10 +780,12 @@ def admin_set_printer():
     printer_name = (data.get("printer_name") or "").strip()
     config = load_printer_config()
     available = config.get("available_printers") or []
-    if printer_name and printer_name not in available:
-        return jsonify({"error": "That printer isn't in the reported printer list. Make sure the print agent is running and has reported its printers."}), 400
+    if printer_name != QR_REQUIRED_PRINTER:
+        return jsonify({"error": f"QR Print Server is locked to {QR_REQUIRED_PRINTER}."}), 400
+    if printer_name not in available:
+        return jsonify({"error": "The required 355 printer is not reported by the print agent."}), 400
 
-    config["printer_name"] = printer_name  # "" clears it, deliberately allowed
+    config["printer_name"] = QR_REQUIRED_PRINTER
     save_printer_config(config)
     return jsonify({"success": True, "printer_name": printer_name})
 
@@ -865,8 +897,8 @@ a.back{{color:#D4AF37;text-decoration:none;font-size:14px;display:inline-block;m
 
 
 def cleanup_old_uploads():
-    """Delete upload directories for jobs older than 30 days."""
-    cutoff = datetime.utcnow() - timedelta(days=30)
+    """Retain printable QR documents for the configured evidence period."""
+    cutoff = datetime.utcnow() - timedelta(days=DOCUMENT_RETENTION_DAYS)
     with app.app_context():
         old_jobs = PrintJob.query.filter(PrintJob.created_at < cutoff).all()
         removed = 0
@@ -876,12 +908,12 @@ def cleanup_old_uploads():
                 shutil.rmtree(job_dir, ignore_errors=True)
                 removed += 1
     if removed:
-        print(f"[cleanup] Removed {removed} upload directories older than 30 days.")
+        print(f"[cleanup] Removed {removed} upload directories older than {DOCUMENT_RETENTION_DAYS} days.")
 
 
 @app.route("/admin/history", methods=["GET"])
 def admin_history():
-    cutoff = datetime.utcnow() - timedelta(days=30)
+    cutoff = datetime.utcnow() - timedelta(days=DOCUMENT_RETENTION_DAYS)
     jobs = (PrintJob.query
             .filter(PrintJob.created_at >= cutoff)
             .order_by(PrintJob.created_at.desc())
@@ -920,7 +952,7 @@ h1{{color:#D4AF37;font-family:Georgia,serif;letter-spacing:2px}}
 a.back{{color:#D4AF37;text-decoration:none;font-size:14px;display:inline-block;margin-bottom:20px}}
 </style></head><body>
 <a class="back" href="/admin">← Back to Admin</a>
-<h1>Print History — Last 30 Days</h1>
+<h1>Print History — Last {DOCUMENT_RETENTION_DAYS} Days</h1>
 <p style="color:#888;font-size:13px;margin-bottom:20px">{len(jobs)} job(s) found</p>
 <div class="grid">{cards if cards else "<p style='color:#666'>No print jobs in the last 30 days.</p>"}</div>
 </body></html>"""
