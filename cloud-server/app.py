@@ -2,6 +2,8 @@ import base64
 import json
 import os
 import random
+import secrets
+import hmac
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -99,6 +101,162 @@ class KYCDocument(db.Model):
     error_message = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+# Delayed bill attachment. This is intentionally separate from PrintJob: a
+# scanned ID may arrive before a bill exists, and must never auto-print.
+class DocumentBundle(db.Model):
+    __tablename__ = "document_bundles"
+    id = db.Column(db.String(32), primary_key=True)
+    display_name = db.Column(db.String(160), nullable=False)
+    status = db.Column(db.String(32), default="pending", nullable=False)
+    file_paths = db.Column(db.Text, nullable=False, default="[]")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+
+class DocumentScanSession(db.Model):
+    __tablename__ = "document_scan_sessions"
+    id = db.Column(db.String(32), primary_key=True)
+    token = db.Column(db.String(96), nullable=False, unique=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+
+
+def _document_token_required():
+    return os.environ.get("PRODUCTION_MODE", "false").lower() == "true"
+
+
+def _valid_document_token(token):
+    if not _document_token_required():
+        return True
+    session = DocumentScanSession.query.filter_by(token=token or "").first()
+    return bool(session and not session.used_at and session.expires_at > datetime.utcnow())
+
+
+def _document_bridge_authorized():
+    """Allow document metadata/media only to the configured Router bridge."""
+    expected = os.environ.get("DOCUMENT_BRIDGE_TOKEN", "")
+    if not expected:
+        # Never publish identity documents merely because deployment settings
+        # were missed. The Router bridge is unavailable until configured.
+        return False, ""
+    supplied = request.headers.get("X-Document-Bridge-Token", "")
+    return hmac.compare_digest(supplied, expected), ""
+
+
+def _require_document_bridge():
+    authorized, _ = _document_bridge_authorized()
+    if authorized:
+        return None
+    if not os.environ.get("DOCUMENT_BRIDGE_TOKEN", ""):
+        return jsonify({"error": "Document bridge is not configured."}), 503
+    return jsonify({"error": "Unauthorized document bridge."}), 401
+
+
+@app.route("/api/document-scan-sessions", methods=["POST"])
+def create_document_scan_session():
+    secret = request.headers.get("X-Admin-Secret", "")
+    expected = os.environ.get("ADMIN_SECRET", "")
+    if not expected or not hmac.compare_digest(secret, expected):
+        return jsonify({"error": "Unauthorized"}), 401
+    scan_id, token = "SCAN-" + secrets.token_hex(6).upper(), secrets.token_urlsafe(32)
+    db.session.add(DocumentScanSession(id=scan_id, token=token, expires_at=datetime.utcnow() + timedelta(minutes=15)))
+    db.session.commit()
+    return jsonify({"scan_id": scan_id, "token": token, "expires_in_seconds": 900}), 201
+
+
+def _generate_document_bundle_id():
+    today = datetime.now().strftime("%Y%m%d")
+    for _ in range(1000):
+        bundle_id = f"DOC-{today}-{random.randint(1, 999):03d}"
+        if not DocumentBundle.query.get(bundle_id):
+            return bundle_id
+    raise RuntimeError("Unable to generate document bundle ID. Try again.")
+
+
+@app.route("/api/document-bundles/upload", methods=["POST"])
+def upload_document_bundle():
+    """QR Scanner attachment mode. Creates a pending bundle and OCR items;
+    does not touch the ordinary print queue."""
+    token = request.form.get("scan_token") or request.headers.get("X-Document-Scan-Token")
+    if not _valid_document_token(token):
+        return jsonify({"error": "A valid scan session is required."}), 401
+    files = request.files.getlist("files[]") or request.files.getlist("files")
+    display_name = (request.form.get("display_name") or "Pending ID documents").strip()
+    if not files:
+        return jsonify({"error": "No files selected."}), 400
+    if len(files) > 12:
+        return jsonify({"error": "Maximum 12 files allowed."}), 400
+    bundle_id = _generate_document_bundle_id()
+    bundle_dir = UPLOAD_DIR / "document-bundles" / bundle_id
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    saved = []
+    for uploaded in files:
+        if not uploaded or not uploaded.filename:
+            continue
+        if Path(uploaded.filename).suffix.lower() not in ALLOWED_EXTENSIONS:
+            return jsonify({"error": f"Unsupported file type: {uploaded.filename}"}), 400
+        filename = secure_filename(uploaded.filename) or f"document_{len(saved)+1}.jpg"
+        destination = bundle_dir / filename
+        if destination.exists():
+            destination = bundle_dir / f"{destination.stem}_{len(saved)+1}{destination.suffix}"
+        uploaded.save(destination)
+        saved.append(destination.name)
+        # Existing local OCR accepts images only. PDFs remain printable but are
+        # not falsely represented as OCR-complete.
+        if destination.suffix.lower() in KYC_ALLOWED_EXTENSIONS:
+            doc_id = _generate_kyc_id()
+            kyc_dir = UPLOAD_DIR / "kyc" / doc_id
+            kyc_dir.mkdir(parents=True, exist_ok=True)
+            kyc_target = kyc_dir / destination.name
+            shutil.copy2(destination, kyc_target)
+            db.session.add(KYCDocument(id=doc_id, status="pending", file_path=f"{doc_id}/{kyc_target.name}"))
+    if not saved:
+        return jsonify({"error": "No valid files uploaded."}), 400
+    bundle = DocumentBundle(id=bundle_id, display_name=display_name[:160], status="pending", file_paths=json.dumps(saved))
+    db.session.add(bundle)
+    if _document_token_required():
+        DocumentScanSession.query.filter_by(token=token).update({"used_at": datetime.utcnow()})
+    db.session.commit()
+    return jsonify({"success": True, "bundle_id": bundle_id, "status": "pending", "file_count": len(saved)})
+
+
+@app.route("/api/document-bundles/pending", methods=["GET"])
+def pending_document_bundles():
+    denied = _require_document_bridge()
+    if denied:
+        return denied
+    bundles = DocumentBundle.query.filter_by(status="pending").order_by(DocumentBundle.created_at.asc()).limit(50).all()
+    return jsonify({"bundles": [{
+        "bundle_id": bundle.id,
+        "display_name": bundle.display_name,
+        "file_count": len(json.loads(bundle.file_paths or "[]")),
+        "created_at": bundle.created_at.isoformat(),
+    } for bundle in bundles]})
+
+
+@app.route("/api/document-bundles/<bundle_id>", methods=["GET"])
+def get_document_bundle(bundle_id):
+    denied = _require_document_bridge()
+    if denied:
+        return denied
+    bundle = DocumentBundle.query.get_or_404(bundle_id)
+    files = json.loads(bundle.file_paths or "[]")
+    return jsonify({
+        "bundle_id": bundle.id,
+        "display_name": bundle.display_name,
+        "status": bundle.status,
+        "files": [{"filename": name, "url": request.url_root.rstrip("/") + f"/document-media/{bundle.id}/{name}"} for name in files],
+    })
+
+
+@app.route("/document-media/<bundle_id>/<path:filename>", methods=["GET"])
+def document_bundle_media(bundle_id, filename):
+    denied = _require_document_bridge()
+    if denied:
+        return denied
+    return send_from_directory(UPLOAD_DIR / "document-bundles" / secure_filename(bundle_id), filename, as_attachment=True)
 
 
 def _generate_kyc_id():

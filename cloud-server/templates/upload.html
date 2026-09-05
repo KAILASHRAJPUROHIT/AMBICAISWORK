@@ -437,6 +437,19 @@
         </div>
 
         <div class="options">
+            <span class="section-label">Send documents as</span>
+            <div class="print-types" style="margin-bottom:18px">
+                <label class="type-card">
+                    <input type="radio" name="delivery-mode" value="standalone" checked>
+                    <div class="type-content"><span class="mode-icon">🖨️</span><strong>Print Now</strong><span class="mode-desc">Normal standalone document print</span></div>
+                </label>
+                <label class="type-card">
+                    <input type="radio" name="delivery-mode" value="attach">
+                    <div class="type-content"><span class="mode-icon">📎</span><strong>Attach to Bill</strong><span class="mode-desc">Hold securely for biller selection</span></div>
+                </label>
+            </div>
+            <input id="document-bundle-name" type="text" maxlength="160" placeholder="Customer name / reference (optional)"
+                style="width:100%;box-sizing:border-box;padding:12px;border-radius:8px;margin:0 0 20px;background:var(--navy-light);color:white;border:1px solid var(--gold);">
             <span class="section-label">Print Mode</span>
             <div class="print-types">
                 <label class="type-card">
@@ -1547,6 +1560,9 @@
         queue.forEach((item, i) => _pendingFd.append('files[]', item.blob, item.name || `doc_${i}.jpg`));
         _pendingFd.append('print_mode', document.querySelector('input[name="print-mode"]:checked').value);
         _pendingFd.append('copies', document.getElementById('copies-select').value);
+        _pendingFd.append('display_name', document.getElementById('document-bundle-name').value || 'Pending ID documents');
+        const scanToken = new URLSearchParams(window.location.search).get('scan_token');
+        if (scanToken) _pendingFd.append('scan_token', scanToken);
 
         // Gate: show social modal — print only fires after user interacts with it
         showSocialModal();
@@ -1582,7 +1598,8 @@
         _lastFd = null;
 
         showView('progress');
-        document.getElementById('progress-title').textContent = 'Sending to print queue…';
+        const attachMode = document.querySelector('input[name="delivery-mode"]:checked').value === 'attach';
+        document.getElementById('progress-title').textContent = attachMode ? 'Saving secure document bundle…' : 'Sending to print queue…';
         document.getElementById('progress-desc').textContent = 'Please wait while your documents are uploaded.';
         const stuckBtn = document.getElementById('btn-progress-stuck');
         stuckBtn.classList.add('hidden');
@@ -1595,7 +1612,7 @@
         _uploadAbortController = new AbortController();
         const timeoutId = setTimeout(() => _uploadAbortController.abort(), UPLOAD_TIMEOUT_MS);
 
-        fetch('/upload', { method: 'POST', body: fd, signal: _uploadAbortController.signal })
+        fetch(attachMode ? '/api/document-bundles/upload' : '/upload', { method: 'POST', body: fd, signal: _uploadAbortController.signal })
             .then(r => {
                 if (!r.ok) return r.json().then(d => Promise.reject(d.error || `Server error ${r.status}`));
                 return r.json();
@@ -1603,13 +1620,18 @@
             .then(data => {
                 clearTimeout(timeoutId);
                 clearTimeout(_stuckButtonTimer);
-                document.getElementById('display-queue-id').textContent = data.queue_id;
+                const isBundle = Boolean(data.bundle_id);
+                document.getElementById('display-queue-id').textContent = isBundle ? data.bundle_id : data.queue_id;
+                document.querySelector('#stamp-box div').textContent = isBundle ? 'Document Bundle ID' : 'Queue ID';
                 queue.forEach(item => URL.revokeObjectURL(item.url));
                 queue = [];
                 updateQueueUI();
                 haptic([100, 50, 200]);
                 showView('success');
-                startPolling(data.queue_id);
+                if (isBundle) {
+                    document.getElementById('status-text').textContent = 'Waiting securely for biller selection…';
+                    document.getElementById('queue-position-text').textContent = 'Show this bundle ID to the biller if needed.';
+                } else startPolling(data.queue_id);
             })
             .catch(err => {
                 clearTimeout(timeoutId);
