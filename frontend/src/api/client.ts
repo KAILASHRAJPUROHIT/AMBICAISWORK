@@ -181,6 +181,25 @@ export async function recordBankActivityReferenceCopy(reference: string, source:
   return handleJsonResponse(response, 'Failed to record Ref / UTR copy');
 }
 
+export async function getDocumentDashboard() {
+  const response = await fetch(`${BASE_URL}/api/documents`, { headers: getHeaders() });
+  return handleJsonResponse(response, 'Failed to fetch documents');
+}
+
+export async function reprintDocument(bundleId: string) {
+  const response = await fetch(`${BASE_URL}/api/documents/${encodeURIComponent(bundleId)}/reprint`, { method: 'POST', headers: getHeaders() });
+  return handleJsonResponse(response, 'Could not queue document reprint');
+}
+
+export async function resendDocumentToBiller(bundleId: string) {
+  const response = await fetch(`${BASE_URL}/api/documents/${encodeURIComponent(bundleId)}/resend-to-biller`, { method: 'POST', headers: getHeaders() });
+  return handleJsonResponse(response, 'Could not resend documents to biller');
+}
+
+export function documentDownloadUrl(bundleId: string, filename: string) {
+  return `${BASE_URL}/api/documents/${encodeURIComponent(bundleId)}/files/${encodeURIComponent(filename)}`;
+}
+
 export async function saveBankActivityCorrection(id: number, correction: Record<string, string>) {
   const response = await fetch(`${BASE_URL}/api/bank-activity/${id}/correction`, {
     method: 'POST',

@@ -5,6 +5,10 @@ import sys
 import ipaddress
 import re
 import hashlib
+import ctypes
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request as UrlRequest, urlopen
 from uuid import uuid4
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, Union
@@ -73,6 +77,34 @@ from backend.invoice_lifecycle import start_lifecycle_automation
 
 # Initialize FastAPI app
 app = FastAPI(title="Aradhana Review API")
+QR_DOCUMENT_SERVER_URL = os.environ.get("QR_DOCUMENT_SERVER_URL", "https://print.aradhanajewellers.com").rstrip("/")
+
+
+def _windows_credential(target: str) -> str:
+    """Read a Generic Credential without placing its secret in config or logs."""
+    if os.name != "nt":
+        return ""
+    class Credential(ctypes.Structure):
+        _fields_ = [("Flags", ctypes.c_uint32), ("Type", ctypes.c_uint32), ("TargetName", ctypes.c_void_p),
+                    ("Comment", ctypes.c_void_p), ("LastWritten", ctypes.c_byte * 8),
+                    ("CredentialBlobSize", ctypes.c_uint32), ("CredentialBlob", ctypes.c_void_p),
+                    ("Persist", ctypes.c_uint32), ("AttributeCount", ctypes.c_uint32), ("Attributes", ctypes.c_void_p),
+                    ("TargetAlias", ctypes.c_void_p), ("UserName", ctypes.c_void_p)]
+    pointer = ctypes.c_void_p()
+    try:
+        if not ctypes.windll.advapi32.CredReadW(target, 1, 0, ctypes.byref(pointer)):
+            return ""
+        credential = ctypes.cast(pointer, ctypes.POINTER(Credential)).contents
+        if not credential.CredentialBlob or not credential.CredentialBlobSize:
+            return ""
+        return ctypes.wstring_at(credential.CredentialBlob, credential.CredentialBlobSize // 2).rstrip("\0").strip()
+    finally:
+        if pointer:
+            ctypes.windll.advapi32.CredFree(pointer)
+
+
+def _document_bridge_token() -> str:
+    return os.environ.get("QR_DOCUMENT_BRIDGE_TOKEN", "").strip() or _windows_credential("AIS.DocumentBridgeToken")
 
 # Dependency
 def get_db():
@@ -736,6 +768,7 @@ def _active_bank_activity_test_popups(db: Session) -> List[dict]:
             continue
     return active
 
+
 @app.get("/api/bank-activity")
 async def get_bank_activity(request: Request, db: Session = Depends(get_db)):
     """Latest credited/debited bank SMS records for the LAN-only cash-flow view."""
@@ -1171,6 +1204,66 @@ async def get_open_escalations_real(request: Request, db: Session = Depends(get_
         "high_count": sum(1 for e in escalations if e["severity"] == "HIGH"),
         "escalations": escalations,
     })
+
+def _qr_document_request(path: str, method: str = "GET", payload: Optional[dict] = None) -> tuple[bytes, str]:
+    """Server-side bridge. Dashboard clients never receive the QR secret."""
+    token = _document_bridge_token()
+    if not token:
+        raise HTTPException(status_code=503, detail="Document bridge is not configured on this server.")
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"X-Document-Bridge-Token": token}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    request = UrlRequest(QR_DOCUMENT_SERVER_URL + path, data=data, headers=headers, method=method)
+    try:
+        with urlopen(request, timeout=30) as response:
+            return response.read(), response.headers.get_content_type()
+    except HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")[:500]
+        raise HTTPException(status_code=error.code, detail=detail) from error
+    except URLError as error:
+        raise HTTPException(status_code=502, detail=f"Document server unavailable: {error.reason}") from error
+
+
+def _valid_document_id(value: str) -> str:
+    if not re.fullmatch(r"DOC-[A-Z0-9-]{4,64}", value or ""):
+        raise HTTPException(status_code=400, detail="Invalid document bundle id.")
+    return value
+
+
+@app.get("/api/documents")
+async def get_document_dashboard(request: Request):
+    _require_lan_bank_activity(request)
+    raw, _ = _qr_document_request("/api/document-bundles/dashboard")
+    return JSONResponse(content=json.loads(raw))
+
+
+@app.get("/api/documents/{bundle_id}/files/{filename}")
+async def download_document_file(bundle_id: str, filename: str, request: Request):
+    _require_lan_bank_activity(request)
+    _valid_document_id(bundle_id)
+    if filename != os.path.basename(filename):
+        raise HTTPException(status_code=400, detail="Invalid document filename.")
+    raw, content_type = _qr_document_request(f"/document-media/{quote(bundle_id)}/{quote(filename)}")
+    return Response(content=raw, media_type=content_type or "application/octet-stream",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@app.post("/api/documents/{bundle_id}/reprint")
+async def reprint_document(bundle_id: str, request: Request):
+    _require_lan_bank_activity(request)
+    _valid_document_id(bundle_id)
+    raw, _ = _qr_document_request(f"/api/document-bundles/{quote(bundle_id)}/reprint", "POST", {})
+    return JSONResponse(content=json.loads(raw))
+
+
+@app.post("/api/documents/{bundle_id}/resend-to-biller")
+async def resend_document_to_biller(bundle_id: str, request: Request):
+    _require_lan_bank_activity(request)
+    _valid_document_id(bundle_id)
+    raw, _ = _qr_document_request(f"/api/document-bundles/{quote(bundle_id)}/resend-to-biller", "POST", {})
+    return JSONResponse(content=json.loads(raw))
+
 
 @app.get("/api/reconciliation/open")
 async def get_open_reconciliation_real(request: Request, response: Response, db: Session = Depends(get_db)):
@@ -2124,6 +2217,7 @@ async def security_middleware(request: Request, call_next):
         "/api/version",
         "/api/reports/payment-bifurcation",
         "/api/bank-activity",
+        "/api/documents",
         "/api/debug/",
         "/debug/",
         "/status-colors",
