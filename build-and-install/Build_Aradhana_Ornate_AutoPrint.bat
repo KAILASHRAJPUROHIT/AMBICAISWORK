@@ -3,7 +3,7 @@ setlocal EnableExtensions
 title Build Aradhana Ornate AutoPrint Tray App v2
 
 set "HERE=%~dp0"
-set "SRC=%HERE%AradhanaOrnateAutoPrint.cs"
+set "SRC=%HERE%..\src\AradhanaOrnateAutoPrint.cs"
 set "EXE=%HERE%AradhanaOrnateAutoPrint.exe"
 
 set "CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
@@ -20,6 +20,7 @@ echo Building...
 "%CSC%" /nologo /target:winexe /optimize+ ^
  /reference:System.dll ^
  /reference:System.Drawing.dll ^
+ /reference:System.Security.dll ^
  /reference:System.Windows.Forms.dll ^
  /out:"%EXE%" "%SRC%"
 

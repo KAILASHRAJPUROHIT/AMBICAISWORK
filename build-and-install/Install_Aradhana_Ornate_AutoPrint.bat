@@ -6,6 +6,9 @@ set "APPNAME=AradhanaOrnateAutoPrint.exe"
 set "BASE=C:\ProgramData\Aradhana\OrnateAutoPrintTray"
 set "TARGET=%BASE%\%APPNAME%"
 set "SOURCE=%~dp0%APPNAME%"
+set "REFERENCE=office-sales-voucher-format-reference.png"
+set "REFERENCE_SOURCE=%~dp0%REFERENCE%"
+set "REFERENCE_TARGET=%BASE%\%REFERENCE%"
 set "RUNKEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
 set "RUNNAME=Aradhana Ornate AutoPrint"
 
@@ -27,6 +30,19 @@ if not exist "%BASE%" mkdir "%BASE%"
 copy /y "%SOURCE%" "%TARGET%" >nul
 if errorlevel 1 (
   echo ERROR: Could not copy the EXE to %BASE%
+  pause
+  exit /b 1
+)
+
+if not exist "%REFERENCE_SOURCE%" (
+  echo ERROR: %REFERENCE% was not found next to this installer.
+  pause
+  exit /b 1
+)
+
+copy /y "%REFERENCE_SOURCE%" "%REFERENCE_TARGET%" >nul
+if errorlevel 1 (
+  echo ERROR: Could not copy the Voucher Format reference to %BASE%
   pause
   exit /b 1
 )

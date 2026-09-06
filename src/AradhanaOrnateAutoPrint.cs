@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Forms;
 
@@ -51,6 +52,12 @@ namespace AradhanaOrnateAutoPrint
         // to PC2's incoming share instead of printing directly.
         public bool Relay1007Enabled = false;
 
+        // AIS document workflow is opt-in until physical P355 acceptance tests pass.
+        public bool DocumentWorkflowEnabled = false;
+        public string DocumentWorkflowRoot = @"C:\AradhanaSystems\platform\plugins\document-print-workflow";
+        public string DocumentWorkflowApi = "http://127.0.0.1:8310";
+        public string DocumentScannerApi = "";
+
         public bool IsHub
         {
             get { return !Relay1007Enabled; }
@@ -89,6 +96,10 @@ namespace AradhanaOrnateAutoPrint
                         case "OrnateExecutablePathOverride": cfg.OrnateExecutablePathOverride = val; break;
                         case "Overlay355TargetPrinterOverride": cfg.Overlay355TargetPrinterOverride = val; break;
                         case "Relay1007Enabled": cfg.Relay1007Enabled = val.Equals("true", StringComparison.OrdinalIgnoreCase); break;
+                        case "DocumentWorkflowEnabled": cfg.DocumentWorkflowEnabled = val.Equals("true", StringComparison.OrdinalIgnoreCase); break;
+                        case "DocumentWorkflowRoot": cfg.DocumentWorkflowRoot = val; break;
+                        case "DocumentWorkflowApi": cfg.DocumentWorkflowApi = val; break;
+                        case "DocumentScannerApi": cfg.DocumentScannerApi = val; break;
                     }
                 }
             }
@@ -113,6 +124,10 @@ namespace AradhanaOrnateAutoPrint
                 sb.AppendLine("OrnateExecutablePathOverride=" + OrnateExecutablePathOverride);
                 sb.AppendLine("Overlay355TargetPrinterOverride=" + Overlay355TargetPrinterOverride);
                 sb.AppendLine("Relay1007Enabled=" + (Relay1007Enabled ? "true" : "false"));
+                sb.AppendLine("DocumentWorkflowEnabled=" + (DocumentWorkflowEnabled ? "true" : "false"));
+                sb.AppendLine("DocumentWorkflowRoot=" + DocumentWorkflowRoot);
+                sb.AppendLine("DocumentWorkflowApi=" + DocumentWorkflowApi);
+                sb.AppendLine("DocumentScannerApi=" + DocumentScannerApi);
                 File.WriteAllText(path, sb.ToString());
             }
             catch { }
@@ -131,6 +146,10 @@ namespace AradhanaOrnateAutoPrint
     {
         private const string OrnateProcessName = "ONX";
         private const string OrnateExecutablePath = @"D:\Ornnx\ONX.exe";
+        // Alt+P opens Ornate's custom voucher window first.  The standard
+        // Win32 Print dialog appears only after the biller presses Print in
+        // that window, so document choices must begin here, not later.
+        private const string VoucherDialogTitle = "Voucher Print";
         private const string RequiredDialogTitle = "Print";
         private const string RequiredDialogClass = "#32770";
         private const uint GW_OWNER = 4;
@@ -238,6 +257,10 @@ namespace AradhanaOrnateAutoPrint
         private const string Overlay355TargetPrinterDefault = "HP Laser MFP 355sdnw (05:32:A7)";
         private const int Overlay355ProcessTimeoutMs = 60000;
         private bool overlay355Busy = false;
+        private string documentWorkflowManifestForNextCustomerCopy = null;
+        private readonly HashSet<IntPtr> voucherWindows = new HashSet<IntPtr>();
+        private string voucherDecisionFileForCurrentBill = null;
+        private bool voucherDecisionPendingForCurrentBill = false;
         private static string cachedPythonExe;
 
         // "py" only resolves via the process's inherited PATH, which goes stale
@@ -335,14 +358,24 @@ namespace AradhanaOrnateAutoPrint
 
         private readonly NotifyIcon tray;
         private readonly Timer timer;
+        private readonly Timer hotkeyTimer;
         private Timer overlay355Timer;
         private Timer relay1007Timer;
         private readonly HashSet<IntPtr> handled = new HashSet<IntPtr>();
         private bool enabled = true;
 
-        // Copy 1 / copy 2 detection state.
+        // Print-session state. Both a real Alt+P and a local visual Voucher
+        // Format match are required before a P1007 office copy.
         private DateTime lastHandledUtc = DateTime.MinValue;
-        private int nextCopyNumber = 1;
+        private bool voucherBillSessionActive = false;
+        private bool officeCopyHandledForVoucherBill = false;
+        private DateTime billStartArmedUntilUtc = DateTime.MinValue;
+        private bool pKeyWasDown = false;
+
+        private const string OfficeVoucherReferenceFileName = "office-sales-voucher-format-reference.png";
+        private const int VoucherFormatFingerprintWidth = 256;
+        private const int VoucherFormatFingerprintHeight = 20;
+        private const double OfficeVoucherFingerprintMaxDifference = 5.0;
 
         private AppConfig config;
         private SettingsForm settingsForm;
@@ -412,6 +445,7 @@ namespace AradhanaOrnateAutoPrint
                 Log("EXIT by user.");
                 tray.Visible = false;
                 timer.Stop();
+                hotkeyTimer.Stop();
                 Application.Exit();
             };
 
@@ -430,6 +464,12 @@ namespace AradhanaOrnateAutoPrint
             timer = new Timer { Interval = 250 };
             timer.Tick += (s, e) => Scan();
             timer.Start();
+
+            // Observes only a foreground Alt+P transition. It does not install
+            // a keyboard hook or consume any key from Ornate.
+            hotkeyTimer = new Timer { Interval = 20 };
+            hotkeyTimer.Tick += (s, e) => ObserveBillStartHotkey();
+            hotkeyTimer.Start();
 
             overlay355Timer = new Timer { Interval = 3000 };
             overlay355Timer.Tick += (s, e) => Scan355();
@@ -514,8 +554,22 @@ namespace AradhanaOrnateAutoPrint
                 merged = Path.Combine(Overlay355TempDir, "merged_" + baseName + ".pdf");
 
                 string pythonExe = ResolvePythonExe();
-                var overlayArgs = string.Format("\"{0}\" \"{1}\" \"{2}\" \"{3}\" \"{4}\"",
-                    Overlay355Script, path, merged, Overlay355FrontImage, Overlay355BackImage);
+                bool useDocumentLayout = !string.IsNullOrEmpty(documentWorkflowManifestForNextCustomerCopy) &&
+                    File.Exists(documentWorkflowManifestForNextCustomerCopy);
+                string renderer = useDocumentLayout
+                    ? Path.Combine(config.DocumentWorkflowRoot, "renderer", "p355_document_renderer.py")
+                    : Overlay355Script;
+                if (useDocumentLayout && !File.Exists(renderer))
+                {
+                    Log("DOCUMENT: renderer missing; normal terms layout retained.");
+                    useDocumentLayout = false;
+                    renderer = Overlay355Script;
+                }
+                var overlayArgs = useDocumentLayout
+                    ? string.Format("\"{0}\" \"{1}\" \"{2}\" \"{3}\" \"{4}\" \"{5}\"",
+                        renderer, path, merged, Overlay355FrontImage, Overlay355BackImage, documentWorkflowManifestForNextCustomerCopy)
+                    : string.Format("\"{0}\" \"{1}\" \"{2}\" \"{3}\" \"{4}\"",
+                        renderer, path, merged, Overlay355FrontImage, Overlay355BackImage);
 
                 int overlayExit;
                 string overlayOutput;
@@ -532,6 +586,9 @@ namespace AradhanaOrnateAutoPrint
                     "-print-to \"{0}\" -print-settings \"duplex\" -silent \"{1}\"",
                     EffectiveOverlay355TargetPrinter, merged);
 
+                Log("355 OUTPUT: source=" + Path.GetFileName(path) +
+                    ", target='" + EffectiveOverlay355TargetPrinter + "'.");
+
                 int printExit;
                 string printOutput;
                 bool printOk = RunChildProcess(ResolveSumatraExe(), printArgs, out printExit, out printOutput);
@@ -546,7 +603,13 @@ namespace AradhanaOrnateAutoPrint
                     DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Path.GetFileName(path));
                 File.Move(path, dest);
 
-                Log("OK: 355 overlaid and printed " + Path.GetFileName(path));
+                // Only consume the chosen manifest after Sumatra accepted the
+                // composed PDF. Failed jobs retain their document context for
+                // investigation/retry rather than silently dropping it.
+                if (useDocumentLayout) documentWorkflowManifestForNextCustomerCopy = null;
+
+                Log("OK: 355 overlaid and submitted to '" +
+                    EffectiveOverlay355TargetPrinter + "': " + Path.GetFileName(path));
             }
             catch (Exception ex)
             {
@@ -692,7 +755,7 @@ namespace AradhanaOrnateAutoPrint
         // Runs a process with a timeout, killing it if it hangs (e.g. an
         // unexpected dialog with nobody to click it) rather than blocking
         // the scan forever.
-        private bool RunChildProcess(string exe, string args, out int exitCode, out string output)
+        private bool RunChildProcess(string exe, string args, out int exitCode, out string output, bool interactive = false)
         {
             exitCode = -1;
             output = "";
@@ -702,11 +765,15 @@ namespace AradhanaOrnateAutoPrint
                 FileName = exe,
                 Arguments = args,
                 UseShellExecute = false,
-                CreateNoWindow = true,
+                // The biller decision is a real Tk window. Hiding that child
+                // makes its process run correctly but leaves the biller with
+                // no visible choice, then eventually times out.
+                CreateNoWindow = !interactive,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                WindowStyle = ProcessWindowStyle.Hidden
+                WindowStyle = interactive ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden
             };
+            ApplyDocumentBridgeToken(psi);
 
             using (var p = new Process())
             {
@@ -755,11 +822,13 @@ namespace AradhanaOrnateAutoPrint
 
                 EnumWindows((hWnd, lParam) =>
                 {
+                    TryHandleVoucherDialog(hWnd, validPids);
                     TryHandlePrintDialog(hWnd, validPids);
                     return true;
                 }, IntPtr.Zero);
 
                 handled.RemoveWhere(h => !IsWindow(h));
+                voucherWindows.RemoveWhere(h => !IsWindow(h));
             }
             catch (Exception ex)
             {
@@ -834,6 +903,8 @@ namespace AradhanaOrnateAutoPrint
             handled.Add(hWnd);
 
             int copyNumber = ResolveCopyNumber();
+            if (copyNumber == 1)
+                PrepareDocumentWorkflowForNextCustomerCopy();
             string targetPrinter = config.ResolvePrinter(copyNumber);
 
             var diagnostics = new List<string>();
@@ -856,27 +927,437 @@ namespace AradhanaOrnateAutoPrint
             SendMessage(printButton, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
         }
 
-        // Decides whether this dialog is copy 1 or copy 2 of a bill, using a timing
-        // window since Ornate's two Print dialogs are otherwise indistinguishable.
+        // This never clicks, closes, or disables Ornate's Voucher Print window.
+        // It only starts a no-focus document panel.  If the biller ignores it,
+        // the normal Ornate print flow remains available without delay.
+        private void TryHandleVoucherDialog(IntPtr hWnd, HashSet<int> ornatePids)
+        {
+            if (!string.Equals(GetWindowTextValue(hWnd), VoucherDialogTitle,
+                               StringComparison.OrdinalIgnoreCase)) return;
+            if (!BelongsToOrnate(hWnd, ornatePids)) return;
+            if (voucherWindows.Contains(hWnd)) return;
+
+            voucherWindows.Add(hWnd);
+
+            // A P1007 office copy needs both signals: a foreground Alt+P and
+            // the approved Sales Voucher visual reference. Uncertainty=P355.
+            double fingerprintDifference;
+            bool approvedFormat = IsApprovedOfficeVoucherFormat(hWnd, out fingerprintDifference);
+            if (!approvedFormat || !ConsumeBillStartArm())
+            {
+                if (!voucherBillSessionActive)
+                {
+                    voucherBillSessionActive = true;
+                    officeCopyHandledForVoucherBill = true;
+                    Log("ROUTE SAFETY: Voucher Print is not a confirmed new office session (format difference=" +
+                        fingerprintDifference.ToString("0.00") + "); P1007 blocked and this/any later copy stays P355.");
+                }
+                else
+                {
+                    Log("ROUTE: not a confirmed new office session; later copy remains P355.");
+                }
+                return;
+            }
+
+            // Both signals confirmed: only this path resets a P1007 session.
+            lastHandledUtc = DateTime.MinValue;
+            voucherBillSessionActive = true;
+            officeCopyHandledForVoucherBill = false;
+            Log("ROUTE: confirmed Alt+P + approved office Voucher Format (difference=" +
+                fingerprintDifference.ToString("0.00") + "); first copy=P1007, second/URD/later copies=P355.");
+
+            if (!config.DocumentWorkflowEnabled || string.IsNullOrEmpty(config.DocumentScannerApi)) return;
+
+            try
+            {
+                string root = config.DocumentWorkflowRoot;
+                string bridge = Path.Combine(root, "bridge", "biller_popup.py");
+                string sync = Path.Combine(root, "bridge", "qr_bundle_sync.py");
+                if (!File.Exists(bridge) || !File.Exists(sync))
+                {
+                    Log("DOCUMENT: workflow files missing; Voucher Print remains normal.");
+                    return;
+                }
+
+                string syncOutput; int syncExit;
+                Log("DOCUMENT: Alt+P detected; syncing held QR bundles.");
+                bool syncOk = RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --scanner-api \"{1}\" --workflow-api \"{2}\"", sync, config.DocumentScannerApi, config.DocumentWorkflowApi), out syncExit, out syncOutput);
+                Log("DOCUMENT: Alt+P sync exit=" + syncExit + " ok=" + syncOk + " output=" + syncOutput);
+                if (!syncOk || syncExit != 0 || syncOutput.IndexOf("\"eligible\": 0", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Log("DOCUMENT: no recent QR bundles; Alt+P panel suppressed.");
+                    return;
+                }
+
+                voucherDecisionFileForCurrentBill = Path.Combine(@"C:\PrintBridge\document_decisions", "voucher_" + Guid.NewGuid().ToString("N") + ".json");
+                voucherDecisionPendingForCurrentBill = true;
+                string args = string.Format("\"{0}\" --api \"{1}\" --decision-file \"{2}\"", bridge, config.DocumentWorkflowApi, voucherDecisionFileForCurrentBill);
+                if (StartInteractiveChild(ResolvePythonExe(), args))
+                    Log("DOCUMENT: non-blocking Alt+P decision panel opened.");
+                else
+                    Log("DOCUMENT: could not open Alt+P decision panel; normal bill route retained.");
+            }
+            catch (Exception ex) { Log("DOCUMENT: Alt+P panel failed; normal bill route retained: " + ex.Message); }
+        }
+
+        private bool StartInteractiveChild(string exe, string args)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = args,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Normal
+                };
+                ApplyDocumentBridgeToken(psi);
+                using (var process = Process.Start(psi)) return process != null;
+            }
+            catch (Exception ex)
+            {
+                Log("DOCUMENT: could not start interactive panel: " + ex.Message);
+                return false;
+            }
+        }
+
+        // The bridge secret is intentionally not stored in config.txt or in a
+        // startup command. The preferred durable store is a DPAPI blob scoped
+        // to the signed-in biller. Credential Manager remains a backwards-
+        // compatible fallback; an inherited environment value is only for an
+        // already-running support session.
+        private const string DocumentBridgeCredentialTarget = "AIS.DocumentBridgeToken";
+        private static string DocumentBridgeDpapiTokenPath
+        {
+            get
+            {
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Aradhana", "Secrets", "document_bridge_token.dpapi");
+            }
+        }
+
+        private static string ReadDocumentBridgeToken()
+        {
+            string inherited = Environment.GetEnvironmentVariable("AIS_DOCUMENT_BRIDGE_TOKEN");
+            if (!string.IsNullOrWhiteSpace(inherited)) return inherited.Trim();
+
+            string dpapiToken = ReadDpapiDocumentBridgeToken();
+            if (!string.IsNullOrWhiteSpace(dpapiToken)) return dpapiToken;
+
+            return ReadCredentialManagerDocumentBridgeToken();
+        }
+
+        private static string ReadDpapiDocumentBridgeToken()
+        {
+            try
+            {
+                if (!File.Exists(DocumentBridgeDpapiTokenPath)) return "";
+                byte[] encrypted = File.ReadAllBytes(DocumentBridgeDpapiTokenPath);
+                byte[] bytes = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
+                return Encoding.Unicode.GetString(bytes).TrimEnd('\0').Trim();
+            }
+            catch { return ""; }
+        }
+
+        private static string ReadCredentialManagerDocumentBridgeToken()
+        {
+            IntPtr credentialPointer = IntPtr.Zero;
+            try
+            {
+                if (!CredRead(DocumentBridgeCredentialTarget, 1, 0, out credentialPointer) ||
+                    credentialPointer == IntPtr.Zero) return "";
+                var credential = (CREDENTIAL)Marshal.PtrToStructure(credentialPointer, typeof(CREDENTIAL));
+                if (credential.CredentialBlob == IntPtr.Zero || credential.CredentialBlobSize == 0) return "";
+                byte[] bytes = new byte[credential.CredentialBlobSize];
+                Marshal.Copy(credential.CredentialBlob, bytes, 0, bytes.Length);
+                return Encoding.Unicode.GetString(bytes).TrimEnd('\0').Trim();
+            }
+            catch { return ""; }
+            finally
+            {
+                if (credentialPointer != IntPtr.Zero) CredFree(credentialPointer);
+            }
+        }
+
+        private static void ApplyDocumentBridgeToken(ProcessStartInfo startInfo)
+        {
+            string token = ReadDocumentBridgeToken();
+            if (!string.IsNullOrWhiteSpace(token))
+                startInfo.EnvironmentVariables["AIS_DOCUMENT_BRIDGE_TOKEN"] = token;
+        }
+
+        // Runs only on the first real Ornate Print dialog for a bill. The
+        // popup is a separate local process and cannot select printers or send
+        // a print job. Any timeout/error safely falls back to the normal bill.
+        private void PrepareDocumentWorkflowForNextCustomerCopy()
+        {
+            documentWorkflowManifestForNextCustomerCopy = null;
+            if (!config.DocumentWorkflowEnabled || string.IsNullOrEmpty(config.DocumentScannerApi)) return;
+            try
+            {
+                // When Alt+P was seen, the panel already exists and this method
+                // must never open a second blocking one.  Consume its choice if
+                // available; an unattended panel deliberately means bill-only.
+                if (voucherDecisionPendingForCurrentBill)
+                {
+                    ApplyVoucherDecisionIfAvailable();
+                    voucherDecisionPendingForCurrentBill = false;
+                    voucherDecisionFileForCurrentBill = null;
+                    return;
+                }
+                string root = config.DocumentWorkflowRoot;
+                string bridge = Path.Combine(root, "bridge", "biller_popup.py");
+                string sync = Path.Combine(root, "bridge", "qr_bundle_sync.py");
+                string cache = Path.Combine(root, "bridge", "cache_bundle.py");
+                string standalone = Path.Combine(root, "bridge", "queue_standalone.py");
+                if (!File.Exists(bridge) || !File.Exists(sync) || !File.Exists(cache) || !File.Exists(standalone))
+                {
+                    Log("DOCUMENT: workflow files missing; normal bill route retained.");
+                    return;
+                }
+                string ignored; int ignoredExit;
+                Log("DOCUMENT: syncing held QR bundles.");
+                bool syncOk = RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --scanner-api \"{1}\" --workflow-api \"{2}\"", sync, config.DocumentScannerApi, config.DocumentWorkflowApi), out ignoredExit, out ignored);
+                Log("DOCUMENT: sync exit=" + ignoredExit + " ok=" + syncOk + " output=" + ignored);
+                string decisions = Path.Combine(@"C:\PrintBridge\document_decisions", Guid.NewGuid().ToString("N") + ".json");
+                Log("DOCUMENT: opening persistent document toast before printer submission.");
+                bool popupOk = RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --api \"{1}\" --decision-file \"{2}\"", bridge, config.DocumentWorkflowApi, decisions), out ignoredExit, out ignored, true);
+                Log("DOCUMENT: popup exit=" + ignoredExit + " ok=" + popupOk + " output=" + ignored);
+                if (!File.Exists(decisions))
+                {
+                    Log("DOCUMENT: no biller decision; normal bill route retained.");
+                    return;
+                }
+                string decision = File.ReadAllText(decisions);
+                try { File.Delete(decisions); } catch { }
+                const string attach = "\"decision\": \"attach\"";
+                const string standaloneDecision = "\"decision\": \"standalone\"";
+                const string key = "\"bundle_id\": \"";
+                bool isAttach = decision.IndexOf(attach, StringComparison.OrdinalIgnoreCase) >= 0;
+                bool isStandalone = decision.IndexOf(standaloneDecision, StringComparison.OrdinalIgnoreCase) >= 0;
+                if (!isAttach && !isStandalone)
+                {
+                    Log("DOCUMENT: biller chose a non-attachment route.");
+                    return;
+                }
+                int start = decision.IndexOf(key, StringComparison.OrdinalIgnoreCase);
+                if (start < 0) return;
+                start += key.Length; int end = decision.IndexOf('"', start);
+                if (end <= start) return;
+                string bundleId = decision.Substring(start, end - start);
+                string output; int exit;
+                if (isStandalone)
+                {
+                    bool queued = RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --scanner-api \"{1}\" --bundle-id \"{2}\"", standalone, config.DocumentScannerApi, bundleId), out exit, out output);
+                    Log("DOCUMENT: standalone bundle request exit=" + exit + " ok=" + queued + " output=" + output);
+                    return; // The normal Ornate bill route remains untouched.
+                }
+                if (RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --scanner-api \"{1}\" --bundle-id \"{2}\"", cache, config.DocumentScannerApi, bundleId), out exit, out output) && exit == 0)
+                {
+                    string manifest = output.Trim();
+                    if (File.Exists(manifest))
+                    {
+                        documentWorkflowManifestForNextCustomerCopy = manifest;
+                        Log("DOCUMENT: selected bundle cached for the customer P355 copy.");
+                    }
+                    else Log("DOCUMENT: cache did not return a local manifest.");
+                }
+            }
+            catch (Exception ex) { Log("DOCUMENT: decision failed; normal bill route retained: " + ex.Message); }
+        }
+
+        private void ApplyVoucherDecisionIfAvailable()
+        {
+            if (string.IsNullOrEmpty(voucherDecisionFileForCurrentBill) ||
+                !File.Exists(voucherDecisionFileForCurrentBill))
+            {
+                Log("DOCUMENT: Alt+P panel unattended; normal bill route retained.");
+                return;
+            }
+
+            string decision = File.ReadAllText(voucherDecisionFileForCurrentBill);
+            try { File.Delete(voucherDecisionFileForCurrentBill); } catch { }
+            const string attach = "\"decision\": \"attach\"";
+            const string standaloneDecision = "\"decision\": \"standalone\"";
+            const string key = "\"bundle_id\": \"";
+            bool isAttach = decision.IndexOf(attach, StringComparison.OrdinalIgnoreCase) >= 0;
+            bool isStandalone = decision.IndexOf(standaloneDecision, StringComparison.OrdinalIgnoreCase) >= 0;
+            if (!isAttach && !isStandalone)
+            {
+                Log("DOCUMENT: biller chose normal bill route from Alt+P panel.");
+                return;
+            }
+            int start = decision.IndexOf(key, StringComparison.OrdinalIgnoreCase);
+            if (start < 0) return;
+            start += key.Length; int end = decision.IndexOf('"', start);
+            if (end <= start) return;
+            string bundleId = decision.Substring(start, end - start);
+            string root = config.DocumentWorkflowRoot;
+            string output; int exit;
+            if (isStandalone)
+            {
+                string standalone = Path.Combine(root, "bridge", "queue_standalone.py");
+                bool queued = RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --scanner-api \"{1}\" --bundle-id \"{2}\"", standalone, config.DocumentScannerApi, bundleId), out exit, out output);
+                Log("DOCUMENT: standalone bundle request exit=" + exit + " ok=" + queued + " output=" + output);
+                return;
+            }
+            string cache = Path.Combine(root, "bridge", "cache_bundle.py");
+            if (RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --scanner-api \"{1}\" --bundle-id \"{2}\"", cache, config.DocumentScannerApi, bundleId), out exit, out output) && exit == 0)
+            {
+                string manifest = output.Trim();
+                if (File.Exists(manifest))
+                {
+                    documentWorkflowManifestForNextCustomerCopy = manifest;
+                    Log("DOCUMENT: Alt+P selection cached for the customer P355 copy.");
+                }
+                else Log("DOCUMENT: Alt+P cache did not return a local manifest.");
+            }
+            else Log("DOCUMENT: Alt+P cache request failed: " + output);
+        }
+
+        // Determines whether this is the approved office copy or a later
+        // customer/URD copy. Timing is intentionally not used: it cannot
+        // distinguish a delayed URD window from a new bill.
         private int ResolveCopyNumber()
         {
-            DateTime now = DateTime.UtcNow;
-            int copyNumber;
-
-            if (nextCopyNumber == 2 && (now - lastHandledUtc).TotalSeconds <= config.SessionGapSeconds)
+            if (voucherBillSessionActive)
             {
-                copyNumber = 2;
-                nextCopyNumber = 1; // next dialog starts a new bill
+                lastHandledUtc = DateTime.UtcNow;
+                if (!officeCopyHandledForVoucherBill)
+                {
+                    officeCopyHandledForVoucherBill = true;
+                    return 1;
+                }
+                return 2;
             }
-            else
-            {
-                copyNumber = 1;
-                nextCopyNumber = 2; // expect copy 2 next, within the gap window
-            }
-
-            lastHandledUtc = now;
-            return copyNumber;
+            Log("ROUTE SAFETY: print dialog without confirmed Alt+P session; P1007 blocked, routing P355.");
+            return 2;
         }
+
+        private bool IsApprovedOfficeVoucherFormat(IntPtr dialog, out double difference)
+        {
+            difference = double.PositiveInfinity;
+            string referencePath = Path.Combine(baseFolder, OfficeVoucherReferenceFileName);
+            if (!File.Exists(referencePath))
+            {
+                Log("ROUTE SAFETY: office Voucher Format reference missing; P1007 blocked.");
+                return false;
+            }
+
+            RECT rect;
+            if (!GetWindowRect(dialog, out rect))
+            {
+                Log("ROUTE SAFETY: Voucher Print bounds unavailable; P1007 blocked.");
+                return false;
+            }
+            int width = rect.Right - rect.Left;
+            int height = rect.Bottom - rect.Top;
+            if (width < 200 || height < 100)
+            {
+                Log("ROUTE SAFETY: Voucher Print bounds invalid; P1007 blocked.");
+                return false;
+            }
+
+            try
+            {
+                using (var captured = new Bitmap(width, height))
+                using (var graphics = Graphics.FromImage(captured))
+                {
+                    IntPtr hdc = graphics.GetHdc();
+                    bool capturedWindow;
+                    try { capturedWindow = PrintWindow(dialog, hdc, 2); }
+                    finally { graphics.ReleaseHdc(hdc); }
+                    if (!capturedWindow)
+                    {
+                        Log("ROUTE SAFETY: Voucher Print capture failed; P1007 blocked.");
+                        return false;
+                    }
+
+                    using (var reference = new Bitmap(referencePath))
+                    using (var actualFormat = CreateVoucherFormatFingerprint(captured))
+                    using (var referenceFormat = CreateVoucherFormatFingerprint(reference))
+                    {
+                        difference = MeanPixelDifference(actualFormat, referenceFormat);
+                        return difference <= OfficeVoucherFingerprintMaxDifference;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("ROUTE SAFETY: Voucher Format capture error; P1007 blocked: " + ex.Message);
+                return false;
+            }
+        }
+
+        private static Bitmap CreateVoucherFormatFingerprint(Image source)
+        {
+            // The format combo's text area, expressed as stable proportions of
+            // the complete Voucher Print window. This survives window position
+            // and standard Windows DPI scaling while excluding editable count.
+            int left = Math.Max(0, (int)Math.Round(source.Width * 0.238));
+            int top = Math.Max(0, (int)Math.Round(source.Height * 0.125));
+            int right = Math.Min(source.Width, (int)Math.Round(source.Width * 0.950));
+            int bottom = Math.Min(source.Height, (int)Math.Round(source.Height * 0.180));
+            if (right <= left || bottom <= top) throw new InvalidOperationException("Voucher Format crop is invalid.");
+
+            var fingerprint = new Bitmap(VoucherFormatFingerprintWidth, VoucherFormatFingerprintHeight);
+            using (var graphics = Graphics.FromImage(fingerprint))
+            {
+                graphics.Clear(Color.White);
+                graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBilinear;
+                graphics.DrawImage(source,
+                    new Rectangle(0, 0, VoucherFormatFingerprintWidth, VoucherFormatFingerprintHeight),
+                    new Rectangle(left, top, right - left, bottom - top),
+                    GraphicsUnit.Pixel);
+            }
+            return fingerprint;
+        }
+
+        private static double MeanPixelDifference(Bitmap actual, Bitmap reference)
+        {
+            if (actual.Width != reference.Width || actual.Height != reference.Height)
+                return double.PositiveInfinity;
+
+            double total = 0;
+            int count = actual.Width * actual.Height;
+            for (int y = 0; y < actual.Height; y++)
+            {
+                for (int x = 0; x < actual.Width; x++)
+                {
+                    Color a = actual.GetPixel(x, y);
+                    Color b = reference.GetPixel(x, y);
+                    total += (Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B)) / 3.0;
+                }
+            }
+            return total / count;
+        }
+
+        private void ObserveBillStartHotkey()
+        {
+            const int VK_MENU = 0x12;
+            const int VK_P = 0x50;
+            bool pDown = (GetAsyncKeyState(VK_P) & 0x8000) != 0;
+            bool pPressed = pDown && !pKeyWasDown;
+            pKeyWasDown = pDown;
+            if (!enabled || !pPressed || (GetAsyncKeyState(VK_MENU) & 0x8000) == 0) return;
+
+            IntPtr foreground = GetForegroundWindow();
+            if (foreground == IntPtr.Zero) return;
+            if (!GetValidOrnatePids().Contains(GetWindowPid(foreground))) return;
+
+            billStartArmedUntilUtc = DateTime.UtcNow.AddSeconds(30);
+            Log("ROUTE: Alt+P observed in Ornate; awaiting approved Voucher Format for P1007 office copy.");
+        }
+
+        private bool ConsumeBillStartArm()
+        {
+            if (billStartArmedUntilUtc < DateTime.UtcNow) return false;
+            billStartArmedUntilUtc = DateTime.MinValue;
+            return true;
+        }
+
 
         // Selects printerName in the dialog's printer picker and notifies the
         // dialog so its internal selection actually updates before Print is
@@ -1140,6 +1621,39 @@ namespace AradhanaOrnateAutoPrint
 
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct CREDENTIAL
+        {
+            public uint Flags;
+            public uint Type;
+            public IntPtr TargetName;
+            public IntPtr Comment;
+            public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
+            public uint CredentialBlobSize;
+            public IntPtr CredentialBlob;
+            public uint Persist;
+            public uint AttributeCount;
+            public IntPtr Attributes;
+            public IntPtr TargetAlias;
+            public IntPtr UserName;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CredRead(string target, uint type, uint flags, out IntPtr credential);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern void CredFree(IntPtr credential);
+
         [DllImport("user32.dll")]
         private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
 
@@ -1151,6 +1665,18 @@ namespace AradhanaOrnateAutoPrint
 
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint flags);
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
