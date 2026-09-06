@@ -315,6 +315,15 @@ def print_document_bundle_standalone(bundle_id):
     bundle = DocumentBundle.query.get_or_404(bundle_id)
     if bundle.status != "pending":
         return jsonify({"error": "This document bundle is no longer pending.", "status": bundle.status}), 409
+    return _queue_document_bundle(bundle, consume_pending=True)
+
+
+def _queue_document_bundle(bundle: DocumentBundle, consume_pending: bool):
+    """Create a 355-locked QR job from archived bundle files.
+
+    The caller controls whether the held bundle is consumed. Dashboard reprint
+    preserves its audit status; an explicit biller print consumes pending state.
+    """
     filenames = json.loads(bundle.file_paths or "[]")
     if not filenames:
         return jsonify({"error": "This document bundle has no printable files."}), 409
@@ -336,7 +345,8 @@ def print_document_bundle_standalone(bundle_id):
             copied.append(destination.name)
         job = PrintJob(id=job_id, status="pending", print_mode=bundle.print_mode, copies=1, file_paths=json.dumps(copied))
         db.session.add(job)
-        bundle.status = "standalone_queued"
+        if consume_pending:
+            bundle.status = "standalone_queued"
         db.session.commit()
     except Exception as error:
         db.session.rollback()
@@ -344,6 +354,55 @@ def print_document_bundle_standalone(bundle_id):
         return jsonify({"error": f"Could not queue document bundle: {error}"}), 409
     return jsonify({"success": True, "bundle_id": bundle.id, "queue_id": job_id,
                     "status": "pending", "file_count": len(copied)})
+
+
+@app.route("/api/document-bundles/<bundle_id>/reprint", methods=["POST"])
+def reprint_document_bundle(bundle_id):
+    """Bridge-only historical reprint. It never alters biller-queue state."""
+    denied = _require_document_bridge()
+    if denied:
+        return denied
+    bundle = DocumentBundle.query.get_or_404(bundle_id)
+    return _queue_document_bundle(bundle, consume_pending=False)
+
+
+@app.route("/api/document-bundles/<bundle_id>/resend-to-biller", methods=["POST"])
+def resend_document_bundle(bundle_id):
+    """Create a fresh 30-minute held bundle from retained source files."""
+    denied = _require_document_bridge()
+    if denied:
+        return denied
+    source = DocumentBundle.query.get_or_404(bundle_id)
+    filenames = json.loads(source.file_paths or "[]")
+    if not filenames:
+        return jsonify({"error": "This document bundle has no retained files."}), 409
+    clone_id = _generate_document_bundle_id()
+    clone = DocumentBundle(id=clone_id, display_name=source.display_name, status="pending",
+                           print_mode=source.print_mode, file_paths=source.file_paths)
+    db.session.add(clone)
+    db.session.commit()
+    return jsonify({"success": True, "bundle_id": clone_id, "status": "pending",
+                    "expires_in_minutes": DOCUMENT_QUEUE_MINUTES})
+
+
+@app.route("/api/document-bundles/dashboard", methods=["GET"])
+def document_bundle_dashboard():
+    """Bridge-only 365-day document index for the LAN dashboard."""
+    denied = _require_document_bridge()
+    if denied:
+        return denied
+    cutoff = datetime.utcnow() - timedelta(days=DOCUMENT_RETENTION_DAYS)
+    bundles = (DocumentBundle.query.filter(DocumentBundle.created_at >= cutoff)
+               .order_by(DocumentBundle.created_at.desc()).limit(500).all())
+    return jsonify({"documents": [{
+        "bundle_id": bundle.id,
+        "customer_name": bundle.display_name,
+        "document_type": "ID Cards" if bundle.print_mode == "id_card" else "Full Page",
+        "document_count": len(json.loads(bundle.file_paths or "[]")),
+        "status": bundle.status,
+        "created_at": bundle.created_at.isoformat(),
+        "files": json.loads(bundle.file_paths or "[]"),
+    } for bundle in bundles]})
 
 
 @app.route("/document-media/<bundle_id>/<path:filename>", methods=["GET"])

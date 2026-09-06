@@ -450,12 +450,13 @@
                     <div class="type-content"><strong>ID Cards</strong><div class="mode-desc">Up to six capped cards per 50% bill reverse</div></div>
                 </label>
             </div>
-            <p style="font-size:12px;line-height:1.45;color:var(--gold-light);margin-bottom:20px">Documents are held for the biller. They print only after the biller chooses <strong>Print documents now</strong> or <strong>Attach to bill</strong>.</p>
+            <p style="font-size:12px;line-height:1.45;color:var(--gold-light);margin-bottom:20px">Send for Billing holds documents for 30 minutes. Direct to Printer queues them immediately to the fixed 355 printer.</p>
         </div>
 
-        <button id="btn-submit-all" class="btn-master" onclick="submitAll()" disabled>
-            Send to Print Queue
-        </button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <button id="btn-submit-all" class="btn-master" onclick="submitAll('billing')" disabled>Send for Billing</button>
+            <button id="btn-direct-print" class="btn-master" onclick="submitAll('direct')" disabled style="background:#1c7c54">Direct to Printer</button>
+        </div>
     </div>
 
     <!-- CAMERA VIEW -->
@@ -662,14 +663,17 @@
         const emptyHint = document.getElementById('queue-empty');
         const countLabel = document.getElementById('queue-count');
         const submitBtn = document.getElementById('btn-submit-all');
+        const directBtn = document.getElementById('btn-direct-print');
 
         grid.innerHTML = '';
         if (queue.length === 0) {
             emptyHint.classList.remove('hidden');
             submitBtn.disabled = true;
+            directBtn.disabled = true;
         } else {
             emptyHint.classList.add('hidden');
             submitBtn.disabled = false;
+            directBtn.disabled = false;
             queue.forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'queue-item';
@@ -1402,8 +1406,11 @@
         setTimeout(() => btn.remove(), 8000);
     }
 
-    function submitAll() {
+    let _submitIntent = 'billing';
+
+    function submitAll(intent = 'billing') {
         if (!queue.length) return;
+        _submitIntent = intent === 'direct' ? 'direct' : 'billing';
 
         const totalSize = queue.reduce((sum, item) => sum + (item.blob.size || 0), 0);
         if (totalSize > 50 * 1024 * 1024) {
@@ -1418,6 +1425,7 @@
         queue.forEach((item, i) => _pendingFd.append('files[]', item.blob, item.name || `doc_${i}.jpg`));
         _pendingFd.append('display_name', document.getElementById('document-bundle-name').value || 'Pending ID documents');
         _pendingFd.append('print_mode', document.querySelector('input[name="document-print-mode"]:checked').value);
+        _pendingFd.append('copies', '1');
         const scanToken = new URLSearchParams(window.location.search).get('scan_token');
         if (scanToken) _pendingFd.append('scan_token', scanToken);
 
@@ -1455,8 +1463,9 @@
         _lastFd = null;
 
         showView('progress');
-        document.getElementById('progress-title').textContent = 'Sending to biller queue…';
-        document.getElementById('progress-desc').textContent = 'Please wait while your documents are uploaded.';
+        const direct = _submitIntent === 'direct';
+        document.getElementById('progress-title').textContent = direct ? 'Sending to 355 printer…' : 'Sending to biller queue…';
+        document.getElementById('progress-desc').textContent = direct ? 'Documents will print only on the fixed 355 printer.' : 'Please wait while your documents are uploaded.';
         const stuckBtn = document.getElementById('btn-progress-stuck');
         stuckBtn.classList.add('hidden');
         clearTimeout(_stuckButtonTimer);
@@ -1468,7 +1477,7 @@
         _uploadAbortController = new AbortController();
         const timeoutId = setTimeout(() => _uploadAbortController.abort(), UPLOAD_TIMEOUT_MS);
 
-        fetch('/api/document-bundles/upload', { method: 'POST', body: fd, signal: _uploadAbortController.signal })
+        fetch(direct ? '/upload' : '/api/document-bundles/upload', { method: 'POST', body: fd, signal: _uploadAbortController.signal })
             .then(r => {
                 if (!r.ok) return r.json().then(d => Promise.reject(d.error || `Server error ${r.status}`));
                 return r.json();
