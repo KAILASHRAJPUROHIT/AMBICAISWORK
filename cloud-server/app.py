@@ -219,10 +219,18 @@ def _enqueue_ocr_copy(source: Path, bundle_id: str | None = None) -> str | None:
 @app.route("/api/document-bundles/upload", methods=["POST"])
 def upload_document_bundle():
     """QR Scanner attachment mode. Creates a pending bundle and OCR items;
-    does not touch the ordinary print queue."""
+    does not touch the ordinary print queue.
+
+    Accepts either a customer-facing scan-session token (the QR/browser flow)
+    or the same low-privilege Router bridge token already used for the
+    document read routes below -- lets a trusted internal client (e.g. the
+    Ornate Buddy tablet app) upload directly without minting an admin-issued
+    scan session, without ever needing the broader ADMIN_SECRET.
+    """
     token = request.form.get("scan_token") or request.headers.get("X-Document-Scan-Token")
-    if not _valid_document_token(token):
-        return jsonify({"error": "A valid scan session is required."}), 401
+    bridge_authorized, _ = _document_bridge_authorized()
+    if not bridge_authorized and not _valid_document_token(token):
+        return jsonify({"error": "A valid scan session or Router bridge token is required."}), 401
     files = request.files.getlist("files[]") or request.files.getlist("files")
     display_name = (request.form.get("display_name") or "Pending ID documents").strip()
     if not files:
