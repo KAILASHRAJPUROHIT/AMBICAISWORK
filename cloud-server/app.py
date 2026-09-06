@@ -119,6 +119,13 @@ class DocumentBundle(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class DocumentBundleOcrLink(db.Model):
+    """Maps an OCR work item to its held print bundle without mixing queues."""
+    __tablename__ = "document_bundle_ocr_links"
+    bundle_id = db.Column(db.String(32), db.ForeignKey("document_bundles.id"), primary_key=True)
+    kyc_document_id = db.Column(db.String(32), db.ForeignKey("kyc_documents.id"), primary_key=True)
+
+
 class DocumentScanSession(db.Model):
     __tablename__ = "document_scan_sessions"
     id = db.Column(db.String(32), primary_key=True)
@@ -190,7 +197,7 @@ def expire_document_bundles() -> int:
     return expired
 
 
-def _enqueue_ocr_copy(source: Path) -> str | None:
+def _enqueue_ocr_copy(source: Path, bundle_id: str | None = None) -> str | None:
     """Copy an image into the isolated local-OCR queue.
 
     Printing must remain independent: a copy/queue failure is deliberately not
@@ -204,6 +211,8 @@ def _enqueue_ocr_copy(source: Path) -> str | None:
     target = kyc_dir / source.name
     shutil.copy2(source, target)
     db.session.add(KYCDocument(id=doc_id, status="pending", file_path=f"{doc_id}/{target.name}"))
+    if bundle_id:
+        db.session.add(DocumentBundleOcrLink(bundle_id=bundle_id, kyc_document_id=doc_id))
     return doc_id
 
 
@@ -223,6 +232,8 @@ def upload_document_bundle():
     bundle_id = _generate_document_bundle_id()
     bundle_dir = UPLOAD_DIR / "document-bundles" / bundle_id
     bundle_dir.mkdir(parents=True, exist_ok=True)
+    bundle = DocumentBundle(id=bundle_id, display_name=display_name[:160], status="pending", file_paths="[]")
+    db.session.add(bundle)
     saved = []
     for uploaded in files:
         if not uploaded or not uploaded.filename:
@@ -235,11 +246,10 @@ def upload_document_bundle():
             destination = bundle_dir / f"{destination.stem}_{len(saved)+1}{destination.suffix}"
         uploaded.save(destination)
         saved.append(destination.name)
-        _enqueue_ocr_copy(destination)
+        _enqueue_ocr_copy(destination, bundle_id)
     if not saved:
         return jsonify({"error": "No valid files uploaded."}), 400
-    bundle = DocumentBundle(id=bundle_id, display_name=display_name[:160], status="pending", file_paths=json.dumps(saved))
-    db.session.add(bundle)
+    bundle.file_paths = json.dumps(saved)
     if _document_token_required():
         DocumentScanSession.query.filter_by(token=token).update({"used_at": datetime.utcnow()})
     db.session.commit()
@@ -419,6 +429,15 @@ def kyc_ocr_update_status(doc_id):
     error_message = data.get("error") or data.get("error_message")
     if error_message:
         doc.error_message = str(error_message)[:2000]
+    # OCR may label a pending bundle, but never establishes customer identity.
+    # The visible suffix forces a biller to verify before attaching or printing.
+    customer_name = str(data.get("customer_name") or "").strip()
+    if status == "completed" and customer_name:
+        label = f"{customer_name[:130]} — OCR name, verify"
+        for link in DocumentBundleOcrLink.query.filter_by(kyc_document_id=doc.id).all():
+            bundle = DocumentBundle.query.get(link.bundle_id)
+            if bundle and bundle.status == "pending":
+                bundle.display_name = label[:160]
     db.session.commit()
     return jsonify({"success": True, "doc_id": doc.id, "status": doc.status})
 
