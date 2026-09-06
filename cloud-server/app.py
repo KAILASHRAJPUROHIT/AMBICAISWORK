@@ -114,6 +114,7 @@ class DocumentBundle(db.Model):
     id = db.Column(db.String(32), primary_key=True)
     display_name = db.Column(db.String(160), nullable=False)
     status = db.Column(db.String(32), default="pending", nullable=False)
+    print_mode = db.Column(db.String(32), default="pdf", nullable=False)
     file_paths = db.Column(db.Text, nullable=False, default="[]")
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -233,6 +234,9 @@ def upload_document_bundle():
         return jsonify({"error": "A valid scan session or Router bridge token is required."}), 401
     files = request.files.getlist("files[]") or request.files.getlist("files")
     display_name = (request.form.get("display_name") or "Pending ID documents").strip()
+    print_mode = request.form.get("print_mode", "pdf").strip()
+    if print_mode not in VALID_PRINT_MODES:
+        return jsonify({"error": "Invalid print mode."}), 400
     if not files:
         return jsonify({"error": "No files selected."}), 400
     if len(files) > 12:
@@ -240,7 +244,8 @@ def upload_document_bundle():
     bundle_id = _generate_document_bundle_id()
     bundle_dir = UPLOAD_DIR / "document-bundles" / bundle_id
     bundle_dir.mkdir(parents=True, exist_ok=True)
-    bundle = DocumentBundle(id=bundle_id, display_name=display_name[:160], status="pending", file_paths="[]")
+    bundle = DocumentBundle(id=bundle_id, display_name=display_name[:160], status="pending",
+                            print_mode=print_mode, file_paths="[]")
     db.session.add(bundle)
     saved = []
     for uploaded in files:
@@ -274,6 +279,7 @@ def pending_document_bundles():
     return jsonify({"bundles": [{
         "bundle_id": bundle.id,
         "display_name": bundle.display_name,
+        "print_mode": bundle.print_mode,
         "file_count": len(json.loads(bundle.file_paths or "[]")),
         "created_at": bundle.created_at.isoformat(),
     } for bundle in bundles]})
@@ -290,6 +296,7 @@ def get_document_bundle(bundle_id):
         "bundle_id": bundle.id,
         "display_name": bundle.display_name,
         "status": bundle.status,
+        "print_mode": bundle.print_mode,
         "files": [{"filename": name, "url": request.url_root.rstrip("/") + f"/document-media/{bundle.id}/{name}"} for name in files],
     })
 
@@ -327,7 +334,7 @@ def print_document_bundle_standalone(bundle_id):
                 destination = job_dir / f"{destination.stem}_{len(copied) + 1}{destination.suffix}"
             shutil.copy2(source, destination)
             copied.append(destination.name)
-        job = PrintJob(id=job_id, status="pending", print_mode="pdf", copies=1, file_paths=json.dumps(copied))
+        job = PrintJob(id=job_id, status="pending", print_mode=bundle.print_mode, copies=1, file_paths=json.dumps(copied))
         db.session.add(job)
         bundle.status = "standalone_queued"
         db.session.commit()
@@ -480,10 +487,14 @@ def init_db():
 
         inspector = db.inspect(db.engine)
         columns = [col["name"] for col in inspector.get_columns("print_jobs")]
+        bundle_columns = [col["name"] for col in inspector.get_columns("document_bundles")]
 
         with db.engine.connect() as conn:
             if "error_message" not in columns:
                 conn.execute(db.text("ALTER TABLE print_jobs ADD COLUMN error_message TEXT"))
+                conn.commit()
+            if "print_mode" not in bundle_columns:
+                conn.execute(db.text("ALTER TABLE document_bundles ADD COLUMN print_mode TEXT NOT NULL DEFAULT 'pdf'"))
                 conn.commit()
 
         if not PrinterConfig.query.get(1):

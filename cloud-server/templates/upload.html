@@ -439,6 +439,17 @@
         <div class="options">
             <input id="document-bundle-name" type="text" maxlength="160" placeholder="Customer name / reference (optional)"
                 style="width:100%;box-sizing:border-box;padding:12px;border-radius:8px;margin:0 0 20px;background:var(--navy-light);color:white;border:1px solid var(--gold);">
+            <span class="section-label">Document layout</span>
+            <div class="print-types" style="margin-bottom:20px">
+                <label class="type-card">
+                    <input type="radio" name="document-print-mode" value="pdf" checked>
+                    <div class="type-content"><strong>Full Page</strong><div class="mode-desc">One readable page per 50% bill reverse</div></div>
+                </label>
+                <label class="type-card">
+                    <input type="radio" name="document-print-mode" value="id_card">
+                    <div class="type-content"><strong>ID Cards</strong><div class="mode-desc">Up to six capped cards per 50% bill reverse</div></div>
+                </label>
+            </div>
             <p style="font-size:12px;line-height:1.45;color:var(--gold-light);margin-bottom:20px">Documents are held for the biller. They print only after the biller chooses <strong>Print documents now</strong> or <strong>Attach to bill</strong>.</p>
         </div>
 
@@ -1406,6 +1417,7 @@
         _pendingFd = new FormData();
         queue.forEach((item, i) => _pendingFd.append('files[]', item.blob, item.name || `doc_${i}.jpg`));
         _pendingFd.append('display_name', document.getElementById('document-bundle-name').value || 'Pending ID documents');
+        _pendingFd.append('print_mode', document.querySelector('input[name="document-print-mode"]:checked').value);
         const scanToken = new URLSearchParams(window.location.search).get('scan_token');
         if (scanToken) _pendingFd.append('scan_token', scanToken);
 
