@@ -577,6 +577,14 @@
 <script>
     const PRODUCTION_MODE = {{ 'true' if production_mode else 'false' }};
 
+    // Capture-only mode (?mode=capture): used when this page is loaded
+    // inside a native app's WebView (e.g. the Ornate Buddy tablet app) just
+    // to get one scanned image back via the AndroidCapture JS bridge --
+    // camera + detection only, no upload/print-queue/audio/social behavior.
+    // Every other code path in this file is completely unaffected; this
+    // flag is false for every real customer QR/print visit.
+    const CAPTURE_MODE = new URLSearchParams(window.location.search).get('mode') === 'capture';
+
     // Global state
     let queue = [];
     let cropper = null;
@@ -747,6 +755,15 @@
         if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
         const ring = document.getElementById('autocapture-ring');
         ring.classList.remove('visible', 'flash');
+        if (CAPTURE_MODE) {
+            // Nothing useful behind the camera view in this mode -- tell the
+            // embedding app the user cancelled instead of showing the
+            // (irrelevant, hidden) print-queue main view.
+            if (window.AndroidCapture && window.AndroidCapture.onCaptureCancelled) {
+                window.AndroidCapture.onCaptureCancelled();
+            }
+            return;
+        }
         showView('main');
     }
 
@@ -1247,6 +1264,16 @@
             finalCanvas = document.getElementById('crop-canvas');
         }
         haptic(50);
+
+        if (CAPTURE_MODE) {
+            // Hand the finished image straight back to the embedding native
+            // app -- never touches the print queue, never uploads anywhere.
+            if (window.AndroidCapture && window.AndroidCapture.onDocumentCaptured) {
+                window.AndroidCapture.onDocumentCaptured(finalCanvas.toDataURL('image/jpeg', 0.92));
+            }
+            return;
+        }
+
         finalCanvas.toBlob(blob => {
             const name = cropSource === 'upload' ? `upload_${Date.now()}.jpg` : `scan_${Date.now()}.jpg`;
             addToQueue(blob, name, 'image/jpeg');
@@ -1608,6 +1635,14 @@
                 }, { once: true });
             })
             .catch(() => {});
+    }
+
+    // Capture-only mode: skip straight to the camera, no welcome audio,
+    // no queue/print UI. Every function this depends on (startCamera,
+    // confirmCrop, stopCamera) already checks CAPTURE_MODE itself, so this
+    // is the only extra line needed to enter that mode.
+    if (CAPTURE_MODE) {
+        window.addEventListener('load', startCamera);
     }
 </script>
 
