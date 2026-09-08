@@ -50,11 +50,6 @@ class VisionServoController(private val log: (String) -> Unit) {
     private var reacquiringSinceMs = 0L
     private var lastServoLogMs = 0L
     private var lockLoggedOnce = false
-    // The most recent DINO box that disagreed with a live MIL track but
-    // wasn't yet acted on -- cleared on agreement/reseed/state-reset, only
-    // ever compared against the NEXT disagreeing DINO result (see
-    // applyDinoResult's TRACKING branch doc comment).
-    private var pendingDisagreement: NormalizedBox? = null
 
     fun reset() {
         tracker.reset()
@@ -62,7 +57,6 @@ class VisionServoController(private val log: (String) -> Unit) {
         pendingDino = null
         trackedBox = null
         lockLoggedOnce = false
-        pendingDisagreement = null
         log("[STATE] -> SEARCHING (reset)")
     }
 
@@ -118,7 +112,6 @@ class VisionServoController(private val log: (String) -> Unit) {
             VisionState.SEARCHING, VisionState.ACQUIRING -> {
                 tracker.seed(mat, dino.toRectF())
                 trackedBox = dino
-                pendingDisagreement = null
                 log("[STATE] SEARCHING -> ACQUIRING")
                 log("[MIL] seeded")
                 // MIL is live the instant init() returns -- there is no
@@ -137,49 +130,28 @@ class VisionServoController(private val log: (String) -> Unit) {
                 val iou = current.iou(dino)
                 val dist = current.centerDist(dino)
                 when {
-                    iou >= AGREEMENT_IOU_GOOD || dist <= AGREEMENT_DIST_GOOD -> {
+                    iou >= AGREEMENT_IOU_GOOD || dist <= AGREEMENT_DIST_GOOD ->
                         log("[DINO] agrees with MIL (iou=${"%.2f".format(iou)} dist=${"%.2f".format(dist)}) -- no reseed")
-                        pendingDisagreement = null
-                    }
                     iou >= AGREEMENT_IOU_MODERATE || dist <= AGREEMENT_DIST_MODERATE -> {
                         tracker.seed(mat, dino.toRectF())
                         log("[RESEED] moderate drift (iou=${"%.2f".format(iou)}) -- reseeding from DINO")
-                        pendingDisagreement = null
                     }
-                    else -> {
+                    else ->
                         // One bad DINO box must not violently redirect an
-                        // already-good MIL lock -- but MIL can also drift
-                        // onto the wrong (static) patch while still
-                        // reporting update()=true every frame, which never
-                        // trips consecutiveMisses/PREDICTING at all. Two
-                        // independent DINO results that disagree with MIL
-                        // but AGREE WITH EACH OTHER is the confirmation
-                        // signal that it's MIL that's wrong, not one noisy
-                        // DINO box -- accept the reseed in that case even
-                        // though MIL never technically "failed".
-                        val prior = pendingDisagreement
-                        if (prior != null && (prior.iou(dino) >= AGREEMENT_IOU_MODERATE || prior.centerDist(dino) <= AGREEMENT_DIST_MODERATE)) {
-                            tracker.seed(mat, dino.toRectF())
-                            log("[RESEED] two independent DINO detections agree (iou=${"%.2f".format(prior.iou(dino))}) " +
-                                "and disagree with MIL -- MIL likely drifted, reseeding")
-                            pendingDisagreement = null
-                        } else {
-                            log("[DINO] large disagreement (iou=${"%.2f".format(iou)} dist=${"%.2f".format(dist)}) with live MIL -- awaiting confirmation")
-                            pendingDisagreement = dino
-                        }
-                    }
+                        // already-good MIL lock. Ignored unless MIL itself
+                        // is already failing -- REACQUIRING is handled in
+                        // its own branch below, never reaches here.
+                        log("[DINO] large disagreement (iou=${"%.2f".format(iou)} dist=${"%.2f".format(dist)}) with live MIL -- ignoring")
                 }
             }
             VisionState.PREDICTING -> {
                 tracker.seed(mat, dino.toRectF())
-                pendingDisagreement = null
                 state = VisionState.TRACKING
                 log("[STATE] PREDICTING -> TRACKING (DINO reseed)")
                 log("[RESEED] from PREDICTING")
             }
             VisionState.REACQUIRING -> {
                 tracker.seed(mat, dino.toRectF())
-                pendingDisagreement = null
                 state = VisionState.TRACKING
                 log("[STATE] REACQUIRING -> TRACKING (DINO reacquired)")
                 log("[RESEED] from REACQUIRING")
@@ -234,19 +206,9 @@ class VisionServoController(private val log: (String) -> Unit) {
 
         val pan = nonlinearCommand(ex)
         val tilt = nonlinearCommand(-ey)
-        // Zoom-IN only once roughly centered -- zoom races ahead of a slow
-        // pan/tilt correction otherwise, and confirmed live: a target still
-        // far off-center got zoomed to 3.4x while pan/tilt were still
-        // catching up, clipping it at the frame edge and getting the whole
-        // servo stuck (large ex/ey that never shrinks, because the object is
-        // partially out of frame, not because the direction is wrong).
-        // Zoom-OUT has no such risk -- backing off only ever helps
-        // reacquire a target that's about to be clipped, so it stays
-        // unconditional on centering.
-        val roughlyCentered = abs(ex) <= ZOOM_ALLOW_DEADBAND && abs(ey) <= ZOOM_ALLOW_DEADBAND
         val zoomStep = when {
+            occupancy < CAPTURE_MIN_OCCUPANCY - ZOOM_DEADBAND -> ZOOM_STEP
             occupancy > CAPTURE_MIN_OCCUPANCY + ZOOM_DEADBAND -> -ZOOM_STEP
-            occupancy < CAPTURE_MIN_OCCUPANCY - ZOOM_DEADBAND && roughlyCentered -> ZOOM_STEP
             else -> 0f
         }
 
@@ -286,22 +248,9 @@ class VisionServoController(private val log: (String) -> Unit) {
         "${"%.2f".format(b.cx)},${"%.2f".format(b.cy)},${"%.2f".format(b.w)},${"%.2f".format(b.h)}"
 
     companion object {
-        // Measured against the real pipeline (RTX 5070, warm Grounding
-        // DINO): server_latency alone runs ~350-400ms, plus JPEG encode +
-        // network -- observed round-trip age 440-550ms. 300ms was an
-        // unmeasured design-discussion number and discarded EVERY real
-        // detection outright. 900ms gives margin above the observed ceiling
-        // while still rejecting a truly hung/backed-up response -- DINO is
-        // the periodic corrector here, not the per-frame loop (MIL owns
-        // that), so this budget is intentionally generous.
-        const val STALE_DISCARD_MS = 900L
+        const val STALE_DISCARD_MS = 300L
         const val CENTER_DEADBAND = 0.04f
         const val ZOOM_DEADBAND = 0.05f
-        // Looser than CENTER_DEADBAND (0.04) deliberately -- this only
-        // gates whether zoom-IN may run at all, not full lock criteria.
-        // Requiring full centering before any zoom would stall framing
-        // progress on a target that's close-but-not-perfectly centered.
-        const val ZOOM_ALLOW_DEADBAND = 0.15f
         const val CAPTURE_MIN_OCCUPANCY = 0.75f
         const val ZOOM_STEP = 0.05f
         const val REACQUIRE_TIMEOUT_MS = 4000L

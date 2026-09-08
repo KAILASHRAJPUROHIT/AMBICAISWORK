@@ -140,6 +140,8 @@ CaptureCam/.gradle/
 CaptureCam/build/
 CaptureCam/app/build/
 CaptureCam/local.properties
+# One-off diagnostic APK snapshot (261MB) -- not source, never belongs in git.
+CaptureCam/reports/*.apk
 
 # ── Machine-bound encrypted credentials (DPAPI, tied to this Windows user) ────
 config/azure_flux2_pro_key.dpapi

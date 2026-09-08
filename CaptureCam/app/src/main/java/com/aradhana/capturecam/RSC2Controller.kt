@@ -52,10 +52,28 @@ class RSC2Controller {
     private var gatt: BluetoothGatt? = null
     private var commandCharacteristic: BluetoothGattCharacteristic? = null
     private var seq = 1
-    private var activeMoveRunnable: Runnable? = null
+    @Volatile private var activeMoveRunnable: Runnable? = null
     private var heartbeatRunnable: Runnable? = null
+    @Volatile private var connectInFlight = false
 
     val isReady: Boolean get() = commandCharacteristic != null && gatt != null
+
+    /**
+     * Fires when the gimbal disconnects AFTER a successful connect() --
+     * i.e. mid-session, not a failed initial connection attempt (that path
+     * already reports through connect()'s own onResult(false)). Confirmed
+     * live (2026-08-23): once connect() has succeeded once, MainActivity's
+     * self-heal retry loop (scheduleGimbalRetry/attemptGimbalConnect)
+     * terminates permanently -- it only re-triggers on onCreate/onResume/
+     * onNewIntent, never from inside a long-running foreground session. A
+     * later real BLE drop (range, RF interference, OS stack hiccup -- all
+     * normal for a BLE peripheral) was therefore never retried until the
+     * Activity happened to pause/resume for some unrelated reason (e.g.
+     * navigating to BLE Diagnostics and back), which read from the
+     * operator's side as the gimbal being permanently dead until an app
+     * restart. Set this to route unexpected disconnects back into the same
+     * retry loop the initial connect uses. */
+    var onUnexpectedDisconnect: (() -> Unit)? = null
 
     /** True while a moveOut()/returnHome() burst is actively streaming
      * frames (i.e. the gimbal is physically in motion or settling from
@@ -124,14 +142,25 @@ class RSC2Controller {
      * present (spec rule 61).
      */
     fun connect(context: Context, scanTimeoutMs: Long = 10_000L, onResult: (Boolean) -> Unit) {
+        if (isReady) {
+            onResult(true)
+            return
+        }
+        if (connectInFlight) {
+            Log.d(TAG, "RSC 2 connect already in flight")
+            return
+        }
+        connectInFlight = true
         if (!hasBlePermissions(context)) {
             Log.w(TAG, "Missing BLE permissions -- cannot connect to RSC 2")
+            connectInFlight = false
             onResult(false)
             return
         }
         val adapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
         if (adapter == null || !adapter.isEnabled) {
             Log.w(TAG, "Bluetooth unavailable or off")
+            connectInFlight = false
             onResult(false)
             return
         }
@@ -140,13 +169,17 @@ class RSC2Controller {
         fun finish(success: Boolean) {
             if (resolved) return
             resolved = true
+            connectInFlight = false
             onResult(success)
         }
 
+        var deviceConnectStarted = false
         val scanCallback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
+                if (deviceConnectStarted) return
                 val name = try { result.device.name } catch (e: SecurityException) { null } ?: return
                 if (!name.contains("RSC", ignoreCase = true) && !name.contains("Ronin", ignoreCase = true)) return
+                deviceConnectStarted = true
                 try {
                     adapter.bluetoothLeScanner?.stopScan(this)
                 } catch (_: SecurityException) {}
@@ -188,9 +221,22 @@ class RSC2Controller {
                     try { g.discoverServices() } catch (e: SecurityException) { finish(false) }
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.w(TAG, "RSC 2 disconnected (status=$status)")
+                    // Always close/clear the GATT client here, not just on
+                    // an explicit disconnect() call -- otherwise every
+                    // unexpected drop-and-reconnect cycle leaks a stale
+                    // BluetoothGatt object (connectGatt() is called again
+                    // on the next attempt without this one ever being
+                    // closed), which can exhaust the OS BLE stack's
+                    // connection slots over a long session.
+                    try { g.close() } catch (_: SecurityException) {}
+                    if (gatt === g) gatt = null
                     commandCharacteristic = null
                     stopHeartbeat()
-                    if (!resolved) finish(false)
+                    if (!resolved) {
+                        finish(false)
+                    } else {
+                        onUnexpectedDisconnect?.invoke()
+                    }
                 }
             }
 
@@ -203,6 +249,19 @@ class RSC2Controller {
                     startHeartbeat()
                 }
                 finish(char != null)
+            }
+
+            override fun onCharacteristicWrite(
+                g: BluetoothGatt,
+                characteristic: BluetoothGattCharacteristic,
+                status: Int
+            ) {
+                if (characteristic.uuid != COMMAND_CHAR_UUID) return
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    Log.d(TAG, "RSC 2 write confirmed")
+                } else {
+                    Log.w(TAG, "RSC 2 write callback failed status=$status")
+                }
             }
         }
         try {
@@ -237,7 +296,11 @@ class RSC2Controller {
                 char.value = frame
                 g.writeCharacteristic(char)
             }
-            if (!ok) Log.w(TAG, "writeCharacteristic() failed (sdk=${Build.VERSION.SDK_INT})")
+            // This tablet's Android 16 vendor stack has returned a non-zero
+            // queue result while still delivering onCharacteristicWrite(0).
+            // Treat the callback as authoritative; keep this as diagnostic
+            // detail instead of a false production failure every 900 ms.
+            if (!ok) Log.d(TAG, "RSC 2 write queue returned non-success (sdk=${Build.VERSION.SDK_INT})")
         } catch (e: SecurityException) {
             Log.w(TAG, "Missing permission to write: ${e.message}")
         }
@@ -265,6 +328,31 @@ class RSC2Controller {
         }
         Log.i(TAG, "streamDeflection($axis1,$axis2,$axis3) starting")
         val ticks = (durationMs / 200L).toInt().coerceAtLeast(1)
+        // Velocity ramp, not an instant on/off step -- per explicit request
+        // (2026-08-18): every frame before this held FULL deflection for
+        // every tick, then snapped straight back to AXIS_CENTER on the
+        // final tick. That's a true step function (0 -> full -> 0
+        // instantly), which is exactly what reads as a jerky start/stop
+        // jolt on a physical gimbal. The 200ms per-frame cadence itself is
+        // a real BLE constraint confirmed earlier this session (this
+        // protocol has no sub-200ms frame rate established as safe), so
+        // this doesn't change WHEN frames go out, only ramps each axis's
+        // MAGNITUDE up over the first tick and back down over the last
+        // tick (when there's room -- a single-tick burst has no ramp
+        // headroom and stays full magnitude, unavoidable with only one
+        // frame available). Full magnitude for the ticks in between keeps
+        // net displacement close to the original calibrated duration-to-
+        // motion mapping (centeringDurationFor()), so existing tuning
+        // isn't invalidated -- only the edges are softened.
+        val rampTicks = if (ticks >= 3) 1 else 0
+        fun rampFraction(index: Int): Float = when {
+            rampTicks == 0 -> 1f
+            index < rampTicks -> (index + 1).toFloat() / (rampTicks + 1)
+            index >= ticks - rampTicks -> (ticks - index).toFloat() / (rampTicks + 1)
+            else -> 1f
+        }
+        fun scaledAxis(target: Int, fraction: Float): Int =
+            (DumlProtocol.AXIS_CENTER + (target - DumlProtocol.AXIS_CENTER) * fraction).toInt()
         var sent = 0
         val runnable = object : Runnable {
             override fun run() {
@@ -275,7 +363,10 @@ class RSC2Controller {
                     handler.postDelayed(onDone, settleMs)
                     return
                 }
-                val frame = DumlProtocol.buildJoystickFrame(axis1, axis2, axis3, seq)
+                val fraction = rampFraction(sent)
+                val frame = DumlProtocol.buildJoystickFrame(
+                    scaledAxis(axis1, fraction), scaledAxis(axis2, fraction), scaledAxis(axis3, fraction), seq
+                )
                 seq += 1
                 writeFrame(frame)
                 sent += 1

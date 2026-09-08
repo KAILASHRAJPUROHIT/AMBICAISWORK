@@ -2,91 +2,91 @@
   ".GR22_117.34760": {
     "label": ".GR22_117.34760",
     "source": "",
-    "queued_at": 1788873123.761021,
+    "queued_at": 1788873363.7123537,
     "last_error": "FileNotFoundError: ."
   },
   ".GR22_134.34760": {
     "label": ".GR22_134.34760",
     "source": "",
-    "queued_at": 1788873123.7675319,
+    "queued_at": 1788873363.7168658,
     "last_error": "FileNotFoundError: ."
   },
   ".GR22_168.34760": {
     "label": ".GR22_168.34760",
     "source": "",
-    "queued_at": 1788873123.771547,
+    "queued_at": 1788873363.721369,
     "last_error": "FileNotFoundError: ."
   },
   ".GR22_210.34760": {
     "label": ".GR22_210.34760",
     "source": "",
-    "queued_at": 1788873123.7796323,
+    "queued_at": 1788873363.725373,
     "last_error": "FileNotFoundError: ."
   },
   ".GR22_9.34760": {
     "label": ".GR22_9.34760",
     "source": "",
-    "queued_at": 1788873123.7846825,
+    "queued_at": 1788873363.7307653,
     "last_error": "FileNotFoundError: ."
   },
   "GR22_247": {
     "label": "GR22_247",
     "source": "C:\\AradhanaSystems\\projects\\catalogue-capture\\main\\output\\GENTS RING 22\\GR22_247.jpg",
-    "queued_at": 1788873124.0870404,
+    "queued_at": 1788873363.8491704,
     "last_error": "ValueError: GR22_247: expected one current-stock label, found 0"
   },
   "GR22_248": {
     "label": "GR22_248",
     "source": "C:\\AradhanaSystems\\projects\\catalogue-capture\\main\\output\\GENTS RING 22\\GR22_248.jpg",
-    "queued_at": 1788873124.1286142,
+    "queued_at": 1788873363.89035,
     "last_error": "ValueError: GR22_248: expected one current-stock label, found 0"
   },
   ".LR22_12.32248": {
     "label": ".LR22_12.32248",
     "source": "",
-    "queued_at": 1788873123.78974,
+    "queued_at": 1788873363.7364683,
     "last_error": "FileNotFoundError: ."
   },
   ".LR22_207.32248": {
     "label": ".LR22_207.32248",
     "source": "",
-    "queued_at": 1788873123.7947497,
+    "queued_at": 1788873363.7411675,
     "last_error": "FileNotFoundError: ."
   },
   ".LR22_210.32248": {
     "label": ".LR22_210.32248",
     "source": "",
-    "queued_at": 1788873123.7997453,
+    "queued_at": 1788873363.746756,
     "last_error": "FileNotFoundError: ."
   },
   ".LR22_97.32248": {
     "label": ".LR22_97.32248",
     "source": "",
-    "queued_at": 1788873123.8049746,
+    "queued_at": 1788873363.7512681,
     "last_error": "FileNotFoundError: ."
   },
   ".GR22_10.34760": {
     "label": ".GR22_10.34760",
     "source": "",
-    "queued_at": 1788873123.754134,
+    "queued_at": 1788873363.7068288,
     "last_error": "FileNotFoundError: ."
   },
   "GR22_246": {
     "label": "GR22_246",
     "source": "C:\\AradhanaSystems\\projects\\catalogue-capture\\main\\output\\GENTS RING 22\\GR22_246.jpg",
-    "queued_at": 1788873124.0315053,
+    "queued_at": 1788873363.8081686,
     "last_error": "ValueError: GR22_246: expected one current-stock label, found 0"
   },
   "LR22_479": {
     "label": "LR22_479",
     "source": "C:\\AradhanaSystems\\projects\\catalogue-capture\\main\\output\\LADIES RING 22\\LR22_479.jpg",
-    "queued_at": 1788873124.168075,
+    "queued_at": 1788873363.9300401,
     "last_error": "ValueError: LR22_479: expected one current-stock label, found 0"
   },
   "LR22_480": {
     "label": "LR22_480",
     "source": "C:\\AradhanaSystems\\projects\\catalogue-capture\\main\\output\\LADIES RING 22\\LR22_480.jpg",
-    "queued_at": 1788873124.2083766,
+    "queued_at": 1788873363.9702225,
     "last_error": "ValueError: LR22_480: expected one current-stock label, found 0"
   }
 }

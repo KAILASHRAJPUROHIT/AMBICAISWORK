@@ -62,6 +62,88 @@ object SharpnessAnalyzer {
     }
 
     /**
+     * Unclamped Laplacian variance over the same ROI [score] uses. [score]
+     * maps variance onto 0..100 via ((v - 20) / 170), so every value above
+     * 190 collapses to 100 -- and gold's specular edges exceed 190 whether
+     * the frame is focused or not. This returns the underlying number so the
+     * live signal can be compared against the delivered image's raw score
+     * and a usable threshold derived from real data.
+     */
+    fun scoreRaw(bitmap: Bitmap, bounds: MaterialDetector.Bounds, step: Int = 3): Double {
+        val width = bitmap.width
+        val height = bitmap.height
+        val x0 = max(1, (bounds.x0 * width).toInt())
+        val x1 = min(width - 2, (bounds.x1 * width).toInt())
+        val y0 = max(1, (bounds.y0 * height).toInt())
+        val y1 = min(height - 2, (bounds.y1 * height).toInt())
+        if (x1 - x0 < 6 || y1 - y0 < 6) return 0.0
+
+        fun luma(x: Int, y: Int): Int {
+            val p = bitmap.getPixel(x, y)
+            return (((p shr 16) and 0xFF) * 299 +
+                ((p shr 8) and 0xFF) * 587 + (p and 0xFF) * 114) / 1000
+        }
+
+        var sum = 0.0
+        var sumSquares = 0.0
+        var count = 0
+        var y = y0
+        while (y < y1) {
+            var x = x0
+            while (x < x1) {
+                val lap = 4 * luma(x, y) - luma(x - 1, y) - luma(x + 1, y) -
+                    luma(x, y - 1) - luma(x, y + 1)
+                sum += lap
+                sumSquares += lap.toDouble() * lap
+                count += 1
+                x += step
+            }
+            y += step
+        }
+        if (count == 0) return 0.0
+        val mean = sum / count
+        return max(0.0, sumSquares / count - mean * mean)
+    }
+
+    /** Bitmap equivalent of [score], used by Sony's decoded Live View. */
+    fun score(bitmap: Bitmap, bounds: MaterialDetector.Bounds, step: Int = 3): Float {
+        val width = bitmap.width
+        val height = bitmap.height
+        val x0 = max(1, (bounds.x0 * width).toInt())
+        val x1 = min(width - 2, (bounds.x1 * width).toInt())
+        val y0 = max(1, (bounds.y0 * height).toInt())
+        val y1 = min(height - 2, (bounds.y1 * height).toInt())
+        if (x1 - x0 < 6 || y1 - y0 < 6) return 0f
+
+        fun luma(x: Int, y: Int): Int {
+            val p = bitmap.getPixel(x, y)
+            return (((p shr 16) and 0xFF) * 299 +
+                ((p shr 8) and 0xFF) * 587 + (p and 0xFF) * 114) / 1000
+        }
+
+        var sum = 0.0
+        var sumSquares = 0.0
+        var count = 0
+        var y = y0
+        while (y < y1) {
+            var x = x0
+            while (x < x1) {
+                val lap = 4 * luma(x, y) - luma(x - 1, y) - luma(x + 1, y) -
+                    luma(x, y - 1) - luma(x, y + 1)
+                sum += lap
+                sumSquares += lap.toDouble() * lap
+                count += 1
+                x += step
+            }
+            y += step
+        }
+        if (count == 0) return 0f
+        val mean = sum / count
+        val variance = max(0.0, sumSquares / count - mean * mean)
+        return ((variance - 20.0) / 170.0 * 100.0).coerceIn(0.0, 100.0).toFloat()
+    }
+
+    /**
      * Raw (unnormalized) Laplacian variance over the actual captured
      * full-resolution bitmap -- deliberately NOT mapped onto [score]'s 0..100
      * scale, because that scale was tuned against the low-res ImageAnalysis
