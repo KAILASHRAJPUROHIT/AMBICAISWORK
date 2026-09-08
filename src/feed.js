@@ -119,7 +119,7 @@ export function selectRow(rows, spec) {
  * the candidate that matched, for logging) when a candidate matched, or a
  * combined note listing every candidate's failure when none did.
  */
-export function selectRowAny(rows, candidates) {
+export function selectRowAny(rows, candidates, autoFormat = null) {
   const attempts = [];
   let fallback = null;
   for (let i = 0; i < candidates.length; i++) {
@@ -129,6 +129,27 @@ export function selectRowAny(rows, candidates) {
     if (!sel.row) attempts.push(`candidate ${i} (code ${candidates[i].code}): ${sel.note}`);
   }
   if (fallback) return fallback;
+
+  // Dealers periodically renumber their live scrips. A code-only update should
+  // not take the monitor down, but selecting a vaguely similar row would be
+  // worse. The fallback is intentionally narrow: one and only one semantic
+  // match, with excluded names (for example GST-inclusive rows) rejected.
+  if (autoFormat?.enabled && autoFormat.namePattern) {
+    const include = new RegExp(autoFormat.namePattern, 'i');
+    const exclude = autoFormat.excludeNamePattern ? new RegExp(autoFormat.excludeNamePattern, 'i') : null;
+    const matches = rows.filter((row) => include.test(row.name) && !(exclude && exclude.test(row.name)));
+    if (matches.length === 1) {
+      return {
+        row: matches[0],
+        matchedBy: 'auto-format',
+        confident: false,
+        usedCandidate: -2,
+        field: autoFormat.field || 'sell',
+        note: `Auto-format fallback selected code ${matches[0].code}: "${matches[0].name}".`,
+      };
+    }
+    attempts.push(`auto-format: expected exactly one semantic row, found ${matches.length}`);
+  }
   return {
     row: null,
     matchedBy: 'none',
