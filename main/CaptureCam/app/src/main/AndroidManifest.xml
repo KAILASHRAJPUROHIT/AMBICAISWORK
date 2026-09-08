@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Required by WifiManager.WifiLock. DSLR mode holds a non-reference-
+         counted low-latency lock only while Sony live view is active. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Sony ZV-E10 II PTP-IP control (SonyPtpIpController/
+         SonyWifiConnectionManager): the camera runs its own WiFi access
+         point in remote-control mode; ACCESS_WIFI_STATE/CHANGE_WIFI_STATE
+         are needed to join it via WifiNetworkSpecifier without disturbing
+         the phone's main WiFi connection used for uploads. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+
+    <!-- RSC 2 BLE proof-of-concept only (BleDiagnosticsActivity). DJI
+         publishes no developer SDK for the RSC 2 (confirmed: R SDK covers
+         RS 2/RS 3 Pro/RS 4/RS 4 Pro/RS 5, not RSC 2), so this is a
+         reverse engineered protocol discovery tool, gated behind an
+         explicit hardware validation milestone before any of the
+         calibration/motion-controller architecture is built on top of it. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+
+    <!-- Reads back the photo Nothing Camera just saved (NothingCameraBridge):
+         these are files WE did not create, so scoped storage requires this
+         even though we only ever read our own most-recent capture. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+
+    <uses-feature android:name="android.hardware.camera.any" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+
+    <!-- Package-visibility declaration (API 30+) so PackageManager can find
+         Nothing Camera's launch intent and NothingCameraAccessibilityService
+         can be scoped to its package: no QUERY_ALL_PACKAGES needed since
+         we only ever need this one specific, known package. -->
+    <queries>
+        <package android:name="com.nothing.camera" />
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.CaptureCam"
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config">
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.CaptureCam">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Deep-link hand-off from capture.html: a link/button there
+                 navigates to capturecam://start, which the browser hands
+                 straight to this Activity. See MainActivity's launchedFromBrowser
+                 flag: a deep-link launch returns to the caller (finish())
+                 after ONE item is uploaded, instead of looping internally,
+                 so the browser stays the anchor for tray/recommended-item
+                 context. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="capturecam" android:host="start" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".BleDiagnosticsActivity"
+            android:exported="true"
+            android:label="RSC2 BLE Diagnostics"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.CaptureCam" />
+
+        <!-- Drives Nothing Camera's own shutter via its Accessibility node
+             tree (see NothingCameraBridge.kt doc comment for the full
+             design): lets capture use the phone's real, proven camera
+             pipeline instead of this app's own CameraX/zoom-climb logic,
+             while CaptureCam still owns gimbal positioning, tag scanning,
+             and upload. Requires a one-time manual enable in Settings ->
+             Accessibility (Android does not allow granting this permission
+             class programmatically); MainActivity's
+             ensureNothingCameraServiceEnabled() deep-links there. -->
+        <service
+            android:name=".NothingCameraAccessibilityService"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:label="CaptureCam: Nothing Camera control">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/nothing_camera_accessibility_config" />
+        </service>
+    </application>
+</manifest>

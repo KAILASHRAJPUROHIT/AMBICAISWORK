@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Review — Aradhana Catalogue</title>
+<style>
+  :root{
+    --bg:#0e0e11; --panel:#17171c; --line:#2a2a33; --text:#e9e9ef;
+    --muted:#8a8a98; --ok:#2ea44f; --bad:#d1394a; --warn:#c98a13; --accent:#7c5cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif;overflow:hidden}
+
+  header{display:flex;align-items:center;gap:16px;padding:10px 16px;
+         background:var(--panel);border-bottom:1px solid var(--line)}
+  .title{font-weight:600}
+  .counter{color:var(--muted);font-variant-numeric:tabular-nums}
+  .spacer{flex:1}
+
+  /* Completion marker: green ONLY when every item is approved. */
+  .folder-state{display:flex;align-items:center;gap:8px;padding:5px 12px;
+                border-radius:999px;border:1px solid var(--line);font-weight:600}
+  .folder-state .dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+  .folder-state.complete{border-color:var(--ok);color:#b7f0c3}
+  .folder-state.complete .dot{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+
+  /* Half-and-half comparison — the point of the screen. */
+  .stage{position:absolute;inset:52px 0 88px 0;display:grid;
+         grid-template-columns:1fr 1fr;gap:2px;background:var(--line)}
+  .half{position:relative;background:#fff;display:flex;align-items:center;
+        justify-content:center;overflow:hidden}
+  .half img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+  .half .tag{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.62);
+             color:#fff;padding:3px 9px;border-radius:5px;font-size:12px;
+             letter-spacing:.4px}
+  .half.missing{background:#1b1b22;color:var(--muted);font-size:13px}
+
+  footer{position:absolute;left:0;right:0;bottom:0;height:88px;background:var(--panel);
+         border-top:1px solid var(--line);display:flex;align-items:center;
+         gap:10px;padding:0 16px}
+  button{background:#20202a;color:var(--text);border:1px solid var(--line);
+         border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer}
+  button:hover{border-color:#3d3d4a}
+  button.approve{background:var(--ok);border-color:var(--ok);color:#04210c;font-weight:700}
+  button.reject{background:var(--bad);border-color:var(--bad);color:#2a0308;font-weight:700}
+  button.requeue{background:var(--accent);border-color:var(--accent);color:#0b0620;font-weight:700}
+  .status{font-size:12px;padding:3px 9px;border-radius:5px;border:1px solid var(--line)}
+  .status.passed{color:#b7f0c3;border-color:#2a5}
+  .status.errored{color:#ffc9d0;border-color:#833}
+  .verdict{font-weight:700}
+  .verdict.approved{color:#5ddb7d}
+  .verdict.rejected{color:#ff7b8c}
+  .verdict.pending{color:var(--muted)}
+  .hint{color:var(--muted);font-size:12px}
+  .err{color:#ffc9d0;font-size:12px}
+
+  /* Reason picker. Opens on reject; number keys pick. Reviewing 65 items has
+     to stay keystroke-speed or it will not get done, and unusable feedback is
+     worse than none because calibration would read stale labels. */
+  .reasons{position:absolute;inset:0;background:rgba(6,6,10,.86);
+           display:none;align-items:center;justify-content:center;z-index:50}
+  .reasons.open{display:flex}
+  .reason-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+               padding:20px 22px;min-width:520px;max-width:640px}
+  .reason-card h3{margin:0 0 4px;font-size:16px}
+  .reason-card .sub{color:var(--muted);font-size:12px;margin-bottom:14px}
+  .reason{display:flex;gap:12px;align-items:baseline;padding:8px 10px;
+          border-radius:8px;cursor:pointer;border:1px solid transparent}
+  .reason:hover{background:#20202a;border-color:var(--line)}
+  .reason kbd{background:#000;border:1px solid var(--line);border-radius:5px;
+              padding:2px 8px;font-size:12px;min-width:24px;text-align:center}
+  .reason .tunes{color:var(--muted);font-size:11px;margin-left:auto}
+  .reason-note{width:100%;margin-top:12px;background:#0f0f14;color:var(--text);
+               border:1px solid var(--line);border-radius:8px;padding:9px 11px;
+               font:13px system-ui}
+  .reason-cancel{margin-top:12px;color:var(--muted);font-size:12px}
+
+  /* Batch chooser. The screen opens HERE, not inside an item: a reviewer
+     needs to pick which run they are looking at — especially when comparing
+     a batch made before a change against the ones made after it. */
+  .batches{position:absolute;inset:52px 0 0 0;overflow:auto;padding:22px 26px}
+  .batches h2{margin:0 0 4px;font-size:17px}
+  .batches .sub{color:var(--muted);font-size:12.5px;margin-bottom:18px}
+  .batch{display:flex;align-items:center;gap:16px;padding:14px 16px;margin-bottom:10px;
+         background:var(--panel);border:1px solid var(--line);border-radius:10px;cursor:pointer}
+  .batch:hover{border-color:#3d3d4a;background:#1c1c23}
+  .batch .when{font-weight:600;min-width:150px}
+  .batch .count{color:var(--muted);min-width:90px}
+  .batch .bar{flex:1;height:8px;background:#23232c;border-radius:99px;overflow:hidden}
+  .batch .bar i{display:block;height:100%;background:var(--ok)}
+  .batch .state{min-width:190px;text-align:right;font-size:12.5px;color:var(--muted)}
+  .batch.done{border-color:var(--ok)}
+  .batch.done .state{color:#7ee69a;font-weight:700}
+  .backlink{color:var(--muted);cursor:pointer;font-size:13px}
+  .backlink:hover{color:var(--text)}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="title">Review</span>
+  <span class="counter" id="counter">—</span>
+  <span class="status" id="status">—</span>
+  <span class="err" id="errtext"></span>
+  <span class="spacer"></span>
+  <span class="folder-state" id="folderState"><span class="dot"></span><span id="folderText">—</span></span>
+</header>
+
+<div class="batches" id="batchScreen">
+  <h2>Runs awaiting review</h2>
+  <div class="sub">Newest first. A run is only complete when every item in it has been approved.</div>
+  <div id="batchList"></div>
+</div>
+
+<div class="stage hidden" id="stage">
+  <div class="half" id="leftHalf">
+    <span class="tag">ORIGINAL</span>
+    <img id="imgOriginal" alt="original">
+  </div>
+  <div class="half">
+    <span class="tag">EDITED</span>
+    <img id="imgEdited" alt="edited">
+  </div>
+</div>
+
+<div class="reasons" id="reasonOverlay">
+  <div class="reason-card">
+    <h3>Why is <span id="reasonLabel"></span> rejected?</h3>
+    <div class="sub">Pick a reason — it is stored with the item's measurements so
+      the pipeline can be tuned against real defects, not guesses.</div>
+    <div id="reasonList"></div>
+    <input class="reason-note" id="reasonNote" placeholder="Optional note (what exactly was wrong?)">
+    <div class="reason-cancel">Esc to cancel</div>
+  </div>
+</div>
+
+<footer id="footer" class="hidden">
+  <button id="btnBack">↩ Batches</button>
+  <button id="btnPrev">← Prev</button>
+  <button id="btnNext">Next →</button>
+  <button class="approve" id="btnApprove">Approve (A)</button>
+  <button class="reject" id="btnReject">Reject (R)</button>
+  <button class="requeue" id="btnRequeue">Requeue rejected + errored (Q)</button>
+  <span class="spacer"></span>
+  <span>verdict: <span class="verdict pending" id="verdictText">pending</span></span>
+  <span class="hint">A approve · R reject · ←/→ move · Q requeue</span>
+</footer>
+
+<script>
+let items = [], idx = 0, summary = {}, batches = [], activeBatch = null;
+
+function showBatchScreen(){
+  activeBatch = null;
+  document.getElementById('batchScreen').classList.remove('hidden');
+  document.getElementById('stage').classList.add('hidden');
+  document.getElementById('footer').classList.add('hidden');
+  document.getElementById('counter').textContent = '';
+  document.getElementById('status').textContent = '';
+  document.getElementById('errtext').textContent = '';
+  loadBatches();
+}
+
+async function loadBatches(autoOpenLatest){
+  const r = await fetch('/api/review/batches');
+  batches = (await r.json()).batches || [];
+  const list = document.getElementById('batchList');
+  list.innerHTML = '';
+  if(!batches.length){ list.innerHTML = '<div class="sub">No completed runs found.</div>'; return; }
+  if(autoOpenLatest){ openBatch(batches[0].batch); return; }
+  batches.forEach(b => {
+    const pct = b.total ? Math.round(100 * b.approved / b.total) : 0;
+    const row = document.createElement('div');
+    row.className = 'batch' + (b.complete ? ' done' : '');
+    row.innerHTML =
+      '<span class="when">' + b.date + '  ' + b.started_hm + '–' + b.ended_hm + '</span>' +
+      '<span class="count">' + b.total + ' items</span>' +
+      '<span class="bar"><i style="width:' + pct + '%"></i></span>' +
+      '<span class="state">' + (b.complete
+          ? 'COMPLETE — all approved'
+          : (b.approved + ' approved · ' + b.pending + ' pending' +
+             (b.rejected ? ' · ' + b.rejected + ' rejected' : '') +
+             (b.errored ? ' · ' + b.errored + ' errored' : ''))) + '</span>';
+    row.onclick = () => openBatch(b.batch);
+    list.appendChild(row);
+  });
+}
+
+async function openBatch(n){
+  activeBatch = n;
+  document.getElementById('batchScreen').classList.add('hidden');
+  document.getElementById('stage').classList.remove('hidden');
+  document.getElementById('footer').classList.remove('hidden');
+  await load();
+}
+
+async function load(){
+  const url = '/api/review/items' + (activeBatch ? ('?batch=' + activeBatch) : '');
+  const r = await fetch(url);
+  const d = await r.json();
+  items = d.items || [];
+  summary = d.summary || {};
+  // Within a chosen batch, land on the first undecided item so a resumed
+  // session continues where it stopped.
+  const firstPending = items.findIndex(i => i.verdict === 'pending');
+  idx = firstPending >= 0 ? firstPending : 0;
+  render();
+}
+
+function render(){
+  if(!items.length){
+    document.getElementById('counter').textContent = 'no items';
+    return;
+  }
+  const it = items[idx];
+  document.getElementById('counter').textContent =
+    (idx+1) + ' / ' + items.length + '  ·  ' + it.label;
+
+  const st = document.getElementById('status');
+  st.textContent = it.status;
+  st.className = 'status ' + it.status;
+
+  document.getElementById('errtext').textContent = it.error ? ('· ' + it.error) : '';
+
+  const v = document.getElementById('verdictText');
+  v.textContent = it.verdict;
+  v.className = 'verdict ' + it.verdict;
+
+  // Cache-bust so a requeued+regenerated image never shows the stale one.
+  const bust = '?t=' + Date.now();
+  const left = document.getElementById('leftHalf');
+  const orig = document.getElementById('imgOriginal');
+  if(it.has_original){
+    left.classList.remove('missing');
+    orig.style.display = '';
+    orig.src = '/review_img/original/' + encodeURIComponent(it.label) + bust + '&w=1100';
+  } else {
+    left.classList.add('missing');
+    orig.style.display = 'none';
+  }
+  document.getElementById('imgEdited').src =
+    '/review_img/edited/' + encodeURIComponent(it.label) + bust + '&w=1100';
+
+  renderFolder();
+}
+
+function renderFolder(){
+  const el = document.getElementById('folderState');
+  const t  = document.getElementById('folderText');
+  const s  = summary || {};
+  const done = (s.approved||0), total = (s.total||0);
+  t.textContent = s.complete
+    ? ('FOLDER COMPLETE — ' + done + '/' + total + ' approved')
+    : (done + '/' + total + ' approved · ' + (s.pending||0) + ' pending · ' +
+       (s.rejected||0) + ' rejected · ' + (s.errored||0) + ' errored');
+  el.classList.toggle('complete', !!s.complete);
+}
+
+let reasons = [], reasonOpen = false;
+
+async function loadReasons(){
+  const r = await fetch('/api/review/reasons');
+  reasons = (await r.json()).reasons || [];
+  const list = document.getElementById('reasonList');
+  list.innerHTML = '';
+  reasons.forEach(rs => {
+    const row = document.createElement('div');
+    row.className = 'reason';
+    row.innerHTML = '<kbd>' + rs.key + '</kbd><span>' + rs.label + '</span>' +
+                    (rs.tunes ? '<span class="tunes">tunes: ' + rs.tunes + '</span>' : '');
+    row.onclick = () => pickReason(rs.code);
+    list.appendChild(row);
+  });
+}
+
+function openReasons(){
+  if(!items.length) return;
+  document.getElementById('reasonLabel').textContent = items[idx].label;
+  document.getElementById('reasonNote').value = '';
+  document.getElementById('reasonOverlay').classList.add('open');
+  reasonOpen = true;
+}
+
+function closeReasons(){
+  document.getElementById('reasonOverlay').classList.remove('open');
+  reasonOpen = false;
+}
+
+function pickReason(code){
+  const note = document.getElementById('reasonNote').value.trim() || null;
+  closeReasons();
+  setVerdict('rejected', code, note);
+}
+
+async function setVerdict(verdict, reason, note){
+  if(!items.length) return;
+  const it = items[idx];
+  // A rejection without a reason teaches nothing — ask before recording it.
+  if(verdict === 'rejected' && !reason){ openReasons(); return; }
+  const wasLastItem = idx === items.length - 1;
+  const r = await fetch('/api/review/verdict', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({label: it.label, verdict: verdict,
+                          category: it.category, reason: reason || null,
+                          note: note || null})
+  });
+  const d = await r.json();
+  if(d.error){ alert('Could not save: ' + d.error); return; }
+  if(d.summary) summary = d.summary;
+  it.verdict = verdict;
+  it.reason = reason || null;
+  // The last item just got a decision — nothing left to review here, so
+  // return to the main tool instead of leaving the reviewer stranded on a
+  // static "last item" screen with no obvious next step.
+  if(wasLastItem){
+    document.getElementById('status').textContent = 'Batch review complete — returning to main page…';
+    setTimeout(() => { location.href = '/'; }, 900);
+    return;
+  }
+  // Auto-advance: reviewing 65 items must be keystrokes, not navigation.
+  if(idx < items.length - 1){ idx++; }
+  render();
+}
+
+async function requeue(){
+  const labels = items
+    .filter(i => i.verdict === 'rejected' || i.status === 'errored')
+    .map(i => i.label);
+  if(!labels.length){ alert('Nothing rejected or errored to requeue.'); return; }
+  if(!confirm('Requeue ' + labels.length + ' item(s) back to input/ for reprocessing?')) return;
+  const r = await fetch('/api/review/requeue', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({labels: labels})
+  });
+  const d = await r.json();
+  alert('Requeued ' + (d.requeued||[]).length + ' item(s)' +
+        ((d.missing||[]).length ? ('\nNo original found for: ' + d.missing.join(', ')) : ''));
+}
+
+document.getElementById('btnBack').onclick = showBatchScreen;
+document.getElementById('btnPrev').onclick = () => { if(idx>0){idx--;render();} };
+document.getElementById('btnNext').onclick = () => { if(idx<items.length-1){idx++;render();} };
+document.getElementById('btnApprove').onclick = () => setVerdict('approved');
+document.getElementById('btnReject').onclick  = () => setVerdict('rejected');
+document.getElementById('btnRequeue').onclick = requeue;
+
+document.addEventListener('keydown', e => {
+  // On the batch list the item keys mean nothing — swallow them so a stray
+  // "a" cannot approve something the reviewer has not looked at.
+  if(activeBatch === null && !reasonOpen){
+    return;
+  }
+  // While the reason picker is open it owns the keyboard: number keys choose
+  // a reason, Esc cancels. Otherwise a stray "a" would approve the item the
+  // reviewer is in the middle of rejecting.
+  if(reasonOpen){
+    if(e.key === 'Escape'){ closeReasons(); return; }
+    if(document.activeElement === document.getElementById('reasonNote') &&
+       e.key !== 'Enter') return;              // let them type the note
+    const hit = reasons.find(r => r.key === e.key);
+    if(hit){ e.preventDefault(); pickReason(hit.code); }
+    return;
+  }
+  if(e.key === 'ArrowLeft'){ if(idx>0){idx--;render();} }
+  else if(e.key === 'ArrowRight'){ if(idx<items.length-1){idx++;render();} }
+  else if(e.key.toLowerCase() === 'a'){ setVerdict('approved'); }
+  else if(e.key.toLowerCase() === 'r'){ setVerdict('rejected'); }
+  else if(e.key.toLowerCase() === 'q'){ requeue(); }
+});
+
+document.getElementById('reasonOverlay').onclick = e => {
+  if(e.target.id === 'reasonOverlay') closeReasons();
+};
+
+loadReasons();
+// ?open=latest (set when this page is auto-launched right after a batch
+// finishes) skips the picker and jumps straight into that newest run —
+// otherwise land on the batch list so a reviewer can choose which run.
+const autoOpenLatest = new URLSearchParams(location.search).get('open') === 'latest';
+document.getElementById('batchScreen').classList.remove('hidden');
+document.getElementById('stage').classList.add('hidden');
+document.getElementById('footer').classList.add('hidden');
+document.getElementById('counter').textContent = '';
+document.getElementById('status').textContent = '';
+document.getElementById('errtext').textContent = '';
+loadBatches(autoOpenLatest);
+</script>
+</body>
+</html>

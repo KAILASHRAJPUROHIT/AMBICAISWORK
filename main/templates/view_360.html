@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ tag }} · 360° view</title>
+<style>
+  :root { --ink:#102a43; --muted:#627d98; --canvas:#f3f7f7; --card:#ffffff; --teal:#008c8c; --teal-dark:#006b6b; --coral:#ff695e; --line:#d9e5e7; }
+  *{box-sizing:border-box} body{margin:0;background:var(--canvas);color:var(--ink);font:14px/1.45 Inter,Segoe UI,Arial,sans-serif}
+  .shell{max-width:640px;margin:auto;padding:24px}
+  h1{font-size:18px;margin:0 0 4px}
+  p.hint{margin:0 0 16px;color:var(--muted);font-size:12px}
+  .spin-stage{position:relative;background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 18px 50px rgba(16,42,67,.09);touch-action:pan-y;user-select:none;cursor:grab}
+  .spin-stage:active{cursor:grabbing}
+  .spin-stage img{display:block;width:100%;aspect-ratio:1/1;object-fit:contain;background:#fff;pointer-events:none}
+  .spin-hint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(16,42,67,.72);color:#fff;padding:6px 14px;border-radius:999px;font-size:11px;font-weight:700;pointer-events:none;transition:opacity .3s}
+  .spin-hint.hidden{opacity:0}
+  .actions{display:flex;gap:10px;margin-top:16px}
+  .btn{border:0;border-radius:999px;padding:11px 17px;font-weight:750;color:#fff;background:var(--teal);text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+  .btn:hover{background:var(--teal-dark)}
+  .btn.secondary{background:#e7eff1;color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <h1>{{ tag }}</h1>
+  <p class="hint">Drag or swipe to spin · {{ frame_names|length }} angles</p>
+  <div class="spin-stage" id="spin-stage">
+    <img id="spin-frame" src="/img/output/{{ category }}/{{ tag }}_360/{{ frame_names[0] }}" alt="{{ tag }} 360 view">
+    <div class="spin-hint" id="spin-hint">Drag to spin ↔</div>
+  </div>
+  <div class="actions">
+    {% if has_video %}
+    <a class="btn" href="/img/output/{{ category }}/{{ tag }}_360.mp4" target="_blank">▶ Watch 360 video</a>
+    {% endif %}
+    <a class="btn secondary" href="/">← Back to catalogue</a>
+  </div>
+</div>
+<script>
+  const frames = {{ frame_names|tojson }};
+  const framePrefix = '/img/output/{{ category }}/{{ tag }}_360/';
+  const stage = document.getElementById('spin-stage');
+  const img = document.getElementById('spin-frame');
+  const hint = document.getElementById('spin-hint');
+  let index = 0, dragging = false, lastX = 0, dragged = false;
+  const PIXELS_PER_FRAME = 10;
+
+  function show(i) {
+    index = ((i % frames.length) + frames.length) % frames.length;
+    img.src = framePrefix + frames[index];
+  }
+  frames.slice(1).forEach(name => { const preload = new Image(); preload.src = framePrefix + name; });
+
+  function start(x) { dragging = true; lastX = x; }
+  function move(x) {
+    if (!dragging) return;
+    const delta = x - lastX;
+    if (Math.abs(delta) >= PIXELS_PER_FRAME) {
+      const steps = Math.trunc(delta / PIXELS_PER_FRAME);
+      show(index - steps);
+      lastX += steps * PIXELS_PER_FRAME;
+      dragged = true;
+      hint.classList.add('hidden');
+    }
+  }
+  function end() { dragging = false; }
+
+  stage.addEventListener('mousedown', e => start(e.clientX));
+  window.addEventListener('mousemove', e => move(e.clientX));
+  window.addEventListener('mouseup', end);
+  stage.addEventListener('touchstart', e => start(e.touches[0].clientX), {passive: true});
+  stage.addEventListener('touchmove', e => move(e.touches[0].clientX), {passive: true});
+  stage.addEventListener('touchend', end);
+</script>
+</body>
+</html>
