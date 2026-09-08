@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aradhana Jewellers | Boisar</title>
+    <!-- Premium Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-blue: #23519D;
+            --luxury-gold: #F7CA5B;
+            --secondary-gold: #CCA137;
+            --ivory: #FFF8E7;
+            --white: #FFFFFF;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--primary-blue);
+            font-family: 'Montserrat', sans-serif;
+            color: var(--ivory);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .background-pattern {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(135deg, rgba(35, 81, 157, 0.9) 0%, rgba(20, 50, 100, 0.95) 100%),
+                url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23cca137' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            z-index: -1;
+        }
+
+        .main-container {
+            width: 100%;
+            max-width: 480px;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            flex: 1;
+        }
+
+        /* Hero Section */
+        .hero-section {
+            width: 100%;
+            margin-bottom: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .logo-container {
+            background-color: var(--ivory);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            margin-bottom: 30px;
+            width: 80%;
+            max-width: 280px;
+            border: 2px solid var(--secondary-gold);
+        }
+
+        .brand-logo {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .brand-name {
+            font-family: 'Cinzel', serif;
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--luxury-gold);
+            letter-spacing: 3px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+        }
+
+        .welcome-text {
+            font-size: 16px;
+            font-weight: 300;
+            color: var(--ivory);
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+
+        .subtitle-text {
+            font-size: 14px;
+            color: rgba(255, 248, 231, 0.8);
+            font-weight: 400;
+            margin-bottom: 25px;
+        }
+
+        .gold-divider {
+            width: 60px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--luxury-gold), transparent);
+            margin: 0 auto;
+        }
+
+        /* Actions Section */
+        .action-section {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 50px;
+        }
+
+        .action-card {
+            display: flex;
+            align-items: center;
+            background-color: var(--ivory);
+            color: var(--primary-blue);
+            text-decoration: none;
+            padding: 18px 24px;
+            border-radius: 6px;
+            border: 1px solid var(--secondary-gold);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .action-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background-color: var(--luxury-gold);
+            transition: width 0.3s ease;
+        }
+
+        .action-card:hover, .action-card:active {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .action-card:hover::before, .action-card:active::before {
+            width: 100%;
+            opacity: 0.1;
+        }
+
+        .action-icon {
+            font-size: 24px;
+            color: var(--secondary-gold);
+            width: 40px;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+        }
+
+        .action-text {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .action-icon i { color: var(--secondary-gold); }
+
+        /* Footer */
+        .footer {
+            margin-top: auto;
+            padding: 30px 20px;
+            width: 100%;
+            text-align: center;
+            border-top: 1px solid rgba(247, 202, 91, 0.2);
+            background-color: rgba(35, 81, 157, 0.5);
+        }
+
+        .footer-tagline {
+            font-family: 'Cinzel', serif;
+            color: var(--luxury-gold);
+            font-size: 14px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+        }
+
+        .footer-info {
+            font-size: 13px;
+            color: rgba(255, 248, 231, 0.7);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .footer-link {
+            color: var(--ivory);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-link:hover {
+            color: var(--luxury-gold);
+        }
+
+        @media (min-width: 768px) {
+            .main-container {
+                padding: 60px 20px;
+            }
+            .logo-container {
+                max-width: 320px;
+            }
+            .brand-name {
+                font-size: 36px;
+            }
+            .action-card {
+                padding: 22px 30px;
+            }
+            .action-text {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="background-pattern"></div>
+
+    <div class="main-container">
+        <!-- 1. Hero Section -->
+        <header class="hero-section">
+            <div class="logo-container">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Aradhana Jewellers Logo" class="brand-logo">
+            </div>
+            
+            <h1 class="brand-name">ARADHANA JEWELLERS</h1>
+            <p class="welcome-text">Welcome to Aradhana</p>
+            <p class="subtitle-text">Trusted Jewellery Store in Boisar</p>
+            
+            <div class="gold-divider"></div>
+        </header>
+
+        <!-- 2. Action Section -->
+        <main class="action-section">
+            <a href="https://g.page/r/CZSjxdw4AdaxEBM/review" target="_blank" class="action-card">
+                <div class="action-icon">
+                    <i class="fab fa-google"></i>
+                </div>
+                <span class="action-text">Review Us on Google</span>
+            </a>
+
+            <a href="https://wa.me/918983366647" target="_blank" class="action-card">
+                <div class="action-icon">
+                    <i class="fab fa-whatsapp"></i>
+                </div>
+                <span class="action-text">Message Us on WhatsApp</span>
+            </a>
+
+            <a href="/print" class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-print"></i>
+                </div>
+                <span class="action-text">Print Documents</span>
+            </a>
+
+            <a href="https://www.instagram.com/aradhanajewellers.boisar/" target="_blank" class="action-card">
+                <div class="action-icon">
+                    <i class="fab fa-instagram"></i>
+                </div>
+                <span class="action-text">Visit Instagram</span>
+            </a>
+
+            <a href="https://www.facebook.com/people/Aradhana-Jewellers-Boisar/61573284677105/" target="_blank" class="action-card">
+                <div class="action-icon">
+                    <i class="fab fa-facebook-f"></i>
+                </div>
+                <span class="action-text">Visit Facebook</span>
+            </a>
+        </main>
+    </div>
+
+    <!-- 4. Footer -->
+    <footer class="footer">
+        <div class="footer-tagline">Trust • Purity • Craftsmanship</div>
+        <div class="footer-info">
+            <a href="tel:+918983366647" class="footer-link"><i class="fas fa-phone-alt" style="margin-right: 8px;"></i>8983366647</a>
+            <a href="https://print.aradhanajewellers.com" target="_blank" class="footer-link"><i class="fas fa-globe" style="margin-right: 8px;"></i>print.aradhanajewellers.com</a>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,35 @@
+__pycache__/
+*.pyc
+.env
+venv/
+.venv/
+
+C:/WhatsappAutoPrint/
+
+uploads/
+output/
+printed/
+error/
+temp/
+
+*.log
+
+# Aradhana Print Agent
+/local-print-agent/AgentWorkspace/
+/local-print-agent/logs/
+/local-print-agent/*.db
+/local-print-agent/.env
+/local-print-agent/*.pdf
+
+# Runtime databases
+/cloud-server/jobs.db
+/local-print-agent/agent_state.db
+
+# Runtime config (which printer is selected) — not source
+/cloud-server/printer_config.json
+
+# Installer output
+/package/
+
+# Generated PDFs everywhere
+*.pdf
