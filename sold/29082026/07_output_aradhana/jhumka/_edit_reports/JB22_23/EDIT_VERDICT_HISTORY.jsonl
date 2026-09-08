@@ -1,0 +1,2 @@
+{"previous_verdict": "", "new_verdict": "INFERENCE_FAILED", "reason": "KLEIN_RESOURCE_GUARD: VRAM free 2875 MB < 5000 MB", "timestamp": "2026-08-10T08:57:58.561747Z", "reviewer": "operator"}
+{"previous_verdict": "", "new_verdict": "INFERENCE_FAILED", "reason": "COMFY_LOCAL_NOT_RUNNING: ComfyUI Desktop is not reachable at http://127.0.0.1:8188 \u2014 start it and confirm the Klein GGUF/CLIP/VAE models are loaded", "timestamp": "2026-08-10T10:35:37.136000Z", "reviewer": "operator"}

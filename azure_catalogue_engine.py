@@ -103,7 +103,16 @@ def generate(
             stdout, stderr = process.communicate(timeout=360)
         except subprocess.TimeoutExpired:
             _terminate_process_tree(process)
-            stdout, stderr = process.communicate()
+            # This drain MUST be bounded. The runner is PowerShell which
+            # spawns python; if the grandchild survives the tree kill it keeps
+            # the stdout pipe open and an unbounded communicate() blocks
+            # forever -- the batch then sits with no active call and never
+            # advances (observed 2026-09-01, stuck 8+ minutes on LR22_108).
+            try:
+                stdout, stderr = process.communicate(timeout=20)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = "", "child did not exit after termination"
             raise AzureCatalogueError("Azure call timed out after 360 seconds")
     finally:
         with _ACTIVE_LOCK:

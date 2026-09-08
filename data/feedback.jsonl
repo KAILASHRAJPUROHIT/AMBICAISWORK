@@ -10,9 +10,7 @@
 {"label": "JB22_27", "verdict": "approved", "reason": null, "note": null, "ts": 1786182671.7488036, "crop_method": "colour_gold", "crop_occupancy": 0.9708, "jewel_score": 0.9989, "jewellery_pieces": 2}
 {"label": "JB22_28", "verdict": "approved", "reason": null, "note": null, "ts": 1786182678.3431761, "crop_method": "colour_gold", "crop_occupancy": 0.8604, "jewel_score": 0.9998, "jewellery_pieces": 2}
 {"label": "JB22_29", "verdict": "approved", "reason": null, "note": null, "ts": 1786182684.2685905, "crop_method": "colour_gold", "crop_occupancy": 0.8137, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_30", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786182726.014207, "crop_method": "colour_gold", "crop_occupancy": 1.0, "jewel_score": 0.9999, "jewellery_pieces": 2}
 {"label": "JB22_31", "verdict": "rejected", "reason": "stones_wrong", "note": "left item stone missing", "ts": 1786182752.719699, "crop_method": "colour_gold", "crop_occupancy": 0.6323, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_32", "verdict": "rejected", "reason": "stones_wrong", "note": "right item stone missing", "ts": 1786182765.4229665, "crop_method": "colour_gold", "crop_occupancy": 0.9766, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_34", "verdict": "approved", "reason": null, "note": null, "ts": 1786182770.952246, "crop_method": "colour_gold", "crop_occupancy": 0.742, "jewel_score": 0.9989, "jewellery_pieces": 2}
 {"label": "JB22_37", "verdict": "approved", "reason": null, "note": null, "ts": 1786182837.6580608, "crop_method": "colour_gold", "crop_occupancy": 0.6175, "jewel_score": 0.9999, "jewellery_pieces": 2}
 {"label": "JB22_39", "verdict": "approved", "reason": null, "note": null, "ts": 1786182846.3936658, "crop_method": "colour_gold", "crop_occupancy": 0.7853, "jewel_score": 1.0, "jewellery_pieces": 2}
@@ -25,7 +23,6 @@
 {"label": "JB22_52", "verdict": "approved", "reason": null, "note": null, "ts": 1786182924.3770711, "crop_method": "colour_gold", "crop_occupancy": 0.7812, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_54", "verdict": "rejected", "reason": "stones_wrong", "note": null, "ts": 1786182947.871344, "crop_method": "colour_gold", "crop_occupancy": 0.5642, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_55", "verdict": "approved", "reason": null, "note": null, "ts": 1786182958.1955118, "crop_method": "colour_gold", "crop_occupancy": 0.4318, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_56", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786182978.944225, "crop_method": "colour_gold", "crop_occupancy": 0.602, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_57", "verdict": "approved", "reason": null, "note": null, "ts": 1786182985.300163, "crop_method": "colour_gold", "crop_occupancy": 0.2879, "jewel_score": 0.9879, "jewellery_pieces": 2}
 {"label": "JB22_58", "verdict": "approved", "reason": null, "note": null, "ts": 1786182990.9877946, "crop_method": "colour_gold", "crop_occupancy": 0.3603, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_59", "verdict": "approved", "reason": null, "note": null, "ts": 1786182994.7488284, "crop_method": "colour_gold", "crop_occupancy": 0.9295, "jewel_score": 1.0, "jewellery_pieces": 2}
@@ -33,7 +30,6 @@
 {"label": "JB22_61", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183011.750872, "crop_method": "colour_gold", "crop_occupancy": 0.6679, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_62", "verdict": "approved", "reason": null, "note": null, "ts": 1786183020.016899, "crop_method": "colour_gold", "crop_occupancy": 0.978, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_65", "verdict": "approved", "reason": null, "note": null, "ts": 1786183037.1707532, "crop_method": "colour_gold", "crop_occupancy": 0.7955, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_66", "verdict": "approved", "reason": null, "note": null, "ts": 1786183043.2970228, "crop_method": "colour_gold", "crop_occupancy": 0.7016, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_67", "verdict": "approved", "reason": null, "note": null, "ts": 1786183048.2468615, "crop_method": "colour_gold", "crop_occupancy": 0.6604, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_69", "verdict": "approved", "reason": null, "note": null, "ts": 1786183055.4568057, "crop_method": "colour_gold", "crop_occupancy": 0.5723, "jewel_score": 0.9495, "jewellery_pieces": 2}
 {"label": "JB22_71", "verdict": "approved", "reason": null, "note": null, "ts": 1786183060.3756247, "crop_method": "colour_gold", "crop_occupancy": 0.8726, "jewel_score": 0.9998, "jewellery_pieces": 2}
@@ -50,9 +46,7 @@
 {"label": "JB22_27", "verdict": "approved", "reason": null, "note": null, "ts": 1786183113.892047, "crop_method": "colour_gold", "crop_occupancy": 0.9708, "jewel_score": 0.9989, "jewellery_pieces": 2}
 {"label": "JB22_28", "verdict": "approved", "reason": null, "note": null, "ts": 1786183119.3494873, "crop_method": "colour_gold", "crop_occupancy": 0.8604, "jewel_score": 0.9998, "jewellery_pieces": 2}
 {"label": "JB22_29", "verdict": "approved", "reason": null, "note": null, "ts": 1786183124.830989, "crop_method": "colour_gold", "crop_occupancy": 0.8137, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_30", "verdict": "approved", "reason": null, "note": null, "ts": 1786183136.0185068, "crop_method": "colour_gold", "crop_occupancy": 1.0, "jewel_score": 0.9999, "jewellery_pieces": 2}
 {"label": "JB22_31", "verdict": "approved", "reason": null, "note": null, "ts": 1786183148.1401575, "crop_method": "colour_gold", "crop_occupancy": 0.6323, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_32", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183154.179984, "crop_method": "colour_gold", "crop_occupancy": 0.9766, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_34", "verdict": "approved", "reason": null, "note": null, "ts": 1786183164.8094907, "crop_method": "colour_gold", "crop_occupancy": 0.742, "jewel_score": 0.9989, "jewellery_pieces": 2}
 {"label": "JB22_37", "verdict": "approved", "reason": null, "note": null, "ts": 1786183167.2007067, "crop_method": "colour_gold", "crop_occupancy": 0.6175, "jewel_score": 0.9999, "jewellery_pieces": 2}
 {"label": "JB22_39", "verdict": "approved", "reason": null, "note": null, "ts": 1786183336.2213635, "crop_method": "colour_gold", "crop_occupancy": 0.7853, "jewel_score": 1.0, "jewellery_pieces": 2}
@@ -65,7 +59,6 @@
 {"label": "JB22_52", "verdict": "approved", "reason": null, "note": null, "ts": 1786183395.251461, "crop_method": "colour_gold", "crop_occupancy": 0.7812, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_54", "verdict": "approved", "reason": null, "note": null, "ts": 1786183398.712223, "crop_method": "colour_gold", "crop_occupancy": 0.5642, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_55", "verdict": "approved", "reason": null, "note": null, "ts": 1786183401.5510986, "crop_method": "colour_gold", "crop_occupancy": 0.4318, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_56", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183406.0968227, "crop_method": "colour_gold", "crop_occupancy": 0.602, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_57", "verdict": "approved", "reason": null, "note": null, "ts": 1786183413.107762, "crop_method": "colour_gold", "crop_occupancy": 0.2879, "jewel_score": 0.9879, "jewellery_pieces": 2}
 {"label": "JB22_58", "verdict": "approved", "reason": null, "note": null, "ts": 1786183417.2789059, "crop_method": "colour_gold", "crop_occupancy": 0.3603, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_59", "verdict": "approved", "reason": null, "note": null, "ts": 1786183422.4243417, "crop_method": "colour_gold", "crop_occupancy": 0.9295, "jewel_score": 1.0, "jewellery_pieces": 2}
@@ -73,7 +66,6 @@
 {"label": "JB22_61", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183435.7256947, "crop_method": "colour_gold", "crop_occupancy": 0.6679, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_62", "verdict": "approved", "reason": null, "note": null, "ts": 1786183438.7943902, "crop_method": "colour_gold", "crop_occupancy": 0.978, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_65", "verdict": "approved", "reason": null, "note": null, "ts": 1786183446.705568, "crop_method": "colour_gold", "crop_occupancy": 0.7955, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_66", "verdict": "approved", "reason": null, "note": null, "ts": 1786183448.4190876, "crop_method": "colour_gold", "crop_occupancy": 0.7016, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_67", "verdict": "approved", "reason": null, "note": null, "ts": 1786183451.519942, "crop_method": "colour_gold", "crop_occupancy": 0.6604, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_69", "verdict": "approved", "reason": null, "note": null, "ts": 1786183457.4503376, "crop_method": "colour_gold", "crop_occupancy": 0.5723, "jewel_score": 0.9495, "jewellery_pieces": 2}
 {"label": "JB22_71", "verdict": "approved", "reason": null, "note": null, "ts": 1786183467.1553226, "crop_method": "colour_gold", "crop_occupancy": 0.8726, "jewel_score": 0.9998, "jewellery_pieces": 2}
@@ -91,16 +83,11 @@
 {"label": "JB22_20", "verdict": "approved", "reason": null, "note": null, "ts": 1786183610.3272948, "crop_method": "colour_gold", "crop_occupancy": 0.6752, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_21", "verdict": "approved", "reason": null, "note": null, "ts": 1786183611.7255373, "crop_method": "colour_gold", "crop_occupancy": 0.7152, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_22", "verdict": "approved", "reason": null, "note": null, "ts": 1786183615.121717, "crop_method": "colour_gold", "crop_occupancy": 0.7509, "jewel_score": 0.9999, "jewellery_pieces": 2}
-{"label": "JB22_23", "verdict": "approved", "reason": null, "note": null, "ts": 1786183617.7862365, "crop_method": "colour_gold", "crop_occupancy": 0.9124, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_3", "verdict": "approved", "reason": null, "note": null, "ts": 1786183619.8720593, "crop_method": "colour_gold", "crop_occupancy": 0.7764, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_4", "verdict": "approved", "reason": null, "note": null, "ts": 1786183622.893695, "crop_method": "colour_gold", "crop_occupancy": 0.7785, "jewel_score": 0.9999, "jewellery_pieces": 2}
 {"label": "JB22_5", "verdict": "approved", "reason": null, "note": null, "ts": 1786183626.4034216, "crop_method": "colour_gold", "crop_occupancy": 0.8687, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_6", "verdict": "approved", "reason": null, "note": null, "ts": 1786183629.6531832, "crop_method": "colour_gold", "crop_occupancy": 0.7312, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_7", "verdict": "approved", "reason": null, "note": null, "ts": 1786183633.25146, "crop_method": "colour_gold", "crop_occupancy": 0.9004, "jewel_score": 0.999, "jewellery_pieces": 2}
-{"label": "JB22_9", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183651.4131432, "crop_method": "colour_gold", "crop_occupancy": 0.5632, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_9", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183656.5425084, "crop_method": "colour_gold", "crop_occupancy": 0.5632, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_9", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786183661.083981, "crop_method": "colour_gold", "crop_occupancy": 0.5632, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_9", "verdict": "approved", "reason": null, "note": null, "ts": 1786183673.9736292, "crop_method": "colour_gold", "crop_occupancy": 0.5632, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_100", "verdict": "approved", "reason": null, "note": null, "ts": 1786183683.987499, "crop_method": "colour_gold", "crop_occupancy": 0.5228, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_101", "verdict": "approved", "reason": null, "note": null, "ts": 1786183688.520006, "crop_method": "colour_gold", "crop_occupancy": 0.5061, "jewel_score": 1.0, "jewellery_pieces": 2}
 {"label": "JB22_24", "verdict": "approved", "reason": null, "note": null, "ts": 1786183694.6089275, "crop_method": "colour_gold", "crop_occupancy": 1.0, "jewel_score": 1.0, "jewellery_pieces": 2}
@@ -108,12 +95,10 @@
 {"label": "JB22_27", "verdict": "approved", "reason": null, "note": null, "ts": 1786183705.7630954, "crop_method": "colour_gold", "crop_occupancy": 0.9708, "jewel_score": 0.9989, "jewellery_pieces": 2}
 {"label": "JB22_28", "verdict": "approved", "reason": null, "note": null, "ts": 1786183708.728703, "crop_method": "colour_gold", "crop_occupancy": 0.8604, "jewel_score": 0.9998, "jewellery_pieces": 2}
 {"label": "JB22_29", "verdict": "approved", "reason": null, "note": null, "ts": 1786183716.2313995, "crop_method": "colour_gold", "crop_occupancy": 0.8137, "jewel_score": 1.0, "jewellery_pieces": 2}
-{"label": "JB22_30", "verdict": "approved", "reason": null, "note": null, "ts": 1786183718.981131, "crop_method": "colour_gold", "crop_occupancy": 1.0, "jewel_score": 0.9999, "jewellery_pieces": 2}
 {"label": "WT22_1", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184613.7870939, "crop_method": "colour_gold", "crop_occupancy": 0.825, "jewel_score": 0.9822, "jewellery_pieces": 1}
 {"label": "WT22_107", "verdict": "rejected", "reason": "other", "note": "pieces not joined", "ts": 1786184651.7478273, "crop_method": "colour_gold", "crop_occupancy": 0.2397, "jewel_score": 1.0, "jewellery_pieces": 1}
 {"label": "WT22_111", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184669.874442, "crop_method": "colour_gold", "crop_occupancy": 0.7608, "jewel_score": 0.9996, "jewellery_pieces": 1}
 {"label": "WT22_12", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184673.8399007, "crop_method": "colour_gold", "crop_occupancy": 0.7715, "jewel_score": 0.9976, "jewellery_pieces": 1}
-{"label": "WT22_127", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184682.961283, "crop_method": "colour_gold", "crop_occupancy": 0.8942, "jewel_score": 0.9746, "jewellery_pieces": 1}
 {"label": "WT22_18", "verdict": "rejected", "reason": "other", "note": "objects not joined", "ts": 1786184698.098081, "crop_method": "sam2_focus", "crop_occupancy": 1.0, "jewel_score": 0.9157, "jewellery_pieces": null}
 {"label": "WT22_19", "verdict": "rejected", "reason": "other", "note": "ohjects not joined", "ts": 1786184713.4850285, "crop_method": "sam2_focus", "crop_occupancy": 0.991, "jewel_score": 0.9999, "jewellery_pieces": null}
 {"label": "WT22_2", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184717.27294, "crop_method": "sam2_focus", "crop_occupancy": 0.987, "jewel_score": 0.9199, "jewellery_pieces": null}
@@ -126,12 +111,10 @@
 {"label": "WT22_45", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184767.08739, "crop_method": "sam2_focus", "crop_occupancy": 0.934, "jewel_score": 0.9613, "jewellery_pieces": null}
 {"label": "WT22_46", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184769.3839555, "crop_method": "colour_gold", "crop_occupancy": 0.7578, "jewel_score": 0.9842, "jewellery_pieces": 1}
 {"label": "WT22_49", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184775.6399536, "crop_method": "colour_gold", "crop_occupancy": 0.792, "jewel_score": 0.6072, "jewellery_pieces": 1}
-{"label": "WT22_50", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184782.1480823, "crop_method": "colour_gold", "crop_occupancy": 0.8085, "jewel_score": 0.9989, "jewellery_pieces": 1}
 {"label": "WT22_51", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184784.747524, "crop_method": "sam2_focus", "crop_occupancy": 1.0, "jewel_score": 0.9111, "jewellery_pieces": null}
 {"label": "WT22_53", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184788.075136, "crop_method": "sam2_focus", "crop_occupancy": 1.0, "jewel_score": 1.0, "jewellery_pieces": null}
 {"label": "WT22_54", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184797.9216297, "crop_method": "colour_gold", "crop_occupancy": 0.8313, "jewel_score": 0.9999, "jewellery_pieces": 1}
 {"label": "WT22_55", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184805.0410438, "crop_method": "colour_gold", "crop_occupancy": 0.7458, "jewel_score": 0.9957, "jewellery_pieces": 1}
-{"label": "WT22_59", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184811.5834613, "crop_method": "colour_gold", "crop_occupancy": 0.7482, "jewel_score": 0.9881, "jewellery_pieces": 1}
 {"label": "WT22_6", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786184814.21696, "crop_method": "colour_gold", "crop_occupancy": 0.9895, "jewel_score": 0.9998, "jewellery_pieces": 1}
 {"label": "WT22_60", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1786184826.8578014, "crop_method": "colour_gold", "crop_occupancy": 0.9715, "jewel_score": 0.9818, "jewellery_pieces": 1}
 {"label": "WT22_7", "verdict": "rejected", "reason": "other", "note": "not joined", "ts": 1786184833.9560163, "crop_method": "sam2_focus", "crop_occupancy": 0.9953, "jewel_score": 0.9997, "jewellery_pieces": null}
@@ -194,7 +177,6 @@
 {"label": "ER22_52", "verdict": "rejected", "reason": "other", "note": "design mismtach", "ts": 1786695043.5296671}
 {"label": "ER22_53", "verdict": "approved", "reason": null, "note": null, "ts": 1786695078.4562883}
 {"label": "ER22_55", "verdict": "approved", "reason": null, "note": null, "ts": 1786695082.6365504}
-{"label": "ER22_56", "verdict": "rejected", "reason": "other", "note": "this design has no studds and tag piece is still there in the finished image", "ts": 1786695147.8578382}
 {"label": "ER22_57", "verdict": "approved", "reason": null, "note": null, "ts": 1786695154.6464407}
 {"label": "ER22_58", "verdict": "rejected", "reason": "other", "note": "shining design elements also shown as matte", "ts": 1786695181.046001}
 {"label": "ER22_59", "verdict": "rejected", "reason": "other", "note": "shining also shown as matte", "ts": 1786695195.381401}
@@ -254,7 +236,6 @@
 {"label": "BG22_51", "verdict": "approved", "reason": null, "note": null, "ts": 1786779685.407642}
 {"label": "BG22_52", "verdict": "approved", "reason": null, "note": null, "ts": 1786779691.405428}
 {"label": "BG22_54", "verdict": "rejected", "reason": "other", "note": "design has no red accents", "ts": 1786779704.6393461}
-{"label": "BG22_57", "verdict": "rejected", "reason": "other", "note": "design has no red accents", "ts": 1786779719.4577746}
 {"label": "BG22_58", "verdict": "approved", "reason": null, "note": null, "ts": 1786779722.639489}
 {"label": "BG22_60", "verdict": "approved", "reason": null, "note": null, "ts": 1786779727.7231903}
 {"label": "BG22_63", "verdict": "approved", "reason": null, "note": null, "ts": 1786779732.5725358}
@@ -301,7 +282,6 @@
 {"label": "ER22_39", "verdict": "approved", "reason": null, "note": null, "ts": 1786780843.412371}
 {"label": "ER22_43", "verdict": "approved", "reason": null, "note": null, "ts": 1786780847.5048769}
 {"label": "ER22_52", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786780855.1078768}
-{"label": "ER22_56", "verdict": "approved", "reason": null, "note": null, "ts": 1786780858.241043}
 {"label": "ER22_58", "verdict": "approved", "reason": null, "note": null, "ts": 1786780861.4011269}
 {"label": "ER22_59", "verdict": "approved", "reason": null, "note": null, "ts": 1786780864.8263004}
 {"label": "ER22_61", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786780868.199596}
@@ -318,14 +298,12 @@
 {"label": "BG22_79", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 preserved the studless all-gold design.", "ts": 1786780940.516496}
 {"label": "BG22_68", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 removed invented red accents.", "ts": 1786780940.5280359}
 {"label": "BG22_67", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 removed invented blue accents.", "ts": 1786780940.5411358}
-{"label": "BG22_57", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 removed invented red accents.", "ts": 1786780940.5542223}
 {"label": "BG22_54", "verdict": "approved", "reason": null, "note": "Codex imagegen repair \u2014 removed invented red accents.", "ts": 1786780940.5663772}
 {"label": "ER22_92", "verdict": "rejected", "reason": "other", "note": "why the text on left earring", "ts": 1786780947.1576004}
 {"label": "BG22_82", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - preserved the studless all-gold design.", "ts": 1786780950.6543415}
 {"label": "BG22_79", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - preserved the studless all-gold design.", "ts": 1786780950.6618783}
 {"label": "BG22_68", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented red accents.", "ts": 1786780950.6684456}
 {"label": "BG22_67", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented blue accents.", "ts": 1786780950.676141}
-{"label": "BG22_57", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented red accents.", "ts": 1786780950.6834466}
 {"label": "BG22_54", "verdict": "approved", "reason": null, "note": "Codex imagegen repair - removed invented red accents.", "ts": 1786780950.6913085}
 {"label": "ER22_93", "verdict": "rejected", "reason": "other", "note": "this is a studless design", "ts": 1786780967.6930933}
 {"label": "ER22_97", "verdict": "rejected", "reason": "other", "note": "original design has no green or red elements", "ts": 1786780991.1671696}
@@ -382,7 +360,6 @@
 {"label": "GR22_162", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783267.0123746}
 {"label": "GR22_164", "verdict": "approved", "reason": null, "note": null, "ts": 1786783268.9428933}
 {"label": "GR22_166", "verdict": "rejected", "reason": "other", "note": "no red blue cues present in original design", "ts": 1786783288.2316198}
-{"label": "GR22_167", "verdict": "rejected", "reason": "other", "note": "no blue accents in real deisgn", "ts": 1786783307.5013072}
 {"label": "JB22_100", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.8978417}
 {"label": "JB22_12", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.904128}
 {"label": "JB22_13", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9101725}
@@ -395,14 +372,12 @@
 {"label": "JB22_20", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9518328}
 {"label": "JB22_21", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.95797}
 {"label": "JB22_22", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.963729}
-{"label": "JB22_23", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.969237}
 {"label": "JB22_24", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9747472}
 {"label": "JB22_26", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9812534}
 {"label": "JB22_27", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9867609}
 {"label": "JB22_28", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783364.9927778}
 {"label": "JB22_29", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.000836}
 {"label": "JB22_3", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.007349}
-{"label": "JB22_30", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0133543}
 {"label": "JB22_31", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0191815}
 {"label": "JB22_34", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.0248287}
 {"label": "JB22_37", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.029878}
@@ -424,22 +399,18 @@
 {"label": "JB22_60", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1228895}
 {"label": "JB22_62", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.128982}
 {"label": "JB22_65", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1339872}
-{"label": "JB22_66", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1403656}
 {"label": "JB22_67", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1453643}
 {"label": "JB22_69", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1508753}
 {"label": "JB22_7", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.157403}
 {"label": "JB22_71", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.163146}
 {"label": "JB22_73", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.168651}
-{"label": "JB22_9", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1746504}
 {"label": "JB22_91", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1811607}
 {"label": "JB22_93", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.186694}
 {"label": "JB22_98", "verdict": "pending", "reason": null, "note": "Approved delivery file missing; reset to pending after integrity investigation", "ts": 1786783365.1937196}
 {"label": "GR22_168", "verdict": "rejected", "reason": "other", "note": "no blue accent in original design", "ts": 1786783374.163674}
 {"label": "GR22_171", "verdict": "approved", "reason": null, "note": null, "ts": 1786783377.5786483}
 {"label": "GR22_174", "verdict": "rejected", "reason": "other", "note": "random red and blue colors added which arte not a part of the original design", "ts": 1786783534.0757458}
-{"label": "GR22_177", "verdict": "approved", "reason": null, "note": null, "ts": 1786783539.3869221}
 {"label": "GR22_18", "verdict": "approved", "reason": null, "note": null, "ts": 1786783545.778481}
-{"label": "GR22_180", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786783550.4710882}
 {"label": "GR22_181", "verdict": "approved", "reason": null, "note": null, "ts": 1786783553.7103496}
 {"label": "GR22_187", "verdict": "approved", "reason": null, "note": null, "ts": 1786783556.7730389}
 {"label": "GR22_189", "verdict": "rejected", "reason": "other", "note": "random blue color added", "ts": 1786783568.398305}
@@ -517,10 +488,8 @@
 {"label": "GR22_161", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786376.1922653}
 {"label": "GR22_162", "verdict": "approved", "reason": null, "note": null, "ts": 1786786378.4750838}
 {"label": "GR22_166", "verdict": "rejected", "reason": "stones_wrong", "note": null, "ts": 1786786628.6212134}
-{"label": "GR22_167", "verdict": "approved", "reason": null, "note": null, "ts": 1786786632.3645635}
 {"label": "GR22_168", "verdict": "approved", "reason": null, "note": null, "ts": 1786786634.5151834}
 {"label": "GR22_174", "verdict": "approved", "reason": null, "note": null, "ts": 1786786638.104159}
-{"label": "GR22_180", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786643.8245778}
 {"label": "GR22_189", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786786649.4242508}
 {"label": "GR22_196", "verdict": "approved", "reason": null, "note": null, "ts": 1786786651.5781028}
 {"label": "GR22_202", "verdict": "approved", "reason": null, "note": null, "ts": 1786786653.7215178}
@@ -615,7 +584,6 @@
 {"label": "LR22_11", "verdict": "approved", "reason": null, "note": null, "ts": 1786796521.8522706}
 {"label": "LR22_110", "verdict": "approved", "reason": null, "note": null, "ts": 1786796523.4172053}
 {"label": "LR22_112", "verdict": "approved", "reason": null, "note": null, "ts": 1786796525.6404366}
-{"label": "LR22_113", "verdict": "approved", "reason": null, "note": null, "ts": 1786796528.2917373}
 {"label": "LR22_117", "verdict": "approved", "reason": null, "note": null, "ts": 1786796532.498792}
 {"label": "LR22_119", "verdict": "approved", "reason": null, "note": null, "ts": 1786796535.073771}
 {"label": "LR22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1786796536.9617436}
@@ -624,11 +592,9 @@
 {"label": "LR22_129", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786796552.0264883}
 {"label": "LR22_132", "verdict": "approved", "reason": null, "note": null, "ts": 1786803111.3257647}
 {"label": "LR22_133", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803119.819183}
-{"label": "LR22_135", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803126.977087}
 {"label": "LR22_139", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803132.9111238}
 {"label": "LR22_142", "verdict": "approved", "reason": null, "note": null, "ts": 1786803141.2668726}
 {"label": "LR22_143", "verdict": "approved", "reason": null, "note": null, "ts": 1786803143.3959105}
-{"label": "LR22_147", "verdict": "approved", "reason": null, "note": null, "ts": 1786803145.2329383}
 {"label": "LR22_149", "verdict": "approved", "reason": null, "note": null, "ts": 1786803148.4207134}
 {"label": "LR22_150", "verdict": "approved", "reason": null, "note": null, "ts": 1786803150.7318976}
 {"label": "LR22_151", "verdict": "approved", "reason": null, "note": null, "ts": 1786803159.5869977}
@@ -643,8 +609,6 @@
 {"label": "LR22_167", "verdict": "rejected", "reason": "stones_wrong", "note": null, "ts": 1786803199.4355392}
 {"label": "LR22_168", "verdict": "rejected", "reason": "stones_wrong", "note": null, "ts": 1786803203.0708644}
 {"label": "LR22_169", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803219.163488}
-{"label": "LR22_170", "verdict": "approved", "reason": null, "note": null, "ts": 1786803226.4485354}
-{"label": "LR22_171", "verdict": "approved", "reason": null, "note": null, "ts": 1786803233.0630536}
 {"label": "LR22_172", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803238.810762}
 {"label": "LR22_173", "verdict": "approved", "reason": null, "note": null, "ts": 1786803244.198214}
 {"label": "LR22_174", "verdict": "approved", "reason": null, "note": null, "ts": 1786803251.2994359}
@@ -661,7 +625,6 @@
 {"label": "LR22_193", "verdict": "approved", "reason": null, "note": null, "ts": 1786803290.074674}
 {"label": "LR22_194", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803293.795986}
 {"label": "LR22_195", "verdict": "approved", "reason": null, "note": null, "ts": 1786803301.4171288}
-{"label": "LR22_196", "verdict": "approved", "reason": null, "note": null, "ts": 1786803303.1909811}
 {"label": "LR22_197", "verdict": "approved", "reason": null, "note": null, "ts": 1786803304.827093}
 {"label": "LR22_199", "verdict": "approved", "reason": null, "note": null, "ts": 1786803307.3623884}
 {"label": "LR22_2", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803311.4991558}
@@ -681,7 +644,6 @@
 {"label": "LR22_228", "verdict": "approved", "reason": null, "note": null, "ts": 1786803370.4192367}
 {"label": "LR22_234", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803378.890847}
 {"label": "LR22_235", "verdict": "approved", "reason": null, "note": null, "ts": 1786803381.2164524}
-{"label": "LR22_236", "verdict": "approved", "reason": null, "note": null, "ts": 1786803383.3638513}
 {"label": "LR22_237", "verdict": "approved", "reason": null, "note": null, "ts": 1786803388.632843}
 {"label": "LR22_238", "verdict": "approved", "reason": null, "note": null, "ts": 1786803390.920973}
 {"label": "LR22_241", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803394.4899921}
@@ -736,11 +698,9 @@
 {"label": "LR22_340", "verdict": "approved", "reason": null, "note": null, "ts": 1786803594.2070906}
 {"label": "LR22_341", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803599.8400512}
 {"label": "LR22_342", "verdict": "approved", "reason": null, "note": null, "ts": 1786803607.5839536}
-{"label": "LR22_343", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803620.4666681}
 {"label": "LR22_346", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803648.305666}
 {"label": "LR22_384", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803652.2408104}
 {"label": "LR22_385", "verdict": "approved", "reason": null, "note": null, "ts": 1786803656.5909672}
-{"label": "LR22_386", "verdict": "approved", "reason": null, "note": null, "ts": 1786803659.789031}
 {"label": "LR22_388", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803662.7478738}
 {"label": "LR22_39", "verdict": "approved", "reason": null, "note": null, "ts": 1786803666.2137697}
 {"label": "LR22_390", "verdict": "approved", "reason": null, "note": null, "ts": 1786803670.7885706}
@@ -755,7 +715,6 @@
 {"label": "LR22_401", "verdict": "approved", "reason": null, "note": null, "ts": 1786803706.8315601}
 {"label": "LR22_402", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803713.0088394}
 {"label": "LR22_403", "verdict": "approved", "reason": null, "note": null, "ts": 1786803716.9849966}
-{"label": "LR22_404", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803720.5562685}
 {"label": "LR22_405", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803724.836495}
 {"label": "LR22_406", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803728.0558963}
 {"label": "LR22_407", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803731.3602095}
@@ -768,7 +727,6 @@
 {"label": "LR22_415", "verdict": "approved", "reason": null, "note": null, "ts": 1786803823.1317668}
 {"label": "LR22_416", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803827.3641646}
 {"label": "LR22_417", "verdict": "approved", "reason": null, "note": null, "ts": 1786803832.4954329}
-{"label": "LR22_418", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803836.2594054}
 {"label": "LR22_419", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803841.8772657}
 {"label": "LR22_42", "verdict": "approved", "reason": null, "note": null, "ts": 1786803845.1826506}
 {"label": "LR22_420", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803848.9848452}
@@ -791,10 +749,8 @@
 {"label": "LR22_440", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803976.0390863}
 {"label": "LR22_442", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803979.157241}
 {"label": "LR22_444", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803982.360833}
-{"label": "LR22_445", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803987.8960593}
 {"label": "LR22_446", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803992.5080035}
 {"label": "LR22_447", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786803996.6488392}
-{"label": "LR22_448", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786804000.6116502}
 {"label": "LR22_449", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786804006.121851}
 {"label": "LR22_45", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1786804013.8690686}
 {"label": "LR22_450", "verdict": "approved", "reason": null, "note": null, "ts": 1786804019.5854986}
@@ -842,7 +798,6 @@
 {"label": "LR22_95", "verdict": "approved", "reason": null, "note": null, "ts": 1786804188.883251}
 {"label": "LR22_96", "verdict": "approved", "reason": null, "note": null, "ts": 1786804191.8039763}
 {"label": "LR22_97", "verdict": "approved", "reason": null, "note": null, "ts": 1786804194.533689}
-{"label": "LR22_98", "verdict": "approved", "reason": null, "note": null, "ts": 1786804197.7028496}
 {"label": "LR22_99", "verdict": "approved", "reason": null, "note": null, "ts": 1786804199.7639062}
 {"label": "BL22_16", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787124948.3877585}
 {"label": "BL22_18", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787124951.739466}
@@ -854,3 +809,705 @@
 {"label": "GR22_127", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787138970.310411}
 {"label": "image-1787142374333", "verdict": "approved", "reason": null, "note": null, "ts": 1787142459.339827}
 {"label": "ring", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787315089.7610824}
+{"label": "GR22_78", "verdict": "approved", "reason": null, "note": null, "ts": 1787655824.9045596}
+{"label": "ER22_13", "verdict": "approved", "reason": null, "note": null, "ts": 1787664385.865332}
+{"label": "LR22_128", "verdict": "approved", "reason": null, "note": null, "ts": 1787735076.3399715}
+{"label": "LR22_149", "verdict": "approved", "reason": null, "note": null, "ts": 1787735083.014382}
+{"label": "LR22_168", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1787735089.7370348}
+{"label": "LR22_27", "verdict": "approved", "reason": null, "note": null, "ts": 1787735091.7567425}
+{"label": "LR22_458", "verdict": "approved", "reason": null, "note": null, "ts": 1787735094.753026}
+{"label": "LR22_47", "verdict": "approved", "reason": null, "note": null, "ts": 1787735098.164437}
+{"label": "LR22_55", "verdict": "approved", "reason": null, "note": null, "ts": 1787735099.8541963}
+{"label": "LR22_66", "verdict": "approved", "reason": null, "note": null, "ts": 1787735100.9857032}
+{"label": "LR22_84", "verdict": "rejected", "reason": "other", "note": "orientation is incorrect", "ts": 1787735111.108672}
+{"label": "LR22_87", "verdict": "rejected", "reason": "other", "note": "design is titled", "ts": 1787735120.3206108}
+{"label": "LR22_88", "verdict": "approved", "reason": null, "note": null, "ts": 1787735126.0020816}
+{"label": "LR22_93", "verdict": "approved", "reason": null, "note": null, "ts": 1787735128.0175533}
+{"label": "LR22_99", "verdict": "approved", "reason": null, "note": null, "ts": 1787735141.4350467}
+{"label": "LR18_37", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788096083.771599}
+{"label": "LR22_168", "verdict": "rejected", "reason": "other", "note": "wrong orientation", "ts": 1788096110.095028}
+{"label": "LR22_84", "verdict": "rejected", "reason": "other", "note": "w", "ts": 1788096116.8282535}
+{"label": "LR22_87", "verdict": "rejected", "reason": "other", "note": null, "ts": 1788096120.749503}
+{"label": ".LR22_109.9160", "verdict": "approved", "reason": null, "note": null, "ts": 1788102994.275601}
+{"label": ".LR22_119.9160", "verdict": "approved", "reason": null, "note": null, "ts": 1788103002.042033}
+{"label": ".LR22_173.9160", "verdict": "rejected", "reason": "other", "note": "wrong orientation", "ts": 1788103022.2279606}
+{"label": ".LR22_265.9160", "verdict": "approved", "reason": null, "note": null, "ts": 1788103027.9388196}
+{"label": ".LR22_27.9160", "verdict": "approved", "reason": null, "note": null, "ts": 1788103031.0161252}
+{"label": ".LR22_55.9160", "verdict": "approved", "reason": null, "note": null, "ts": 1788103033.4006815}
+{"label": "LR22_10", "verdict": "approved", "reason": null, "note": null, "ts": 1788103037.7559032}
+{"label": "LR22_102", "verdict": "approved", "reason": null, "note": null, "ts": 1788103041.1289074}
+{"label": "LR22_108", "verdict": "rejected", "reason": "other", "note": "improperly cropped", "ts": 1788103058.6578758}
+{"label": "LR22_116", "verdict": "approved", "reason": null, "note": null, "ts": 1788103067.024841}
+{"label": "LR22_117", "verdict": "approved", "reason": null, "note": null, "ts": 1788103073.2517052}
+{"label": "LR22_128", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788103081.5098445}
+{"label": "LR22_132", "verdict": "approved", "reason": null, "note": null, "ts": 1788103087.0289118}
+{"label": "LR22_149", "verdict": "approved", "reason": null, "note": null, "ts": 1788103092.6891384}
+{"label": "LR22_154", "verdict": "approved", "reason": null, "note": null, "ts": 1788103097.2710395}
+{"label": "LR22_168", "verdict": "approved", "reason": null, "note": null, "ts": 1788103100.8783383}
+{"label": "LR22_172", "verdict": "approved", "reason": null, "note": null, "ts": 1788103103.8700516}
+{"label": "LR22_185", "verdict": "approved", "reason": null, "note": null, "ts": 1788103106.866643}
+{"label": "LR22_189", "verdict": "approved", "reason": null, "note": null, "ts": 1788103114.4263122}
+{"label": "LR22_190", "verdict": "approved", "reason": null, "note": null, "ts": 1788103119.9999807}
+{"label": "LR22_235", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788103126.133385}
+{"label": "LR22_238", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788103138.1457255}
+{"label": "LR22_241", "verdict": "approved", "reason": null, "note": null, "ts": 1788103142.7497385}
+{"label": "LR22_248", "verdict": "approved", "reason": null, "note": null, "ts": 1788103153.6308882}
+{"label": "LR22_25", "verdict": "rejected", "reason": "detail_lost", "note": null, "ts": 1788103160.8666282}
+{"label": "LR22_258", "verdict": "approved", "reason": null, "note": null, "ts": 1788103165.0173085}
+{"label": "LR22_259", "verdict": "approved", "reason": null, "note": null, "ts": 1788103171.754428}
+{"label": "LR22_26", "verdict": "approved", "reason": null, "note": null, "ts": 1788103174.5795567}
+{"label": "LR22_262", "verdict": "approved", "reason": null, "note": null, "ts": 1788103186.1406517}
+{"label": "LR22_29", "verdict": "approved", "reason": null, "note": null, "ts": 1788103192.4175897}
+{"label": "LR22_385", "verdict": "approved", "reason": null, "note": null, "ts": 1788103194.3590162}
+{"label": "LR22_388", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788103199.876803}
+{"label": "LR22_39", "verdict": "approved", "reason": null, "note": null, "ts": 1788103205.1988876}
+{"label": "LR22_393", "verdict": "approved", "reason": null, "note": null, "ts": 1788103208.5546641}
+{"label": "LR22_401", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788103215.2284524}
+{"label": "LR22_407", "verdict": "approved", "reason": null, "note": null, "ts": 1788103218.5166638}
+{"label": "LR22_42", "verdict": "approved", "reason": null, "note": null, "ts": 1788103230.7608812}
+{"label": "LR22_429", "verdict": "approved", "reason": null, "note": null, "ts": 1788103232.7742822}
+{"label": "LR22_46", "verdict": "approved", "reason": null, "note": null, "ts": 1788103235.3523023}
+{"label": "LR22_57", "verdict": "approved", "reason": null, "note": null, "ts": 1788103240.3732107}
+{"label": "LR22_6", "verdict": "approved", "reason": null, "note": null, "ts": 1788103243.9270473}
+{"label": "LR22_64", "verdict": "approved", "reason": null, "note": null, "ts": 1788103247.7009635}
+{"label": "LR22_66", "verdict": "approved", "reason": null, "note": null, "ts": 1788103253.8490386}
+{"label": "LR22_72", "verdict": "approved", "reason": null, "note": null, "ts": 1788103258.9476368}
+{"label": "LR22_80", "verdict": "approved", "reason": null, "note": null, "ts": 1788103280.824647}
+{"label": "LR22_81", "verdict": "approved", "reason": null, "note": null, "ts": 1788103297.3556936}
+{"label": "LR22_84", "verdict": "approved", "reason": null, "note": null, "ts": 1788103300.9357657}
+{"label": "LR22_86", "verdict": "approved", "reason": null, "note": null, "ts": 1788103303.6245468}
+{"label": "LR22_87", "verdict": "approved", "reason": null, "note": null, "ts": 1788103305.4143634}
+{"label": "LR22_88", "verdict": "approved", "reason": null, "note": null, "ts": 1788103314.8654094}
+{"label": "LR22_91", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788103317.8605807}
+{"label": "LR22_93", "verdict": "approved", "reason": null, "note": null, "ts": 1788103321.42079}
+{"label": "LR22_96", "verdict": "approved", "reason": null, "note": null, "ts": 1788103326.3251255}
+{"label": "LR22_99", "verdict": "approved", "reason": null, "note": null, "ts": 1788103331.3399334}
+{"label": "LR18_10", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788172448.810232}
+{"label": "LR18_31", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788172467.2731743}
+{"label": "LR22_103", "verdict": "approved", "reason": null, "note": null, "ts": 1788181560.8851502}
+{"label": "LR22_104", "verdict": "approved", "reason": null, "note": null, "ts": 1788181639.5489235}
+{"label": "LR22_108", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788181646.1116853}
+{"label": "LR22_128", "verdict": "rejected", "reason": "detail_lost", "note": null, "ts": 1788181783.1489372}
+{"label": "LR22_160", "verdict": "rejected", "reason": "detail_lost", "note": null, "ts": 1788181790.4014547}
+{"label": "LR22_173", "verdict": "approved", "reason": null, "note": null, "ts": 1788181997.3589864}
+{"label": "LR22_235", "verdict": "approved", "reason": null, "note": null, "ts": 1788182000.5975068}
+{"label": "LR22_238", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182008.1893613}
+{"label": "LR22_25", "verdict": "approved", "reason": null, "note": null, "ts": 1788182014.6408165}
+{"label": "LR22_401", "verdict": "rejected", "reason": "detail_lost", "note": null, "ts": 1788182023.1415923}
+{"label": "LR22_417", "verdict": "approved", "reason": null, "note": null, "ts": 1788182042.5163884}
+{"label": "LR22_419", "verdict": "approved", "reason": null, "note": null, "ts": 1788182046.1313882}
+{"label": "LR22_421", "verdict": "approved", "reason": null, "note": null, "ts": 1788182050.4760337}
+{"label": "LR22_428", "verdict": "approved", "reason": null, "note": null, "ts": 1788182056.3577688}
+{"label": "LR22_431", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182069.507273}
+{"label": "LR22_434", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182073.8547986}
+{"label": "LR22_438", "verdict": "approved", "reason": null, "note": null, "ts": 1788182081.8716516}
+{"label": "LR22_442", "verdict": "approved", "reason": null, "note": null, "ts": 1788182097.594629}
+{"label": "LR22_45", "verdict": "approved", "reason": null, "note": null, "ts": 1788182099.7885787}
+{"label": "LR22_47", "verdict": "approved", "reason": null, "note": null, "ts": 1788182107.2583835}
+{"label": "LR22_62", "verdict": "approved", "reason": null, "note": null, "ts": 1788182112.4002745}
+{"label": "LR22_76", "verdict": "approved", "reason": null, "note": null, "ts": 1788182116.4207716}
+{"label": "LR22_91", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182122.7699666}
+{"label": "LR22_95", "verdict": "approved", "reason": null, "note": null, "ts": 1788182127.3785615}
+{"label": "LR18_10", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182139.0522995}
+{"label": "LR18_31", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182142.238945}
+{"label": "LR22_103", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182148.7273448}
+{"label": "LR22_104", "verdict": "approved", "reason": null, "note": null, "ts": 1788182155.1497724}
+{"label": "LR22_108", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182158.4601543}
+{"label": "LR22_128", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182161.9576616}
+{"label": "LR22_160", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182165.365013}
+{"label": "LR22_173", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182168.289217}
+{"label": "LR22_235", "verdict": "approved", "reason": null, "note": null, "ts": 1788182170.1157572}
+{"label": "LR22_238", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182173.0270898}
+{"label": "LR22_25", "verdict": "approved", "reason": null, "note": null, "ts": 1788182176.249624}
+{"label": "LR22_401", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182179.2188478}
+{"label": "LR22_417", "verdict": "approved", "reason": null, "note": null, "ts": 1788182198.5400486}
+{"label": "LR22_419", "verdict": "approved", "reason": null, "note": null, "ts": 1788182200.9139009}
+{"label": "LR22_421", "verdict": "approved", "reason": null, "note": null, "ts": 1788182202.555381}
+{"label": "LR22_428", "verdict": "approved", "reason": null, "note": null, "ts": 1788182203.5796793}
+{"label": "LR22_431", "verdict": "approved", "reason": null, "note": null, "ts": 1788182205.240786}
+{"label": "LR22_434", "verdict": "approved", "reason": null, "note": null, "ts": 1788182209.352191}
+{"label": "LR22_438", "verdict": "approved", "reason": null, "note": null, "ts": 1788182212.3270812}
+{"label": "LR22_442", "verdict": "approved", "reason": null, "note": null, "ts": 1788182214.5346217}
+{"label": "LR22_45", "verdict": "approved", "reason": null, "note": null, "ts": 1788182216.7842338}
+{"label": "LR22_47", "verdict": "approved", "reason": null, "note": null, "ts": 1788182217.9697704}
+{"label": "LR22_62", "verdict": "approved", "reason": null, "note": null, "ts": 1788182219.0374658}
+{"label": "LR22_76", "verdict": "approved", "reason": null, "note": null, "ts": 1788182220.4035485}
+{"label": "LR22_91", "verdict": "approved", "reason": null, "note": null, "ts": 1788182227.1041355}
+{"label": "LR22_95", "verdict": "approved", "reason": null, "note": null, "ts": 1788182228.586644}
+{"label": "LR18_10", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182237.5358427}
+{"label": "LR18_31", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182239.350774}
+{"label": "LR18_20", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788182250.9249337}
+{"label": "LR18_32", "verdict": "approved", "reason": null, "note": null, "ts": 1788182255.3218179}
+{"label": "LR18_36", "verdict": "approved", "reason": null, "note": null, "ts": 1788182258.23414}
+{"label": "LR18_37", "verdict": "approved", "reason": null, "note": null, "ts": 1788182260.5099769}
+{"label": "LR18_10", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260002.298699}
+{"label": "LR22_104", "verdict": "rejected", "reason": "pair_mismatch", "note": null, "ts": 1788260018.4389353}
+{"label": "LR22_108", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260020.513644}
+{"label": "LR22_128", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260021.5675468}
+{"label": "LR22_235", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260022.4577951}
+{"label": "LR22_238", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260023.1153443}
+{"label": "LR22_25", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260023.592044}
+{"label": "LR22_401", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260023.959724}
+{"label": "LR22_417", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260024.2670078}
+{"label": "LR22_419", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260024.770805}
+{"label": "LR22_421", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260025.2334137}
+{"label": "LR22_428", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260025.584381}
+{"label": "LR22_431", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260025.8670654}
+{"label": "LR22_434", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260026.2440073}
+{"label": "LR22_438", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260026.3345172}
+{"label": "LR22_442", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260026.594165}
+{"label": "LR22_442", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260026.5971649}
+{"label": "LR22_47", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260026.9414766}
+{"label": "LR22_62", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260027.2808}
+{"label": "LR22_76", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260027.8500762}
+{"label": "LR22_76", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260027.886393}
+{"label": "LR22_95", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260028.2552392}
+{"label": "LR22_95", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260028.3438551}
+{"label": "LR22_95", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260028.6434412}
+{"label": "LR22_95", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260028.7799}
+{"label": "LR22_95", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260029.0788834}
+{"label": "LR22_95", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260029.237479}
+{"label": "LR18_20", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788260035.9862645}
+{"label": "LR18_10", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788263884.7387986}
+{"label": "LR18_20", "verdict": "approved", "reason": null, "note": null, "ts": 1788263897.8197823}
+{"label": "LR18_31", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788263901.0467613}
+{"label": "LR18_32", "verdict": "approved", "reason": null, "note": null, "ts": 1788263911.0099223}
+{"label": "LR18_36", "verdict": "approved", "reason": null, "note": null, "ts": 1788263917.114614}
+{"label": "LR18_37", "verdict": "approved", "reason": null, "note": null, "ts": 1788263925.0133872}
+{"label": "LR22_10", "verdict": "approved", "reason": null, "note": null, "ts": 1788266255.8504527}
+{"label": "LR22_100", "verdict": "approved", "reason": null, "note": null, "ts": 1788266259.947621}
+{"label": "LR22_102", "verdict": "approved", "reason": null, "note": null, "ts": 1788266263.9700963}
+{"label": "LR22_103", "verdict": "approved", "reason": null, "note": null, "ts": 1788266266.5520973}
+{"label": "LR22_104", "verdict": "approved", "reason": null, "note": null, "ts": 1788266270.8106315}
+{"label": "LR22_109", "verdict": "approved", "reason": null, "note": null, "ts": 1788266274.529463}
+{"label": "LR22_116", "verdict": "approved", "reason": null, "note": null, "ts": 1788266276.8095021}
+{"label": "LR22_117", "verdict": "approved", "reason": null, "note": null, "ts": 1788266278.71205}
+{"label": "LR22_119", "verdict": "approved", "reason": null, "note": null, "ts": 1788266288.121185}
+{"label": "LR22_128", "verdict": "approved", "reason": null, "note": null, "ts": 1788266329.5594816}
+{"label": "LR22_132", "verdict": "approved", "reason": null, "note": null, "ts": 1788266356.511255}
+{"label": "LR22_154", "verdict": "approved", "reason": null, "note": null, "ts": 1788266361.1224675}
+{"label": "LR18_10", "verdict": "approved", "reason": null, "note": null, "ts": 1788273006.1337364}
+{"label": "LR18_20", "verdict": "approved", "reason": null, "note": null, "ts": 1788273010.7029061}
+{"label": "LR18_31", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788273014.3257716}
+{"label": "LR18_32", "verdict": "approved", "reason": null, "note": null, "ts": 1788273018.8290749}
+{"label": "LR18_36", "verdict": "approved", "reason": null, "note": null, "ts": 1788273021.0969923}
+{"label": "LR18_37", "verdict": "approved", "reason": null, "note": null, "ts": 1788273023.5867155}
+{"label": "LR22_10", "verdict": "approved", "reason": null, "note": null, "ts": 1788273642.069862}
+{"label": "LR22_25", "verdict": "approved", "reason": null, "note": null, "ts": 1788273644.1043358}
+{"label": "LR22_6", "verdict": "approved", "reason": null, "note": null, "ts": 1788273650.8061347}
+{"label": "LR22_7", "verdict": "approved", "reason": null, "note": null, "ts": 1788273652.7958646}
+{"label": "LR22_9", "verdict": "approved", "reason": null, "note": null, "ts": 1788273658.2717226}
+{"label": ".LR22_104.20220", "verdict": "approved", "reason": null, "note": null, "ts": 1788274667.3364434}
+{"label": "LR22_100", "verdict": "approved", "reason": null, "note": null, "ts": 1788274669.442265}
+{"label": "LR22_102", "verdict": "approved", "reason": null, "note": null, "ts": 1788274670.861248}
+{"label": "LR22_103", "verdict": "approved", "reason": null, "note": null, "ts": 1788274671.7982957}
+{"label": "LR18_31", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788327478.8496122}
+{"label": "LR18_10", "verdict": "approved", "reason": null, "note": null, "ts": 1788329307.3316102}
+{"label": "LR22_104", "verdict": "approved", "reason": null, "note": null, "ts": 1788329307.8093145}
+{"label": "LR18_10", "verdict": "approved", "reason": null, "note": null, "ts": 1788329344.9019234}
+{"label": "LR22_442", "verdict": "approved", "reason": null, "note": null, "ts": 1788335379.0441391}
+{"label": "LR22_45", "verdict": "approved", "reason": null, "note": null, "ts": 1788335384.0940099}
+{"label": "LR22_46", "verdict": "approved", "reason": null, "note": null, "ts": 1788335387.4023595}
+{"label": "LR22_47", "verdict": "approved", "reason": null, "note": null, "ts": 1788335391.2820282}
+{"label": "LR22_49", "verdict": "approved", "reason": null, "note": null, "ts": 1788335397.3470144}
+{"label": "LR22_55", "verdict": "approved", "reason": null, "note": null, "ts": 1788335404.4992073}
+{"label": "LR22_57", "verdict": "approved", "reason": null, "note": null, "ts": 1788335411.1694515}
+{"label": "LR22_62", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788335417.5048947}
+{"label": "LR22_64", "verdict": "approved", "reason": null, "note": null, "ts": 1788335425.270837}
+{"label": "LR22_66", "verdict": "approved", "reason": null, "note": null, "ts": 1788335430.9022856}
+{"label": "LR22_67", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788335437.8671165}
+{"label": "LR22_69", "verdict": "rejected", "reason": "other", "note": "dsign is too small", "ts": 1788335461.2177787}
+{"label": "LR22_72", "verdict": "approved", "reason": null, "note": null, "ts": 1788335466.7006276}
+{"label": "LR22_76", "verdict": "approved", "reason": null, "note": null, "ts": 1788335477.6123235}
+{"label": "LR22_80", "verdict": "approved", "reason": null, "note": null, "ts": 1788335480.4046311}
+{"label": "LR22_81", "verdict": "approved", "reason": null, "note": null, "ts": 1788335485.8188858}
+{"label": "LR22_84", "verdict": "approved", "reason": null, "note": null, "ts": 1788335499.6073163}
+{"label": "LR22_86", "verdict": "approved", "reason": null, "note": null, "ts": 1788335506.0639358}
+{"label": "LR22_87", "verdict": "approved", "reason": null, "note": null, "ts": 1788335510.3354855}
+{"label": "LR22_88", "verdict": "approved", "reason": null, "note": null, "ts": 1788335515.1875432}
+{"label": "LR22_91", "verdict": "approved", "reason": null, "note": null, "ts": 1788335523.400654}
+{"label": "LR22_93", "verdict": "approved", "reason": null, "note": null, "ts": 1788335527.2721324}
+{"label": "LR22_95", "verdict": "approved", "reason": null, "note": null, "ts": 1788335532.4783359}
+{"label": "LR22_96", "verdict": "approved", "reason": null, "note": null, "ts": 1788335537.0025766}
+{"label": "LR22_99", "verdict": "approved", "reason": null, "note": null, "ts": 1788335541.0609148}
+{"label": "LR22_116", "verdict": "approved", "reason": null, "note": null, "ts": 1788359212.1029155}
+{"label": "LR22_162", "verdict": "approved", "reason": null, "note": null, "ts": 1788359214.9440289}
+{"label": "LR22_163", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788359223.160663}
+{"label": "LR22_169", "verdict": "approved", "reason": null, "note": null, "ts": 1788359228.5234492}
+{"label": "LR22_181", "verdict": "approved", "reason": null, "note": null, "ts": 1788359233.8635638}
+{"label": "LR22_186", "verdict": "approved", "reason": null, "note": null, "ts": 1788359236.618371}
+{"label": "LR22_199", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788359248.964789}
+{"label": "LR22_203", "verdict": "approved", "reason": null, "note": null, "ts": 1788359251.0667846}
+{"label": "LR22_208", "verdict": "approved", "reason": null, "note": null, "ts": 1788359255.3620255}
+{"label": "LR22_219", "verdict": "approved", "reason": null, "note": null, "ts": 1788359260.6032872}
+{"label": "LR22_227", "verdict": "approved", "reason": null, "note": null, "ts": 1788359263.7122498}
+{"label": "LR22_228", "verdict": "approved", "reason": null, "note": null, "ts": 1788359268.7863038}
+{"label": "LR22_256", "verdict": "approved", "reason": null, "note": null, "ts": 1788359271.4472933}
+{"label": "LR22_28", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788359275.6824892}
+{"label": "LR22_32", "verdict": "approved", "reason": null, "note": null, "ts": 1788359278.5454185}
+{"label": "LR22_33", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788359307.1140506}
+{"label": "LR22_392", "verdict": "approved", "reason": null, "note": null, "ts": 1788359310.399519}
+{"label": "LR22_394", "verdict": "approved", "reason": null, "note": null, "ts": 1788359313.380208}
+{"label": "LR22_395", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788359321.0729449}
+{"label": "LR22_4", "verdict": "approved", "reason": null, "note": null, "ts": 1788359325.7543473}
+{"label": "LR22_425", "verdict": "approved", "reason": null, "note": null, "ts": 1788359328.6825554}
+{"label": "LR22_429", "verdict": "approved", "reason": null, "note": null, "ts": 1788359331.192495}
+{"label": "LR22_438", "verdict": "approved", "reason": null, "note": null, "ts": 1788359344.9410045}
+{"label": "LR22_439", "verdict": "approved", "reason": null, "note": null, "ts": 1788359352.107237}
+{"label": "LR22_44", "verdict": "approved", "reason": null, "note": null, "ts": 1788359357.7057407}
+{"label": "LR22_440", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788359362.8852265}
+{"label": "LR22_443", "verdict": "approved", "reason": null, "note": null, "ts": 1788359365.0520315}
+{"label": "LR22_450", "verdict": "approved", "reason": null, "note": null, "ts": 1788359367.4795551}
+{"label": "LR22_453", "verdict": "approved", "reason": null, "note": null, "ts": 1788359369.9203985}
+{"label": "LR22_454", "verdict": "approved", "reason": null, "note": null, "ts": 1788359373.5321379}
+{"label": "LR22_455", "verdict": "approved", "reason": null, "note": null, "ts": 1788359384.9427097}
+{"label": "LR22_457", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788359389.539821}
+{"label": "LR22_458", "verdict": "approved", "reason": null, "note": null, "ts": 1788359390.8638237}
+{"label": "LR22_460", "verdict": "approved", "reason": null, "note": null, "ts": 1788359393.072286}
+{"label": "LR22_464", "verdict": "approved", "reason": null, "note": null, "ts": 1788359395.0179632}
+{"label": "LR22_465", "verdict": "approved", "reason": null, "note": null, "ts": 1788359396.6246073}
+{"label": "LR22_468", "verdict": "approved", "reason": null, "note": null, "ts": 1788359398.2224438}
+{"label": "LR22_469", "verdict": "approved", "reason": null, "note": null, "ts": 1788359400.460401}
+{"label": "LR22_470", "verdict": "approved", "reason": null, "note": null, "ts": 1788359401.802333}
+{"label": "LR22_471", "verdict": "approved", "reason": null, "note": null, "ts": 1788359412.776677}
+{"label": "LR22_5", "verdict": "approved", "reason": null, "note": null, "ts": 1788359414.568786}
+{"label": "LR22_56", "verdict": "approved", "reason": null, "note": null, "ts": 1788359416.2059188}
+{"label": "LR22_59", "verdict": "approved", "reason": null, "note": null, "ts": 1788359418.0940871}
+{"label": "LR22_62", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788359421.88085}
+{"label": "LR22_67", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788359426.00685}
+{"label": "LR22_69", "verdict": "approved", "reason": null, "note": null, "ts": 1788359427.8845787}
+{"label": "LR22_94", "verdict": "approved", "reason": null, "note": null, "ts": 1788359429.5851567}
+{"label": "BG22_66", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788776687.0006185}
+{"label": "BG22_81", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788776691.7755227}
+{"label": ".GR22_117.34760", "verdict": "approved", "reason": null, "note": null, "ts": 1788782018.1563418}
+{"label": ".GR22_134.34760", "verdict": "approved", "reason": null, "note": null, "ts": 1788782019.5933056}
+{"label": ".GR22_168.34760", "verdict": "approved", "reason": null, "note": null, "ts": 1788782020.8236225}
+{"label": ".GR22_210.34760", "verdict": "approved", "reason": null, "note": null, "ts": 1788782021.6942036}
+{"label": ".GR22_9.34760", "verdict": "approved", "reason": null, "note": null, "ts": 1788782022.41886}
+{"label": "GR22_1", "verdict": "approved", "reason": null, "note": null, "ts": 1788782028.4129872}
+{"label": "GR22_100", "verdict": "approved", "reason": null, "note": null, "ts": 1788782045.9482584}
+{"label": "GR22_103", "verdict": "approved", "reason": null, "note": null, "ts": 1788782052.7320113}
+{"label": "GR22_104", "verdict": "approved", "reason": null, "note": null, "ts": 1788782056.4967217}
+{"label": "GR22_105", "verdict": "approved", "reason": null, "note": null, "ts": 1788782058.3232112}
+{"label": "GR22_106", "verdict": "approved", "reason": null, "note": null, "ts": 1788782061.6380997}
+{"label": "GR22_107", "verdict": "approved", "reason": null, "note": null, "ts": 1788782063.2738805}
+{"label": "GR22_108", "verdict": "approved", "reason": null, "note": null, "ts": 1788782067.9179034}
+{"label": "GR22_109", "verdict": "approved", "reason": null, "note": null, "ts": 1788782093.2637885}
+{"label": "GR22_11", "verdict": "approved", "reason": null, "note": null, "ts": 1788782096.2477734}
+{"label": "GR22_112", "verdict": "approved", "reason": null, "note": null, "ts": 1788782099.4419837}
+{"label": "GR22_113", "verdict": "approved", "reason": null, "note": null, "ts": 1788782104.7105298}
+{"label": "GR22_114", "verdict": "approved", "reason": null, "note": null, "ts": 1788782106.9191704}
+{"label": "GR22_115", "verdict": "approved", "reason": null, "note": null, "ts": 1788782115.4548066}
+{"label": "GR22_116", "verdict": "approved", "reason": null, "note": null, "ts": 1788782117.6854224}
+{"label": "GR22_119", "verdict": "approved", "reason": null, "note": null, "ts": 1788782154.5121567}
+{"label": "GR22_12", "verdict": "approved", "reason": null, "note": null, "ts": 1788782157.6488822}
+{"label": "GR22_122", "verdict": "approved", "reason": null, "note": null, "ts": 1788782160.6170945}
+{"label": "GR22_125", "verdict": "approved", "reason": null, "note": null, "ts": 1788782163.6464226}
+{"label": "GR22_126", "verdict": "approved", "reason": null, "note": null, "ts": 1788782182.3959246}
+{"label": "GR22_128", "verdict": "approved", "reason": null, "note": null, "ts": 1788782190.8275452}
+{"label": "GR22_129", "verdict": "approved", "reason": null, "note": null, "ts": 1788782193.507401}
+{"label": "GR22_13", "verdict": "approved", "reason": null, "note": null, "ts": 1788782197.105358}
+{"label": "GR22_130", "verdict": "approved", "reason": null, "note": null, "ts": 1788782198.757764}
+{"label": "GR22_131", "verdict": "approved", "reason": null, "note": null, "ts": 1788782204.2477005}
+{"label": "GR22_132", "verdict": "approved", "reason": null, "note": null, "ts": 1788782220.9740202}
+{"label": "GR22_14", "verdict": "approved", "reason": null, "note": null, "ts": 1788782224.288327}
+{"label": "GR22_140", "verdict": "approved", "reason": null, "note": null, "ts": 1788782226.2767882}
+{"label": "GR22_141", "verdict": "approved", "reason": null, "note": null, "ts": 1788782228.364625}
+{"label": "GR22_143", "verdict": "approved", "reason": null, "note": null, "ts": 1788782230.4816663}
+{"label": "GR22_144", "verdict": "approved", "reason": null, "note": null, "ts": 1788782233.559196}
+{"label": "GR22_145", "verdict": "approved", "reason": null, "note": null, "ts": 1788782236.626233}
+{"label": "GR22_146", "verdict": "approved", "reason": null, "note": null, "ts": 1788782238.5777202}
+{"label": "GR22_147", "verdict": "approved", "reason": null, "note": null, "ts": 1788782240.401596}
+{"label": "GR22_148", "verdict": "approved", "reason": null, "note": null, "ts": 1788782242.02426}
+{"label": "GR22_149", "verdict": "approved", "reason": null, "note": null, "ts": 1788782243.5342848}
+{"label": "GR22_15", "verdict": "approved", "reason": null, "note": null, "ts": 1788782246.7079678}
+{"label": "GR22_150", "verdict": "approved", "reason": null, "note": null, "ts": 1788782248.454873}
+{"label": "GR22_152", "verdict": "approved", "reason": null, "note": null, "ts": 1788782250.0354106}
+{"label": "GR22_154", "verdict": "approved", "reason": null, "note": null, "ts": 1788782350.896611}
+{"label": "GR22_156", "verdict": "approved", "reason": null, "note": null, "ts": 1788782353.441486}
+{"label": "GR22_157", "verdict": "approved", "reason": null, "note": null, "ts": 1788782357.36046}
+{"label": "GR22_158", "verdict": "approved", "reason": null, "note": null, "ts": 1788782378.1292284}
+{"label": "GR22_16", "verdict": "approved", "reason": null, "note": null, "ts": 1788782380.580422}
+{"label": "GR22_160", "verdict": "approved", "reason": null, "note": null, "ts": 1788782388.2815244}
+{"label": "GR22_161", "verdict": "approved", "reason": null, "note": null, "ts": 1788782390.5156329}
+{"label": "GR22_162", "verdict": "approved", "reason": null, "note": null, "ts": 1788782391.9284892}
+{"label": "GR22_164", "verdict": "approved", "reason": null, "note": null, "ts": 1788782393.520481}
+{"label": "GR22_165", "verdict": "approved", "reason": null, "note": null, "ts": 1788782395.323188}
+{"label": "GR22_166", "verdict": "approved", "reason": null, "note": null, "ts": 1788782396.7126124}
+{"label": "GR22_169", "verdict": "approved", "reason": null, "note": null, "ts": 1788782410.2770286}
+{"label": "GR22_17", "verdict": "approved", "reason": null, "note": null, "ts": 1788782411.6720479}
+{"label": "GR22_170", "verdict": "approved", "reason": null, "note": null, "ts": 1788782413.2637236}
+{"label": "GR22_171", "verdict": "approved", "reason": null, "note": null, "ts": 1788782414.8686283}
+{"label": "GR22_174", "verdict": "approved", "reason": null, "note": null, "ts": 1788782417.8521798}
+{"label": "GR22_178", "verdict": "approved", "reason": null, "note": null, "ts": 1788782418.364431}
+{"label": "GR22_18", "verdict": "approved", "reason": null, "note": null, "ts": 1788782420.0153966}
+{"label": "GR22_181", "verdict": "approved", "reason": null, "note": null, "ts": 1788782420.9234617}
+{"label": "GR22_183", "verdict": "approved", "reason": null, "note": null, "ts": 1788782421.8977172}
+{"label": "GR22_186", "verdict": "approved", "reason": null, "note": null, "ts": 1788782423.110395}
+{"label": "GR22_187", "verdict": "approved", "reason": null, "note": null, "ts": 1788782424.1494849}
+{"label": "GR22_189", "verdict": "approved", "reason": null, "note": null, "ts": 1788782425.2052548}
+{"label": "GR22_19", "verdict": "approved", "reason": null, "note": null, "ts": 1788782426.2949028}
+{"label": "GR22_190", "verdict": "approved", "reason": null, "note": null, "ts": 1788782427.4725623}
+{"label": "GR22_192", "verdict": "approved", "reason": null, "note": null, "ts": 1788782428.4603422}
+{"label": "GR22_195", "verdict": "approved", "reason": null, "note": null, "ts": 1788782429.7049477}
+{"label": "GR22_196", "verdict": "approved", "reason": null, "note": null, "ts": 1788782430.6924722}
+{"label": "GR22_20", "verdict": "approved", "reason": null, "note": null, "ts": 1788782432.2618363}
+{"label": "GR22_201", "verdict": "approved", "reason": null, "note": null, "ts": 1788782433.9109719}
+{"label": "GR22_202", "verdict": "approved", "reason": null, "note": null, "ts": 1788782435.2743866}
+{"label": "GR22_203", "verdict": "approved", "reason": null, "note": null, "ts": 1788782436.3935733}
+{"label": "GR22_205", "verdict": "approved", "reason": null, "note": null, "ts": 1788782437.4247098}
+{"label": "GR22_209", "verdict": "approved", "reason": null, "note": null, "ts": 1788782438.7111452}
+{"label": "GR22_21", "verdict": "approved", "reason": null, "note": null, "ts": 1788782440.6987379}
+{"label": "GR22_211", "verdict": "approved", "reason": null, "note": null, "ts": 1788782442.9488657}
+{"label": "GR22_212", "verdict": "approved", "reason": null, "note": null, "ts": 1788782444.0308058}
+{"label": "GR22_213", "verdict": "approved", "reason": null, "note": null, "ts": 1788782445.1775858}
+{"label": "GR22_214", "verdict": "approved", "reason": null, "note": null, "ts": 1788782446.307243}
+{"label": "GR22_218", "verdict": "approved", "reason": null, "note": null, "ts": 1788782447.2225227}
+{"label": "GR22_219", "verdict": "approved", "reason": null, "note": null, "ts": 1788782459.8303783}
+{"label": "GR22_22", "verdict": "approved", "reason": null, "note": null, "ts": 1788782471.6276772}
+{"label": "GR22_220", "verdict": "approved", "reason": null, "note": null, "ts": 1788782473.4114542}
+{"label": "GR22_221", "verdict": "approved", "reason": null, "note": null, "ts": 1788782474.9273124}
+{"label": "GR22_222", "verdict": "approved", "reason": null, "note": null, "ts": 1788782476.715714}
+{"label": "GR22_223", "verdict": "approved", "reason": null, "note": null, "ts": 1788782511.6173382}
+{"label": "GR22_224", "verdict": "approved", "reason": null, "note": null, "ts": 1788782531.8451362}
+{"label": "GR22_225", "verdict": "approved", "reason": null, "note": null, "ts": 1788782536.550618}
+{"label": "GR22_226", "verdict": "approved", "reason": null, "note": null, "ts": 1788782554.58032}
+{"label": "GR22_227", "verdict": "approved", "reason": null, "note": null, "ts": 1788782597.5947921}
+{"label": "GR22_228", "verdict": "approved", "reason": null, "note": null, "ts": 1788782600.4203289}
+{"label": "GR22_229", "verdict": "approved", "reason": null, "note": null, "ts": 1788782602.3807795}
+{"label": "GR22_23", "verdict": "approved", "reason": null, "note": null, "ts": 1788782604.231432}
+{"label": "GR22_230", "verdict": "approved", "reason": null, "note": null, "ts": 1788782605.844467}
+{"label": "GR22_231", "verdict": "approved", "reason": null, "note": null, "ts": 1788782609.0624576}
+{"label": "GR22_232", "verdict": "approved", "reason": null, "note": null, "ts": 1788782612.1250272}
+{"label": "GR22_233", "verdict": "approved", "reason": null, "note": null, "ts": 1788782614.5713682}
+{"label": "GR22_234", "verdict": "approved", "reason": null, "note": null, "ts": 1788782615.9568717}
+{"label": "GR22_236", "verdict": "approved", "reason": null, "note": null, "ts": 1788782617.473261}
+{"label": "GR22_237", "verdict": "approved", "reason": null, "note": null, "ts": 1788782618.980363}
+{"label": "GR22_238", "verdict": "approved", "reason": null, "note": null, "ts": 1788782620.475035}
+{"label": "GR22_239", "verdict": "approved", "reason": null, "note": null, "ts": 1788782622.163131}
+{"label": "GR22_24", "verdict": "approved", "reason": null, "note": null, "ts": 1788782623.336164}
+{"label": "GR22_247", "verdict": "approved", "reason": null, "note": null, "ts": 1788782671.8222897}
+{"label": "GR22_248", "verdict": "approved", "reason": null, "note": null, "ts": 1788782679.9688287}
+{"label": "GR22_25", "verdict": "approved", "reason": null, "note": null, "ts": 1788782681.6931233}
+{"label": "GR22_26", "verdict": "approved", "reason": null, "note": null, "ts": 1788782683.3052306}
+{"label": "GR22_27", "verdict": "approved", "reason": null, "note": null, "ts": 1788782684.4987059}
+{"label": "GR22_28", "verdict": "approved", "reason": null, "note": null, "ts": 1788782685.728748}
+{"label": "GR22_29", "verdict": "approved", "reason": null, "note": null, "ts": 1788782686.9105413}
+{"label": "GR22_3", "verdict": "approved", "reason": null, "note": null, "ts": 1788782688.0838976}
+{"label": "GR22_30", "verdict": "approved", "reason": null, "note": null, "ts": 1788782689.6178844}
+{"label": "GR22_31", "verdict": "approved", "reason": null, "note": null, "ts": 1788782690.9107096}
+{"label": "GR22_32", "verdict": "approved", "reason": null, "note": null, "ts": 1788782692.452143}
+{"label": "GR22_33", "verdict": "approved", "reason": null, "note": null, "ts": 1788782694.076428}
+{"label": "GR22_34", "verdict": "approved", "reason": null, "note": null, "ts": 1788782695.2272284}
+{"label": "GR22_35", "verdict": "approved", "reason": null, "note": null, "ts": 1788782696.728347}
+{"label": "GR22_36", "verdict": "approved", "reason": null, "note": null, "ts": 1788782698.326835}
+{"label": "GR22_37", "verdict": "approved", "reason": null, "note": null, "ts": 1788782700.092842}
+{"label": "GR22_38", "verdict": "approved", "reason": null, "note": null, "ts": 1788782701.4181557}
+{"label": "GR22_39", "verdict": "approved", "reason": null, "note": null, "ts": 1788782702.6773126}
+{"label": "GR22_4", "verdict": "approved", "reason": null, "note": null, "ts": 1788782704.0581245}
+{"label": "GR22_42", "verdict": "approved", "reason": null, "note": null, "ts": 1788782705.7302196}
+{"label": "GR22_43", "verdict": "approved", "reason": null, "note": null, "ts": 1788782707.2156785}
+{"label": "GR22_44", "verdict": "approved", "reason": null, "note": null, "ts": 1788782708.5403314}
+{"label": "GR22_45", "verdict": "approved", "reason": null, "note": null, "ts": 1788782709.8030565}
+{"label": "GR22_46", "verdict": "approved", "reason": null, "note": null, "ts": 1788782710.9532819}
+{"label": "GR22_47", "verdict": "approved", "reason": null, "note": null, "ts": 1788782712.222131}
+{"label": "GR22_49", "verdict": "approved", "reason": null, "note": null, "ts": 1788782713.6477792}
+{"label": "GR22_5", "verdict": "approved", "reason": null, "note": null, "ts": 1788782714.884392}
+{"label": "GR22_50", "verdict": "approved", "reason": null, "note": null, "ts": 1788782716.09105}
+{"label": "GR22_51", "verdict": "approved", "reason": null, "note": null, "ts": 1788782717.2436802}
+{"label": "GR22_53", "verdict": "approved", "reason": null, "note": null, "ts": 1788782719.7112393}
+{"label": "GR22_54", "verdict": "approved", "reason": null, "note": null, "ts": 1788782721.0564175}
+{"label": "GR22_55", "verdict": "approved", "reason": null, "note": null, "ts": 1788782722.4791992}
+{"label": "GR22_57", "verdict": "approved", "reason": null, "note": null, "ts": 1788782723.520079}
+{"label": "GR22_58", "verdict": "approved", "reason": null, "note": null, "ts": 1788782724.6251347}
+{"label": "GR22_59", "verdict": "approved", "reason": null, "note": null, "ts": 1788782726.3084347}
+{"label": "GR22_6", "verdict": "approved", "reason": null, "note": null, "ts": 1788782727.6605852}
+{"label": "GR22_61", "verdict": "approved", "reason": null, "note": null, "ts": 1788782729.070271}
+{"label": "GR22_62", "verdict": "approved", "reason": null, "note": null, "ts": 1788782742.9963503}
+{"label": "GR22_63", "verdict": "approved", "reason": null, "note": null, "ts": 1788782744.3360991}
+{"label": "GR22_65", "verdict": "approved", "reason": null, "note": null, "ts": 1788782755.7212496}
+{"label": "GR22_66", "verdict": "approved", "reason": null, "note": null, "ts": 1788782756.851334}
+{"label": "GR22_67", "verdict": "approved", "reason": null, "note": null, "ts": 1788782760.5166354}
+{"label": "GR22_68", "verdict": "approved", "reason": null, "note": null, "ts": 1788782764.296336}
+{"label": "GR22_69", "verdict": "approved", "reason": null, "note": null, "ts": 1788782766.6024258}
+{"label": "GR22_7", "verdict": "approved", "reason": null, "note": null, "ts": 1788782767.9034634}
+{"label": "GR22_70", "verdict": "approved", "reason": null, "note": null, "ts": 1788782769.1200194}
+{"label": "GR22_71", "verdict": "approved", "reason": null, "note": null, "ts": 1788782770.409231}
+{"label": "GR22_73", "verdict": "approved", "reason": null, "note": null, "ts": 1788782771.7796102}
+{"label": "GR22_74", "verdict": "approved", "reason": null, "note": null, "ts": 1788782781.79016}
+{"label": "GR22_76", "verdict": "approved", "reason": null, "note": null, "ts": 1788782783.4623382}
+{"label": "GR22_77", "verdict": "approved", "reason": null, "note": null, "ts": 1788782786.7784462}
+{"label": "GR22_78", "verdict": "approved", "reason": null, "note": null, "ts": 1788782791.0003085}
+{"label": "GR22_79", "verdict": "approved", "reason": null, "note": null, "ts": 1788782794.592145}
+{"label": "GR22_8", "verdict": "approved", "reason": null, "note": null, "ts": 1788782797.4527242}
+{"label": "GR22_80", "verdict": "approved", "reason": null, "note": null, "ts": 1788782803.986463}
+{"label": "GR22_81", "verdict": "approved", "reason": null, "note": null, "ts": 1788782805.621335}
+{"label": "GR22_82", "verdict": "approved", "reason": null, "note": null, "ts": 1788782806.876927}
+{"label": "GR22_83", "verdict": "approved", "reason": null, "note": null, "ts": 1788782808.381248}
+{"label": "GR22_84", "verdict": "approved", "reason": null, "note": null, "ts": 1788782835.8278425}
+{"label": "GR22_85", "verdict": "approved", "reason": null, "note": null, "ts": 1788782842.8533287}
+{"label": "GR22_86", "verdict": "approved", "reason": null, "note": null, "ts": 1788782861.5094657}
+{"label": "GR22_91", "verdict": "approved", "reason": null, "note": null, "ts": 1788782862.727957}
+{"label": "GR22_93", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788782867.9083073}
+{"label": "GR22_94", "verdict": "approved", "reason": null, "note": null, "ts": 1788782869.0528588}
+{"label": "GR22_96", "verdict": "approved", "reason": null, "note": null, "ts": 1788782871.2790093}
+{"label": ".LR22_12.32248", "verdict": "approved", "reason": null, "note": null, "ts": 1788782882.2330346}
+{"label": ".LR22_207.32248", "verdict": "approved", "reason": null, "note": null, "ts": 1788782883.0356328}
+{"label": ".LR22_210.32248", "verdict": "approved", "reason": null, "note": null, "ts": 1788782883.6113303}
+{"label": ".LR22_97.32248", "verdict": "approved", "reason": null, "note": null, "ts": 1788782884.2169497}
+{"label": "GR22_120", "verdict": "approved", "reason": null, "note": null, "ts": 1788783549.347492}
+{"label": "GR22_127", "verdict": "approved", "reason": null, "note": null, "ts": 1788783550.8397207}
+{"label": "GR22_133", "verdict": "approved", "reason": null, "note": null, "ts": 1788783552.3115945}
+{"label": "GR22_139", "verdict": "approved", "reason": null, "note": null, "ts": 1788783553.8664432}
+{"label": "GR22_159", "verdict": "approved", "reason": null, "note": null, "ts": 1788783555.4748485}
+{"label": "GR22_240", "verdict": "approved", "reason": null, "note": null, "ts": 1788783557.9535437}
+{"label": "GR22_93", "verdict": "approved", "reason": null, "note": null, "ts": 1788783561.951694}
+{"label": ".GR22_10.34760", "verdict": "approved", "reason": null, "note": null, "ts": 1788784565.7572956}
+{"label": ".GR22_168.34760", "verdict": "approved", "reason": null, "note": null, "ts": 1788784588.7332156}
+{"label": "GR22_117", "verdict": "approved", "reason": null, "note": null, "ts": 1788784590.6870406}
+{"label": "GR22_134", "verdict": "approved", "reason": null, "note": null, "ts": 1788784592.415584}
+{"label": "GR22_210", "verdict": "approved", "reason": null, "note": null, "ts": 1788784595.0548394}
+{"label": "GR22_9", "verdict": "approved", "reason": null, "note": null, "ts": 1788784596.5718234}
+{"label": "GR22_208", "verdict": "approved", "reason": null, "note": null, "ts": 1788784694.386563}
+{"label": "GR22_246", "verdict": "approved", "reason": null, "note": null, "ts": 1788784695.9192052}
+{"label": "GR22_10", "verdict": "approved", "reason": null, "note": null, "ts": 1788784756.6730466}
+{"label": "GR22_168", "verdict": "approved", "reason": null, "note": null, "ts": 1788784762.929333}
+{"label": "LR18_11", "verdict": "approved", "reason": null, "note": null, "ts": 1788785508.6896682}
+{"label": "LR18_13", "verdict": "approved", "reason": null, "note": null, "ts": 1788785510.0122452}
+{"label": "LR18_15", "verdict": "approved", "reason": null, "note": null, "ts": 1788785511.0446644}
+{"label": "LR18_16", "verdict": "approved", "reason": null, "note": null, "ts": 1788785512.6586962}
+{"label": "LR18_17", "verdict": "approved", "reason": null, "note": null, "ts": 1788785513.7174687}
+{"label": "LR18_18", "verdict": "approved", "reason": null, "note": null, "ts": 1788785515.34655}
+{"label": "LR18_19", "verdict": "approved", "reason": null, "note": null, "ts": 1788785516.4984336}
+{"label": "LR18_22", "verdict": "approved", "reason": null, "note": null, "ts": 1788785517.8046858}
+{"label": "LR18_23", "verdict": "approved", "reason": null, "note": null, "ts": 1788785518.9289546}
+{"label": "LR18_24", "verdict": "approved", "reason": null, "note": null, "ts": 1788785520.9640517}
+{"label": "LR18_25", "verdict": "approved", "reason": null, "note": null, "ts": 1788785522.6085255}
+{"label": "LR18_26", "verdict": "approved", "reason": null, "note": null, "ts": 1788785524.0587437}
+{"label": "LR18_27", "verdict": "approved", "reason": null, "note": null, "ts": 1788785525.3396766}
+{"label": "LR18_28", "verdict": "approved", "reason": null, "note": null, "ts": 1788785526.6719122}
+{"label": "LR18_29", "verdict": "approved", "reason": null, "note": null, "ts": 1788785543.3663251}
+{"label": "LR18_30", "verdict": "approved", "reason": null, "note": null, "ts": 1788785545.4795773}
+{"label": "LR18_31", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788785554.9294014}
+{"label": "LR18_35", "verdict": "approved", "reason": null, "note": null, "ts": 1788785556.3067613}
+{"label": "LR18_38", "verdict": "approved", "reason": null, "note": null, "ts": 1788785557.7450602}
+{"label": "LR18_39", "verdict": "approved", "reason": null, "note": null, "ts": 1788785559.976703}
+{"label": "LR18_4", "verdict": "approved", "reason": null, "note": null, "ts": 1788785561.6593766}
+{"label": "LR18_5", "verdict": "approved", "reason": null, "note": null, "ts": 1788785563.038791}
+{"label": "LR18_6", "verdict": "approved", "reason": null, "note": null, "ts": 1788785565.0268388}
+{"label": "LR18_7", "verdict": "approved", "reason": null, "note": null, "ts": 1788785566.7817628}
+{"label": "LR22_11", "verdict": "approved", "reason": null, "note": null, "ts": 1788790123.0391824}
+{"label": "LR22_110", "verdict": "approved", "reason": null, "note": null, "ts": 1788790124.885028}
+{"label": "LR22_118", "verdict": "approved", "reason": null, "note": null, "ts": 1788790126.0589876}
+{"label": "LR22_120", "verdict": "approved", "reason": null, "note": null, "ts": 1788790127.8172252}
+{"label": "LR22_121", "verdict": "approved", "reason": null, "note": null, "ts": 1788790129.5146973}
+{"label": "LR22_122", "verdict": "approved", "reason": null, "note": null, "ts": 1788790130.8284912}
+{"label": "LR22_124", "verdict": "approved", "reason": null, "note": null, "ts": 1788790132.2649262}
+{"label": "LR22_129", "verdict": "approved", "reason": null, "note": null, "ts": 1788790134.186982}
+{"label": "LR22_13", "verdict": "approved", "reason": null, "note": null, "ts": 1788790135.3815892}
+{"label": "LR22_133", "verdict": "approved", "reason": null, "note": null, "ts": 1788790137.1030507}
+{"label": "LR22_14", "verdict": "approved", "reason": null, "note": null, "ts": 1788790138.4829938}
+{"label": "LR22_143", "verdict": "approved", "reason": null, "note": null, "ts": 1788790140.198076}
+{"label": "LR22_15", "verdict": "approved", "reason": null, "note": null, "ts": 1788790141.4425733}
+{"label": "LR22_151", "verdict": "approved", "reason": null, "note": null, "ts": 1788790143.1621726}
+{"label": "LR22_155", "verdict": "approved", "reason": null, "note": null, "ts": 1788790144.5798092}
+{"label": "LR22_158", "verdict": "approved", "reason": null, "note": null, "ts": 1788790147.2660394}
+{"label": "LR22_16", "verdict": "approved", "reason": null, "note": null, "ts": 1788790148.5981216}
+{"label": "LR22_163", "verdict": "approved", "reason": null, "note": null, "ts": 1788790152.6838918}
+{"label": "LR22_167", "verdict": "approved", "reason": null, "note": null, "ts": 1788790154.6546643}
+{"label": "LR22_17", "verdict": "approved", "reason": null, "note": null, "ts": 1788790158.6681376}
+{"label": "LR22_174", "verdict": "approved", "reason": null, "note": null, "ts": 1788790177.3712804}
+{"label": "LR22_177", "verdict": "approved", "reason": null, "note": null, "ts": 1788790179.0040836}
+{"label": "LR22_19", "verdict": "approved", "reason": null, "note": null, "ts": 1788790181.0576072}
+{"label": "LR22_191", "verdict": "approved", "reason": null, "note": null, "ts": 1788790182.3545575}
+{"label": "LR22_193", "verdict": "approved", "reason": null, "note": null, "ts": 1788790183.9975114}
+{"label": "LR22_194", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788790189.3498695}
+{"label": "LR22_195", "verdict": "approved", "reason": null, "note": null, "ts": 1788790190.9549055}
+{"label": "LR22_197", "verdict": "approved", "reason": null, "note": null, "ts": 1788790192.257382}
+{"label": "LR22_199", "verdict": "approved", "reason": null, "note": null, "ts": 1788790193.84477}
+{"label": "LR22_2", "verdict": "approved", "reason": null, "note": null, "ts": 1788790196.5167992}
+{"label": "LR22_20", "verdict": "approved", "reason": null, "note": null, "ts": 1788790197.7806184}
+{"label": "LR22_201", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788790203.2968104}
+{"label": "LR22_221", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788790206.6904302}
+{"label": "LR22_222", "verdict": "approved", "reason": null, "note": null, "ts": 1788790208.8770523}
+{"label": "LR22_226", "verdict": "approved", "reason": null, "note": null, "ts": 1788790212.8726594}
+{"label": "LR22_234", "verdict": "approved", "reason": null, "note": null, "ts": 1788790215.393125}
+{"label": "LR22_24", "verdict": "approved", "reason": null, "note": null, "ts": 1788790218.6810334}
+{"label": "LR22_242", "verdict": "approved", "reason": null, "note": null, "ts": 1788790220.1001198}
+{"label": "LR22_244", "verdict": "approved", "reason": null, "note": null, "ts": 1788790221.5744498}
+{"label": "LR22_246", "verdict": "approved", "reason": null, "note": null, "ts": 1788790223.4506752}
+{"label": "LR22_250", "verdict": "approved", "reason": null, "note": null, "ts": 1788790225.0997252}
+{"label": "LR22_252", "verdict": "approved", "reason": null, "note": null, "ts": 1788790227.8020904}
+{"label": "LR22_253", "verdict": "approved", "reason": null, "note": null, "ts": 1788790229.1684308}
+{"label": "LR22_257", "verdict": "approved", "reason": null, "note": null, "ts": 1788790230.9958506}
+{"label": "LR22_266", "verdict": "approved", "reason": null, "note": null, "ts": 1788790232.3568916}
+{"label": "LR22_269", "verdict": "approved", "reason": null, "note": null, "ts": 1788790234.044644}
+{"label": "LR22_271", "verdict": "approved", "reason": null, "note": null, "ts": 1788790236.0064504}
+{"label": "LR22_274", "verdict": "approved", "reason": null, "note": null, "ts": 1788790237.601441}
+{"label": "LR22_28", "verdict": "approved", "reason": null, "note": null, "ts": 1788790239.2150369}
+{"label": "LR22_280", "verdict": "approved", "reason": null, "note": null, "ts": 1788790242.4877563}
+{"label": "LR22_286", "verdict": "approved", "reason": null, "note": null, "ts": 1788790243.792337}
+{"label": "LR22_30", "verdict": "approved", "reason": null, "note": null, "ts": 1788790247.07676}
+{"label": "LR22_320", "verdict": "approved", "reason": null, "note": null, "ts": 1788790249.8529646}
+{"label": "LR22_321", "verdict": "approved", "reason": null, "note": null, "ts": 1788790252.0179503}
+{"label": "LR22_322", "verdict": "approved", "reason": null, "note": null, "ts": 1788790253.4640496}
+{"label": "LR22_323", "verdict": "approved", "reason": null, "note": null, "ts": 1788790254.78336}
+{"label": "LR22_325", "verdict": "approved", "reason": null, "note": null, "ts": 1788790255.962484}
+{"label": "LR22_326", "verdict": "approved", "reason": null, "note": null, "ts": 1788790257.6212895}
+{"label": "LR22_328", "verdict": "approved", "reason": null, "note": null, "ts": 1788790258.8234093}
+{"label": "LR22_329", "verdict": "approved", "reason": null, "note": null, "ts": 1788790263.6276577}
+{"label": "LR22_33", "verdict": "approved", "reason": null, "note": null, "ts": 1788790267.5530148}
+{"label": "LR22_330", "verdict": "approved", "reason": null, "note": null, "ts": 1788790270.4769464}
+{"label": "LR22_331", "verdict": "approved", "reason": null, "note": null, "ts": 1788790272.0515513}
+{"label": "LR22_333", "verdict": "approved", "reason": null, "note": null, "ts": 1788790274.674503}
+{"label": "LR22_334", "verdict": "approved", "reason": null, "note": null, "ts": 1788790276.598347}
+{"label": "LR22_336", "verdict": "approved", "reason": null, "note": null, "ts": 1788790277.9843018}
+{"label": "LR22_338", "verdict": "approved", "reason": null, "note": null, "ts": 1788790279.3858178}
+{"label": "LR22_339", "verdict": "approved", "reason": null, "note": null, "ts": 1788790280.717535}
+{"label": "LR22_341", "verdict": "approved", "reason": null, "note": null, "ts": 1788790281.9694984}
+{"label": "LR22_342", "verdict": "approved", "reason": null, "note": null, "ts": 1788790283.445057}
+{"label": "LR22_346", "verdict": "approved", "reason": null, "note": null, "ts": 1788790285.014474}
+{"label": "LR22_37", "verdict": "approved", "reason": null, "note": null, "ts": 1788790286.317676}
+{"label": "LR22_38", "verdict": "approved", "reason": null, "note": null, "ts": 1788790289.266047}
+{"label": "LR22_384", "verdict": "approved", "reason": null, "note": null, "ts": 1788790290.8789518}
+{"label": "LR22_390", "verdict": "approved", "reason": null, "note": null, "ts": 1788790292.3493116}
+{"label": "LR22_395", "verdict": "approved", "reason": null, "note": null, "ts": 1788790294.2999082}
+{"label": "LR22_396", "verdict": "approved", "reason": null, "note": null, "ts": 1788790295.7003803}
+{"label": "LR22_397", "verdict": "approved", "reason": null, "note": null, "ts": 1788790298.2476847}
+{"label": "LR22_398", "verdict": "approved", "reason": null, "note": null, "ts": 1788790299.6279392}
+{"label": "LR22_399", "verdict": "approved", "reason": null, "note": null, "ts": 1788790301.1570933}
+{"label": "LR22_402", "verdict": "approved", "reason": null, "note": null, "ts": 1788790303.4060192}
+{"label": "LR22_403", "verdict": "approved", "reason": null, "note": null, "ts": 1788790304.768854}
+{"label": "LR22_408", "verdict": "approved", "reason": null, "note": null, "ts": 1788790307.8678405}
+{"label": "LR22_409", "verdict": "approved", "reason": null, "note": null, "ts": 1788790309.2232504}
+{"label": "LR22_41", "verdict": "approved", "reason": null, "note": null, "ts": 1788790311.1171756}
+{"label": "LR22_41", "verdict": "approved", "reason": null, "note": null, "ts": 1788790311.3271892}
+{"label": "LR22_410", "verdict": "approved", "reason": null, "note": null, "ts": 1788790311.4784575}
+{"label": "LR22_410", "verdict": "approved", "reason": null, "note": null, "ts": 1788790311.591451}
+{"label": "LR22_410", "verdict": "approved", "reason": null, "note": null, "ts": 1788790311.731982}
+{"label": "LR22_410", "verdict": "approved", "reason": null, "note": null, "ts": 1788790311.8437085}
+{"label": "LR22_422", "verdict": "approved", "reason": null, "note": null, "ts": 1788790312.2206187}
+{"label": "LR22_422", "verdict": "approved", "reason": null, "note": null, "ts": 1788790316.7585187}
+{"label": "LR22_423", "verdict": "approved", "reason": null, "note": null, "ts": 1788790317.994947}
+{"label": "LR22_424", "verdict": "approved", "reason": null, "note": null, "ts": 1788790319.3496044}
+{"label": "LR22_426", "verdict": "approved", "reason": null, "note": null, "ts": 1788790320.4013636}
+{"label": "LR22_427", "verdict": "approved", "reason": null, "note": null, "ts": 1788790321.594444}
+{"label": "LR22_430", "verdict": "approved", "reason": null, "note": null, "ts": 1788790322.7158651}
+{"label": "LR22_433", "verdict": "approved", "reason": null, "note": null, "ts": 1788790323.989569}
+{"label": "LR22_435", "verdict": "approved", "reason": null, "note": null, "ts": 1788790324.9251356}
+{"label": "LR22_436", "verdict": "approved", "reason": null, "note": null, "ts": 1788790325.9205344}
+{"label": "LR22_437", "verdict": "approved", "reason": null, "note": null, "ts": 1788790327.234183}
+{"label": "LR22_440", "verdict": "approved", "reason": null, "note": null, "ts": 1788790329.3660402}
+{"label": "LR22_441", "verdict": "approved", "reason": null, "note": null, "ts": 1788790330.4067156}
+{"label": "LR22_444", "verdict": "approved", "reason": null, "note": null, "ts": 1788790333.9220693}
+{"label": "LR22_446", "verdict": "approved", "reason": null, "note": null, "ts": 1788790335.470391}
+{"label": "LR22_447", "verdict": "approved", "reason": null, "note": null, "ts": 1788790337.1505296}
+{"label": "LR22_449", "verdict": "approved", "reason": null, "note": null, "ts": 1788790339.0622685}
+{"label": "LR22_451", "verdict": "approved", "reason": null, "note": null, "ts": 1788790340.1337988}
+{"label": "LR22_456", "verdict": "approved", "reason": null, "note": null, "ts": 1788790341.1429915}
+{"label": "LR22_457", "verdict": "approved", "reason": null, "note": null, "ts": 1788790343.9234712}
+{"label": "LR22_461", "verdict": "approved", "reason": null, "note": null, "ts": 1788790345.09977}
+{"label": "LR22_462", "verdict": "approved", "reason": null, "note": null, "ts": 1788790346.4169931}
+{"label": "LR22_472", "verdict": "approved", "reason": null, "note": null, "ts": 1788790348.6388292}
+{"label": "LR22_479", "verdict": "approved", "reason": null, "note": null, "ts": 1788790349.9858255}
+{"label": "LR22_48", "verdict": "approved", "reason": null, "note": null, "ts": 1788790351.7563274}
+{"label": "LR22_480", "verdict": "approved", "reason": null, "note": null, "ts": 1788790353.074471}
+{"label": "LR22_51", "verdict": "approved", "reason": null, "note": null, "ts": 1788790354.2860377}
+{"label": "LR22_52", "verdict": "approved", "reason": null, "note": null, "ts": 1788790355.4519472}
+{"label": "LR22_54", "verdict": "approved", "reason": null, "note": null, "ts": 1788790356.4157393}
+{"label": "LR22_58", "verdict": "approved", "reason": null, "note": null, "ts": 1788790358.5634658}
+{"label": "LR22_62", "verdict": "approved", "reason": null, "note": null, "ts": 1788790360.0175393}
+{"label": "LR22_67", "verdict": "rejected", "reason": "design_mismatch", "note": null, "ts": 1788790364.8657305}
+{"label": "LR22_68", "verdict": "approved", "reason": null, "note": null, "ts": 1788790366.134558}
+{"label": "LR22_70", "verdict": "approved", "reason": null, "note": null, "ts": 1788790367.7384317}
+{"label": "LR22_73", "verdict": "approved", "reason": null, "note": null, "ts": 1788790369.0563378}
+{"label": "LR22_74", "verdict": "approved", "reason": null, "note": null, "ts": 1788790371.0224292}
+{"label": "LR22_75", "verdict": "approved", "reason": null, "note": null, "ts": 1788790372.327929}
+{"label": "LR22_78", "verdict": "approved", "reason": null, "note": null, "ts": 1788790373.8185675}
+{"label": "LR22_79", "verdict": "approved", "reason": null, "note": null, "ts": 1788790375.7568903}
+{"label": "LR22_82", "verdict": "approved", "reason": null, "note": null, "ts": 1788790378.0426948}
+{"label": "LR22_83", "verdict": "approved", "reason": null, "note": null, "ts": 1788790379.8056307}
+{"label": "LR22_85", "verdict": "approved", "reason": null, "note": null, "ts": 1788790381.4938765}
+{"label": "LR22_92", "verdict": "approved", "reason": null, "note": null, "ts": 1788790390.5557084}
+{"label": "LR22_412", "verdict": "approved", "reason": null, "note": null, "ts": 1788790397.6913078}
+{"label": "LR22_413", "verdict": "approved", "reason": null, "note": null, "ts": 1788790399.069375}
+{"label": "LR22_414", "verdict": "approved", "reason": null, "note": null, "ts": 1788790400.0716596}
+{"label": "LR22_415", "verdict": "approved", "reason": null, "note": null, "ts": 1788790401.195962}
+{"label": "LR22_105", "verdict": "approved", "reason": null, "note": null, "ts": 1788790407.2978983}
+{"label": "LR22_109", "verdict": "approved", "reason": null, "note": null, "ts": 1788790460.6306963}
+{"label": "LR22_117", "verdict": "approved", "reason": null, "note": null, "ts": 1788790471.7344818}
+{"label": "LR22_119", "verdict": "approved", "reason": null, "note": null, "ts": 1788790472.5476227}
+{"label": "LR22_128", "verdict": "approved", "reason": null, "note": null, "ts": 1788790473.4065502}
+{"label": "LR22_132", "verdict": "approved", "reason": null, "note": null, "ts": 1788790474.224199}
+{"label": "LR22_149", "verdict": "approved", "reason": null, "note": null, "ts": 1788790474.9006965}
+{"label": "LR22_154", "verdict": "approved", "reason": null, "note": null, "ts": 1788790475.5600238}
+{"label": "LR22_160", "verdict": "approved", "reason": null, "note": null, "ts": 1788790476.1489706}
+{"label": "LR22_165", "verdict": "approved", "reason": null, "note": null, "ts": 1788790476.78247}
+{"label": "LR22_168", "verdict": "approved", "reason": null, "note": null, "ts": 1788790477.4961762}
+{"label": "LR22_172", "verdict": "approved", "reason": null, "note": null, "ts": 1788790478.113189}
+{"label": "LR22_173", "verdict": "approved", "reason": null, "note": null, "ts": 1788790478.7332695}
+{"label": "LR22_185", "verdict": "approved", "reason": null, "note": null, "ts": 1788790479.7182121}
+{"label": "LR22_189", "verdict": "approved", "reason": null, "note": null, "ts": 1788790480.3647656}
+{"label": "LR22_190", "verdict": "approved", "reason": null, "note": null, "ts": 1788790481.2003567}
+{"label": "LR22_225", "verdict": "approved", "reason": null, "note": null, "ts": 1788790481.8989763}
+{"label": "LR22_235", "verdict": "approved", "reason": null, "note": null, "ts": 1788790482.7423482}
+{"label": "LR22_238", "verdict": "approved", "reason": null, "note": null, "ts": 1788790483.4283135}
+{"label": "LR22_241", "verdict": "approved", "reason": null, "note": null, "ts": 1788790484.0381458}
+{"label": "LR22_248", "verdict": "approved", "reason": null, "note": null, "ts": 1788790484.7133956}
+{"label": "LR22_258", "verdict": "approved", "reason": null, "note": null, "ts": 1788790485.3028834}
+{"label": "LR22_259", "verdict": "approved", "reason": null, "note": null, "ts": 1788790485.9136035}
+{"label": "LR22_26", "verdict": "approved", "reason": null, "note": null, "ts": 1788790486.4886088}
+{"label": "LR22_262", "verdict": "approved", "reason": null, "note": null, "ts": 1788790487.1698089}
+{"label": "LR22_265", "verdict": "approved", "reason": null, "note": null, "ts": 1788790487.8767493}
+{"label": "LR22_27", "verdict": "approved", "reason": null, "note": null, "ts": 1788790488.9304273}
+{"label": "LR22_29", "verdict": "approved", "reason": null, "note": null, "ts": 1788790489.8888478}
+{"label": "LR22_385", "verdict": "approved", "reason": null, "note": null, "ts": 1788790490.5438778}
+{"label": "LR22_388", "verdict": "approved", "reason": null, "note": null, "ts": 1788790491.1876442}
+{"label": "LR22_39", "verdict": "approved", "reason": null, "note": null, "ts": 1788790491.799209}
+{"label": "LR22_393", "verdict": "approved", "reason": null, "note": null, "ts": 1788790492.5226068}
+{"label": "LR22_40", "verdict": "approved", "reason": null, "note": null, "ts": 1788790493.0235605}
+{"label": "LR22_401", "verdict": "approved", "reason": null, "note": null, "ts": 1788790493.8389564}
+{"label": "LR22_407", "verdict": "approved", "reason": null, "note": null, "ts": 1788790494.4499962}
+{"label": "LR22_417", "verdict": "approved", "reason": null, "note": null, "ts": 1788790495.0096192}
+{"label": "LR22_419", "verdict": "approved", "reason": null, "note": null, "ts": 1788790495.727043}
+{"label": "LR22_42", "verdict": "approved", "reason": null, "note": null, "ts": 1788790496.610546}
+{"label": "LR22_421", "verdict": "approved", "reason": null, "note": null, "ts": 1788790497.270094}
+{"label": "LR22_428", "verdict": "approved", "reason": null, "note": null, "ts": 1788790497.9590015}
+{"label": "LR22_431", "verdict": "approved", "reason": null, "note": null, "ts": 1788790504.7111137}
+{"label": "LR22_432", "verdict": "approved", "reason": null, "note": null, "ts": 1788790505.6266572}
+{"label": "LR22_434", "verdict": "approved", "reason": null, "note": null, "ts": 1788790506.5390944}
+{"label": "LR22_1", "verdict": "approved", "reason": null, "note": null, "ts": 1788790512.554182}
+{"label": "TP22_108", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861788.9708538}
+{"label": "TP22_126", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861789.7750313}
+{"label": "TP22_127", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861790.5465558}
+{"label": "TP22_147", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861791.2024999}
+{"label": "TP22_199", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861791.710398}
+{"label": "TP22_212", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861792.054104}
+{"label": "TP22_216", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861792.3747146}
+{"label": "TP22_221", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861792.6503725}
+{"label": "TP22_273", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861792.9469864}
+{"label": "TP22_370", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861793.264043}
+{"label": "TP22_42", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861793.6603446}
+{"label": "TP22_439", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861794.582527}
+{"label": "TP22_93", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861795.243566}
+{"label": "TP22_94", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861796.0748165}
+{"label": "TP22_95", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788861796.8853166}
+{"label": "TP22_42", "verdict": "approved", "reason": null, "note": null, "ts": 1788862248.4358447}
+{"label": "TP22_108", "verdict": "approved", "reason": null, "note": null, "ts": 1788862538.6442797}
+{"label": "TP22_126", "verdict": "approved", "reason": null, "note": null, "ts": 1788862542.734721}
+{"label": "TP22_127", "verdict": "rejected", "reason": "piece_count", "note": null, "ts": 1788862547.0817397}
+{"label": "TP22_147", "verdict": "approved", "reason": null, "note": null, "ts": 1788862548.7281399}
+{"label": "TP22_199", "verdict": "approved", "reason": null, "note": null, "ts": 1788862549.9852393}
+{"label": "TP22_212", "verdict": "approved", "reason": null, "note": null, "ts": 1788862551.0089126}
+{"label": "TP22_216", "verdict": "approved", "reason": null, "note": null, "ts": 1788862552.264761}
+{"label": "TP22_218", "verdict": "approved", "reason": null, "note": null, "ts": 1788862554.5988781}
+{"label": "TP22_221", "verdict": "approved", "reason": null, "note": null, "ts": 1788862556.0690093}
+{"label": "TP22_273", "verdict": "approved", "reason": null, "note": null, "ts": 1788862557.6613114}
+{"label": "TP22_370", "verdict": "approved", "reason": null, "note": null, "ts": 1788862559.0996513}
+{"label": "TP22_439", "verdict": "approved", "reason": null, "note": null, "ts": 1788862560.2827263}
+{"label": "TP22_93", "verdict": "approved", "reason": null, "note": null, "ts": 1788862561.5193005}
+{"label": "TP22_94", "verdict": "approved", "reason": null, "note": null, "ts": 1788862562.6567478}
+{"label": "TP22_95", "verdict": "approved", "reason": null, "note": null, "ts": 1788862564.2359738}
+{"label": "TP22_127", "verdict": "approved", "reason": null, "note": null, "ts": 1788862692.4538722}
+{"label": "TP22_215", "verdict": "approved", "reason": null, "note": null, "ts": 1788862694.105753}
+{"label": "TP22_351", "verdict": "approved", "reason": null, "note": null, "ts": 1788862696.8999333}

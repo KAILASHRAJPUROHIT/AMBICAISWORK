@@ -69,7 +69,14 @@ def test_import_repair_publishes_then_approves_and_routes_raw(monkeypatch, tmp_p
 
     assert result["review"]["verdict"] == "approved"
     assert (paths["output"] / "Bangle22" / "BG22_7.jpg").is_file()
-    assert failed.read_bytes() == b"old-failed-delivery"
+    # The failed delivery is still preserved, but no longer as a second LIVE
+    # image under the same label: since 2026-09-02 a superseded delivery is
+    # archived to <category>/_superseded/, which the delivery walkers skip.
+    # The audit record survives; the live set stays one-image-per-label.
+    archived = list((failed.parent / review_queue.SUPERSEDED_DIRNAME).glob("BG22_7__*.jpg"))
+    assert len(archived) == 1, "the failed delivery must be preserved, not destroyed"
+    assert archived[0].read_bytes() == b"old-failed-delivery"
+    assert not failed.exists(), "it must not remain a live delivery"
     assert not raw.exists()
     assert (paths["processed"] / "BANGLE 22" / "BG22_7.jpg").read_bytes() == b"raw-master"
     assert codex_repair.AUDIT_PATH.is_file()

@@ -6,11 +6,11 @@ Dim shell, fso, http, port, url
 Set shell = CreateObject("WScript.Shell")
 Set fso   = CreateObject("Scripting.FileSystemObject")
 
-Const TOOL      = "C:\Users\kaila\Desktop\JewelleryCatalogTool"
+Const TOOL      = "C:\AradhanaSystems\projects\catalogue-capture\main"
 Const PYTHON_EXE = "C:\Users\kaila\AppData\Local\Programs\Python\Python310\python.exe"
-Const PORT_FILE = "C:\Users\kaila\Desktop\JewelleryCatalogTool\capture_port.txt"
+Const PORT_FILE = "C:\AradhanaSystems\projects\catalogue-capture\main\capture_port.txt"
 Const DEFAULT_PORT = "7660"
-Const LOG_FILE  = "C:\Users\kaila\Desktop\JewelleryCatalogTool\logs\capture_run.log"
+Const LOG_FILE  = "C:\AradhanaSystems\projects\catalogue-capture\main\logs\capture_run.log"
 Const LOG_MAX_BYTES = 5242880
 
 If fso.FileExists(LOG_FILE) Then

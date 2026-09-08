@@ -35,10 +35,11 @@
 
 $ErrorActionPreference = 'SilentlyContinue'
 
-$ToolDir     = "C:\Users\kaila\Desktop\JewelleryCatalogTool"
+$ToolDir     = "C:\AradhanaSystems\projects\catalogue-capture\main"
 $LogFile     = Join-Path $ToolDir "logs\supervisor.log"
 $StateFile   = Join-Path $ToolDir "data\supervisor_state.json"
 $RestartRequest = Join-Path $ToolDir "data\restart_catalogue.request"
+$CaptureRestartRequest = Join-Path $ToolDir "data\restart_capture.request"
 $LogMax      = 2MB
 $FailThreshold = 3   # consecutive down-checks (~3 min at the 1-min poll interval) before alerting
 
@@ -52,6 +53,19 @@ if (Test-Path -LiteralPath $RestartRequest) {
         Start-Sleep -Seconds 3
     } catch {
         Add-Content -Path $LogFile -Value ("[" + (Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "] Requested catalogue restart FAILED: " + $_.Exception.Message)
+    }
+}
+
+# Capture server runs as its own NSSM service.  A maintenance session is not
+# elevated, so it requests this narrowly-scoped reload and leaves the main
+# catalogue/generation service completely untouched.
+if (Test-Path -LiteralPath $CaptureRestartRequest) {
+    try {
+        Restart-Service -Name "AradhanaCaptureServer" -Force -ErrorAction Stop
+        Remove-Item -LiteralPath $CaptureRestartRequest -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 3
+    } catch {
+        Add-Content -Path $LogFile -Value ("[" + (Get-Date -Format "yyyy-MM-dd HH:mm:ss") + "] Requested capture restart FAILED: " + $_.Exception.Message)
     }
 }
 

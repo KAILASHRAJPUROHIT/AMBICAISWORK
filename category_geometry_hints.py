@@ -39,6 +39,32 @@ _BALI_HINT = (
     "throughout, bright diffused softbox lighting, and a seamless pure white background."
 )
 
+# Confirmed live 2026-09-08: earring/tops-family renders were coming back
+# showing only ONE earring instead of the matched pair the physical item
+# actually is (category_topology.py's own _PAIR set already knows earrings,
+# tops, jhumka and dull ship as two pieces -- but that classification was
+# never wired into the prompt, so FLUX had no reason to know there should be
+# two). Unlike _BALI_HINT (a hoop that curves away from camera and needs an
+# opening/ellipse projection called out), these are small flat/compact
+# stud-and-drop earrings -- the geometry risk here isn't shape-flattening,
+# it's the model treating the reference photo of two earrings as one subject
+# and rendering only one. So this hint's job is narrower: state the pair
+# count explicitly and require both pieces in the same frame.
+_SMALL_PAIR_HINT = (
+    "Highest-priority pair contract: the physical item is a matched PAIR of two separate "
+    "earrings, not one. Render both earrings together in a single frame, side by side, "
+    "upright, level, equally sized, mirror-matched, and consistently rotated -- never crop, "
+    "merge, or drop either piece down to a single earring. These are small compact stud or "
+    "drop-style earrings, so use a close macro product framing that keeps both complete "
+    "pieces fully visible with clear even spacing between them, not a single-earring "
+    "close-up. Image 1 is the exclusive authority for product identity, silhouette, "
+    "proportions, stone count, setting, engraving, and materials, applied identically to "
+    "both earrings. When Image 2 is supplied, use it exclusively for the reviewed camera "
+    "angle and pair spacing. Use a 100 mm macro product lens at f/11, sharp focus "
+    "throughout, bright diffused softbox lighting, and a seamless pure white studio "
+    "background."
+)
+
 _ITEM_HINTS: dict[str, str] = {
     "BL18_10": (
         "Highest-priority subject and geometry for BL18_10: a matched pair of compact slim "
@@ -85,12 +111,45 @@ _ITEM_HINTS: dict[str, str] = {
     ),
 }
 
+_RING_HINT = (
+    "Ring shank contract: this is a finger ring, so show the complete ring, not the "
+    "decorated head alone. Present it in a front three-quarter product view with the "
+    "head upright and facing the camera, and the band continuing out of the head on "
+    "both sides and curving away behind it, its far side visible as a narrower arc "
+    "receding from the camera. The finger opening reads as a real opening with depth. "
+    "Every ring has a band, so draw the complete band in every case: where Image 1 "
+    "crops it away, hides it behind the stand, or shows only a short fragment, "
+    "continue that fragment into a full, smoothly tapering band of the same width, "
+    "metal, and finish, closing the circle behind the head. This completes a part of "
+    "the piece the photograph did not show, and is not an added component. Where the "
+    "band IS visible, keep its width, taper, and surface work exactly as Image 1 has them."
+)
+
 _GEOMETRY_HINTS: dict[str, str] = {
     "bali": _BALI_HINT,
     "bali_18": _BALI_HINT,
     "bali_22": _BALI_HINT,
     "ladies_bali": _BALI_HINT,
     "mens_bali": _BALI_HINT,
+    # Rings were rendering as a floating ornament head with the shank dropped
+    # entirely (LR22_95, confirmed by the catalogue owner 2026-09-01 against an
+    # earlier render that kept it). A ring photographed head-on gives the model
+    # no reason to know a band continues behind -- the same blind spot the bali
+    # hoop hint exists for.
+    "ladies_ring_22": _RING_HINT,
+    "ladies_ring_18": _RING_HINT,
+    "ladies_rings": _RING_HINT,
+    "gents_ring_22": _RING_HINT,
+    "gents_rings": _RING_HINT,
+    "baby_ring_22": _RING_HINT,
+    # Small earring-family categories that category_topology.py's _PAIR set
+    # already knows always ship as two pieces (see _SMALL_PAIR_HINT above).
+    "earring_22": _SMALL_PAIR_HINT,
+    "earring_18": _SMALL_PAIR_HINT,
+    "tops_22": _SMALL_PAIR_HINT,
+    "tops_18": _SMALL_PAIR_HINT,
+    "jhumka_22": _SMALL_PAIR_HINT,
+    "dull_22": _SMALL_PAIR_HINT,
 }
 
 

@@ -135,6 +135,30 @@ def test_minimal_inventory_accepts_compact_daily_export(monkeypatch, tmp_path):
     assert inventory.labels == ("TP22/1",)
 
 
+def test_category_loader_ignores_trailing_report_filter_row(monkeypatch, tmp_path):
+    workbook = tmp_path / "29082026.xls"
+    workbook.write_bytes(b"placeholder")
+    monkeypatch.setattr(
+        stock_excel,
+        "_read_xls",
+        lambda _path: [(
+            "Sheet",
+            [
+                ["Label No", "ItemName"],
+                ["BL22/43", "BALI 22"],
+                ["", ""],
+                ["[Carat] <> 'S925'", ""],
+            ],
+        )],
+    )
+
+    categories = stock_excel.load_stock_label_categories(workbook)
+    inventory = stock_excel.load_stock_label_inventory(workbook)
+
+    assert categories == {"bl22/43": "BALI 22", "bl22_43": "BALI 22"}
+    assert inventory.labels == ("BL22/43",)
+
+
 def test_schedule_is_11_daily_and_13_additionally_on_thursday():
     assert stock_excel.scheduled_scan_times(date(2026, 7, 31)) == (time(11),)
     assert stock_excel.scheduled_scan_times(date(2026, 7, 30)) == (

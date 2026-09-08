@@ -57,7 +57,15 @@ def remove_reflection_artifacts(img: Image.Image) -> Image.Image:
 # Locked-in target average gold tone (hex / RGB) -- the mid-tone anchor from
 # the approved prompt palette, darkened per owner feedback. Must stay in
 # sync with the RGB values stated in config/flux2_pro_catalogue_prompt.txt.
-TARGET_RGB = (195, 155, 71)  # #C39B47
+TARGET_RGB = (221, 174, 93)  # #DDAE5D
+
+# Measured 2026-09-01 off the owner's reference ring, replacing the earlier
+# #C39B47. That value sat at hue 20.3 and was pulling every delivered image
+# to a yellower gold than the brand target of 16.0; chosen by the owner from a five-step
+# ladder (option C); lands the whole catalogue at ~19.3, spread +-0.3. Note this is a CHANNEL-GAIN
+# correction: matching the same target by rotating hue in HSV or LAB was
+# tried first and turned the gold rose, because rotating a light yellow
+# toward orange gives pink rather than a richer gold.
 
 # Clamp how far any single channel's gain can push -- keeps a badly-off
 # generation from being over-corrected into an unnatural colour, and

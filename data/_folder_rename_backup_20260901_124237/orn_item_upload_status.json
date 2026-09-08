@@ -1,0 +1,27 @@
+{
+  "ran_at": 1788246723.8293703,
+  "published": [],
+  "failed": [
+    {
+      "label": ".LR22_109.9160",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\.LR22_109.9160.jpg"
+    },
+    {
+      "label": ".LR22_119.9160",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\.LR22_119.9160.jpg"
+    },
+    {
+      "label": ".LR22_265.9160",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\.LR22_265.9160.jpg"
+    },
+    {
+      "label": ".LR22_27.9160",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\.LR22_27.9160.jpg"
+    },
+    {
+      "label": ".LR22_55.9160",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\.LR22_55.9160.jpg"
+    }
+  ],
+  "remaining": 5
+}

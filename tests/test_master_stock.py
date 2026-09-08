@@ -10,19 +10,30 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import pandas as pd
+import xlrd
+
 import capture_tool as ct
 
 
 def _write_xls_like(monkeypatch, rows):
-    """Patches pd.read_excel to return `rows` (a list of lists) as a
-    DataFrame, bypassing the need for a real .xls file / xlrd round trip."""
-    df = pd.DataFrame(rows)
+    """Patches xlrd.open_workbook to serve `rows` (a list of lists), bypassing
+    the need for a real .xls file. The parser reads via xlrd rather than pandas
+    because the service interpreter has xlrd but no pandas -- see
+    _parse_master_stock. Rows are padded to equal width, as a real sheet is."""
+    width = max((len(r) for r in rows), default=0)
+    padded = [list(r) + [""] * (width - len(r)) for r in rows]
 
-    def fake_read_excel(path, engine=None, header=None):
-        return df
+    class _Sheet:
+        nrows = len(padded)
 
-    monkeypatch.setattr(pd, "read_excel", fake_read_excel)
+        def row_values(self, index):
+            return padded[index]
+
+    class _Book:
+        def sheet_by_index(self, index):
+            return _Sheet()
+
+    monkeypatch.setattr(xlrd, "open_workbook", lambda path: _Book())
 
 
 def test_parses_reduced_schema(monkeypatch):
@@ -51,8 +62,13 @@ def test_parses_full_schema(monkeypatch):
     ]
     _write_xls_like(monkeypatch, rows)
     labels = ct._parse_master_stock("fake.xls")
+    # item_name comes from the TAG CODE's prefix, not the section title.
+    # BB22 is BAJU BANDH 22; BABY BRACLET 22 is BV22. The real full-schema
+    # export carries a single section title followed by every category's rows
+    # in one block, so trusting the title mislabelled 2785 of 2795 items
+    # (fixed 2026-09-01) -- this fixture reproduces exactly that mismatch.
     assert labels["BB22/1"] == {
-        "item_name": "BABY BRACLET 22", "old_barcode": "BB1", "prefix": "BB22",
+        "item_name": "BAJU BANDH 22", "old_barcode": "BB1", "prefix": "BB22",
         "carat": "22 KT", "variety": "PLAIN", "gross_wt": 10.63, "net_wt": 10.63,
         "pcs": 1, "huid": "TC3XRM",
     }

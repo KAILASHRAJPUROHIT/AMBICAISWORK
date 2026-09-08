@@ -41,8 +41,8 @@ from logutil import ts
 # code that references this constant for historical/debugging purposes still
 # finds the real path, not a NameError.
 DND_SOURCE           = r"C:\Users\kaila\Desktop\FINAL CATALOGUE DND (tag-named)"
-CAPTURE_INTAKE_SOURCE = r"C:\Users\kaila\Desktop\JewelleryCatalogTool\capture_intake"
-RAW_FINAL_DIR        = r"C:\Users\kaila\Desktop\JewelleryCatalogTool\master backup"
+CAPTURE_INTAKE_SOURCE = r"C:\AradhanaSystems\projects\catalogue-capture\main\capture_intake"
+RAW_FINAL_DIR        = r"C:\AradhanaSystems\projects\catalogue-capture\main\master backup"
 
 _SOURCES = (CAPTURE_INTAKE_SOURCE,)
 _STABLE_AGE_SECS = 10   # skip files modified more recently than this

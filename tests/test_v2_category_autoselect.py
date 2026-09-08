@@ -13,7 +13,7 @@ def test_numbered_folder_path_resolves_current_category():
 
 
 def test_output_category_folder_matches_catalogue_layout():
-    assert app._category_output_folder("jhumka_22") == "Jhumka22"
+    assert app._category_output_folder("jhumka_22") == "JHUMKA 22"
     assert app.OUTPUT.name == "output"
 
 

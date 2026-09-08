@@ -154,3 +154,4 @@ config/email_2fa_smtp.dpapi
 data/capture_https_key.pem
 data/capture_https_cert.pem
 data/capture_https_meta.json
+artifacts/

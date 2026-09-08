@@ -6,6 +6,8 @@ import argparse
 import base64
 import hashlib
 import json
+import time
+import socket
 import math
 import os
 import re
@@ -363,7 +365,11 @@ def main() -> int:
     karat = karat_from_label.karat_from_label(source.stem) or "22"
     prompt = prompt.replace("{KARAT}", karat)
     import category_geometry_hints
-    geometry_hint = category_geometry_hints.hint_for(args.category, source.stem)
+    import single_reference
+    # source may be a single_reference cache file; per-item hints key on the
+    # real label, not the cache filename.
+    item_label = single_reference.label_from(source)
+    geometry_hint = category_geometry_hints.hint_for(args.category, item_label)
     if geometry_hint:
         # Category/item geometry is front-loaded because BFL's FLUX.2
         # guidance says the most important edit constraint belongs first.
@@ -388,12 +394,12 @@ def main() -> int:
         prompt = (f"{prompt}\n\nImage 1's filename confirms this piece has a genuine diamond or "
                   "rhodium stud/accent. Preserve it exactly as shown -- position, size, colour and count.")
     else:
-        prompt = (f"{prompt}\n\nThis piece has NO diamond stud, rhodium accent or any white/clear stone "
-                  "setting anywhere on it -- confirmed, not merely unclear from the photo. Do not add, "
-                  "invent or render any diamond, rhodium, cubic zirconia or other white stone/accent "
-                  "anywhere on the piece, even if a bright highlight or reflection in Image 1 might "
-                  "suggest one. Every surface is plain gold unless Image 1 shows an actual coloured "
-                  "gemstone or enamel fill at that spot.")
+        prompt = (f"{prompt}\n\nProduct-material record for this item: preserve every source-confirmed "
+                  "bounded, connected component at its exact location and material, including any genuine "
+                  "black, white, grey, silver/rhodium, gemstone, enamel, bead, thread, chain, clasp, or "
+                  "setting. Its continuous plain-gold regions remain polished gold. Pale pixels without a "
+                  "physical boundary or setting render as smooth softbox highlights; unbounded mirror, velvet, "
+                  "stand, tag, camera, room and hard-reflection shapes render as clean studio context.")
     width = int(config["output_width"])
     height = int(config["output_height"])
     background_reference = None
@@ -497,8 +503,42 @@ def main() -> int:
             method="POST",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "Accept": "application/json"},
         )
-        with urllib.request.urlopen(request, timeout=240) as response:
-            response_payload = json.loads(response.read().decode("utf-8"))
+        # Bounded retry on READ TIMEOUT ONLY. The endpoint intermittently
+        # accepts a request and never answers -- 16 of 70 calls on 2026-09-01
+        # (23%), every one a "read operation timed out", each losing an item
+        # from a 79-item batch. Retrying a timeout may re-bill a render that
+        # completed server-side but never reached us, which is why this is
+        # capped at two extra attempts and recorded in automatic_retries so
+        # the cost stays visible in the ledger. Any other failure -- HTTP
+        # status, content policy, malformed response -- still fails closed on
+        # the first attempt, exactly as before.
+        # Attempt budget MUST stay inside azure_catalogue_engine's 360s kill
+        # timer. Three 240s attempts plus backoff came to 735s, so the parent
+        # killed the child mid-retry and the batch hung (2026-09-01). First
+        # attempt keeps the full 240s for a legitimately slow render; the
+        # retry gets 60s, because a healthy call returns in 20-40s and one
+        # that cannot finish in 60 is better re-run as a fresh item.
+        # Worst case now 240 + 5 + 60 = 305s, comfortably under 360s.
+        # Successful renders return in 20-40s (measured repeatedly across
+        # 2026-09-01/02), so a 240s first attempt bought nothing but a long
+        # wait before the one retry. Three shorter attempts fit the same
+        # budget and give three chances at a flaky endpoint instead of two:
+        # 120 + 5 + 90 + 5 + 60 = 280s, still under the parent's 360s kill.
+        response_payload = None
+        attempt_timeouts = (120, 90, 60)
+        for attempt, attempt_timeout in enumerate(attempt_timeouts):
+            try:
+                with urllib.request.urlopen(request, timeout=attempt_timeout) as response:
+                    response_payload = json.loads(response.read().decode("utf-8"))
+                break
+            except (TimeoutError, socket.timeout):
+                record["automatic_retries"] = attempt
+                if attempt == len(attempt_timeouts) - 1:
+                    raise
+                print(f"read timeout after {attempt_timeout}s "
+                      f"(attempt {attempt + 1} of {len(attempt_timeouts)}); retrying", flush=True)
+                time.sleep(5)
+        record["automatic_retries"] = record.get("automatic_retries", 0)
         kind, value = find_image_result(response_payload)
         if kind == "base64":
             image_bytes = base64.b64decode(value, validate=True)

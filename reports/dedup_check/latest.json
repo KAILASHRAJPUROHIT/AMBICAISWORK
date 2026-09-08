@@ -1,8 +1,33 @@
 {
-  "checked_at": "2026-08-21T12:23:33Z",
-  "capture_intake_files": 8,
-  "processed_files": 3,
-  "label_conflicts": {},
+  "checked_at": "2026-09-08T10:17:16Z",
+  "capture_intake_files": 11,
+  "processed_files": 472,
+  "label_conflicts": {
+    "TP22_127": {
+      "capture_intake": [
+        "C:\\AradhanaSystems\\projects\\catalogue-capture\\main\\capture_intake\\56 TOPS 22\\TP22_127.jpg"
+      ],
+      "processed": [
+        "C:\\AradhanaSystems\\projects\\catalogue-capture\\main\\processed\\TOPS 22\\TP22_127.jpg"
+      ]
+    },
+    "TP22_215": {
+      "capture_intake": [
+        "C:\\AradhanaSystems\\projects\\catalogue-capture\\main\\capture_intake\\56 TOPS 22\\TP22_215.jpg"
+      ],
+      "processed": [
+        "C:\\AradhanaSystems\\projects\\catalogue-capture\\main\\processed\\TOPS 22\\TP22_215.jpg"
+      ]
+    },
+    "TP22_351": {
+      "capture_intake": [
+        "C:\\AradhanaSystems\\projects\\catalogue-capture\\main\\capture_intake\\56 TOPS 22\\TP22_351.jpg"
+      ],
+      "processed": [
+        "C:\\AradhanaSystems\\projects\\catalogue-capture\\main\\processed\\TOPS 22\\TP22_351.jpg"
+      ]
+    }
+  },
   "content_duplicates": {},
-  "ok": true
+  "ok": false
 }

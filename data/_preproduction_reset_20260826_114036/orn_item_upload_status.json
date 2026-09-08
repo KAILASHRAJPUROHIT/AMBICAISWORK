@@ -1,0 +1,55 @@
+{
+  "ran_at": 1787724604.1069074,
+  "published": [],
+  "failed": [
+    {
+      "label": "LR22_142",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_142.jpg"
+    },
+    {
+      "label": "LR22_150",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_150.jpg"
+    },
+    {
+      "label": "LR22_179",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_179.jpg"
+    },
+    {
+      "label": "LR22_188",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_188.jpg"
+    },
+    {
+      "label": "LR22_237",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_237.jpg"
+    },
+    {
+      "label": "LR22_268",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_268.jpg"
+    },
+    {
+      "label": "LR22_276",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_276.jpg"
+    },
+    {
+      "label": "LR22_281",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_281.jpg"
+    },
+    {
+      "label": "LR22_340",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_340.jpg"
+    },
+    {
+      "label": "LR22_400",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_400.jpg"
+    },
+    {
+      "label": "LR22_90",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LadiesRing22\\LR22_90.jpg"
+    },
+    {
+      "label": "image-1787142374333",
+      "error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\GentsRings\\image-1787142374333.jpg"
+    }
+  ],
+  "remaining": 12
+}

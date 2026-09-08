@@ -321,7 +321,11 @@ def load_stock_label_inventory(
             rows[header_row + 1 :], start=header_row + 1
         ):
             label = _text(row[label_column] if label_column < len(row) else None)
-            if not label or label.casefold() in {"total", "grand total"}:
+            if (
+                not label
+                or label.casefold() in {"total", "grand total"}
+                or _is_report_filter_label(label)
+            ):
                 continue
             key = label.casefold()
             if key in seen:
@@ -381,6 +385,12 @@ def load_stock_label_categories(
             item_name = _text(row[item_column] if item_column < len(row) else None)
             if not label or label.casefold() in {"total", "grand total"}:
                 continue
+            # Ornate occasionally appends report predicates, e.g.
+            # ``[Carat] <> 'S925'``, below the totals row. They are not stock
+            # tags and have no category. Ignore only this explicit metadata;
+            # all actual Label No + ItemName pairs remain authoritative.
+            if _is_report_filter_label(label) and not item_name:
+                continue
             if not item_name:
                 raise StockDataError(
                     f"{source.name} row {zero_based_row + 1} has Label No {label!r} but no ItemName"
@@ -398,6 +408,11 @@ def load_stock_label_categories(
             return result
 
     raise StockSchemaError(f"No ItemName + Label No columns found in {source.name}")
+
+
+def _is_report_filter_label(value: str) -> bool:
+    """Ornate appends bracketed report predicates below stock rows."""
+    return value.startswith("[") and "]" in value
 
 
 def _read_xls(path: Path) -> list[tuple[str, list[list[Any]]]]:

@@ -1,7 +1,7 @@
 {
   "engine": "azure_flux2_pro",
   "model": "FLUX.2-pro",
-  "researched_at": "2026-08-11",
+  "researched_at": "2026-08-30",
   "sources": [
     {"title": "Black Forest Labs: FLUX.2 prompting guide", "url": "https://docs.bfl.ai/guides/prompting_guide_flux2"},
     {"title": "Black Forest Labs: single-reference editing", "url": "https://docs.bfl.ai/guides/prompting_editing_single_reference"},

@@ -8,7 +8,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Security
-$root = "C:\Users\kaila\Desktop\JewelleryCatalogTool"
+$root = "C:\AradhanaSystems\projects\catalogue-capture\main"
 $configPath = Join-Path $root "config\azure_flux2_guard.json"
 $script = Join-Path $root "tools\azure_flux2_guarded.py"
 $python = "C:\Users\kaila\AppData\Local\Programs\Python\Python311\python.exe"
@@ -58,7 +58,7 @@ try {
     $env:AZURE_API_KEY = $plainKey
     & $python $script --input $InputImage --output $OutputImage --hybrid-output $hybridOutput @promptArgs @backgroundArgs @categoryArgs
     if ($LASTEXITCODE -ne 0) {
-        throw "Guarded FLUX.2-pro call failed. No automatic retry was attempted."
+        throw "Guarded FLUX.2-pro call failed. See automatic_retries in the guard ledger for how many attempts were made."
     }
 }
 finally {

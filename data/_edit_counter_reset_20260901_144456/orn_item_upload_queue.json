@@ -1,0 +1,32 @@
+{
+  ".LR22_109.9160": {
+    "label": ".LR22_109.9160",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LADIES RING 22\\.LR22_109.9160.jpg",
+    "queued_at": 1788254043.9745295,
+    "last_error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LADIES RING 22\\.LR22_109.9160.jpg"
+  },
+  ".LR22_119.9160": {
+    "label": ".LR22_119.9160",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LADIES RING 22\\.LR22_119.9160.jpg",
+    "queued_at": 1788254043.9796143,
+    "last_error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LADIES RING 22\\.LR22_119.9160.jpg"
+  },
+  ".LR22_265.9160": {
+    "label": ".LR22_265.9160",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LADIES RING 22\\.LR22_265.9160.jpg",
+    "queued_at": 1788254043.9846237,
+    "last_error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LADIES RING 22\\.LR22_265.9160.jpg"
+  },
+  ".LR22_27.9160": {
+    "label": ".LR22_27.9160",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LADIES RING 22\\.LR22_27.9160.jpg",
+    "queued_at": 1788254043.9881494,
+    "last_error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LADIES RING 22\\.LR22_27.9160.jpg"
+  },
+  ".LR22_55.9160": {
+    "label": ".LR22_55.9160",
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LADIES RING 22\\.LR22_55.9160.jpg",
+    "queued_at": 1788254043.9916613,
+    "last_error": "FileNotFoundError: C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\output\\LADIES RING 22\\.LR22_55.9160.jpg"
+  }
+}

@@ -1,55 +1,67 @@
 {
-  "ran_at": 1787579643.9524982,
+  "ran_at": 1788873124.2103863,
   "published": [],
   "failed": [
     {
-      "label": "LR22_142",
-      "error": "ValueError: LR22_142: expected one current-stock label, found 0"
+      "label": ".GR22_10.34760",
+      "error": "FileNotFoundError: ."
     },
     {
-      "label": "LR22_150",
-      "error": "ValueError: LR22_150: expected one current-stock label, found 0"
+      "label": ".GR22_117.34760",
+      "error": "FileNotFoundError: ."
     },
     {
-      "label": "LR22_179",
-      "error": "ValueError: LR22_179: expected one current-stock label, found 0"
+      "label": ".GR22_134.34760",
+      "error": "FileNotFoundError: ."
     },
     {
-      "label": "LR22_188",
-      "error": "ValueError: LR22_188: expected one current-stock label, found 0"
+      "label": ".GR22_168.34760",
+      "error": "FileNotFoundError: ."
     },
     {
-      "label": "LR22_237",
-      "error": "ValueError: LR22_237: expected one current-stock label, found 0"
+      "label": ".GR22_210.34760",
+      "error": "FileNotFoundError: ."
     },
     {
-      "label": "LR22_268",
-      "error": "ValueError: LR22_268: expected one current-stock label, found 0"
+      "label": ".GR22_9.34760",
+      "error": "FileNotFoundError: ."
     },
     {
-      "label": "LR22_276",
-      "error": "ValueError: LR22_276: expected one current-stock label, found 0"
+      "label": ".LR22_12.32248",
+      "error": "FileNotFoundError: ."
     },
     {
-      "label": "LR22_281",
-      "error": "ValueError: LR22_281: expected one current-stock label, found 0"
+      "label": ".LR22_207.32248",
+      "error": "FileNotFoundError: ."
     },
     {
-      "label": "LR22_340",
-      "error": "ValueError: LR22_340: expected one current-stock label, found 0"
+      "label": ".LR22_210.32248",
+      "error": "FileNotFoundError: ."
     },
     {
-      "label": "LR22_400",
-      "error": "ValueError: LR22_400: expected one current-stock label, found 0"
+      "label": ".LR22_97.32248",
+      "error": "FileNotFoundError: ."
     },
     {
-      "label": "LR22_90",
-      "error": "ValueError: LR22_90: expected one current-stock label, found 0"
+      "label": "GR22_246",
+      "error": "ValueError: GR22_246: expected one current-stock label, found 0"
     },
     {
-      "label": "image-1787142374333",
-      "error": "ValueError: image-1787142374333: expected one current-stock label, found 0"
+      "label": "GR22_247",
+      "error": "ValueError: GR22_247: expected one current-stock label, found 0"
+    },
+    {
+      "label": "GR22_248",
+      "error": "ValueError: GR22_248: expected one current-stock label, found 0"
+    },
+    {
+      "label": "LR22_479",
+      "error": "ValueError: LR22_479: expected one current-stock label, found 0"
+    },
+    {
+      "label": "LR22_480",
+      "error": "ValueError: LR22_480: expected one current-stock label, found 0"
     }
   ],
-  "remaining": 12
+  "remaining": 15
 }

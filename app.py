@@ -142,9 +142,29 @@ def _otp_digest(salt: str, code: str) -> str:
     return hmac.new(key, f"{salt}:{code}".encode("utf-8"), hashlib.sha256).hexdigest()
 
 
+def _login_required() -> bool:
+    """Whether the password + email-2FA gate is active.
+
+    Read per request, not cached, so the switch takes effect without a
+    restart. Fails CLOSED: an unreadable or malformed config keeps the gate
+    on, because the failure mode of guessing wrong is an unprotected tool
+    that can spend Azure credit and publish to Ornate.
+    """
+    try:
+        with open(os.path.join(BASE, "config", "auth.json"), encoding="utf-8") as handle:
+            return bool(json.load(handle).get("login_required", True))
+    except FileNotFoundError:
+        return True
+    except Exception:
+        app.logger.exception("auth.json unreadable -- keeping login required")
+        return True
+
+
 @app.before_request
 def require_login():
     if request.path in {"/login", "/verify-otp", "/api/health", "/capture"} or request.path.startswith("/static/"):
+        return None
+    if not _login_required():
         return None
     if session.get("authed"):
         return None
@@ -508,11 +528,20 @@ def api_queue_clear():
 
 @app.get("/img/<where>/<path:name>")
 def serve_image(where: str, name: str):
-    roots = {"input": INPUT, "processing": PROCESSING, "processed": PROCESSED, "output": OUTPUT, "backgrounds": BACKGROUNDS}
+    roots = {"input": INPUT, "processing": PROCESSING, "processed": PROCESSED, "output": OUTPUT, "backgrounds": BACKGROUNDS, "capture": CAPTURE}
     root = roots.get(where)
     candidate = _safe_child(root, name) if root else None
     if not candidate or not candidate.is_file():
         return "Not found", 404
+    # ?w= serves a cached preview. Tiles used to load the original file --
+    # 328 MB across input/ alone, a single composite 38.5 MB and 8628x8051 --
+    # which the browser then decoded at full size, and that is what made the
+    # UI sluggish and its controls unresponsive (2026-09-01).
+    width = request.args.get("w", type=int)
+    if width:
+        import thumbnails
+        preview = thumbnails.scaled(candidate, width)
+        return send_from_directory(preview.parent, preview.name)
     return send_from_directory(root, candidate.relative_to(root).as_posix())
 
 
@@ -588,9 +617,20 @@ def _publish_delivery(raw: Path, destination: Path) -> dict:
 
 
 def _category_output_folder(category: str) -> str:
+    """Deliver into a folder named exactly as the stock report names the
+    category -- "LADIES RING 22", not "LadiesRing22".
+
+    The old form ran the label through .title() and stripped every
+    non-alphanumeric character, which re-cased the name and deleted the
+    spaces. stock_category.label is already the exact catalogue spelling, so
+    it is kept verbatim and only characters Windows forbids in a path are
+    replaced. processed/ has always used the readable form; output/ and
+    rejected/ were the odd ones out (2026-09-01).
+    """
     stock_category = stock_category_map.BY_KEY.get(category)
-    label = stock_category.label if stock_category else category.replace("_", " ")
-    folder = re.sub(r"[^A-Za-z0-9]+", "", label.title())
+    label = stock_category.label if stock_category else category.replace("_", " ").upper()
+    folder = re.sub(r'[<>:"/\|?*]+', " ", label)
+    folder = re.sub(r"\s+", " ", folder).strip().strip(".")
     if not folder:
         raise ValueError(f"Invalid output category: {category}")
     return folder
@@ -598,6 +638,7 @@ def _category_output_folder(category: str) -> str:
 
 def _run_batch(category: str, cancel: threading.Event, token: int, background: Path | None = None) -> None:
     import azure_catalogue_engine
+    import single_reference
     import processed_state
 
     items = _derive_single_items_from_disk()
@@ -620,8 +661,16 @@ def _run_batch(category: str, cancel: threading.Event, token: int, background: P
         final = output_dir / f"{safe}.jpg"
         JOB["current"] = f"Azure FLUX.2 Pro · {index}/{len(items)} · {label}"
         try:
-            if final.exists():
-                raise RuntimeError(f"OUTPUT_EXISTS: {final}")
+            # Already delivered = never re-edited, wherever it landed. The
+            # exact-path check missed a label delivered under a different
+            # category folder; matching by label across output/ closes that
+            # (owner's rule, 2026-09-02). A REJECTED item's delivery lives in
+            # rejected/, not output/, so reprocessing a rejection still works.
+            delivered = next(
+                (p for p in OUTPUT.glob(f"*/{final.name}") if p.is_file()), None
+            ) or (final if final.exists() else None)
+            if delivered:
+                raise RuntimeError(f"OUTPUT_EXISTS: {delivered}")
             if _duplicate_guard_enabled():
                 import review_queue
                 duplicate = review_queue.find_approved_duplicate(str(source), exclude_label=label)
@@ -629,8 +678,13 @@ def _run_batch(category: str, cancel: threading.Event, token: int, background: P
                     raise RuntimeError(
                         f"DUPLICATE_OF_APPROVED: same photo already approved as {duplicate['label']}"
                     )
+            # Hand the renderer ONE photograph, not the three-panel sheet.
+            # The sheet still exists and is still what a human reviews; a
+            # composite reference is what made FLUX.2 blend panels and drift
+            # off the real design (measured 2026-08-31, 8/8 rings improved).
             generated = azure_catalogue_engine.generate(
-                source, raw, background=background, category=category, cancel_event=cancel
+                single_reference.main_panel(source), raw,
+                background=background, category=category, cancel_event=cancel
             )
             delivery = _publish_delivery(Path(generated["output"]), final)
             hybrid = generated.get("hybrid_output")
@@ -895,6 +949,14 @@ def api_review_items():
         batches = {str(row["batch"]): row for row in review_queue.list_batches(category)}
         keep = set(batches.get(str(batch), {}).get("labels", []))
         items = [item for item in items if item["label"] in keep]
+    # A decided item leaves the queue. The reviewer wants what is still
+    # waiting, not a list padded with everything ever judged -- decided items
+    # were inflating the "3 / 48" counter and burying the real work
+    # (2026-09-01). Batch summaries still count every verdict; they come from
+    # list_batches, which reads the unfiltered set. ?include=all restores the
+    # full list for auditing.
+    if request.args.get("include") != "all":
+        items = [item for item in items if item.get("verdict") == "pending"]
     for item in items:
         item["has_original"] = bool(item.pop("original", None))
         item.pop("edited", None)
@@ -934,24 +996,69 @@ def api_review_requeue():
 def review_image(side: str, label: str):
     import review_queue
     safe_label = Path(label).name
-    path = review_queue._find_original(safe_label) if side == "original" else next((item.get("edited") for item in review_queue.collect_items() if item["label"] == safe_label), None)
-    return send_from_directory(Path(path).parent, Path(path).name) if path and Path(path).is_file() else ("not found", 404)
+    if side == "original":
+        path = review_queue._find_original(safe_label)
+    else:
+        # _find_finished_output looks the label up directly; the old code ran a
+        # full collect_items() filesystem scan on EVERY image request.
+        try:
+            path = review_queue._find_finished_output(safe_label)
+        except Exception:
+            path = next((item.get("edited") for item in review_queue.collect_items()
+                         if item["label"] == safe_label), None)
+    if not path or not Path(path).is_file():
+        return "not found", 404
+    width = request.args.get("w", type=int)
+    if width:
+        import thumbnails
+        preview = thumbnails.scaled(Path(path), width)
+        return send_from_directory(preview.parent, preview.name)
+    return send_from_directory(Path(path).parent, Path(path).name)
+
+
+def _pipeline_counts() -> dict:
+    """Headline pipeline numbers, shared with the dashboards and reports."""
+    import pipeline_counts
+    numbers = pipeline_counts.counts()
+    return {
+        "captured_total": numbers["captured_total"],
+        "processed_total": numbers["processed"],
+        "done_total": numbers["done"],
+        "awaiting_processing": numbers["awaiting_processing"],
+        "rejected_total": numbers["rejected_for_rework"],
+        "in_intake": numbers["in_intake"],
+    }
 
 
 def _count(root: Path) -> int:
     return len(_images(root, recursive=True))
 
 
+def _is_capture_working_path(path: Path) -> bool:
+    """True for anything under a hidden/internal capture folder.
+
+    _tag_archive, _superseded, .multi_angle_sources and .staging all hold
+    per-angle sources or archived sidecars, never the finished stitched
+    composite -- same "." or "_" prefix convention capture_tool.py's own
+    tag_already_in_system() uses. Recent-capture views must skip these or
+    they show the raw MAIN/ANGLE_1/ANGLE_2 source frames instead of the one
+    labeled stitched image (2026-09-02).
+    """
+    relative = path.relative_to(CAPTURE)
+    return any(part.startswith((".", "_")) for part in relative.parts[:-1])
+
+
 def _latest_capture() -> dict | None:
-    photos = [path for path in _images(CAPTURE, recursive=True) if "_tag_archive" not in path.parts]
+    photos = [path for path in _images(CAPTURE, recursive=True) if not _is_capture_working_path(path)]
     if not photos:
         return None
     path = max(photos, key=lambda item: item.stat().st_mtime_ns)
-    return {"tag": path.stem, "relative_path": path.relative_to(CAPTURE).as_posix(), "preview_url": "/api/pipeline/latest_capture_preview"}
+    return {"tag": path.stem, "relative_path": path.relative_to(CAPTURE).as_posix(), "preview_url": "/api/pipeline/latest_capture_preview", "captured_at": path.stat().st_mtime}
 
 
 @app.get("/api/pipeline/dashboard")
 def api_pipeline_dashboard():
+    import coverage_baseline
     try:
         import stock_excel
         workbook = stock_excel.latest_stock_workbook()
@@ -964,8 +1071,14 @@ def api_pipeline_dashboard():
     health = api_health().get_json().get("checks", {})
     health["stock"] = stock_health
     return jsonify({
-        "captured_total": _count(CAPTURE), "stock_tags": stock_tags, "processing_available": _count(INPUT) + _count(PROCESSING),
-        "processed_total": _count(PROCESSED), "needs_review_total": _count(NEEDS_REVIEW), "rejected_total": _count(REJECTED),
+        # Counts come from pipeline_counts, the single definition shared with
+        # the dashboards and reports: output/ = done, capture_intake = not yet
+        # processed PLUS rejected-for-rework, processed + intake = everything
+        # captured. captured_total previously counted capture_intake alone, so
+        # the headline fell as items were processed (2026-09-02).
+        **_pipeline_counts(),
+        "stock_tags": stock_tags, "processing_available": _count(INPUT) + _count(PROCESSING),
+        "needs_review_total": _count(NEEDS_REVIEW),
         "health": health, "latest_capture": _latest_capture(),
     })
 
@@ -974,6 +1087,26 @@ def api_pipeline_dashboard():
 def api_latest_capture_preview():
     latest = _latest_capture()
     return send_from_directory(CAPTURE, latest["relative_path"]) if latest else ("not found", 404)
+
+
+@app.get("/api/pipeline/recent_captures")
+def api_recent_captures():
+    import review_queue
+    photos = [path for path in _images(CAPTURE, recursive=True) if not _is_capture_working_path(path)]
+    photos.sort(key=lambda item: item.stat().st_mtime_ns, reverse=True)
+    recent = photos[:20]
+    review_state = review_queue._load_state()
+    return jsonify({"captures": [
+        {
+            "tag": path.stem,
+            "relative_path": (relative := path.relative_to(CAPTURE).as_posix()),
+            "preview_url": f"/img/capture/{relative}?w=320",
+            "full_url": f"/img/capture/{relative}",
+            "captured_at": path.stat().st_mtime,
+            "verdict": (review_state.get(path.stem) or {}).get("verdict", "pending"),
+        }
+        for path in recent
+    ]})
 
 
 @app.get("/api/pipeline/category_breakdown")
@@ -997,13 +1130,31 @@ def api_category_breakdown():
         }
     else:
         stock_labels = cache["labels"]
+
+    # "Uploaded" means Ornate NX has actually ingested the item, not just
+    # that our mirror copied a file to the share -- proven by the "<stem>_
+    # Thumb.jpg" sibling Ornate NX itself generates on ingest (owner's own
+    # definition, 2026-09-02). uploaded_labels() (our own publish manifest)
+    # only proves we wrote a file; it says nothing about Ornate NX picking
+    # it up. Cached the same way as stock_labels -- it's an SMB directory
+    # listing and this endpoint is polled every second.
+    thumb_cache = getattr(api_category_breakdown, "_thumb_cache", None)
+    if not thumb_cache or thumb_cache["expires_at"] <= now:
+        try:
+            thumbed = orn_item_image_sync.thumbed_labels()
+        except Exception:
+            thumbed = thumb_cache["labels"] if thumb_cache else frozenset()
+        api_category_breakdown._thumb_cache = {"labels": thumbed, "expires_at": now + 60}
+    else:
+        thumbed = thumb_cache["labels"]
+
     rows = category_dashboard.category_breakdown(
         str(CAPTURE),
         str(PROCESSED),
         stock_labels,
         review_queue._load_state(),
         None,
-        orn_item_image_sync.uploaded_labels(),
+        thumbed,
     )
     upload_status = orn_item_image_sync._load_json(orn_item_image_sync.STATUS)
     upload_queue = orn_item_image_sync._load_json(orn_item_image_sync.QUEUE)
@@ -1013,6 +1164,48 @@ def api_category_breakdown():
         "upload_root_reachable": not upload_queue and not upload_status.get("failed"),
         "upload_queue": len(upload_queue),
     })
+
+
+@app.get("/api/pipeline/category_missing")
+def api_category_missing():
+    """One .csv per category: stock tags never captured (owner's request,
+    2026-09-06). Reuses category_breakdown's own 60s stock-label cache so
+    this doesn't add a second live SMB/Excel read on every click."""
+    import category_dashboard
+    import stock_excel
+
+    category_key = str(request.args.get("category") or "").strip()
+    if not category_key:
+        return jsonify({"error": "category is required"}), 400
+
+    now = time.time()
+    cache = getattr(api_category_breakdown, "_stock_cache", None)
+    if not cache or cache["expires_at"] <= now:
+        try:
+            inventory = stock_excel.load_stock_label_inventory(stock_excel.latest_stock_workbook())
+            stock_labels = inventory.labels
+        except Exception:
+            stock_labels = cache["labels"] if cache else ()
+        api_category_breakdown._stock_cache = {"labels": stock_labels, "expires_at": now + 60}
+    else:
+        stock_labels = cache["labels"]
+
+    resolved = next((c for c in ornament_code_map.CATEGORIES if c.key == category_key), None)
+    if resolved is None:
+        return jsonify({"error": f"unknown category: {category_key}"}), 404
+
+    missing = category_dashboard.missing_labels(
+        category_key, str(CAPTURE), str(PROCESSED), str(OUTPUT), stock_labels
+    )
+
+    lines = ["tag_code"] + missing
+    csv_body = "\r\n".join(lines) + "\r\n"
+    safe_name = re.sub(r"[^A-Za-z0-9]+", "_", resolved.label).strip("_")
+    response = app.response_class(csv_body, mimetype="text/csv")
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename="{safe_name}_not_captured.csv"'
+    )
+    return response
 
 
 def _requeue_service():

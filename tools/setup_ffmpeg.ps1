@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$root = "C:\Users\kaila\Desktop\JewelleryCatalogTool"
+$root = "C:\AradhanaSystems\projects\catalogue-capture\main"
 $destDir = Join-Path $root "tools\ffmpeg"
 
 $existing = Get-ChildItem -Path $destDir -Recurse -Filter "ffmpeg.exe" -ErrorAction SilentlyContinue

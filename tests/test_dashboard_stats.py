@@ -102,7 +102,10 @@ def test_dashboard_counts_primary_images_and_excludes_tag_archive(tmp_path):
     )
 
     assert stats.captured_today == 1
-    assert stats.captured_total == 2
+    # captured_total is now "everything captured so far" = processed + capture
+    # intake, not the capture folder alone (owner's definition, 2026-09-02).
+    # The fixture has 2 in capture and 1 in processed.
+    assert stats.captured_total == 3
     assert stats.stock_tags == 1
     assert stats.stock_pieces == 2
     assert stats.processing_available == 1

@@ -1,5 +1,5 @@
 {
-  "completed_at": 1786530156.622129,
+  "completed_at": 1788081189.7781272,
   "current_items": [
     {
       "category": "BAJU BANDH 22",
@@ -20,6 +20,11 @@
       "category": "BANGLE 22",
       "label": "BG22/10",
       "safe_tag": "BG22_10"
+    },
+    {
+      "category": "BANGLE 22",
+      "label": "BG22/104",
+      "safe_tag": "BG22_104"
     },
     {
       "category": "BANGLE 22",
@@ -233,18 +238,8 @@
     },
     {
       "category": "BANGLE 22",
-      "label": "BG22/57",
-      "safe_tag": "BG22_57"
-    },
-    {
-      "category": "BANGLE 22",
       "label": "BG22/58",
       "safe_tag": "BG22_58"
-    },
-    {
-      "category": "BANGLE 22",
-      "label": "BG22/59",
-      "safe_tag": "BG22_59"
     },
     {
       "category": "BANGLE 22",
@@ -458,11 +453,6 @@
     },
     {
       "category": "BABY KADLI 22",
-      "label": "BK22/10",
-      "safe_tag": "BK22_10"
-    },
-    {
-      "category": "BABY KADLI 22",
       "label": "BK22/11",
       "safe_tag": "BK22_11"
     },
@@ -553,11 +543,6 @@
     },
     {
       "category": "BALI 18",
-      "label": "BL18/18",
-      "safe_tag": "BL18_18"
-    },
-    {
-      "category": "BALI 18",
       "label": "BL18/19",
       "safe_tag": "BL18_19"
     },
@@ -580,11 +565,6 @@
       "category": "BALI 18",
       "label": "BL18/26",
       "safe_tag": "BL18_26"
-    },
-    {
-      "category": "BALI 18",
-      "label": "BL18/27",
-      "safe_tag": "BL18_27"
     },
     {
       "category": "BALI 18",
@@ -658,11 +638,6 @@
     },
     {
       "category": "BALI 18",
-      "label": "BL18/46",
-      "safe_tag": "BL18_46"
-    },
-    {
-      "category": "BALI 18",
       "label": "BL18/47",
       "safe_tag": "BL18_47"
     },
@@ -675,11 +650,6 @@
       "category": "BALI 18",
       "label": "BL18/49",
       "safe_tag": "BL18_49"
-    },
-    {
-      "category": "BALI 18",
-      "label": "BL18/52",
-      "safe_tag": "BL18_52"
     },
     {
       "category": "BALI 18",
@@ -763,11 +733,6 @@
     },
     {
       "category": "BALI 22",
-      "label": "BL22/142",
-      "safe_tag": "BL22_142"
-    },
-    {
-      "category": "BALI 22",
       "label": "BL22/147",
       "safe_tag": "BL22_147"
     },
@@ -780,11 +745,6 @@
       "category": "BALI 22",
       "label": "BL22/153",
       "safe_tag": "BL22_153"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/156",
-      "safe_tag": "BL22_156"
     },
     {
       "category": "BALI 22",
@@ -810,11 +770,6 @@
       "category": "BALI 22",
       "label": "BL22/171",
       "safe_tag": "BL22_171"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/173",
-      "safe_tag": "BL22_173"
     },
     {
       "category": "BALI 22",
@@ -903,11 +858,6 @@
     },
     {
       "category": "BALI 22",
-      "label": "BL22/196",
-      "safe_tag": "BL22_196"
-    },
-    {
-      "category": "BALI 22",
       "label": "BL22/199",
       "safe_tag": "BL22_199"
     },
@@ -925,11 +875,6 @@
       "category": "BALI 22",
       "label": "BL22/202",
       "safe_tag": "BL22_202"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/206",
-      "safe_tag": "BL22_206"
     },
     {
       "category": "BALI 22",
@@ -970,16 +915,6 @@
       "category": "BALI 22",
       "label": "BL22/216",
       "safe_tag": "BL22_216"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/217",
-      "safe_tag": "BL22_217"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/218",
-      "safe_tag": "BL22_218"
     },
     {
       "category": "BALI 22",
@@ -1028,26 +963,6 @@
     },
     {
       "category": "BALI 22",
-      "label": "BL22/230",
-      "safe_tag": "BL22_230"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/231",
-      "safe_tag": "BL22_231"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/232",
-      "safe_tag": "BL22_232"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/236",
-      "safe_tag": "BL22_236"
-    },
-    {
-      "category": "BALI 22",
       "label": "BL22/238",
       "safe_tag": "BL22_238"
     },
@@ -1055,11 +970,6 @@
       "category": "BALI 22",
       "label": "BL22/239",
       "safe_tag": "BL22_239"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/24",
-      "safe_tag": "BL22_24"
     },
     {
       "category": "BALI 22",
@@ -1090,6 +1000,36 @@
       "category": "BALI 22",
       "label": "BL22/250",
       "safe_tag": "BL22_250"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/251",
+      "safe_tag": "BL22_251"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/254",
+      "safe_tag": "BL22_254"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/255",
+      "safe_tag": "BL22_255"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/256",
+      "safe_tag": "BL22_256"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/257",
+      "safe_tag": "BL22_257"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/259",
+      "safe_tag": "BL22_259"
     },
     {
       "category": "BALI 22",
@@ -1163,18 +1103,8 @@
     },
     {
       "category": "BALI 22",
-      "label": "BL22/45",
-      "safe_tag": "BL22_45"
-    },
-    {
-      "category": "BALI 22",
       "label": "BL22/46",
       "safe_tag": "BL22_46"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/47",
-      "safe_tag": "BL22_47"
     },
     {
       "category": "BALI 22",
@@ -1248,11 +1178,6 @@
     },
     {
       "category": "BALI 22",
-      "label": "BL22/70",
-      "safe_tag": "BL22_70"
-    },
-    {
-      "category": "BALI 22",
       "label": "BL22/72",
       "safe_tag": "BL22_72"
     },
@@ -1265,11 +1190,6 @@
       "category": "BALI 22",
       "label": "BL22/76",
       "safe_tag": "BL22_76"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/77",
-      "safe_tag": "BL22_77"
     },
     {
       "category": "BALI 22",
@@ -1295,11 +1215,6 @@
       "category": "BALI 22",
       "label": "BL22/9",
       "safe_tag": "BL22_9"
-    },
-    {
-      "category": "BALI 22",
-      "label": "BL22/94",
-      "safe_tag": "BL22_94"
     },
     {
       "category": "BABY RING 22",
@@ -1400,16 +1315,6 @@
       "category": "BABY RING 22",
       "label": "BR22/31",
       "safe_tag": "BR22_31"
-    },
-    {
-      "category": "BABY RING 22",
-      "label": "BR22/32",
-      "safe_tag": "BR22_32"
-    },
-    {
-      "category": "BABY RING 22",
-      "label": "BR22/33",
-      "safe_tag": "BR22_33"
     },
     {
       "category": "BABY RING 22",
@@ -1548,11 +1453,6 @@
     },
     {
       "category": "CHAIN 22",
-      "label": "CH22/115",
-      "safe_tag": "CH22_115"
-    },
-    {
-      "category": "CHAIN 22",
       "label": "CH22/116",
       "safe_tag": "CH22_116"
     },
@@ -1653,11 +1553,6 @@
     },
     {
       "category": "CHAIN 22",
-      "label": "CH22/154",
-      "safe_tag": "CH22_154"
-    },
-    {
-      "category": "CHAIN 22",
       "label": "CH22/158",
       "safe_tag": "CH22_158"
     },
@@ -1670,11 +1565,6 @@
       "category": "CHAIN 22",
       "label": "CH22/160",
       "safe_tag": "CH22_160"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/162",
-      "safe_tag": "CH22_162"
     },
     {
       "category": "CHAIN 22",
@@ -1723,11 +1613,6 @@
     },
     {
       "category": "CHAIN 22",
-      "label": "CH22/179",
-      "safe_tag": "CH22_179"
-    },
-    {
-      "category": "CHAIN 22",
       "label": "CH22/18",
       "safe_tag": "CH22_18"
     },
@@ -1770,11 +1655,6 @@
       "category": "CHAIN 22",
       "label": "CH22/20",
       "safe_tag": "CH22_20"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/202",
-      "safe_tag": "CH22_202"
     },
     {
       "category": "CHAIN 22",
@@ -1858,11 +1738,6 @@
     },
     {
       "category": "CHAIN 22",
-      "label": "CH22/261",
-      "safe_tag": "CH22_261"
-    },
-    {
-      "category": "CHAIN 22",
       "label": "CH22/265",
       "safe_tag": "CH22_265"
     },
@@ -1875,11 +1750,6 @@
       "category": "CHAIN 22",
       "label": "CH22/268",
       "safe_tag": "CH22_268"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/269",
-      "safe_tag": "CH22_269"
     },
     {
       "category": "CHAIN 22",
@@ -1915,11 +1785,6 @@
       "category": "CHAIN 22",
       "label": "CH22/276",
       "safe_tag": "CH22_276"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/277",
-      "safe_tag": "CH22_277"
     },
     {
       "category": "CHAIN 22",
@@ -1965,16 +1830,6 @@
       "category": "CHAIN 22",
       "label": "CH22/289",
       "safe_tag": "CH22_289"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/29",
-      "safe_tag": "CH22_29"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/291",
-      "safe_tag": "CH22_291"
     },
     {
       "category": "CHAIN 22",
@@ -2033,11 +1888,6 @@
     },
     {
       "category": "CHAIN 22",
-      "label": "CH22/303",
-      "safe_tag": "CH22_303"
-    },
-    {
-      "category": "CHAIN 22",
       "label": "CH22/304",
       "safe_tag": "CH22_304"
     },
@@ -2048,18 +1898,8 @@
     },
     {
       "category": "CHAIN 22",
-      "label": "CH22/307",
-      "safe_tag": "CH22_307"
-    },
-    {
-      "category": "CHAIN 22",
       "label": "CH22/308",
       "safe_tag": "CH22_308"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/309",
-      "safe_tag": "CH22_309"
     },
     {
       "category": "CHAIN 22",
@@ -2078,11 +1918,6 @@
     },
     {
       "category": "CHAIN 22",
-      "label": "CH22/313",
-      "safe_tag": "CH22_313"
-    },
-    {
-      "category": "CHAIN 22",
       "label": "CH22/314",
       "safe_tag": "CH22_314"
     },
@@ -2095,11 +1930,6 @@
       "category": "CHAIN 22",
       "label": "CH22/317",
       "safe_tag": "CH22_317"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/318",
-      "safe_tag": "CH22_318"
     },
     {
       "category": "CHAIN 22",
@@ -2125,11 +1955,6 @@
       "category": "CHAIN 22",
       "label": "CH22/323",
       "safe_tag": "CH22_323"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/325",
-      "safe_tag": "CH22_325"
     },
     {
       "category": "CHAIN 22",
@@ -2163,16 +1988,6 @@
     },
     {
       "category": "CHAIN 22",
-      "label": "CH22/331",
-      "safe_tag": "CH22_331"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/332",
-      "safe_tag": "CH22_332"
-    },
-    {
-      "category": "CHAIN 22",
       "label": "CH22/333",
       "safe_tag": "CH22_333"
     },
@@ -2200,11 +2015,6 @@
       "category": "CHAIN 22",
       "label": "CH22/342",
       "safe_tag": "CH22_342"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/343",
-      "safe_tag": "CH22_343"
     },
     {
       "category": "CHAIN 22",
@@ -2243,11 +2053,6 @@
     },
     {
       "category": "CHAIN 22",
-      "label": "CH22/353",
-      "safe_tag": "CH22_353"
-    },
-    {
-      "category": "CHAIN 22",
       "label": "CH22/354",
       "safe_tag": "CH22_354"
     },
@@ -2255,11 +2060,6 @@
       "category": "CHAIN 22",
       "label": "CH22/355",
       "safe_tag": "CH22_355"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/356",
-      "safe_tag": "CH22_356"
     },
     {
       "category": "CHAIN 22",
@@ -2283,23 +2083,8 @@
     },
     {
       "category": "CHAIN 22",
-      "label": "CH22/360",
-      "safe_tag": "CH22_360"
-    },
-    {
-      "category": "CHAIN 22",
       "label": "CH22/361",
       "safe_tag": "CH22_361"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/362",
-      "safe_tag": "CH22_362"
-    },
-    {
-      "category": "CHAIN 22",
-      "label": "CH22/363",
-      "safe_tag": "CH22_363"
     },
     {
       "category": "CHAIN 22",
@@ -2563,11 +2348,6 @@
     },
     {
       "category": "CHAIN 22",
-      "label": "CH22/85",
-      "safe_tag": "CH22_85"
-    },
-    {
-      "category": "CHAIN 22",
       "label": "CH22/86",
       "safe_tag": "CH22_86"
     },
@@ -2660,11 +2440,6 @@
       "category": "DULL 22",
       "label": "DL22/23",
       "safe_tag": "DL22_23"
-    },
-    {
-      "category": "DULL 22",
-      "label": "DL22/25",
-      "safe_tag": "DL22_25"
     },
     {
       "category": "DULL 22",
@@ -2870,6 +2645,16 @@
       "category": "EARRING 22",
       "label": "ER22/112",
       "safe_tag": "ER22_112"
+    },
+    {
+      "category": "EARRING 22",
+      "label": "ER22/113",
+      "safe_tag": "ER22_113"
+    },
+    {
+      "category": "EARRING 22",
+      "label": "ER22/114",
+      "safe_tag": "ER22_114"
     },
     {
       "category": "EARRING 22",
@@ -3083,11 +2868,6 @@
     },
     {
       "category": "EARRING 22",
-      "label": "ER22/56",
-      "safe_tag": "ER22_56"
-    },
-    {
-      "category": "EARRING 22",
       "label": "ER22/57",
       "safe_tag": "ER22_57"
     },
@@ -3178,11 +2958,6 @@
     },
     {
       "category": "EARRING 22",
-      "label": "ER22/79",
-      "safe_tag": "ER22_79"
-    },
-    {
-      "category": "EARRING 22",
       "label": "ER22/8",
       "safe_tag": "ER22_8"
     },
@@ -3250,11 +3025,6 @@
       "category": "EARRING 22",
       "label": "ER22/93",
       "safe_tag": "ER22_93"
-    },
-    {
-      "category": "EARRING 22",
-      "label": "ER22/94",
-      "safe_tag": "ER22_94"
     },
     {
       "category": "EARRING 22",
@@ -3553,11 +3323,6 @@
     },
     {
       "category": "FANCY MALA 22",
-      "label": "FM22/44",
-      "safe_tag": "FM22_44"
-    },
-    {
-      "category": "FANCY MALA 22",
       "label": "FM22/45",
       "safe_tag": "FM22_45"
     },
@@ -3763,11 +3528,6 @@
     },
     {
       "category": "Gold Coin 10 Gm",
-      "label": "GC10/35",
-      "safe_tag": "GC10_35"
-    },
-    {
-      "category": "Gold Coin 10 Gm",
       "label": "GC10/37",
       "safe_tag": "GC10_37"
     },
@@ -3783,28 +3543,8 @@
     },
     {
       "category": "Gold Coin 1 Gm",
-      "label": "GC1/44",
-      "safe_tag": "GC1_44"
-    },
-    {
-      "category": "Gold Coin 1 Gm",
-      "label": "GC1/45",
-      "safe_tag": "GC1_45"
-    },
-    {
-      "category": "Gold Coin 1 Gm",
-      "label": "GC1/55",
-      "safe_tag": "GC1_55"
-    },
-    {
-      "category": "Gold Coin 1 Gm",
       "label": "GC1/56",
       "safe_tag": "GC1_56"
-    },
-    {
-      "category": "Gold Coin 1 Gm",
-      "label": "GC1/57",
-      "safe_tag": "GC1_57"
     },
     {
       "category": "Gold Coin 1 Gm",
@@ -3815,11 +3555,6 @@
       "category": "Gold Coin 1 Gm",
       "label": "GC1/64",
       "safe_tag": "GC1_64"
-    },
-    {
-      "category": "Gold Coin 1 Gm",
-      "label": "GC1/65",
-      "safe_tag": "GC1_65"
     },
     {
       "category": "Gold Coin 1 Gm",
@@ -3845,11 +3580,6 @@
       "category": "Gold Coin 5 Gm",
       "label": "GC50/1",
       "safe_tag": "GC50_1"
-    },
-    {
-      "category": "Gold Coin 5 Gm",
-      "label": "GC5/31",
-      "safe_tag": "GC5_31"
     },
     {
       "category": "Gold Coin 0.050 M",
@@ -4298,11 +4028,6 @@
     },
     {
       "category": "GENTS RING 22",
-      "label": "GR22/136",
-      "safe_tag": "GR22_136"
-    },
-    {
-      "category": "GENTS RING 22",
       "label": "GR22/139",
       "safe_tag": "GR22_139"
     },
@@ -4433,11 +4158,6 @@
     },
     {
       "category": "GENTS RING 22",
-      "label": "GR22/167",
-      "safe_tag": "GR22_167"
-    },
-    {
-      "category": "GENTS RING 22",
       "label": "GR22/168",
       "safe_tag": "GR22_168"
     },
@@ -4468,11 +4188,6 @@
     },
     {
       "category": "GENTS RING 22",
-      "label": "GR22/177",
-      "safe_tag": "GR22_177"
-    },
-    {
-      "category": "GENTS RING 22",
       "label": "GR22/178",
       "safe_tag": "GR22_178"
     },
@@ -4480,11 +4195,6 @@
       "category": "GENTS RING 22",
       "label": "GR22/18",
       "safe_tag": "GR22_18"
-    },
-    {
-      "category": "GENTS RING 22",
-      "label": "GR22/180",
-      "safe_tag": "GR22_180"
     },
     {
       "category": "GENTS RING 22",
@@ -4505,11 +4215,6 @@
       "category": "GENTS RING 22",
       "label": "GR22/187",
       "safe_tag": "GR22_187"
-    },
-    {
-      "category": "GENTS RING 22",
-      "label": "GR22/188",
-      "safe_tag": "GR22_188"
     },
     {
       "category": "GENTS RING 22",
@@ -4540,11 +4245,6 @@
       "category": "GENTS RING 22",
       "label": "GR22/196",
       "safe_tag": "GR22_196"
-    },
-    {
-      "category": "GENTS RING 22",
-      "label": "GR22/199",
-      "safe_tag": "GR22_199"
     },
     {
       "category": "GENTS RING 22",
@@ -4610,11 +4310,6 @@
       "category": "GENTS RING 22",
       "label": "GR22/214",
       "safe_tag": "GR22_214"
-    },
-    {
-      "category": "GENTS RING 22",
-      "label": "GR22/216",
-      "safe_tag": "GR22_216"
     },
     {
       "category": "GENTS RING 22",
@@ -5058,11 +4753,6 @@
     },
     {
       "category": "GENTS RING 22",
-      "label": "GR22/92",
-      "safe_tag": "GR22_92"
-    },
-    {
-      "category": "GENTS RING 22",
       "label": "GR22/93",
       "safe_tag": "GR22_93"
     },
@@ -5153,6 +4843,36 @@
     },
     {
       "category": "JHUMKA 22",
+      "label": "JB22/102",
+      "safe_tag": "JB22_102"
+    },
+    {
+      "category": "JHUMKA 22",
+      "label": "JB22/103",
+      "safe_tag": "JB22_103"
+    },
+    {
+      "category": "JHUMKA 22",
+      "label": "JB22/104",
+      "safe_tag": "JB22_104"
+    },
+    {
+      "category": "JHUMKA 22",
+      "label": "JB22/105",
+      "safe_tag": "JB22_105"
+    },
+    {
+      "category": "JHUMKA 22",
+      "label": "JB22/106",
+      "safe_tag": "JB22_106"
+    },
+    {
+      "category": "JHUMKA 22",
+      "label": "JB22/107",
+      "safe_tag": "JB22_107"
+    },
+    {
+      "category": "JHUMKA 22",
       "label": "JB22/11",
       "safe_tag": "JB22_11"
     },
@@ -5213,11 +4933,6 @@
     },
     {
       "category": "JHUMKA 22",
-      "label": "JB22/23",
-      "safe_tag": "JB22_23"
-    },
-    {
-      "category": "JHUMKA 22",
       "label": "JB22/24",
       "safe_tag": "JB22_24"
     },
@@ -5248,18 +4963,8 @@
     },
     {
       "category": "JHUMKA 22",
-      "label": "JB22/30",
-      "safe_tag": "JB22_30"
-    },
-    {
-      "category": "JHUMKA 22",
       "label": "JB22/31",
       "safe_tag": "JB22_31"
-    },
-    {
-      "category": "JHUMKA 22",
-      "label": "JB22/32",
-      "safe_tag": "JB22_32"
     },
     {
       "category": "JHUMKA 22",
@@ -5348,11 +5053,6 @@
     },
     {
       "category": "JHUMKA 22",
-      "label": "JB22/56",
-      "safe_tag": "JB22_56"
-    },
-    {
-      "category": "JHUMKA 22",
       "label": "JB22/57",
       "safe_tag": "JB22_57"
     },
@@ -5393,11 +5093,6 @@
     },
     {
       "category": "JHUMKA 22",
-      "label": "JB22/66",
-      "safe_tag": "JB22_66"
-    },
-    {
-      "category": "JHUMKA 22",
       "label": "JB22/67",
       "safe_tag": "JB22_67"
     },
@@ -5428,11 +5123,6 @@
     },
     {
       "category": "JHUMKA 22",
-      "label": "JB22/9",
-      "safe_tag": "JB22_9"
-    },
-    {
-      "category": "JHUMKA 22",
       "label": "JB22/90",
       "safe_tag": "JB22_90"
     },
@@ -5450,11 +5140,6 @@
       "category": "JHUMKA 22",
       "label": "JB22/93",
       "safe_tag": "JB22_93"
-    },
-    {
-      "category": "JHUMKA 22",
-      "label": "JB22/94",
-      "safe_tag": "JB22_94"
     },
     {
       "category": "JHUMKA 22",
@@ -5653,11 +5338,6 @@
     },
     {
       "category": "LADIES BRACELET 22",
-      "label": "LB22/13",
-      "safe_tag": "LB22_13"
-    },
-    {
-      "category": "LADIES BRACELET 22",
       "label": "LB22/14",
       "safe_tag": "LB22_14"
     },
@@ -5733,11 +5413,6 @@
     },
     {
       "category": "LADIES BRACELET 22",
-      "label": "LB22/34",
-      "safe_tag": "LB22_34"
-    },
-    {
-      "category": "LADIES BRACELET 22",
       "label": "LB22/35",
       "safe_tag": "LB22_35"
     },
@@ -5755,11 +5430,6 @@
       "category": "LADIES BRACELET 22",
       "label": "LB22/38",
       "safe_tag": "LB22_38"
-    },
-    {
-      "category": "LADIES BRACELET 22",
-      "label": "LB22/39",
-      "safe_tag": "LB22_39"
     },
     {
       "category": "LADIES BRACELET 22",
@@ -5933,11 +5603,6 @@
     },
     {
       "category": "LOCKET 22",
-      "label": "LC22/103",
-      "safe_tag": "LC22_103"
-    },
-    {
-      "category": "LOCKET 22",
       "label": "LC22/105",
       "safe_tag": "LC22_105"
     },
@@ -6013,11 +5678,6 @@
     },
     {
       "category": "LOCKET 22",
-      "label": "LC22/125",
-      "safe_tag": "LC22_125"
-    },
-    {
-      "category": "LOCKET 22",
       "label": "LC22/126",
       "safe_tag": "LC22_126"
     },
@@ -6030,11 +5690,6 @@
       "category": "LOCKET 22",
       "label": "LC22/130",
       "safe_tag": "LC22_130"
-    },
-    {
-      "category": "LOCKET 22",
-      "label": "LC22/131",
-      "safe_tag": "LC22_131"
     },
     {
       "category": "LOCKET 22",
@@ -6188,16 +5843,6 @@
     },
     {
       "category": "LOCKET 22",
-      "label": "LC22/180",
-      "safe_tag": "LC22_180"
-    },
-    {
-      "category": "LOCKET 22",
-      "label": "LC22/183",
-      "safe_tag": "LC22_183"
-    },
-    {
-      "category": "LOCKET 22",
       "label": "LC22/184",
       "safe_tag": "LC22_184"
     },
@@ -6243,11 +5888,6 @@
     },
     {
       "category": "LOCKET 22",
-      "label": "LC22/193",
-      "safe_tag": "LC22_193"
-    },
-    {
-      "category": "LOCKET 22",
       "label": "LC22/195",
       "safe_tag": "LC22_195"
     },
@@ -6290,16 +5930,6 @@
       "category": "LOCKET 22",
       "label": "LC22/203",
       "safe_tag": "LC22_203"
-    },
-    {
-      "category": "LOCKET 22",
-      "label": "LC22/204",
-      "safe_tag": "LC22_204"
-    },
-    {
-      "category": "LOCKET 22",
-      "label": "LC22/207",
-      "safe_tag": "LC22_207"
     },
     {
       "category": "LOCKET 22",
@@ -6893,11 +6523,6 @@
     },
     {
       "category": "LADIES RING 18",
-      "label": "LR18/33",
-      "safe_tag": "LR18_33"
-    },
-    {
-      "category": "LADIES RING 18",
       "label": "LR18/35",
       "safe_tag": "LR18_35"
     },
@@ -7008,11 +6633,6 @@
     },
     {
       "category": "LADIES RING 22",
-      "label": "LR22/113",
-      "safe_tag": "LR22_113"
-    },
-    {
-      "category": "LADIES RING 22",
       "label": "LR22/116",
       "safe_tag": "LR22_116"
     },
@@ -7083,11 +6703,6 @@
     },
     {
       "category": "LADIES RING 22",
-      "label": "LR22/135",
-      "safe_tag": "LR22_135"
-    },
-    {
-      "category": "LADIES RING 22",
       "label": "LR22/14",
       "safe_tag": "LR22_14"
     },
@@ -7095,11 +6710,6 @@
       "category": "LADIES RING 22",
       "label": "LR22/143",
       "safe_tag": "LR22_143"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/147",
-      "safe_tag": "LR22_147"
     },
     {
       "category": "LADIES RING 22",
@@ -7125,11 +6735,6 @@
       "category": "LADIES RING 22",
       "label": "LR22/155",
       "safe_tag": "LR22_155"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/157",
-      "safe_tag": "LR22_157"
     },
     {
       "category": "LADIES RING 22",
@@ -7190,16 +6795,6 @@
       "category": "LADIES RING 22",
       "label": "LR22/17",
       "safe_tag": "LR22_17"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/170",
-      "safe_tag": "LR22_170"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/171",
-      "safe_tag": "LR22_171"
     },
     {
       "category": "LADIES RING 22",
@@ -7288,11 +6883,6 @@
     },
     {
       "category": "LADIES RING 22",
-      "label": "LR22/196",
-      "safe_tag": "LR22_196"
-    },
-    {
-      "category": "LADIES RING 22",
       "label": "LR22/197",
       "safe_tag": "LR22_197"
     },
@@ -7353,11 +6943,6 @@
     },
     {
       "category": "LADIES RING 22",
-      "label": "LR22/22",
-      "safe_tag": "LR22_22"
-    },
-    {
-      "category": "LADIES RING 22",
       "label": "LR22/221",
       "safe_tag": "LR22_221"
     },
@@ -7395,11 +6980,6 @@
       "category": "LADIES RING 22",
       "label": "LR22/235",
       "safe_tag": "LR22_235"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/236",
-      "safe_tag": "LR22_236"
     },
     {
       "category": "LADIES RING 22",
@@ -7488,11 +7068,6 @@
     },
     {
       "category": "LADIES RING 22",
-      "label": "LR22/261",
-      "safe_tag": "LR22_261"
-    },
-    {
-      "category": "LADIES RING 22",
       "label": "LR22/262",
       "safe_tag": "LR22_262"
     },
@@ -7545,11 +7120,6 @@
       "category": "LADIES RING 22",
       "label": "LR22/282",
       "safe_tag": "LR22_282"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/283",
-      "safe_tag": "LR22_283"
     },
     {
       "category": "LADIES RING 22",
@@ -7668,11 +7238,6 @@
     },
     {
       "category": "LADIES RING 22",
-      "label": "LR22/343",
-      "safe_tag": "LR22_343"
-    },
-    {
-      "category": "LADIES RING 22",
       "label": "LR22/346",
       "safe_tag": "LR22_346"
     },
@@ -7700,11 +7265,6 @@
       "category": "LADIES RING 22",
       "label": "LR22/385",
       "safe_tag": "LR22_385"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/386",
-      "safe_tag": "LR22_386"
     },
     {
       "category": "LADIES RING 22",
@@ -7788,11 +7348,6 @@
     },
     {
       "category": "LADIES RING 22",
-      "label": "LR22/404",
-      "safe_tag": "LR22_404"
-    },
-    {
-      "category": "LADIES RING 22",
       "label": "LR22/405",
       "safe_tag": "LR22_405"
     },
@@ -7855,11 +7410,6 @@
       "category": "LADIES RING 22",
       "label": "LR22/417",
       "safe_tag": "LR22_417"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/418",
-      "safe_tag": "LR22_418"
     },
     {
       "category": "LADIES RING 22",
@@ -8003,11 +7553,6 @@
     },
     {
       "category": "LADIES RING 22",
-      "label": "LR22/445",
-      "safe_tag": "LR22_445"
-    },
-    {
-      "category": "LADIES RING 22",
       "label": "LR22/446",
       "safe_tag": "LR22_446"
     },
@@ -8015,11 +7560,6 @@
       "category": "LADIES RING 22",
       "label": "LR22/447",
       "safe_tag": "LR22_447"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/448",
-      "safe_tag": "LR22_448"
     },
     {
       "category": "LADIES RING 22",
@@ -8073,11 +7613,6 @@
     },
     {
       "category": "LADIES RING 22",
-      "label": "LR22/459",
-      "safe_tag": "LR22_459"
-    },
-    {
-      "category": "LADIES RING 22",
       "label": "LR22/46",
       "safe_tag": "LR22_46"
     },
@@ -8098,11 +7633,6 @@
     },
     {
       "category": "LADIES RING 22",
-      "label": "LR22/463",
-      "safe_tag": "LR22_463"
-    },
-    {
-      "category": "LADIES RING 22",
       "label": "LR22/464",
       "safe_tag": "LR22_464"
     },
@@ -8110,16 +7640,6 @@
       "category": "LADIES RING 22",
       "label": "LR22/465",
       "safe_tag": "LR22_465"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/466",
-      "safe_tag": "LR22_466"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/467",
-      "safe_tag": "LR22_467"
     },
     {
       "category": "LADIES RING 22",
@@ -8220,11 +7740,6 @@
       "category": "LADIES RING 22",
       "label": "LR22/62",
       "safe_tag": "LR22_62"
-    },
-    {
-      "category": "LADIES RING 22",
-      "label": "LR22/63",
-      "safe_tag": "LR22_63"
     },
     {
       "category": "LADIES RING 22",
@@ -8388,11 +7903,6 @@
     },
     {
       "category": "LADIES RING 22",
-      "label": "LR22/98",
-      "safe_tag": "LR22_98"
-    },
-    {
-      "category": "LADIES RING 22",
       "label": "LR22/99",
       "safe_tag": "LR22_99"
     },
@@ -8425,6 +7935,21 @@
       "category": "MS LONG 22",
       "label": "ML22/10",
       "safe_tag": "ML22_10"
+    },
+    {
+      "category": "MS LONG 22",
+      "label": "ML22/100",
+      "safe_tag": "ML22_100"
+    },
+    {
+      "category": "MS LONG 22",
+      "label": "ML22/101",
+      "safe_tag": "ML22_101"
+    },
+    {
+      "category": "MS LONG 22",
+      "label": "ML22/102",
+      "safe_tag": "ML22_102"
     },
     {
       "category": "MS LONG 22",
@@ -8513,11 +8038,6 @@
     },
     {
       "category": "MS LONG 22",
-      "label": "ML22/30",
-      "safe_tag": "ML22_30"
-    },
-    {
-      "category": "MS LONG 22",
       "label": "ML22/31",
       "safe_tag": "ML22_31"
     },
@@ -8560,16 +8080,6 @@
       "category": "MS LONG 22",
       "label": "ML22/4",
       "safe_tag": "ML22_4"
-    },
-    {
-      "category": "MS LONG 22",
-      "label": "ML22/40",
-      "safe_tag": "ML22_40"
-    },
-    {
-      "category": "MS LONG 22",
-      "label": "ML22/41",
-      "safe_tag": "ML22_41"
     },
     {
       "category": "MS LONG 22",
@@ -8638,11 +8148,6 @@
     },
     {
       "category": "MS LONG 22",
-      "label": "ML22/59",
-      "safe_tag": "ML22_59"
-    },
-    {
-      "category": "MS LONG 22",
       "label": "ML22/6",
       "safe_tag": "ML22_6"
     },
@@ -8665,11 +8170,6 @@
       "category": "MS LONG 22",
       "label": "ML22/64",
       "safe_tag": "ML22_64"
-    },
-    {
-      "category": "MS LONG 22",
-      "label": "ML22/65",
-      "safe_tag": "ML22_65"
     },
     {
       "category": "MS LONG 22",
@@ -8730,11 +8230,6 @@
       "category": "MS LONG 22",
       "label": "ML22/82",
       "safe_tag": "ML22_82"
-    },
-    {
-      "category": "MS LONG 22",
-      "label": "ML22/84",
-      "safe_tag": "ML22_84"
     },
     {
       "category": "MS LONG 22",
@@ -9143,11 +8638,6 @@
     },
     {
       "category": "MOTI NATH 18",
-      "label": "MN18/76",
-      "safe_tag": "MN18_76"
-    },
-    {
-      "category": "MOTI NATH 18",
       "label": "MN18/77",
       "safe_tag": "MN18_77"
     },
@@ -9313,18 +8803,8 @@
     },
     {
       "category": "MSS-SHORT 22",
-      "label": "MS22/104",
-      "safe_tag": "MS22_104"
-    },
-    {
-      "category": "MSS-SHORT 22",
       "label": "MS22/105",
       "safe_tag": "MS22_105"
-    },
-    {
-      "category": "MSS-SHORT 22",
-      "label": "MS22/106",
-      "safe_tag": "MS22_106"
     },
     {
       "category": "MSS-SHORT 22",
@@ -9345,11 +8825,6 @@
       "category": "MSS-SHORT 22",
       "label": "MS22/113",
       "safe_tag": "MS22_113"
-    },
-    {
-      "category": "MSS-SHORT 22",
-      "label": "MS22/127",
-      "safe_tag": "MS22_127"
     },
     {
       "category": "MSS-SHORT 22",
@@ -9380,11 +8855,6 @@
       "category": "MSS-SHORT 22",
       "label": "MS22/136",
       "safe_tag": "MS22_136"
-    },
-    {
-      "category": "MSS-SHORT 22",
-      "label": "MS22/137",
-      "safe_tag": "MS22_137"
     },
     {
       "category": "MSS-SHORT 22",
@@ -9448,28 +8918,8 @@
     },
     {
       "category": "MSS-SHORT 22",
-      "label": "MS22/215",
-      "safe_tag": "MS22_215"
-    },
-    {
-      "category": "MSS-SHORT 22",
-      "label": "MS22/217",
-      "safe_tag": "MS22_217"
-    },
-    {
-      "category": "MSS-SHORT 22",
-      "label": "MS22/219",
-      "safe_tag": "MS22_219"
-    },
-    {
-      "category": "MSS-SHORT 22",
       "label": "MS22/22",
       "safe_tag": "MS22_22"
-    },
-    {
-      "category": "MSS-SHORT 22",
-      "label": "MS22/225",
-      "safe_tag": "MS22_225"
     },
     {
       "category": "MSS-SHORT 22",
@@ -9538,13 +8988,103 @@
     },
     {
       "category": "MSS-SHORT 22",
+      "label": "MS22/245",
+      "safe_tag": "MS22_245"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/246",
+      "safe_tag": "MS22_246"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/247",
+      "safe_tag": "MS22_247"
+    },
+    {
+      "category": "MSS-SHORT 22",
       "label": "MS22/25",
       "safe_tag": "MS22_25"
     },
     {
       "category": "MSS-SHORT 22",
+      "label": "MS22/251",
+      "safe_tag": "MS22_251"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/252",
+      "safe_tag": "MS22_252"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/253",
+      "safe_tag": "MS22_253"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/257",
+      "safe_tag": "MS22_257"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/259",
+      "safe_tag": "MS22_259"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/260",
+      "safe_tag": "MS22_260"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/261",
+      "safe_tag": "MS22_261"
+    },
+    {
+      "category": "MSS-SHORT 22",
       "label": "MS22/27",
       "safe_tag": "MS22_27"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/272",
+      "safe_tag": "MS22_272"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/273",
+      "safe_tag": "MS22_273"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/274",
+      "safe_tag": "MS22_274"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/275",
+      "safe_tag": "MS22_275"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/276",
+      "safe_tag": "MS22_276"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/277",
+      "safe_tag": "MS22_277"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/278",
+      "safe_tag": "MS22_278"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/279",
+      "safe_tag": "MS22_279"
     },
     {
       "category": "MSS-SHORT 22",
@@ -9580,11 +9120,6 @@
       "category": "MSS-SHORT 22",
       "label": "MS22/34",
       "safe_tag": "MS22_34"
-    },
-    {
-      "category": "MSS-SHORT 22",
-      "label": "MS22/35",
-      "safe_tag": "MS22_35"
     },
     {
       "category": "MSS-SHORT 22",
@@ -9825,11 +9360,6 @@
       "category": "NECKLACE 22",
       "label": "NK22/130",
       "safe_tag": "NK22_130"
-    },
-    {
-      "category": "NECKLACE 22",
-      "label": "NK22/131",
-      "safe_tag": "NK22_131"
     },
     {
       "category": "NECKLACE 22",
@@ -10168,11 +9698,6 @@
     },
     {
       "category": "NECKLACE 22",
-      "label": "NK22/66",
-      "safe_tag": "NK22_66"
-    },
-    {
-      "category": "NECKLACE 22",
       "label": "NK22/67",
       "safe_tag": "NK22_67"
     },
@@ -10258,11 +9783,6 @@
     },
     {
       "category": "NECKLACE 22",
-      "label": "NK22/87",
-      "safe_tag": "NK22_87"
-    },
-    {
-      "category": "NECKLACE 22",
       "label": "NK22/88",
       "safe_tag": "NK22_88"
     },
@@ -10305,11 +9825,6 @@
       "category": "NECKLACE 22",
       "label": "NK22/97",
       "safe_tag": "NK22_97"
-    },
-    {
-      "category": "NECKLACE 22",
-      "label": "NK22/98",
-      "safe_tag": "NK22_98"
     },
     {
       "category": "NECKLACE SET 18",
@@ -10518,11 +10033,6 @@
     },
     {
       "category": "NECKLACE SET 22",
-      "label": "NS22/46",
-      "safe_tag": "NS22_46"
-    },
-    {
-      "category": "NECKLACE SET 22",
       "label": "NS22/49",
       "safe_tag": "NS22_49"
     },
@@ -10588,11 +10098,6 @@
     },
     {
       "category": "NECKLACE SET 22",
-      "label": "NS22/65",
-      "safe_tag": "NS22_65"
-    },
-    {
-      "category": "NECKLACE SET 22",
       "label": "NS22/66",
       "safe_tag": "NS22_66"
     },
@@ -10613,11 +10118,6 @@
     },
     {
       "category": "NECKLACE SET 22",
-      "label": "NS22/70",
-      "safe_tag": "NS22_70"
-    },
-    {
-      "category": "NECKLACE SET 22",
       "label": "NS22/71",
       "safe_tag": "NS22_71"
     },
@@ -10630,11 +10130,6 @@
       "category": "NECKLACE SET 22",
       "label": "NS22/74",
       "safe_tag": "NS22_74"
-    },
-    {
-      "category": "NECKLACE SET 22",
-      "label": "NS22/76",
-      "safe_tag": "NS22_76"
     },
     {
       "category": "NECKLACE SET 22",
@@ -10748,11 +10243,6 @@
     },
     {
       "category": "PENDENT 22",
-      "label": "PD22/106",
-      "safe_tag": "PD22_106"
-    },
-    {
-      "category": "PENDENT 22",
       "label": "PD22/108",
       "safe_tag": "PD22_108"
     },
@@ -10823,11 +10313,6 @@
     },
     {
       "category": "PENDENT 22",
-      "label": "PD22/128",
-      "safe_tag": "PD22_128"
-    },
-    {
-      "category": "PENDENT 22",
       "label": "PD22/13",
       "safe_tag": "PD22_13"
     },
@@ -10848,18 +10333,8 @@
     },
     {
       "category": "PENDENT 22",
-      "label": "PD22/143",
-      "safe_tag": "PD22_143"
-    },
-    {
-      "category": "PENDENT 22",
       "label": "PD22/144",
       "safe_tag": "PD22_144"
-    },
-    {
-      "category": "PENDENT 22",
-      "label": "PD22/145",
-      "safe_tag": "PD22_145"
     },
     {
       "category": "PENDENT 22",
@@ -10953,11 +10428,6 @@
     },
     {
       "category": "PENDENT 22",
-      "label": "PD22/165",
-      "safe_tag": "PD22_165"
-    },
-    {
-      "category": "PENDENT 22",
       "label": "PD22/166",
       "safe_tag": "PD22_166"
     },
@@ -11020,6 +10490,11 @@
       "category": "PENDENT 22",
       "label": "PD22/178",
       "safe_tag": "PD22_178"
+    },
+    {
+      "category": "PENDENT 22",
+      "label": "PD22/179",
+      "safe_tag": "PD22_179"
     },
     {
       "category": "PENDENT 22",
@@ -11303,11 +10778,6 @@
     },
     {
       "category": "PENDENT 22",
-      "label": "PD22/83",
-      "safe_tag": "PD22_83"
-    },
-    {
-      "category": "PENDENT 22",
       "label": "PD22/84",
       "safe_tag": "PD22_84"
     },
@@ -11330,11 +10800,6 @@
       "category": "PENDENT 22",
       "label": "PD22/9",
       "safe_tag": "PD22_9"
-    },
-    {
-      "category": "PENDENT 22",
-      "label": "PD22/91",
-      "safe_tag": "PD22_91"
     },
     {
       "category": "PENDENT 22",
@@ -11570,11 +11035,6 @@
       "category": "TOPS 18",
       "label": "TP18/11",
       "safe_tag": "TP18_11"
-    },
-    {
-      "category": "TOPS 18",
-      "label": "TP18/12",
-      "safe_tag": "TP18_12"
     },
     {
       "category": "TOPS 18",
@@ -11838,11 +11298,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/158",
-      "safe_tag": "TP22_158"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/159",
       "safe_tag": "TP22_159"
     },
@@ -11943,11 +11398,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/182",
-      "safe_tag": "TP22_182"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/183",
       "safe_tag": "TP22_183"
     },
@@ -12028,11 +11478,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/211",
-      "safe_tag": "TP22_211"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/212",
       "safe_tag": "TP22_212"
     },
@@ -12083,11 +11528,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/223",
-      "safe_tag": "TP22_223"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/225",
       "safe_tag": "TP22_225"
     },
@@ -12100,11 +11540,6 @@
       "category": "TOPS 22",
       "label": "TP22/228",
       "safe_tag": "TP22_228"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/229",
-      "safe_tag": "TP22_229"
     },
     {
       "category": "TOPS 22",
@@ -12123,11 +11558,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/236",
-      "safe_tag": "TP22_236"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/239",
       "safe_tag": "TP22_239"
     },
@@ -12135,11 +11565,6 @@
       "category": "TOPS 22",
       "label": "TP22/245",
       "safe_tag": "TP22_245"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/246",
-      "safe_tag": "TP22_246"
     },
     {
       "category": "TOPS 22",
@@ -12215,11 +11640,6 @@
       "category": "TOPS 22",
       "label": "TP22/274",
       "safe_tag": "TP22_274"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/276",
-      "safe_tag": "TP22_276"
     },
     {
       "category": "TOPS 22",
@@ -12318,16 +11738,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/315",
-      "safe_tag": "TP22_315"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/317",
-      "safe_tag": "TP22_317"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/319",
       "safe_tag": "TP22_319"
     },
@@ -12403,11 +11813,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/354",
-      "safe_tag": "TP22_354"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/358",
       "safe_tag": "TP22_358"
     },
@@ -12448,11 +11853,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/374",
-      "safe_tag": "TP22_374"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/375",
       "safe_tag": "TP22_375"
     },
@@ -12465,11 +11865,6 @@
       "category": "TOPS 22",
       "label": "TP22/377",
       "safe_tag": "TP22_377"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/378",
-      "safe_tag": "TP22_378"
     },
     {
       "category": "TOPS 22",
@@ -12578,11 +11973,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/403",
-      "safe_tag": "TP22_403"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/404",
       "safe_tag": "TP22_404"
     },
@@ -12648,11 +12038,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/433",
-      "safe_tag": "TP22_433"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/434",
       "safe_tag": "TP22_434"
     },
@@ -12673,11 +12058,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/438",
-      "safe_tag": "TP22_438"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/439",
       "safe_tag": "TP22_439"
     },
@@ -12690,11 +12070,6 @@
       "category": "TOPS 22",
       "label": "TP22/441",
       "safe_tag": "TP22_441"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/442",
-      "safe_tag": "TP22_442"
     },
     {
       "category": "TOPS 22",
@@ -12720,11 +12095,6 @@
       "category": "TOPS 22",
       "label": "TP22/447",
       "safe_tag": "TP22_447"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/449",
-      "safe_tag": "TP22_449"
     },
     {
       "category": "TOPS 22",
@@ -12848,18 +12218,8 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/472",
-      "safe_tag": "TP22_472"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/473",
       "safe_tag": "TP22_473"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/474",
-      "safe_tag": "TP22_474"
     },
     {
       "category": "TOPS 22",
@@ -12870,11 +12230,6 @@
       "category": "TOPS 22",
       "label": "TP22/477",
       "safe_tag": "TP22_477"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/478",
-      "safe_tag": "TP22_478"
     },
     {
       "category": "TOPS 22",
@@ -12900,11 +12255,6 @@
       "category": "TOPS 22",
       "label": "TP22/484",
       "safe_tag": "TP22_484"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/485",
-      "safe_tag": "TP22_485"
     },
     {
       "category": "TOPS 22",
@@ -12968,11 +12318,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/497",
-      "safe_tag": "TP22_497"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/499",
       "safe_tag": "TP22_499"
     },
@@ -12985,11 +12330,6 @@
       "category": "TOPS 22",
       "label": "TP22/50",
       "safe_tag": "TP22_50"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/500",
-      "safe_tag": "TP22_500"
     },
     {
       "category": "TOPS 22",
@@ -13008,11 +12348,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/504",
-      "safe_tag": "TP22_504"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/507",
       "safe_tag": "TP22_507"
     },
@@ -13028,11 +12363,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/510",
-      "safe_tag": "TP22_510"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/511",
       "safe_tag": "TP22_511"
     },
@@ -13045,11 +12375,6 @@
       "category": "TOPS 22",
       "label": "TP22/514",
       "safe_tag": "TP22_514"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/515",
-      "safe_tag": "TP22_515"
     },
     {
       "category": "TOPS 22",
@@ -13083,11 +12408,6 @@
     },
     {
       "category": "TOPS 22",
-      "label": "TP22/523",
-      "safe_tag": "TP22_523"
-    },
-    {
-      "category": "TOPS 22",
       "label": "TP22/524",
       "safe_tag": "TP22_524"
     },
@@ -13100,11 +12420,6 @@
       "category": "TOPS 22",
       "label": "TP22/526",
       "safe_tag": "TP22_526"
-    },
-    {
-      "category": "TOPS 22",
-      "label": "TP22/527",
-      "safe_tag": "TP22_527"
     },
     {
       "category": "TOPS 22",
@@ -13418,11 +12733,6 @@
     },
     {
       "category": "WATI 22",
-      "label": "WT22/120",
-      "safe_tag": "WT22_120"
-    },
-    {
-      "category": "WATI 22",
       "label": "WT22/122",
       "safe_tag": "WT22_122"
     },
@@ -13443,11 +12753,6 @@
     },
     {
       "category": "WATI 22",
-      "label": "WT22/127",
-      "safe_tag": "WT22_127"
-    },
-    {
-      "category": "WATI 22",
       "label": "WT22/128",
       "safe_tag": "WT22_128"
     },
@@ -13463,18 +12768,8 @@
     },
     {
       "category": "WATI 22",
-      "label": "WT22/130",
-      "safe_tag": "WT22_130"
-    },
-    {
-      "category": "WATI 22",
       "label": "WT22/133",
       "safe_tag": "WT22_133"
-    },
-    {
-      "category": "WATI 22",
-      "label": "WT22/134",
-      "safe_tag": "WT22_134"
     },
     {
       "category": "WATI 22",
@@ -13485,11 +12780,6 @@
       "category": "WATI 22",
       "label": "WT22/137",
       "safe_tag": "WT22_137"
-    },
-    {
-      "category": "WATI 22",
-      "label": "WT22/139",
-      "safe_tag": "WT22_139"
     },
     {
       "category": "WATI 22",
@@ -13508,21 +12798,6 @@
     },
     {
       "category": "WATI 22",
-      "label": "WT22/143",
-      "safe_tag": "WT22_143"
-    },
-    {
-      "category": "WATI 22",
-      "label": "WT22/144",
-      "safe_tag": "WT22_144"
-    },
-    {
-      "category": "WATI 22",
-      "label": "WT22/145",
-      "safe_tag": "WT22_145"
-    },
-    {
-      "category": "WATI 22",
       "label": "WT22/146",
       "safe_tag": "WT22_146"
     },
@@ -13530,11 +12805,6 @@
       "category": "WATI 22",
       "label": "WT22/147",
       "safe_tag": "WT22_147"
-    },
-    {
-      "category": "WATI 22",
-      "label": "WT22/148",
-      "safe_tag": "WT22_148"
     },
     {
       "category": "WATI 22",
@@ -13628,11 +12898,6 @@
     },
     {
       "category": "WATI 22",
-      "label": "WT22/50",
-      "safe_tag": "WT22_50"
-    },
-    {
-      "category": "WATI 22",
       "label": "WT22/51",
       "safe_tag": "WT22_51"
     },
@@ -13668,11 +12933,6 @@
     },
     {
       "category": "WATI 22",
-      "label": "WT22/59",
-      "safe_tag": "WT22_59"
-    },
-    {
-      "category": "WATI 22",
       "label": "WT22/6",
       "safe_tag": "WT22_6"
     },
@@ -13703,23 +12963,8 @@
     },
     {
       "category": "WATI 22",
-      "label": "WT22/67",
-      "safe_tag": "WT22_67"
-    },
-    {
-      "category": "WATI 22",
       "label": "WT22/7",
       "safe_tag": "WT22_7"
-    },
-    {
-      "category": "WATI 22",
-      "label": "WT22/70",
-      "safe_tag": "WT22_70"
-    },
-    {
-      "category": "WATI 22",
-      "label": "WT22/74",
-      "safe_tag": "WT22_74"
     },
     {
       "category": "WATI 22",
@@ -13747,42 +12992,283 @@
       "safe_tag": "WT22_9"
     }
   ],
-  "current_tag_count": 2749,
-  "current_workbook": "12082026.xls",
+  "current_tag_count": 2598,
+  "current_workbook": "29082026.xls",
   "daily_sold_tags": [
-    "BL18_51",
-    "BL22_165",
-    "BL22_222",
-    "BL22_235",
-    "BL22_246",
-    "CH22_334",
-    "GR22_110",
-    "GR22_215",
-    "LB22_40",
-    "LC22_128",
-    "LC22_160",
-    "LR22_273",
-    "LR22_340",
-    "MS22_157",
-    "MS22_226",
-    "MS22_234",
-    "PD22_132",
-    "TP22_362",
-    "TP22_411",
-    "TP22_451"
+    "BG22_57",
+    "BG22_59",
+    "BK22_10",
+    "BL18_18",
+    "BL18_27",
+    "BL18_46",
+    "BL18_52",
+    "BL22_142",
+    "BL22_156",
+    "BL22_173",
+    "BL22_196",
+    "BL22_206",
+    "BL22_217",
+    "BL22_218",
+    "BL22_230",
+    "BL22_231",
+    "BL22_232",
+    "BL22_236",
+    "BL22_24",
+    "BL22_45",
+    "BL22_47",
+    "BL22_70",
+    "BL22_77",
+    "BL22_94",
+    "BR22_32",
+    "BR22_33",
+    "CH22_115",
+    "CH22_154",
+    "CH22_162",
+    "CH22_179",
+    "CH22_202",
+    "CH22_261",
+    "CH22_269",
+    "CH22_277",
+    "CH22_29",
+    "CH22_291",
+    "CH22_303",
+    "CH22_307",
+    "CH22_309",
+    "CH22_313",
+    "CH22_318",
+    "CH22_325",
+    "CH22_331",
+    "CH22_332",
+    "CH22_343",
+    "CH22_353",
+    "CH22_356",
+    "CH22_360",
+    "CH22_362",
+    "CH22_363",
+    "CH22_85",
+    "DL22_25",
+    "ER22_56",
+    "ER22_79",
+    "ER22_94",
+    "FM22_44",
+    "GC10_35",
+    "GC1_44",
+    "GC1_45",
+    "GC1_55",
+    "GC1_57",
+    "GC1_65",
+    "GC5_31",
+    "GR22_136",
+    "GR22_167",
+    "GR22_177",
+    "GR22_180",
+    "GR22_188",
+    "GR22_199",
+    "GR22_216",
+    "GR22_92",
+    "JB22_23",
+    "JB22_30",
+    "JB22_32",
+    "JB22_56",
+    "JB22_66",
+    "JB22_9",
+    "JB22_94",
+    "LB22_13",
+    "LB22_34",
+    "LB22_39",
+    "LC22_103",
+    "LC22_125",
+    "LC22_131",
+    "LC22_180",
+    "LC22_183",
+    "LC22_193",
+    "LC22_204",
+    "LC22_207",
+    "LR18_33",
+    "LR22_113",
+    "LR22_135",
+    "LR22_147",
+    "LR22_157",
+    "LR22_170",
+    "LR22_171",
+    "LR22_196",
+    "LR22_22",
+    "LR22_236",
+    "LR22_261",
+    "LR22_283",
+    "LR22_343",
+    "LR22_386",
+    "LR22_404",
+    "LR22_418",
+    "LR22_445",
+    "LR22_448",
+    "LR22_459",
+    "LR22_463",
+    "LR22_466",
+    "LR22_467",
+    "LR22_63",
+    "LR22_98",
+    "ML22_30",
+    "ML22_40",
+    "ML22_41",
+    "ML22_59",
+    "ML22_65",
+    "ML22_84",
+    "MN18_76",
+    "MS22_104",
+    "MS22_106",
+    "MS22_127",
+    "MS22_137",
+    "MS22_215",
+    "MS22_217",
+    "MS22_219",
+    "MS22_225",
+    "MS22_35",
+    "NK22_131",
+    "NK22_66",
+    "NK22_87",
+    "NK22_98",
+    "NS22_46",
+    "NS22_65",
+    "NS22_70",
+    "NS22_76",
+    "PD22_106",
+    "PD22_128",
+    "PD22_143",
+    "PD22_145",
+    "PD22_165",
+    "PD22_83",
+    "PD22_91",
+    "TP18_12",
+    "TP22_158",
+    "TP22_182",
+    "TP22_211",
+    "TP22_223",
+    "TP22_229",
+    "TP22_236",
+    "TP22_246",
+    "TP22_276",
+    "TP22_315",
+    "TP22_317",
+    "TP22_354",
+    "TP22_374",
+    "TP22_378",
+    "TP22_403",
+    "TP22_433",
+    "TP22_438",
+    "TP22_442",
+    "TP22_449",
+    "TP22_472",
+    "TP22_474",
+    "TP22_478",
+    "TP22_485",
+    "TP22_497",
+    "TP22_500",
+    "TP22_504",
+    "TP22_510",
+    "TP22_515",
+    "TP22_523",
+    "TP22_527",
+    "WT22_120",
+    "WT22_127",
+    "WT22_130",
+    "WT22_134",
+    "WT22_139",
+    "WT22_143",
+    "WT22_144",
+    "WT22_145",
+    "WT22_148",
+    "WT22_50",
+    "WT22_59",
+    "WT22_67",
+    "WT22_70",
+    "WT22_74"
   ],
   "deleted_bytes": 0,
   "deleted_files": 0,
-  "memory_backup": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\backups\\stock_reconciliation_12082026_20260812_155236_ea075a",
-  "moved_bytes": 6629924,
-  "moved_files": 6,
-  "new_tags": [],
+  "memory_backup": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\backups\\stock_reconciliation_29082026_20260830_144309_01680d",
+  "moved_bytes": 50522774,
+  "moved_files": 30,
+  "new_tags": [
+    "BG22_104",
+    "BL22_251",
+    "BL22_254",
+    "BL22_255",
+    "BL22_256",
+    "BL22_257",
+    "BL22_259",
+    "ER22_113",
+    "ER22_114",
+    "JB22_102",
+    "JB22_103",
+    "JB22_104",
+    "JB22_105",
+    "JB22_106",
+    "JB22_107",
+    "ML22_100",
+    "ML22_101",
+    "ML22_102",
+    "MS22_245",
+    "MS22_246",
+    "MS22_247",
+    "MS22_251",
+    "MS22_252",
+    "MS22_253",
+    "MS22_257",
+    "MS22_259",
+    "MS22_260",
+    "MS22_261",
+    "MS22_272",
+    "MS22_273",
+    "MS22_274",
+    "MS22_275",
+    "MS22_276",
+    "MS22_277",
+    "MS22_278",
+    "MS22_279",
+    "PD22_179"
+  ],
   "notification_ready": true,
   "pending_new": [
+    {
+      "category": "BANGLE 22",
+      "label": "BG22/104",
+      "safe_tag": "BG22_104"
+    },
     {
       "category": "BABY KADLI 22",
       "label": "BK22/13",
       "safe_tag": "BK22_13"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/251",
+      "safe_tag": "BL22_251"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/254",
+      "safe_tag": "BL22_254"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/255",
+      "safe_tag": "BL22_255"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/256",
+      "safe_tag": "BL22_256"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/257",
+      "safe_tag": "BL22_257"
+    },
+    {
+      "category": "BALI 22",
+      "label": "BL22/259",
+      "safe_tag": "BL22_259"
     },
     {
       "category": "CHAIN 22",
@@ -13800,6 +13286,16 @@
       "safe_tag": "ER22_112"
     },
     {
+      "category": "EARRING 22",
+      "label": "ER22/113",
+      "safe_tag": "ER22_113"
+    },
+    {
+      "category": "EARRING 22",
+      "label": "ER22/114",
+      "safe_tag": "ER22_114"
+    },
+    {
       "category": "FANCY MALA 18",
       "label": "FM18/8",
       "safe_tag": "FM18_8"
@@ -13808,6 +13304,36 @@
       "category": "HAAR CHAIN 22",
       "label": "HC22/17",
       "safe_tag": "HC22_17"
+    },
+    {
+      "category": "JHUMKA 22",
+      "label": "JB22/102",
+      "safe_tag": "JB22_102"
+    },
+    {
+      "category": "JHUMKA 22",
+      "label": "JB22/103",
+      "safe_tag": "JB22_103"
+    },
+    {
+      "category": "JHUMKA 22",
+      "label": "JB22/104",
+      "safe_tag": "JB22_104"
+    },
+    {
+      "category": "JHUMKA 22",
+      "label": "JB22/105",
+      "safe_tag": "JB22_105"
+    },
+    {
+      "category": "JHUMKA 22",
+      "label": "JB22/106",
+      "safe_tag": "JB22_106"
+    },
+    {
+      "category": "JHUMKA 22",
+      "label": "JB22/107",
+      "safe_tag": "JB22_107"
     },
     {
       "category": "LADIES BRACELET 22",
@@ -13830,9 +13356,114 @@
       "safe_tag": "LR22_472"
     },
     {
+      "category": "MS LONG 22",
+      "label": "ML22/100",
+      "safe_tag": "ML22_100"
+    },
+    {
+      "category": "MS LONG 22",
+      "label": "ML22/101",
+      "safe_tag": "ML22_101"
+    },
+    {
+      "category": "MS LONG 22",
+      "label": "ML22/102",
+      "safe_tag": "ML22_102"
+    },
+    {
       "category": "MSS-SHORT 22",
       "label": "MS22/243",
       "safe_tag": "MS22_243"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/245",
+      "safe_tag": "MS22_245"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/246",
+      "safe_tag": "MS22_246"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/247",
+      "safe_tag": "MS22_247"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/251",
+      "safe_tag": "MS22_251"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/252",
+      "safe_tag": "MS22_252"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/253",
+      "safe_tag": "MS22_253"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/257",
+      "safe_tag": "MS22_257"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/259",
+      "safe_tag": "MS22_259"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/260",
+      "safe_tag": "MS22_260"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/261",
+      "safe_tag": "MS22_261"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/272",
+      "safe_tag": "MS22_272"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/273",
+      "safe_tag": "MS22_273"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/274",
+      "safe_tag": "MS22_274"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/275",
+      "safe_tag": "MS22_275"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/276",
+      "safe_tag": "MS22_276"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/277",
+      "safe_tag": "MS22_277"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/278",
+      "safe_tag": "MS22_278"
+    },
+    {
+      "category": "MSS-SHORT 22",
+      "label": "MS22/279",
+      "safe_tag": "MS22_279"
     },
     {
       "category": "NECKLACE 22",
@@ -13848,34 +13479,207 @@
       "category": "NECKLACE SET 22",
       "label": "NS22/80",
       "safe_tag": "NS22_80"
+    },
+    {
+      "category": "PENDENT 22",
+      "label": "PD22/179",
+      "safe_tag": "PD22_179"
     }
   ],
-  "previous_workbook": "10082026.xls",
-  "removed_memory_records": 6,
-  "signature": "ce933232671080c3e1244cc2c04b7b7d74f5b3b496244f53b46821ae5c097a45",
-  "sold_archive": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\sold\\12082026",
+  "previous_workbook": "12082026.xls",
+  "removed_memory_records": 57,
+  "signature": "16a83afb8e9571ea1504bc6be0d312732f5776c2636e3dc1e044575560a2eda6",
+  "sold_archive": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\sold\\29082026",
   "sold_tags": [
-    "BL18_51",
-    "BL22_165",
-    "BL22_222",
-    "BL22_235",
-    "BL22_246",
-    "CH22_334",
-    "GR22_110",
-    "GR22_215",
-    "LB22_40",
-    "LC22_128",
-    "LC22_160",
-    "LR22_273",
-    "LR22_340",
-    "MS22_157",
-    "MS22_226",
-    "MS22_234",
-    "PD22_132",
-    "TP22_362",
-    "TP22_411",
-    "TP22_451"
+    "BG22_57",
+    "BG22_59",
+    "BK22_10",
+    "BL18_18",
+    "BL18_27",
+    "BL18_46",
+    "BL18_52",
+    "BL22_142",
+    "BL22_156",
+    "BL22_173",
+    "BL22_196",
+    "BL22_206",
+    "BL22_217",
+    "BL22_218",
+    "BL22_230",
+    "BL22_231",
+    "BL22_232",
+    "BL22_236",
+    "BL22_24",
+    "BL22_45",
+    "BL22_47",
+    "BL22_70",
+    "BL22_77",
+    "BL22_94",
+    "BR22_32",
+    "BR22_33",
+    "CH22_115",
+    "CH22_154",
+    "CH22_162",
+    "CH22_179",
+    "CH22_202",
+    "CH22_261",
+    "CH22_269",
+    "CH22_277",
+    "CH22_29",
+    "CH22_291",
+    "CH22_303",
+    "CH22_307",
+    "CH22_309",
+    "CH22_313",
+    "CH22_318",
+    "CH22_325",
+    "CH22_331",
+    "CH22_332",
+    "CH22_343",
+    "CH22_353",
+    "CH22_356",
+    "CH22_360",
+    "CH22_362",
+    "CH22_363",
+    "CH22_85",
+    "DL22_25",
+    "ER22_56",
+    "ER22_79",
+    "ER22_94",
+    "FM22_44",
+    "GC10_35",
+    "GC1_44",
+    "GC1_45",
+    "GC1_55",
+    "GC1_57",
+    "GC1_65",
+    "GC5_31",
+    "GR22_136",
+    "GR22_167",
+    "GR22_177",
+    "GR22_180",
+    "GR22_188",
+    "GR22_199",
+    "GR22_216",
+    "GR22_92",
+    "JB22_23",
+    "JB22_30",
+    "JB22_32",
+    "JB22_56",
+    "JB22_66",
+    "JB22_9",
+    "JB22_94",
+    "LB22_13",
+    "LB22_34",
+    "LB22_39",
+    "LC22_103",
+    "LC22_125",
+    "LC22_131",
+    "LC22_180",
+    "LC22_183",
+    "LC22_193",
+    "LC22_204",
+    "LC22_207",
+    "LR18_33",
+    "LR22_113",
+    "LR22_135",
+    "LR22_147",
+    "LR22_157",
+    "LR22_170",
+    "LR22_171",
+    "LR22_196",
+    "LR22_22",
+    "LR22_236",
+    "LR22_261",
+    "LR22_283",
+    "LR22_343",
+    "LR22_386",
+    "LR22_404",
+    "LR22_418",
+    "LR22_445",
+    "LR22_448",
+    "LR22_459",
+    "LR22_463",
+    "LR22_466",
+    "LR22_467",
+    "LR22_63",
+    "LR22_98",
+    "ML22_30",
+    "ML22_40",
+    "ML22_41",
+    "ML22_59",
+    "ML22_65",
+    "ML22_84",
+    "MN18_76",
+    "MS22_104",
+    "MS22_106",
+    "MS22_127",
+    "MS22_137",
+    "MS22_215",
+    "MS22_217",
+    "MS22_219",
+    "MS22_225",
+    "MS22_35",
+    "NK22_131",
+    "NK22_66",
+    "NK22_87",
+    "NK22_98",
+    "NS22_46",
+    "NS22_65",
+    "NS22_70",
+    "NS22_76",
+    "PD22_106",
+    "PD22_128",
+    "PD22_143",
+    "PD22_145",
+    "PD22_165",
+    "PD22_83",
+    "PD22_91",
+    "TP18_12",
+    "TP22_158",
+    "TP22_182",
+    "TP22_211",
+    "TP22_223",
+    "TP22_229",
+    "TP22_236",
+    "TP22_246",
+    "TP22_276",
+    "TP22_315",
+    "TP22_317",
+    "TP22_354",
+    "TP22_374",
+    "TP22_378",
+    "TP22_403",
+    "TP22_433",
+    "TP22_438",
+    "TP22_442",
+    "TP22_449",
+    "TP22_472",
+    "TP22_474",
+    "TP22_478",
+    "TP22_485",
+    "TP22_497",
+    "TP22_500",
+    "TP22_504",
+    "TP22_510",
+    "TP22_515",
+    "TP22_523",
+    "TP22_527",
+    "WT22_120",
+    "WT22_127",
+    "WT22_130",
+    "WT22_134",
+    "WT22_139",
+    "WT22_143",
+    "WT22_144",
+    "WT22_145",
+    "WT22_148",
+    "WT22_50",
+    "WT22_59",
+    "WT22_67",
+    "WT22_70",
+    "WT22_74"
   ],
-  "source_identity": "8ea77c781fe1806f6aac995e0948c9ac15f0bc717cf41ce0227b19eb89ba55b2",
+  "source_identity": "81bf2b07c1aa65d12c4dc0ff030ad49184dffecdedc162fd0976dac23cea181a",
   "version": 1
 }

@@ -48,6 +48,15 @@ import sam_locate
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 CAPTURE_ROOT = os.path.join(BASE, "capture_intake")
+# Approving an item MOVES its raw master out of capture_intake into
+# processed/. The dedup guard must look there too, or approval silently
+# drops the tag out of duplicate protection (LR22_104, 2026-09-02).
+PROCESSED_ROOT = os.path.join(BASE, "processed")
+OUTPUT_ROOT = os.path.join(BASE, "output")
+# Roots that mean "this tag has already been shot". Presence in ANY of them
+# blocks a re-capture (owner's rule, 2026-09-02). To legitimately re-shoot a
+# tag, reset it first -- that removes it from these roots.
+CAPTURED_ROOTS = (CAPTURE_ROOT, PROCESSED_ROOT, OUTPUT_ROOT)
 DEDUP_PATH = os.path.join(BASE, "data", "capture_dedup.json")
 TAG_METADATA_PATH = os.path.join(BASE, "data", "capture_tag_metadata.json")
 VOID_REGISTRY_PATH = str(capture_voids.configured_void_registry_path())
@@ -69,6 +78,33 @@ TAG_ARCHIVE_DIRNAME = "_tag_archive"
 # let through (confirmed by eye against the actual images, not just score).
 BLUR_MAX_DIM = 1000
 BLUR_VARIANCE_THRESHOLD = 80.0
+# A hanging/long chain is intentionally thin and split into many separate
+# gold components.  The generic compact-item gates below were calibrated on
+# rings/bangles and falsely reject valid three-angle long-item sets.
+# Kept in sync with the app's CaptureCompositionProfiles NECK_CURVE set
+# (MainActivity.isLongItemCategory). Drift here is silent and expensive:
+# 2026-08-30 audit found mss_short_20/mss_short_22 were long items in the
+# app but missing here, so the server judged them with compact-item gates
+# (blur 80 vs 25, visibility 0.002 vs 0.0002) and falsely rejected them.
+LONG_ITEM_CATEGORIES = {
+    "chain_22", "fancy_mala_18", "fancy_mala_22", "haar_chain_22",
+    "ms_long_22", "mss_short_20", "mss_short_22", "necklace_22",
+    "necklace_set_18", "necklace_set_22",
+}
+LONG_ITEM_BLUR_VARIANCE_THRESHOLD = 25.0
+# Side-profile angle shots cannot reach a threshold calibrated on the
+# face-on hero. _blur_variance measures the GOLD REGION only, and in a side
+# profile the piece is edge-on and small, so that region carries far less
+# high-frequency detail even when the shot is perfectly usable. Measured
+# live 2026-08-30 on LR22/248, one item, one session, all three accepted by
+# eye: main 268.7, angle1 153.5, angle2 55.6 -- angle2 alone failed the flat
+# 80.0 gate and took the whole set to needs_review. Applies to the angle
+# slots only; the hero keeps the full threshold.
+ANGLE_SLOT_BLUR_SCALE = 0.5
+
+
+def _is_long_item_category(category: str | None) -> bool:
+    return (category or "").strip().lower() in LONG_ITEM_CATEGORIES
 
 
 def _stock_write_guard(function):
@@ -111,7 +147,7 @@ def _embed_tag_metadata(jpeg_path: str, *, tag_code: str, category: str, staff_n
         pass
 
 
-def _jewellery_clearly_visible(image_bytes: bytes) -> dict:
+def _jewellery_clearly_visible(image_bytes: bytes, category: str | None = None) -> dict:
     """Local gold-presence gate. No cloud model, account, or network call."""
     try:
         arr = np.frombuffer(image_bytes, dtype=np.uint8)
@@ -123,16 +159,31 @@ def _jewellery_clearly_visible(image_bytes: bytes) -> dict:
         gold = cv2.inRange(hsv, np.array([8, 65, 45]), np.array([38, 255, 255]))
         gold = cv2.morphologyEx(gold, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
         contours, _ = cv2.findContours(gold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        largest = max((cv2.contourArea(c) for c in contours), default=0.0)
-        ratio = largest / float(image.shape[0] * image.shape[1])
-        ok = ratio >= 0.002
+        # Sum of ALL contours, not just the largest single one (2026-08-29:
+        # a real, clearly-visible chain capture was rejected by this check).
+        # A thin beaded/serpentine chain's gold-hue mask breaks into many
+        # small disconnected blobs after MORPH_OPEN -- the decorative
+        # beads/links, not one solid connected shape -- so "largest single
+        # contour" badly undercounts a real chain even though a human
+        # looking at the photo can see it clearly. Total area across every
+        # contour reflects how much of the frame is actually gold-colored,
+        # which is what "clearly visible" should mean; a truly empty/no-
+        # gold frame still sums to 0 either way, so this can't make a
+        # legitimately-failing check start passing.
+        total = sum(cv2.contourArea(c) for c in contours)
+        ratio = total / float(image.shape[0] * image.shape[1])
+        # Long chains occupy much less coloured area than a compact ring, yet
+        # can be completely visible top-to-bottom.  Keep an empty-frame gate,
+        # but use a physically appropriate floor for this silhouette.
+        minimum_ratio = 0.0002 if _is_long_item_category(category) else 0.002
+        ok = ratio >= minimum_ratio
         reason = f"Local gold region {ratio:.2%} of frame"
         return {"ok": ok, "reason": reason, "unverified": False}
     except Exception as e:
         return {"ok": True, "reason": f"Local check unavailable: {type(e).__name__}: {e}", "unverified": True}
 
 
-def _gold_region_bbox(gray_or_color_bgr):
+def _gold_region_bbox(gray_or_color_bgr, aggregate: bool = False):
     """Best-effort bounding box of the largest gold-hue blob, same detection
     already used by _jewellery_clearly_visible. Returns None if nothing
     passes a minimal size floor (silver/white-metal items, or detection
@@ -146,16 +197,23 @@ def _gold_region_bbox(gray_or_color_bgr):
         if not contours:
             return None
         largest = max(contours, key=cv2.contourArea)
-        area = cv2.contourArea(largest)
+        area = sum(cv2.contourArea(c) for c in contours) if aggregate else cv2.contourArea(largest)
         h, w = gray_or_color_bgr.shape[:2]
-        if area < 0.001 * h * w:
+        floor = 0.0001 if aggregate else 0.001
+        if area < floor * h * w:
             return None
+        if aggregate:
+            x0 = min(cv2.boundingRect(c)[0] for c in contours)
+            y0 = min(cv2.boundingRect(c)[1] for c in contours)
+            x1 = max(cv2.boundingRect(c)[0] + cv2.boundingRect(c)[2] for c in contours)
+            y1 = max(cv2.boundingRect(c)[1] + cv2.boundingRect(c)[3] for c in contours)
+            return x0, y0, x1 - x0, y1 - y0
         return cv2.boundingRect(largest)  # x, y, w, h
     except Exception:
         return None
 
 
-def _blur_variance(image_bytes: bytes):
+def _blur_variance(image_bytes: bytes, category: str | None = None):
     """Returns the Laplacian variance of the image (lower = blurrier), or
     None if the bytes couldn't be decoded as an image — decode failures fail
     OPEN (no blur warning) since save_pair separately validates the file is
@@ -178,7 +236,7 @@ def _blur_variance(image_bytes: bytes):
         color = cv2.imdecode(arr, cv2.IMREAD_COLOR)
         if color is None:
             return None
-        bbox = _gold_region_bbox(color)
+        bbox = _gold_region_bbox(color, aggregate=_is_long_item_category(category))
         img = cv2.cvtColor(color, cv2.COLOR_BGR2GRAY)
         if bbox is not None:
             x, y, bw, bh = bbox
@@ -361,12 +419,35 @@ def _parse_master_stock(path: str) -> dict:
     Returns {label_no: {item_name, old_barcode, prefix, carat, variety,
     gross_wt, net_wt, pcs, huid}} — fields absent in the reduced schema are
     None rather than missing, so callers don't need to branch on schema."""
-    import pandas as pd
-    df = pd.read_excel(path, engine="xlrd", header=None)
+    # xlrd directly, NOT pandas: the service runs under Python 3.10, which has
+    # xlrd but no pandas, so the pandas import raised and check_master_stock
+    # fails open -- every scanned tag silently came back unknown (found
+    # 2026-09-01). xlrd alone reads this .xls fine and is already installed.
+    import xlrd
+
+    book = xlrd.open_workbook(path)
+    sheet = book.sheet_by_index(0)
+
+    class _Row:
+        __slots__ = ("_values",)
+
+        def __init__(self, values):
+            self._values = values
+
+        def __len__(self):
+            return len(self._values)
+
+        def get(self, index):
+            if index is None or index >= len(self._values):
+                return None
+            value = self._values[index]
+            return None if value == "" else value
+
     labels = {}
     current_category = None
     label_col, item_col = None, None  # column layout for the CURRENT header row
-    for _, row in df.iterrows():
+    for values in (sheet.row_values(r) for r in range(sheet.nrows)):
+        row = _Row(values)
         col0 = row.get(0)
         if isinstance(col0, str):
             m = _STOCK_SECTION_TITLE_RE.search(col0)
@@ -387,10 +468,20 @@ def _parse_master_stock(path: str) -> dict:
         if not label_no or "/" not in label_no:
             continue  # blank/title/totals row — a real Label No always has a "/"
 
+        # The category comes from the tag code's own prefix, never from the
+        # last section title seen. The full-schema export carries exactly ONE
+        # section title ("BABY BRACLET 22", row 4) followed by all 2795 rows
+        # in a single block, so every item inherited that first category --
+        # LR22/95 parsed as a baby bracelet while its own prefix said LR22.
+        # ornament_code_map maps all 57 prefixes 1:1 and is authoritative.
+        import ornament_code_map
+        resolved = ornament_code_map.category_from_tag_code(label_no)
+        tag_category = resolved.label if resolved else None
+
         if item_col is None:
             # Full schema: Label No is column 0, the rest follow in order.
             labels[label_no] = {
-                "item_name": current_category,
+                "item_name": tag_category or current_category,
                 "old_barcode": row.get(1),
                 "prefix": row.get(2),
                 "carat": row.get(3),
@@ -403,7 +494,8 @@ def _parse_master_stock(path: str) -> dict:
         else:
             # Reduced schema: only ItemName + Label No are present.
             item_name = row.get(item_col)
-            item_name = item_name.strip() if isinstance(item_name, str) else current_category
+            item_name = item_name.strip() if isinstance(item_name, str) else None
+            item_name = item_name or tag_category or current_category
             labels[label_no] = {
                 "item_name": item_name, "old_barcode": None, "prefix": None,
                 "carat": None, "variety": None, "gross_wt": None, "net_wt": None,
@@ -649,6 +741,33 @@ def clear_folder_memory(folder: str) -> dict:
             "remaining": len(dedup)}
 
 
+
+def tag_already_in_system(tag_code: str) -> str | None:
+    """Path proving `tag_code` has already been captured, or None.
+
+    Presence-based, not record-based. The dedup store can lose an entry --
+    check_duplicate used to delete records whose file had moved, so approving
+    an item silently un-protected its own tag (LR22_104). Looking for the file
+    itself cannot be defeated that way.
+
+    Sidecars (_1/_2/_studs/_detail) collapse onto their item, and hidden
+    working folders (.multi_angle_sources, _superseded) are ignored.
+    """
+    safe = _safe_filename_from_tag(tag_code)
+    if not safe:
+        return None
+    for root in CAPTURED_ROOTS:
+        if not os.path.isdir(root):
+            continue
+        for entry in os.listdir(root):
+            if entry.startswith((".", "_")):
+                continue
+            candidate = os.path.join(root, entry, f"{safe}.jpg")
+            if os.path.isfile(candidate):
+                return candidate
+    return None
+
+
 def check_duplicate(tag_code: str) -> dict | None:
     """Returns the prior capture record if tag_code was already captured
     before (by anyone, any session), else None.
@@ -661,11 +780,50 @@ def check_duplicate(tag_code: str) -> dict | None:
         return None
     dedup = _load_dedup()
     prior = dedup.get(tag_code)
+    # The file on disk is the authority. A tag sitting in capture_intake,
+    # processed or output has been shot, whether or not a dedup record
+    # survived, so block on that alone.
+    existing = tag_already_in_system(tag_code)
     if not isinstance(prior, dict):
+        if existing:
+            return {"folder": os.path.basename(os.path.dirname(existing)),
+                    "filename": os.path.basename(existing),
+                    "category": None, "staff": "", "ts": os.path.getmtime(existing),
+                    "source": "file-present"}
         return prior
     folder = prior.get("folder")
     filename = prior.get("filename")
     if folder and filename:
+        # Dedup is a guard over an actual saved deliverable, never a source
+        # of truth by itself. A prior manual delete/void can leave a stale
+        # record behind; blocking a genuine re-capture in that case strands
+        # a complete set in the tablet's needs_review queue as "duplicate".
+        # Remove only the exact stale key, atomically, then allow capture.
+        # A captured item's raw master legitimately lives in capture_intake
+        # (awaiting or rejected) OR processed (approved). Only a record whose
+        # file is in NEITHER is genuinely stale -- a manual delete or void.
+        # Checking capture_intake alone meant every approval un-protected its
+        # own tag, which is exactly backwards: approved pieces are the ones
+        # most certainly already shot.
+        candidates = [
+            os.path.join(CAPTURE_ROOT, folder, filename),
+            os.path.join(PROCESSED_ROOT, folder, filename),
+        ]
+        saved_path = next((c for c in candidates if os.path.isfile(c)), None)
+        if saved_path is None and existing:
+            saved_path = existing        # moved, not deleted -- keep blocking
+        if saved_path is None:
+            saved_path = candidates[0]
+            with _lock:
+                current = _load_dedup()
+                if current.get(tag_code) == prior:
+                    del current[tag_code]
+                    _atomic_write_json(DEDUP_PATH, current)
+                    logging.getLogger("capture_tool").warning(
+                        "Removed stale dedup record tag=%s missing=%s",
+                        tag_code, saved_path
+                    )
+            return None
         try:
             if capture_voids.is_voided(
                 os.path.join(folder, filename), VOID_REGISTRY_PATH
@@ -774,6 +932,33 @@ def _stitch_scale_to_area(img, target_area):
     return img.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
 
+# A side panel is capped here; MAIN gets three times this. Without a cap the
+# canvas is unbounded: _stitch_scale_to_area only ever UPSCALES (by design, so
+# no source detail is thrown away), and side_target_area is driven by the
+# LARGEST angle crop. LR22_163's angle2 tight_crop came back 7819x4808
+# (37.6MP), MAIN was scaled to 3x that, and the composite reached 310MP --
+# past PIL's 179MP decompression-bomb guard, so the verification re-open threw
+# and every retry failed identically (2026-09-01, live capture).
+#
+# 12MP per side panel is far above what anything downstream consumes: the
+# Azure guard prepares references at 10MP and delivery is 3200px. It also
+# stays well clear of the 4MP floor that reference detail needs (below that,
+# fine stone counts start being lost).
+MAX_STITCH_SIDE_PANEL_PIXELS = 12_000_000
+
+
+def _cap_panel_pixels(img, max_pixels: int):
+    """Downscale a panel that is larger than `max_pixels`, preserving aspect."""
+    import math
+    from PIL import Image
+    area = img.width * img.height
+    if area <= max_pixels or area <= 0:
+        return img
+    scale = math.sqrt(max_pixels / area)
+    return img.resize((max(1, int(img.width * scale)),
+                       max(1, int(img.height * scale))), Image.Resampling.LANCZOS)
+
+
 def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: str) -> bool:
     """Composes MAIN/ANGLE_1/ANGLE_2 into one labeled reference-style image:
     full-width MAIN VIEW on top, LEFT ANGLE + RIGHT ANGLE side-by-side below.
@@ -791,9 +976,12 @@ def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: 
     from PIL import Image, ImageDraw
     log = logging.getLogger("capture_tool")
     try:
-        main_img = Image.open(main_path).convert("RGB")
-        angle1_img = Image.open(angle1_path).convert("RGB")
-        angle2_img = Image.open(angle2_path).convert("RGB")
+        main_img = _cap_panel_pixels(
+            Image.open(main_path).convert("RGB"), MAX_STITCH_SIDE_PANEL_PIXELS * 3)
+        angle1_img = _cap_panel_pixels(
+            Image.open(angle1_path).convert("RGB"), MAX_STITCH_SIDE_PANEL_PIXELS)
+        angle2_img = _cap_panel_pixels(
+            Image.open(angle2_path).convert("RGB"), MAX_STITCH_SIDE_PANEL_PIXELS)
 
         main_area = main_img.width * main_img.height
         left_area = angle1_img.width * angle1_img.height
@@ -822,10 +1010,12 @@ def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: 
         def _panel_with_label(panel, x, y, box_w, row_h, label):
             panel_y = y + (row_h - panel.height) // 2
             canvas.paste(panel, (x + (box_w - panel.width) // 2, panel_y))
-            bbox = draw.textbbox((0, 0), label, font=label_font)
-            tw = bbox[2] - bbox[0]
-            draw.text((x + (box_w - tw) // 2, y + row_h + 20), label,
-                       font=label_font, fill=_STITCH_TEXT)
+            # Captions are deliberately NOT drawn (2026-08-31). FLUX.2 read
+            # this burned-in text and painted garbled copies of it into
+            # finished catalogue images ("MAIN SHNIN", "ADTISHM"). The label
+            # band's spacing is kept so panel geometry -- and sam_locate's
+            # assumptions about it -- are unchanged; only the ink is gone.
+            _ = (label, label_font, draw)
 
         x0 = _STITCH_PAD
         y0 = _STITCH_PAD
@@ -1022,12 +1212,13 @@ def save_pair(category: str, jewel_bytes: bytes, tag_bytes: bytes, tag_code: str
             if prior:
                 return {"ok": False, "error": "duplicate", "prior": prior}
 
-        blur_score = _blur_variance(jewel_bytes)
-        if not override_blur and blur_score is not None and blur_score < BLUR_VARIANCE_THRESHOLD:
+        blur_score = _blur_variance(jewel_bytes, category)
+        threshold = LONG_ITEM_BLUR_VARIANCE_THRESHOLD if _is_long_item_category(category) else BLUR_VARIANCE_THRESHOLD
+        if not override_blur and blur_score is not None and blur_score < threshold:
             return {"ok": False, "error": "blurry", "blur_score": round(blur_score, 1)}
 
         if not override_visibility:
-            vis = _jewellery_clearly_visible(jewel_bytes)
+            vis = _jewellery_clearly_visible(jewel_bytes, category)
             if not vis["ok"]:
                 return {"ok": False, "error": "not_clearly_visible", "reason": vis["reason"],
                         "unverified": vis["unverified"]}
@@ -1109,13 +1300,16 @@ def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_byt
         images = {"main": main_bytes, "angle1": angle1_bytes, "angle2": angle2_bytes}
         blur_scores = {}
         for slot, data in images.items():
-            score = _blur_variance(data)
+            score = _blur_variance(data, category)
             blur_scores[slot] = round(score, 1) if score is not None else None
-            if not override_blur and score is not None and score < BLUR_VARIANCE_THRESHOLD:
+            threshold = LONG_ITEM_BLUR_VARIANCE_THRESHOLD if _is_long_item_category(category) else BLUR_VARIANCE_THRESHOLD
+            if slot != "main":
+                threshold *= ANGLE_SLOT_BLUR_SCALE
+            if not override_blur and score is not None and score < threshold:
                 return {"ok": False, "error": "blurry", "slot": slot, "blur_score": blur_scores[slot]}
 
         if not override_visibility:
-            vis = _jewellery_clearly_visible(main_bytes)
+            vis = _jewellery_clearly_visible(main_bytes, category)
             if not vis["ok"]:
                 return {"ok": False, "error": "not_clearly_visible", "reason": vis["reason"],
                         "unverified": vis["unverified"]}

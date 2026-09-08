@@ -112,9 +112,22 @@ def collect_dashboard_stats(
             str(check.get("detail", "")),
         )
 
+    # captured_total and rejected_total come from pipeline_counts so this
+    # dashboard agrees with the tool and the reports: capture_intake alone
+    # made the headline fall as items were processed (2026-09-02).
+    try:
+        import pipeline_counts
+        shared = pipeline_counts.counts(
+            capture_root=capture_root,
+            processed_root=processed_root,
+            rejected_root=rejected_root,
+        )
+    except Exception:
+        shared = {}
+
     return DashboardStats(
         captured_today=captured_today,
-        captured_total=capture.count,
+        captured_total=shared.get("captured_total", capture.count),
         stock_tags=(
             stock_tag_count
             if stock_tag_count is not None
@@ -124,6 +137,10 @@ def collect_dashboard_stats(
         processing_available=processing.count,
         processed_total=processed.count,
         needs_review_total=needs_review.count,
+        # rejected_total keeps its established meaning: rejected DELIVERIES on
+        # disk. The count of intake items awaiting rework because they were
+        # rejected is a different number and is reported separately by the
+        # tool's stats endpoint as rejected_total there -- do not conflate them.
         rejected_total=rejected.count,
         last_captured_at=_as_datetime(capture.latest_mtime, timezone),
         last_processed_at=_as_datetime(processed.latest_mtime, timezone),

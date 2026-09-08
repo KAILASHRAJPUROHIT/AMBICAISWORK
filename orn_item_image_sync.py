@@ -102,6 +102,36 @@ def uploaded_labels(manifest_path: Path = MANIFEST) -> tuple[str, ...]:
     )
 
 
+def thumbed_labels(*, server_root=SERVER_ROOT) -> frozenset[str]:
+    """Labels Ornate NX has actually ingested, not just labels we copied.
+
+    Our own manifest (uploaded_labels above) only proves publish_approved()
+    wrote the file - it says nothing about whether Ornate NX itself picked
+    it up. Ornate NX generates "<stem>_Thumb.jpg" next to a stock image once
+    it has genuinely ingested it, so that sibling file's presence is the
+    real "uploaded" signal, per the owner's own definition (2026-09-02).
+    One os.listdir() per category folder rather than a stat per item -
+    cheap even for a few thousand stock items.
+    """
+    root = Path(server_root)
+    found: set[str] = set()
+    if not root.is_dir():
+        return frozenset()
+    for category_dir in root.iterdir():
+        if not category_dir.is_dir():
+            continue
+        try:
+            names = os.listdir(category_dir)
+        except OSError:
+            continue
+        for name in names:
+            stem, ext = os.path.splitext(name)
+            if ext.lower() not in {".jpg", ".jpeg"} or not stem.lower().endswith("_thumb"):
+                continue
+            found.add(stem[: -len("_thumb")])
+    return frozenset(found)
+
+
 def queue_upload(label: str, source_path: str | os.PathLike[str], error=None,
                  *, queue_path: Path = QUEUE) -> dict:
     row = {

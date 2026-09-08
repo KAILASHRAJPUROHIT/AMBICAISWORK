@@ -234,13 +234,13 @@ function render(){
   if(it.has_original){
     left.classList.remove('missing');
     orig.style.display = '';
-    orig.src = '/review_img/original/' + encodeURIComponent(it.label) + bust;
+    orig.src = '/review_img/original/' + encodeURIComponent(it.label) + bust + '&w=1100';
   } else {
     left.classList.add('missing');
     orig.style.display = 'none';
   }
   document.getElementById('imgEdited').src =
-    '/review_img/edited/' + encodeURIComponent(it.label) + bust;
+    '/review_img/edited/' + encodeURIComponent(it.label) + bust + '&w=1100';
 
   renderFolder();
 }

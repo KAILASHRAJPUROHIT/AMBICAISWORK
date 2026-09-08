@@ -1,8 +1,30 @@
+param(
+    # Android Wireless Debugging rotates this port. Pass the currently shown
+    # endpoint when starting CaptureCam; the launcher converts it to stable
+    # TCP ADB :5555 before opening scrcpy.
+    [string]$Serial = ''
+)
+
 $ErrorActionPreference = 'Stop'
 
 $adbPath = 'C:\platform-tools\adb.exe'
-$scrcpyPath = 'C:\Users\kaila\Desktop\JewelleryCatalogTool\scrcpy\scrcpy-win64-v4.1\scrcpy.exe'
-$tabletIp = '192.168.0.22'
+$scrcpyPath = 'C:\AradhanaSystems\projects\catalogue-capture\main\scrcpy\scrcpy-win64-v4.1\scrcpy.exe'
+function Resolve-TabletEndpoint {
+    param([string]$RequestedSerial)
+    if ($RequestedSerial -match '^\d{1,3}(\.\d{1,3}){3}:\d+$') {
+        return $RequestedSerial
+    }
+    $networkDevice = & $adbPath devices |
+        Select-String '^\d{1,3}(\.\d{1,3}){3}:\d+\s+device$' |
+        Select-Object -First 1
+    if (-not $networkDevice) {
+        throw 'No wireless Android device is connected. Pass -Serial IP:PORT.'
+    }
+    return ($networkDevice.Line -split '\s+')[0]
+}
+
+$bootstrapEndpoint = Resolve-TabletEndpoint $Serial
+$tabletIp = ($bootstrapEndpoint -split ':')[0]
 $stableEndpoint = "${tabletIp}:5555"
 
 if (-not (Test-Path -LiteralPath $adbPath)) {
@@ -34,13 +56,17 @@ function Enable-StableAdbEndpoint {
     # Android's Wireless Debugging TLS endpoint changes whenever adbd is
     # restarted. Use it only to bootstrap classic authenticated TCP ADB on a
     # fixed port. Scrcpy then survives TLS/mDNS port rotation.
-    $service = & $adbPath mdns services |
-        Select-String '_adb-tls-connect._tcp' |
-        Select-Object -First 1
-    if (-not $service) { return $false }
-    $tlsEndpoint = ($service.Line -split '\s+')[-1]
-    if ($tlsEndpoint -notmatch '^\d{1,3}(\.\d{1,3}){3}:\d+$') { return $false }
-    if (-not (Test-AdbEndpoint $tlsEndpoint)) { return $false }
+    # Prefer the operator-supplied live TLS endpoint. mDNS is fallback only;
+    # it may list another tablet or emulator first.
+    $tlsEndpoint = $bootstrapEndpoint
+    if (-not (Test-AdbEndpoint $tlsEndpoint)) {
+        $service = & $adbPath mdns services |
+            Select-String "_adb-tls-connect._tcp.*$([regex]::Escape($tabletIp)):" |
+            Select-Object -First 1
+        if (-not $service) { return $false }
+        $tlsEndpoint = ($service.Line -split '\s+')[-1]
+        if ($tlsEndpoint -notmatch '^\d{1,3}(\.\d{1,3}){3}:\d+$' -or -not (Test-AdbEndpoint $tlsEndpoint)) { return $false }
+    }
     & $adbPath -s $tlsEndpoint tcpip 5555 | Out-Host
     Start-Sleep -Seconds 2
     return (Test-AdbEndpoint $stableEndpoint)

@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 
+import coverage_baseline
 import ornament_code_map as ocm
 
 _IMG_EXT = {".jpg", ".jpeg", ".png", ".webp"}
@@ -20,7 +22,7 @@ def _count_images(root: str) -> int:
     return total
 
 
-def _counts_by_tag(root: str) -> tuple[dict[str, int], dict[str, set[str]]]:
+def _counts_by_tag(root: str, after_reset: bool = False) -> tuple[dict[str, int], dict[str, set[str]]]:
     labels: dict[str, set[str]] = {}
     folders: dict[str, set[str]] = {}
     if not os.path.isdir(root):
@@ -31,6 +33,8 @@ def _counts_by_tag(root: str) -> tuple[dict[str, int], dict[str, set[str]]]:
         top_folder = None if relative == "." else relative.split(os.sep, 1)[0]
         for filename in filenames:
             if os.path.splitext(filename)[1].lower() not in _IMG_EXT:
+                continue
+            if after_reset and not coverage_baseline.include(os.path.join(dirpath, filename)):
                 continue
             resolved = ocm.category_from_tag_code(os.path.splitext(filename)[0])
             if resolved is None:
@@ -68,8 +72,8 @@ def category_breakdown(capture_root: str, processed_root: str,
     the lifecycle ``processed`` root.  Counting output images was incorrect:
     each success can have studio + model files and resetting project memory
     does not delete finished deliverables."""
-    captured_by_key, capture_folders = _counts_by_tag(capture_root)
-    processed_by_key, _ = _counts_by_tag(processed_root)
+    captured_by_key, capture_folders = _counts_by_tag(capture_root, after_reset=True)
+    processed_by_key, _ = _counts_by_tag(processed_root, after_reset=True)
     uploaded_by_key, _ = _counts_by_tag(str(uploaded_root)) if uploaded_root else ({}, {})
     for label in uploaded_labels or ():
         resolved = ocm.category_from_tag_code(str(label))
@@ -109,3 +113,41 @@ def category_breakdown(capture_root: str, processed_root: str,
             "stock_total": stock_total,
         })
     return rows
+
+
+def missing_labels(category_key: str, capture_root: str, processed_root: str,
+                    output_root: str, stock_labels=()) -> list[str]:
+    """Stock tags for one category that have never been captured.
+
+    "Captured" means present in capture_intake, processed, OR output --
+    matching the owner's rule (2026-09-02) that a tag in any of those three
+    is already shot and must never be recaptured. A tag only counts as
+    missing when it is in none of them.
+
+    Returns tag codes in their original "/" form (e.g. "LR22/104"), sorted
+    numerically by the trailing number so the download reads in tray order
+    rather than lexical order (LR22/9 before LR22/10).
+    """
+    import pipeline_counts
+
+    captured_safe = (
+        pipeline_counts._labels(Path(capture_root))
+        | pipeline_counts._labels(Path(processed_root))
+        | pipeline_counts._labels(Path(output_root))
+    )
+    captured_safe = {label.upper() for label in captured_safe}
+
+    missing = []
+    for tag_code in stock_labels or ():
+        resolved = ocm.category_from_tag_code(str(tag_code))
+        if resolved is None or resolved.key != category_key:
+            continue
+        safe = re.sub(r'[/\\:*?"<>|]', "_", str(tag_code)).strip().upper()
+        if safe not in captured_safe:
+            missing.append(str(tag_code))
+
+    def _sort_key(tag_code: str):
+        match = re.search(r"(\d+)\s*$", tag_code)
+        return (int(match.group(1)) if match else 0, tag_code)
+
+    return sorted(set(missing), key=_sort_key)

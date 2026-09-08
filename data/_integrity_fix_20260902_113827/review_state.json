@@ -1,0 +1,140 @@
+{
+ "LR18_10": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788273006.1317503
+ },
+ "LR18_20": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788273010.700918
+ },
+ "LR18_31": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788327478.8476086
+ },
+ "LR18_32": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788273018.8270748
+ },
+ "LR18_36": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788273021.094979
+ },
+ "LR18_37": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788273023.584714
+ },
+ "LR22_10": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788273642.0677893
+ },
+ "LR22_100": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788274669.44062
+ },
+ "LR22_102": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788274670.8601873
+ },
+ "LR22_103": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788274671.7963095
+ },
+ "LR22_104": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788266270.8096304
+ },
+ "LR22_109": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788266274.529463
+ },
+ "LR22_116": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788266276.8083243
+ },
+ "LR22_117": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788266278.710542
+ },
+ "LR22_119": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788266288.120089
+ },
+ "LR22_128": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788266329.5574765
+ },
+ "LR22_132": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788266356.5092578
+ },
+ "LR22_154": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788266361.1204367
+ },
+ "LR22_25": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788273644.1023364
+ },
+ "LR22_6": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788273650.805135
+ },
+ "LR22_7": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788273652.7943397
+ },
+ "LR22_9": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788273658.269727
+ },
+ ".LR22_104.20220": {
+  "verdict": "approved",
+  "reason": null,
+  "note": null,
+  "reviewed_at": 1788274667.3339255
+ }
+}

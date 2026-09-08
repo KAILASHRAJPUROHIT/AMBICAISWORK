@@ -9,5 +9,5 @@
 Dim shell
 Set shell = CreateObject("WScript.Shell")
 Dim cmdLine
-cmdLine = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""C:\Users\kaila\Desktop\JewelleryCatalogTool\supervisor.ps1"""
+cmdLine = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ""C:\AradhanaSystems\projects\catalogue-capture\main\supervisor.ps1"""
 shell.Run cmdLine, 0, True

@@ -36,6 +36,9 @@ CAPTURE_INTAKE = os.path.join(BASE, "capture_intake")
 PROCESSED_DIR = os.path.join(BASE, "processed")
 REJECTED_DIR = os.path.join(BASE, "rejected")
 REJECTED_MANIFEST = os.path.join(REJECTED_DIR, "REJECT_REASONS.txt")
+# Superseded renders live here: preserved, but invisible to the delivery
+# walkers so one label always has exactly one live image.
+SUPERSEDED_DIRNAME = "_superseded"
 OUTPUT_DIR = os.path.join(BASE, "output")
 NEEDS_REVIEW = os.path.join(BASE, "needs_review")
 INPUT_DIR = os.path.join(BASE, "input")
@@ -175,9 +178,11 @@ def _find_all_finished_outputs(label: str) -> list[str]:
         if not os.path.isdir(root):
             continue
         for dirpath, _dirs, files in os.walk(root):
-            if "_edit_reports" in dirpath:
+            if "_edit_reports" in dirpath or SUPERSEDED_DIRNAME in dirpath:
                 continue
             for fname in files:
+                if fname.startswith("."):
+                    continue          # in-flight _publish_delivery temp file
                 if fname.lower().endswith(".jpg") and _label_from_path(fname) == label:
                     found.append(os.path.join(dirpath, fname))
     return found
@@ -204,7 +209,8 @@ def _same_bytes(first: str, second: str) -> bool:
 
 
 def _relocate_between(
-    current: str | None, *, target_root: str, managed_roots: tuple[str, ...]
+    current: str | None, *, target_root: str, managed_roots: tuple[str, ...],
+    resolve_conflicts: bool = False,
 ) -> str | None:
     """Shared move-with-mirrored-subfolder logic for both the raw-master
     router (_relocate_source) and the delivered-image router
@@ -230,7 +236,26 @@ def _relocate_between(
         if _same_bytes(current, dest):
             os.remove(current)
             return dest
-        return current  # genuine conflict -- leave both copies alone
+        if not resolve_conflicts:
+            # RAW MASTERS never auto-resolve: a capture is irreplaceable and
+            # two different raws under one label is a real problem for a human
+            # (see test_approval_preserves_conflicting_raws_for_manual_resolution).
+            return current
+        # Two DIFFERENT renders under one label -- a reject/reprocess/reject
+        # cycle. Leaving both live meant the canonical path kept the older
+        # render while the one actually judged stayed behind in output/, so
+        # "move it to rejected" silently did nothing (LR18_31, 2026-09-01).
+        # Newest wins the canonical path; the superseded render is archived,
+        # never deleted, in a folder the delivery walkers skip.
+        archive = os.path.join(dest_dir, SUPERSEDED_DIRNAME)
+        os.makedirs(archive, exist_ok=True)
+        newer, older = (current, dest) if os.path.getmtime(current) > os.path.getmtime(dest) else (dest, current)
+        stamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(os.path.getmtime(older)))
+        stem, extension = os.path.splitext(os.path.basename(older))
+        shutil.move(older, os.path.join(archive, f"{stem}__{stamp}{extension}"))
+        if newer != dest:
+            shutil.move(newer, dest)
+        return dest
     shutil.move(current, dest)
     return dest
 
@@ -387,13 +412,16 @@ def _relocate_finished_output(label: str, verdict: str) -> str | None:
                 current,
                 target_root=REJECTED_DIR,
                 managed_roots=(OUTPUT_DIR, REJECTED_DIR),
+                resolve_conflicts=True,
             )
             if target:
                 moved.append(target)
         return moved[-1] if moved else None
     target_root = REJECTED_DIR if verdict == REJECTED else OUTPUT_DIR
     primary = max(found, key=os.path.getmtime)
-    moved = _relocate_between(primary, target_root=target_root, managed_roots=(OUTPUT_DIR, REJECTED_DIR))
+    moved = _relocate_between(primary, target_root=target_root,
+                              managed_roots=(OUTPUT_DIR, REJECTED_DIR),
+                              resolve_conflicts=True)
     resolved_moved = os.path.normcase(os.path.abspath(moved)) if moved else None
     for stale in found:
         if os.path.normcase(os.path.abspath(stale)) in {os.path.normcase(os.path.abspath(primary)), resolved_moved}:
@@ -406,9 +434,20 @@ def _relocate_finished_output(label: str, verdict: str) -> str | None:
                 os.remove(stale)
             except OSError:
                 pass
-        # else: genuinely different content under the same label -- leave it;
-        # check_capture_rejected_dedup-style scrutiny should catch this, not
-        # a silent delete here.
+            continue
+        # A DIFFERENT delivery under the same label, on the wrong side -- e.g.
+        # LR18_10 approved, its current render in output/, an older render
+        # from a previous rejection still sitting in rejected/. The verdict
+        # applies to the label, so only the authoritative render stays live.
+        # Archive rather than delete: nothing generated is ever destroyed.
+        try:
+            archive = os.path.join(os.path.dirname(stale), SUPERSEDED_DIRNAME)
+            os.makedirs(archive, exist_ok=True)
+            timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime(os.path.getmtime(stale)))
+            stem, extension = os.path.splitext(os.path.basename(stale))
+            shutil.move(stale, os.path.join(archive, f"{stem}__{timestamp}{extension}"))
+        except OSError:
+            pass
     return moved
 
 
@@ -647,7 +686,7 @@ def collect_items(category: str | None = None) -> list:
 
     # Published output — the passes.
     for root, _dirs, files in os.walk(OUTPUT_DIR):
-        if "_edit_reports" in root:
+        if "_edit_reports" in root or SUPERSEDED_DIRNAME in root:
             continue
         for fname in files:
             if not fname.lower().endswith(".jpg"):
@@ -669,8 +708,10 @@ def collect_items(category: str | None = None) -> list:
     # revisit a call), so they must appear here exactly like a fresh pass.
     if os.path.isdir(REJECTED_DIR):
         for root, _dirs, files in os.walk(REJECTED_DIR):
+            if SUPERSEDED_DIRNAME in root:
+                continue
             for fname in files:
-                if not fname.lower().endswith(".jpg"):
+                if fname.startswith(".") or not fname.lower().endswith(".jpg"):
                     continue
                 label = _label_from_path(fname)
                 if label in items:
@@ -691,7 +732,7 @@ def collect_items(category: str | None = None) -> list:
     if os.path.isdir(NEEDS_REVIEW):
         for root, _dirs, files in os.walk(NEEDS_REVIEW):
             for fname in files:
-                if not fname.lower().endswith(".jpg"):
+                if fname.startswith(".") or not fname.lower().endswith(".jpg"):
                     continue
                 label = _label_from_path(fname)
                 if label in items:
@@ -711,9 +752,23 @@ def collect_items(category: str | None = None) -> list:
         # The API strips it before the browser sees any filesystem path.
         item["_edited_path"] = item.get("edited")
         saved = state.get(label) or {}
-        item["verdict"] = saved.get("verdict", PENDING)
-        item["reason"] = saved.get("reason")
-        item["reviewed_at"] = saved.get("reviewed_at")
+        # A verdict applies to the image that was reviewed, not to the label
+        # forever. Reprocessing an item produces a NEW delivered file, and it
+        # must come back to the queue for a fresh decision -- otherwise a
+        # rejected item can never be fixed: its new render silently inherits
+        # "rejected" and never reappears (2026-09-01, LR18_10 and LR18_20
+        # reprocessed at 16:24 still carrying a 16:13 rejection).
+        reviewed_at = saved.get("reviewed_at")
+        stale = False
+        if reviewed_at:
+            try:
+                stale = os.path.getmtime(item["_edited_path"]) > float(reviewed_at) + 1
+            except (OSError, TypeError, ValueError, KeyError):
+                stale = False
+        item["verdict"] = PENDING if stale else saved.get("verdict", PENDING)
+        item["reason"] = None if stale else saved.get("reason")
+        item["reviewed_at"] = None if stale else reviewed_at
+        item["reprocessed_since_review"] = stale
         out.append(item)
     return out
 

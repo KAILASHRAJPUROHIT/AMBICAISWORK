@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$root = "C:\Users\kaila\Desktop\JewelleryCatalogTool"
+$root = "C:\AradhanaSystems\projects\catalogue-capture\main"
 $destDir = Join-Path $root "models\sam2"
 $destFile = Join-Path $destDir "sam2.1_hiera_large.pt"
 

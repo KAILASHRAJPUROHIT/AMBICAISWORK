@@ -34,20 +34,18 @@ def test_all_current_categories_are_processable():
     assert len(scm.NEEDS_SETUP) == 0
 
 
-def test_bali_keeps_gender_neutral_semantics():
-    """Real data: BALI merges ladies+gents varieties under one category,
-    while today's assets are split ladies_bali/mens_bali. Silently
-    defaulting to one of them would put real gents items on a ladies
-    background — must stay unmapped instead."""
-    assert scm.processing_key("bali_18") == "bali"
-    assert scm.processing_key("bali_22") == "bali"
+def test_bali_keeps_explicit_calibrated_semantics():
+    """Bali keys are separately calibrated; neither may silently fall back
+    to a gender-specific legacy alias."""
+    assert scm.processing_key("bali_18") == "bali_18"
+    assert scm.processing_key("bali_22") == "bali_22"
 
 
-def test_chain_keeps_gender_neutral_semantics_and_legacy_18_works():
-    """Real data: CHAIN is not split by gender, while today's assets are
-    (ladies_chains/gents_chains) — same reasoning as Bali."""
+def test_chain_keeps_explicit_calibrated_semantics_and_legacy_18_works():
+    """CHAIN 22 has an explicit unisex calibration. Historical CHAIN 18
+    retains its generic compatibility key."""
     assert scm.processing_key("chain_18") == "chain"
-    assert scm.processing_key("chain_22") == "chain"
+    assert scm.processing_key("chain_22") == "chain_22"
 
 
 def test_ready_categories_resolve_to_a_non_generic_profile_and_model_zone():
