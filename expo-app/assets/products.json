@@ -1,0 +1,4595 @@
+[
+  {
+    "id": "123",
+    "label": "123",
+    "category": "gentsrings",
+    "categoryName": "Gents Rings",
+    "karat": null,
+    "weight": null,
+    "imageKey": "123",
+    "image": "assets/products/123.jpg"
+  },
+  {
+    "id": "BG22_1",
+    "label": "BG22_1",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 21.99,
+    "imageKey": "BG221",
+    "image": "assets/products/BG22_1.jpg"
+  },
+  {
+    "id": "BG22_10",
+    "label": "BG22_10",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 34.26,
+    "imageKey": "BG2210",
+    "image": "assets/products/BG22_10.jpg"
+  },
+  {
+    "id": "BG22_11",
+    "label": "BG22_11",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 16,
+    "imageKey": "BG2211",
+    "image": "assets/products/BG22_11.jpg"
+  },
+  {
+    "id": "BG22_12",
+    "label": "BG22_12",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 26.17,
+    "imageKey": "BG2212",
+    "image": "assets/products/BG22_12.jpg"
+  },
+  {
+    "id": "BG22_18",
+    "label": "BG22_18",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 16.34,
+    "imageKey": "BG2218",
+    "image": "assets/products/BG22_18.jpg"
+  },
+  {
+    "id": "BG22_26",
+    "label": "BG22_26",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 31.42,
+    "imageKey": "BG2226",
+    "image": "assets/products/BG22_26.jpg"
+  },
+  {
+    "id": "BG22_27",
+    "label": "BG22_27",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 29.54,
+    "imageKey": "BG2227",
+    "image": "assets/products/BG22_27.jpg"
+  },
+  {
+    "id": "BG22_28",
+    "label": "BG22_28",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 31.33,
+    "imageKey": "BG2228",
+    "image": "assets/products/BG22_28.jpg"
+  },
+  {
+    "id": "BG22_3",
+    "label": "BG22_3",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 12.87,
+    "imageKey": "BG223",
+    "image": "assets/products/BG22_3.jpg"
+  },
+  {
+    "id": "BG22_31",
+    "label": "BG22_31",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 34.58,
+    "imageKey": "BG2231",
+    "image": "assets/products/BG22_31.jpg"
+  },
+  {
+    "id": "BG22_32",
+    "label": "BG22_32",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 25.17,
+    "imageKey": "BG2232",
+    "image": "assets/products/BG22_32.jpg"
+  },
+  {
+    "id": "BG22_38",
+    "label": "BG22_38",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 20.51,
+    "imageKey": "BG2238",
+    "image": "assets/products/BG22_38.jpg"
+  },
+  {
+    "id": "BG22_39",
+    "label": "BG22_39",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 18.44,
+    "imageKey": "BG2239",
+    "image": "assets/products/BG22_39.jpg"
+  },
+  {
+    "id": "BG22_41",
+    "label": "BG22_41",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 26.12,
+    "imageKey": "BG2241",
+    "image": "assets/products/BG22_41.jpg"
+  },
+  {
+    "id": "BG22_42",
+    "label": "BG22_42",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 22.52,
+    "imageKey": "BG2242",
+    "image": "assets/products/BG22_42.jpg"
+  },
+  {
+    "id": "BG22_43",
+    "label": "BG22_43",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 35.78,
+    "imageKey": "BG2243",
+    "image": "assets/products/BG22_43.jpg"
+  },
+  {
+    "id": "BG22_44",
+    "label": "BG22_44",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 35.55,
+    "imageKey": "BG2244",
+    "image": "assets/products/BG22_44.jpg"
+  },
+  {
+    "id": "BG22_45",
+    "label": "BG22_45",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 39.77,
+    "imageKey": "BG2245",
+    "image": "assets/products/BG22_45.jpg"
+  },
+  {
+    "id": "BG22_47",
+    "label": "BG22_47",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 20.36,
+    "imageKey": "BG2247",
+    "image": "assets/products/BG22_47.jpg"
+  },
+  {
+    "id": "BG22_49",
+    "label": "BG22_49",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 40.45,
+    "imageKey": "BG2249",
+    "image": "assets/products/BG22_49.jpg"
+  },
+  {
+    "id": "BG22_51",
+    "label": "BG22_51",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 37.47,
+    "imageKey": "BG2251",
+    "image": "assets/products/BG22_51.jpg"
+  },
+  {
+    "id": "BG22_52",
+    "label": "BG22_52",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 26.55,
+    "imageKey": "BG2252",
+    "image": "assets/products/BG22_52.jpg"
+  },
+  {
+    "id": "BG22_53",
+    "label": "BG22_53",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 18.41,
+    "imageKey": "BG2253",
+    "image": "assets/products/BG22_53.jpg"
+  },
+  {
+    "id": "BG22_54",
+    "label": "BG22_54",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 23.89,
+    "imageKey": "BG2254",
+    "image": "assets/products/BG22_54.jpg"
+  },
+  {
+    "id": "BG22_55",
+    "label": "BG22_55",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 35.8,
+    "imageKey": "BG2255",
+    "image": "assets/products/BG22_55.jpg"
+  },
+  {
+    "id": "BG22_57",
+    "label": "BG22_57",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 41.99,
+    "imageKey": "BG2257",
+    "image": "assets/products/BG22_57.jpg"
+  },
+  {
+    "id": "BG22_58",
+    "label": "BG22_58",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 19.97,
+    "imageKey": "BG2258",
+    "image": "assets/products/BG22_58.jpg"
+  },
+  {
+    "id": "BG22_60",
+    "label": "BG22_60",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 20.15,
+    "imageKey": "BG2260",
+    "image": "assets/products/BG22_60.jpg"
+  },
+  {
+    "id": "BG22_63",
+    "label": "BG22_63",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 17.17,
+    "imageKey": "BG2263",
+    "image": "assets/products/BG22_63.jpg"
+  },
+  {
+    "id": "BG22_66",
+    "label": "BG22_66",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 24.09,
+    "imageKey": "BG2266",
+    "image": "assets/products/BG22_66.jpg"
+  },
+  {
+    "id": "BG22_67",
+    "label": "BG22_67",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 20.46,
+    "imageKey": "BG2267",
+    "image": "assets/products/BG22_67.jpg"
+  },
+  {
+    "id": "BG22_68",
+    "label": "BG22_68",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 40.09,
+    "imageKey": "BG2268",
+    "image": "assets/products/BG22_68.jpg"
+  },
+  {
+    "id": "BG22_69",
+    "label": "BG22_69",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 24.31,
+    "imageKey": "BG2269",
+    "image": "assets/products/BG22_69.jpg"
+  },
+  {
+    "id": "BG22_70",
+    "label": "BG22_70",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 34.09,
+    "imageKey": "BG2270",
+    "image": "assets/products/BG22_70.jpg"
+  },
+  {
+    "id": "BG22_73",
+    "label": "BG22_73",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 19.45,
+    "imageKey": "BG2273",
+    "image": "assets/products/BG22_73.jpg"
+  },
+  {
+    "id": "BG22_77",
+    "label": "BG22_77",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 24.96,
+    "imageKey": "BG2277",
+    "image": "assets/products/BG22_77.jpg"
+  },
+  {
+    "id": "BG22_78",
+    "label": "BG22_78",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 12.11,
+    "imageKey": "BG2278",
+    "image": "assets/products/BG22_78.jpg"
+  },
+  {
+    "id": "BG22_79",
+    "label": "BG22_79",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 22.21,
+    "imageKey": "BG2279",
+    "image": "assets/products/BG22_79.jpg"
+  },
+  {
+    "id": "BG22_8",
+    "label": "BG22_8",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 18.2,
+    "imageKey": "BG228",
+    "image": "assets/products/BG22_8.jpg"
+  },
+  {
+    "id": "BG22_81",
+    "label": "BG22_81",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 52.83,
+    "imageKey": "BG2281",
+    "image": "assets/products/BG22_81.jpg"
+  },
+  {
+    "id": "BG22_82",
+    "label": "BG22_82",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 10.78,
+    "imageKey": "BG2282",
+    "image": "assets/products/BG22_82.jpg"
+  },
+  {
+    "id": "BG22_83",
+    "label": "BG22_83",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 29.21,
+    "imageKey": "BG2283",
+    "image": "assets/products/BG22_83.jpg"
+  },
+  {
+    "id": "BG22_84",
+    "label": "BG22_84",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 23.61,
+    "imageKey": "BG2284",
+    "image": "assets/products/BG22_84.jpg"
+  },
+  {
+    "id": "BG22_85",
+    "label": "BG22_85",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 24.02,
+    "imageKey": "BG2285",
+    "image": "assets/products/BG22_85.jpg"
+  },
+  {
+    "id": "BG22_87",
+    "label": "BG22_87",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 20.33,
+    "imageKey": "BG2287",
+    "image": "assets/products/BG22_87.jpg"
+  },
+  {
+    "id": "BG22_88",
+    "label": "BG22_88",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 35.94,
+    "imageKey": "BG2288",
+    "image": "assets/products/BG22_88.jpg"
+  },
+  {
+    "id": "BG22_89",
+    "label": "BG22_89",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 34.66,
+    "imageKey": "BG2289",
+    "image": "assets/products/BG22_89.jpg"
+  },
+  {
+    "id": "BG22_9",
+    "label": "BG22_9",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 34.86,
+    "imageKey": "BG229",
+    "image": "assets/products/BG22_9.jpg"
+  },
+  {
+    "id": "BG22_90",
+    "label": "BG22_90",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 17.67,
+    "imageKey": "BG2290",
+    "image": "assets/products/BG22_90.jpg"
+  },
+  {
+    "id": "BG22_92",
+    "label": "BG22_92",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 29.14,
+    "imageKey": "BG2292",
+    "image": "assets/products/BG22_92.jpg"
+  },
+  {
+    "id": "BG22_93",
+    "label": "BG22_93",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 38.79,
+    "imageKey": "BG2293",
+    "image": "assets/products/BG22_93.jpg"
+  },
+  {
+    "id": "BG22_94",
+    "label": "BG22_94",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 24.48,
+    "imageKey": "BG2294",
+    "image": "assets/products/BG22_94.jpg"
+  },
+  {
+    "id": "BL18_10",
+    "label": "BL18_10",
+    "category": "bali22",
+    "categoryName": "Balis",
+    "karat": 22,
+    "weight": 2.22,
+    "imageKey": "BL1810",
+    "image": "assets/products/BL18_10.jpg"
+  },
+  {
+    "id": "BL18_16",
+    "label": "BL18_16",
+    "category": "bali22",
+    "categoryName": "Balis",
+    "karat": 22,
+    "weight": 2,
+    "imageKey": "BL1816",
+    "image": "assets/products/BL18_16.jpg"
+  },
+  {
+    "id": "BL18_2",
+    "label": "BL18_2",
+    "category": "bali22",
+    "categoryName": "Balis",
+    "karat": 22,
+    "weight": 3.05,
+    "imageKey": "BL182",
+    "image": "assets/products/BL18_2.jpg"
+  },
+  {
+    "id": "BL18_45",
+    "label": "BL18_45",
+    "category": "bali22",
+    "categoryName": "Balis",
+    "karat": 22,
+    "weight": 1.16,
+    "imageKey": "BL1845",
+    "image": "assets/products/BL18_45.jpg"
+  },
+  {
+    "id": "ER22_1",
+    "label": "ER22_1",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 8.38,
+    "imageKey": "ER221",
+    "image": "assets/products/ER22_1.jpg"
+  },
+  {
+    "id": "ER22_10",
+    "label": "ER22_10",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6.36,
+    "imageKey": "ER2210",
+    "image": "assets/products/ER22_10.jpg"
+  },
+  {
+    "id": "ER22_105",
+    "label": "ER22_105",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 9.87,
+    "imageKey": "ER22105",
+    "image": "assets/products/ER22_105.jpg"
+  },
+  {
+    "id": "ER22_107",
+    "label": "ER22_107",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 7.27,
+    "imageKey": "ER22107",
+    "image": "assets/products/ER22_107.jpg"
+  },
+  {
+    "id": "ER22_108",
+    "label": "ER22_108",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 12.21,
+    "imageKey": "ER22108",
+    "image": "assets/products/ER22_108.jpg"
+  },
+  {
+    "id": "ER22_109",
+    "label": "ER22_109",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 5.36,
+    "imageKey": "ER22109",
+    "image": "assets/products/ER22_109.jpg"
+  },
+  {
+    "id": "ER22_11",
+    "label": "ER22_11",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 5.39,
+    "imageKey": "ER2211",
+    "image": "assets/products/ER22_11.jpg"
+  },
+  {
+    "id": "ER22_12",
+    "label": "ER22_12",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6.28,
+    "imageKey": "ER2212",
+    "image": "assets/products/ER22_12.jpg"
+  },
+  {
+    "id": "ER22_13",
+    "label": "ER22_13",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 2.78,
+    "imageKey": "ER2213",
+    "image": "assets/products/ER22_13.jpg"
+  },
+  {
+    "id": "ER22_15",
+    "label": "ER22_15",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 9.28,
+    "imageKey": "ER2215",
+    "image": "assets/products/ER22_15.jpg"
+  },
+  {
+    "id": "ER22_16",
+    "label": "ER22_16",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 8.16,
+    "imageKey": "ER2216",
+    "image": "assets/products/ER22_16.jpg"
+  },
+  {
+    "id": "ER22_19",
+    "label": "ER22_19",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 11.84,
+    "imageKey": "ER2219",
+    "image": "assets/products/ER22_19.jpg"
+  },
+  {
+    "id": "ER22_2",
+    "label": "ER22_2",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 4.28,
+    "imageKey": "ER222",
+    "image": "assets/products/ER22_2.jpg"
+  },
+  {
+    "id": "ER22_20",
+    "label": "ER22_20",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 9.13,
+    "imageKey": "ER2220",
+    "image": "assets/products/ER22_20.jpg"
+  },
+  {
+    "id": "ER22_21",
+    "label": "ER22_21",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 7.12,
+    "imageKey": "ER2221",
+    "image": "assets/products/ER22_21.jpg"
+  },
+  {
+    "id": "ER22_22",
+    "label": "ER22_22",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 5.33,
+    "imageKey": "ER2222",
+    "image": "assets/products/ER22_22.jpg"
+  },
+  {
+    "id": "ER22_24",
+    "label": "ER22_24",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 10.77,
+    "imageKey": "ER2224",
+    "image": "assets/products/ER22_24.jpg"
+  },
+  {
+    "id": "ER22_25",
+    "label": "ER22_25",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 7.9,
+    "imageKey": "ER2225",
+    "image": "assets/products/ER22_25.jpg"
+  },
+  {
+    "id": "ER22_26",
+    "label": "ER22_26",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 11.6,
+    "imageKey": "ER2226",
+    "image": "assets/products/ER22_26.jpg"
+  },
+  {
+    "id": "ER22_3",
+    "label": "ER22_3",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 8.02,
+    "imageKey": "ER223",
+    "image": "assets/products/ER22_3.jpg"
+  },
+  {
+    "id": "ER22_30",
+    "label": "ER22_30",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 3.29,
+    "imageKey": "ER2230",
+    "image": "assets/products/ER22_30.jpg"
+  },
+  {
+    "id": "ER22_31",
+    "label": "ER22_31",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 5.03,
+    "imageKey": "ER2231",
+    "image": "assets/products/ER22_31.jpg"
+  },
+  {
+    "id": "ER22_32",
+    "label": "ER22_32",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 4.75,
+    "imageKey": "ER2232",
+    "image": "assets/products/ER22_32.jpg"
+  },
+  {
+    "id": "ER22_34",
+    "label": "ER22_34",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 8.41,
+    "imageKey": "ER2234",
+    "image": "assets/products/ER22_34.jpg"
+  },
+  {
+    "id": "ER22_35",
+    "label": "ER22_35",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6.21,
+    "imageKey": "ER2235",
+    "image": "assets/products/ER22_35.jpg"
+  },
+  {
+    "id": "ER22_39",
+    "label": "ER22_39",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6.29,
+    "imageKey": "ER2239",
+    "image": "assets/products/ER22_39.jpg"
+  },
+  {
+    "id": "ER22_4",
+    "label": "ER22_4",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 4.02,
+    "imageKey": "ER224",
+    "image": "assets/products/ER22_4.jpg"
+  },
+  {
+    "id": "ER22_42",
+    "label": "ER22_42",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 14.78,
+    "imageKey": "ER2242",
+    "image": "assets/products/ER22_42.jpg"
+  },
+  {
+    "id": "ER22_43",
+    "label": "ER22_43",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6.53,
+    "imageKey": "ER2243",
+    "image": "assets/products/ER22_43.jpg"
+  },
+  {
+    "id": "ER22_45",
+    "label": "ER22_45",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 4.56,
+    "imageKey": "ER2245",
+    "image": "assets/products/ER22_45.jpg"
+  },
+  {
+    "id": "ER22_46",
+    "label": "ER22_46",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6.1,
+    "imageKey": "ER2246",
+    "image": "assets/products/ER22_46.jpg"
+  },
+  {
+    "id": "ER22_47",
+    "label": "ER22_47",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 7.04,
+    "imageKey": "ER2247",
+    "image": "assets/products/ER22_47.jpg"
+  },
+  {
+    "id": "ER22_48",
+    "label": "ER22_48",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 4.78,
+    "imageKey": "ER2248",
+    "image": "assets/products/ER22_48.jpg"
+  },
+  {
+    "id": "ER22_49",
+    "label": "ER22_49",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 5.29,
+    "imageKey": "ER2249",
+    "image": "assets/products/ER22_49.jpg"
+  },
+  {
+    "id": "ER22_52",
+    "label": "ER22_52",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 4.69,
+    "imageKey": "ER2252",
+    "image": "assets/products/ER22_52.jpg"
+  },
+  {
+    "id": "ER22_53",
+    "label": "ER22_53",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6.79,
+    "imageKey": "ER2253",
+    "image": "assets/products/ER22_53.jpg"
+  },
+  {
+    "id": "ER22_55",
+    "label": "ER22_55",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 7.54,
+    "imageKey": "ER2255",
+    "image": "assets/products/ER22_55.jpg"
+  },
+  {
+    "id": "ER22_56",
+    "label": "ER22_56",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 8.1,
+    "imageKey": "ER2256",
+    "image": "assets/products/ER22_56.jpg"
+  },
+  {
+    "id": "ER22_57",
+    "label": "ER22_57",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 3.84,
+    "imageKey": "ER2257",
+    "image": "assets/products/ER22_57.jpg"
+  },
+  {
+    "id": "ER22_58",
+    "label": "ER22_58",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 8.52,
+    "imageKey": "ER2258",
+    "image": "assets/products/ER22_58.jpg"
+  },
+  {
+    "id": "ER22_59",
+    "label": "ER22_59",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 8.27,
+    "imageKey": "ER2259",
+    "image": "assets/products/ER22_59.jpg"
+  },
+  {
+    "id": "ER22_61",
+    "label": "ER22_61",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 5.71,
+    "imageKey": "ER2261",
+    "image": "assets/products/ER22_61.jpg"
+  },
+  {
+    "id": "ER22_65",
+    "label": "ER22_65",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 7.24,
+    "imageKey": "ER2265",
+    "image": "assets/products/ER22_65.jpg"
+  },
+  {
+    "id": "ER22_66",
+    "label": "ER22_66",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6.91,
+    "imageKey": "ER2266",
+    "image": "assets/products/ER22_66.jpg"
+  },
+  {
+    "id": "ER22_7",
+    "label": "ER22_7",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6,
+    "imageKey": "ER227",
+    "image": "assets/products/ER22_7.jpg"
+  },
+  {
+    "id": "ER22_71",
+    "label": "ER22_71",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 4.86,
+    "imageKey": "ER2271",
+    "image": "assets/products/ER22_71.jpg"
+  },
+  {
+    "id": "ER22_72",
+    "label": "ER22_72",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 8.72,
+    "imageKey": "ER2272",
+    "image": "assets/products/ER22_72.jpg"
+  },
+  {
+    "id": "ER22_73",
+    "label": "ER22_73",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 4.54,
+    "imageKey": "ER2273",
+    "image": "assets/products/ER22_73.jpg"
+  },
+  {
+    "id": "ER22_74",
+    "label": "ER22_74",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "ER2274",
+    "image": "assets/products/ER22_74.jpg"
+  },
+  {
+    "id": "ER22_75",
+    "label": "ER22_75",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6.98,
+    "imageKey": "ER2275",
+    "image": "assets/products/ER22_75.jpg"
+  },
+  {
+    "id": "ER22_8",
+    "label": "ER22_8",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6.74,
+    "imageKey": "ER228",
+    "image": "assets/products/ER22_8.jpg"
+  },
+  {
+    "id": "ER22_81",
+    "label": "ER22_81",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 5.22,
+    "imageKey": "ER2281",
+    "image": "assets/products/ER22_81.jpg"
+  },
+  {
+    "id": "ER22_83",
+    "label": "ER22_83",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 3.96,
+    "imageKey": "ER2283",
+    "image": "assets/products/ER22_83.jpg"
+  },
+  {
+    "id": "ER22_85",
+    "label": "ER22_85",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 6.77,
+    "imageKey": "ER2285",
+    "image": "assets/products/ER22_85.jpg"
+  },
+  {
+    "id": "ER22_86",
+    "label": "ER22_86",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 4.78,
+    "imageKey": "ER2286",
+    "image": "assets/products/ER22_86.jpg"
+  },
+  {
+    "id": "ER22_88",
+    "label": "ER22_88",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 14.77,
+    "imageKey": "ER2288",
+    "image": "assets/products/ER22_88.jpg"
+  },
+  {
+    "id": "ER22_91",
+    "label": "ER22_91",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 12.69,
+    "imageKey": "ER2291",
+    "image": "assets/products/ER22_91.jpg"
+  },
+  {
+    "id": "ER22_92",
+    "label": "ER22_92",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 14.45,
+    "imageKey": "ER2292",
+    "image": "assets/products/ER22_92.jpg"
+  },
+  {
+    "id": "ER22_93",
+    "label": "ER22_93",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 7.73,
+    "imageKey": "ER2293",
+    "image": "assets/products/ER22_93.jpg"
+  },
+  {
+    "id": "ER22_97",
+    "label": "ER22_97",
+    "category": "earring22",
+    "categoryName": "Earrings",
+    "karat": 22,
+    "weight": 2.94,
+    "imageKey": "ER2297",
+    "image": "assets/products/ER22_97.jpg"
+  },
+  {
+    "id": "GR22_1",
+    "label": "GR22_1",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.47,
+    "imageKey": "GR221",
+    "image": "assets/products/GR22_1.jpg"
+  },
+  {
+    "id": "GR22_100",
+    "label": "GR22_100",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 1.37,
+    "imageKey": "GR22100",
+    "image": "assets/products/GR22_100.jpg"
+  },
+  {
+    "id": "GR22_103",
+    "label": "GR22_103",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.16,
+    "imageKey": "GR22103",
+    "image": "assets/products/GR22_103.jpg"
+  },
+  {
+    "id": "GR22_104",
+    "label": "GR22_104",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.98,
+    "imageKey": "GR22104",
+    "image": "assets/products/GR22_104.jpg"
+  },
+  {
+    "id": "GR22_107",
+    "label": "GR22_107",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.05,
+    "imageKey": "GR22107",
+    "image": "assets/products/GR22_107.jpg"
+  },
+  {
+    "id": "GR22_107_2",
+    "label": "GR22_107_2",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "GR221072",
+    "image": "assets/products/GR22_107_2.jpg"
+  },
+  {
+    "id": "GR22_108",
+    "label": "GR22_108",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.32,
+    "imageKey": "GR22108",
+    "image": "assets/products/GR22_108.jpg"
+  },
+  {
+    "id": "GR22_116",
+    "label": "GR22_116",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.75,
+    "imageKey": "GR22116",
+    "image": "assets/products/GR22_116.jpg"
+  },
+  {
+    "id": "GR22_117",
+    "label": "GR22_117",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.14,
+    "imageKey": "GR22117",
+    "image": "assets/products/GR22_117.jpg"
+  },
+  {
+    "id": "GR22_119",
+    "label": "GR22_119",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.74,
+    "imageKey": "GR22119",
+    "image": "assets/products/GR22_119.jpg"
+  },
+  {
+    "id": "GR22_12",
+    "label": "GR22_12",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.95,
+    "imageKey": "GR2212",
+    "image": "assets/products/GR22_12.jpg"
+  },
+  {
+    "id": "GR22_120",
+    "label": "GR22_120",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.33,
+    "imageKey": "GR22120",
+    "image": "assets/products/GR22_120.jpg"
+  },
+  {
+    "id": "GR22_122",
+    "label": "GR22_122",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.35,
+    "imageKey": "GR22122",
+    "image": "assets/products/GR22_122.jpg"
+  },
+  {
+    "id": "GR22_125",
+    "label": "GR22_125",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.35,
+    "imageKey": "GR22125",
+    "image": "assets/products/GR22_125.jpg"
+  },
+  {
+    "id": "GR22_130",
+    "label": "GR22_130",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.25,
+    "imageKey": "GR22130",
+    "image": "assets/products/GR22_130.jpg"
+  },
+  {
+    "id": "GR22_131",
+    "label": "GR22_131",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.04,
+    "imageKey": "GR22131",
+    "image": "assets/products/GR22_131.jpg"
+  },
+  {
+    "id": "GR22_132",
+    "label": "GR22_132",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.79,
+    "imageKey": "GR22132",
+    "image": "assets/products/GR22_132.jpg"
+  },
+  {
+    "id": "GR22_133",
+    "label": "GR22_133",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.46,
+    "imageKey": "GR22133",
+    "image": "assets/products/GR22_133.jpg"
+  },
+  {
+    "id": "GR22_134",
+    "label": "GR22_134",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.69,
+    "imageKey": "GR22134",
+    "image": "assets/products/GR22_134.jpg"
+  },
+  {
+    "id": "GR22_135",
+    "label": "GR22_135",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "GR22135",
+    "image": "assets/products/GR22_135.jpg"
+  },
+  {
+    "id": "GR22_14",
+    "label": "GR22_14",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 8.02,
+    "imageKey": "GR2214",
+    "image": "assets/products/GR22_14.jpg"
+  },
+  {
+    "id": "GR22_144",
+    "label": "GR22_144",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.36,
+    "imageKey": "GR22144",
+    "image": "assets/products/GR22_144.jpg"
+  },
+  {
+    "id": "GR22_145",
+    "label": "GR22_145",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.02,
+    "imageKey": "GR22145",
+    "image": "assets/products/GR22_145.jpg"
+  },
+  {
+    "id": "GR22_146",
+    "label": "GR22_146",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 1.94,
+    "imageKey": "GR22146",
+    "image": "assets/products/GR22_146.jpg"
+  },
+  {
+    "id": "GR22_147",
+    "label": "GR22_147",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.93,
+    "imageKey": "GR22147",
+    "image": "assets/products/GR22_147.jpg"
+  },
+  {
+    "id": "GR22_148",
+    "label": "GR22_148",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.61,
+    "imageKey": "GR22148",
+    "image": "assets/products/GR22_148.jpg"
+  },
+  {
+    "id": "GR22_149",
+    "label": "GR22_149",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.21,
+    "imageKey": "GR22149",
+    "image": "assets/products/GR22_149.jpg"
+  },
+  {
+    "id": "GR22_152",
+    "label": "GR22_152",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.59,
+    "imageKey": "GR22152",
+    "image": "assets/products/GR22_152.jpg"
+  },
+  {
+    "id": "GR22_154",
+    "label": "GR22_154",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 7.41,
+    "imageKey": "GR22154",
+    "image": "assets/products/GR22_154.jpg"
+  },
+  {
+    "id": "GR22_156",
+    "label": "GR22_156",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.74,
+    "imageKey": "GR22156",
+    "image": "assets/products/GR22_156.jpg"
+  },
+  {
+    "id": "GR22_158",
+    "label": "GR22_158",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.58,
+    "imageKey": "GR22158",
+    "image": "assets/products/GR22_158.jpg"
+  },
+  {
+    "id": "GR22_159",
+    "label": "GR22_159",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.28,
+    "imageKey": "GR22159",
+    "image": "assets/products/GR22_159.jpg"
+  },
+  {
+    "id": "GR22_16",
+    "label": "GR22_16",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.7,
+    "imageKey": "GR2216",
+    "image": "assets/products/GR22_16.jpg"
+  },
+  {
+    "id": "GR22_160",
+    "label": "GR22_160",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4,
+    "imageKey": "GR22160",
+    "image": "assets/products/GR22_160.jpg"
+  },
+  {
+    "id": "GR22_161",
+    "label": "GR22_161",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.86,
+    "imageKey": "GR22161",
+    "image": "assets/products/GR22_161.jpg"
+  },
+  {
+    "id": "GR22_162",
+    "label": "GR22_162",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.03,
+    "imageKey": "GR22162",
+    "image": "assets/products/GR22_162.jpg"
+  },
+  {
+    "id": "GR22_164",
+    "label": "GR22_164",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.89,
+    "imageKey": "GR22164",
+    "image": "assets/products/GR22_164.jpg"
+  },
+  {
+    "id": "GR22_166",
+    "label": "GR22_166",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 1.75,
+    "imageKey": "GR22166",
+    "image": "assets/products/GR22_166.jpg"
+  },
+  {
+    "id": "GR22_167",
+    "label": "GR22_167",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.56,
+    "imageKey": "GR22167",
+    "image": "assets/products/GR22_167.jpg"
+  },
+  {
+    "id": "GR22_168",
+    "label": "GR22_168",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.54,
+    "imageKey": "GR22168",
+    "image": "assets/products/GR22_168.jpg"
+  },
+  {
+    "id": "GR22_171",
+    "label": "GR22_171",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.44,
+    "imageKey": "GR22171",
+    "image": "assets/products/GR22_171.jpg"
+  },
+  {
+    "id": "GR22_174",
+    "label": "GR22_174",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 1.96,
+    "imageKey": "GR22174",
+    "image": "assets/products/GR22_174.jpg"
+  },
+  {
+    "id": "GR22_177",
+    "label": "GR22_177",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.05,
+    "imageKey": "GR22177",
+    "image": "assets/products/GR22_177.jpg"
+  },
+  {
+    "id": "GR22_18",
+    "label": "GR22_18",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 6.5,
+    "imageKey": "GR2218",
+    "image": "assets/products/GR22_18.jpg"
+  },
+  {
+    "id": "GR22_180",
+    "label": "GR22_180",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.02,
+    "imageKey": "GR22180",
+    "image": "assets/products/GR22_180.jpg"
+  },
+  {
+    "id": "GR22_181",
+    "label": "GR22_181",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2,
+    "imageKey": "GR22181",
+    "image": "assets/products/GR22_181.jpg"
+  },
+  {
+    "id": "GR22_187",
+    "label": "GR22_187",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.97,
+    "imageKey": "GR22187",
+    "image": "assets/products/GR22_187.jpg"
+  },
+  {
+    "id": "GR22_188_stitched",
+    "label": "GR22_188_stitched",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "GR22188stitched",
+    "image": "assets/products/GR22_188_stitched.jpg"
+  },
+  {
+    "id": "GR22_189",
+    "label": "GR22_189",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 1.9,
+    "imageKey": "GR22189",
+    "image": "assets/products/GR22_189.jpg"
+  },
+  {
+    "id": "GR22_192",
+    "label": "GR22_192",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 1.65,
+    "imageKey": "GR22192",
+    "image": "assets/products/GR22_192.jpg"
+  },
+  {
+    "id": "GR22_196",
+    "label": "GR22_196",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 1.76,
+    "imageKey": "GR22196",
+    "image": "assets/products/GR22_196.jpg"
+  },
+  {
+    "id": "GR22_202",
+    "label": "GR22_202",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.49,
+    "imageKey": "GR22202",
+    "image": "assets/products/GR22_202.jpg"
+  },
+  {
+    "id": "GR22_205",
+    "label": "GR22_205",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.05,
+    "imageKey": "GR22205",
+    "image": "assets/products/GR22_205.jpg"
+  },
+  {
+    "id": "GR22_208",
+    "label": "GR22_208",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.09,
+    "imageKey": "GR22208",
+    "image": "assets/products/GR22_208.jpg"
+  },
+  {
+    "id": "GR22_208_2",
+    "label": "GR22_208_2",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "GR222082",
+    "image": "assets/products/GR22_208_2.jpg"
+  },
+  {
+    "id": "GR22_208_2_detail",
+    "label": "GR22_208_2_detail",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "GR222082detail",
+    "image": "assets/products/GR22_208_2_detail.jpg"
+  },
+  {
+    "id": "GR22_209",
+    "label": "GR22_209",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.44,
+    "imageKey": "GR22209",
+    "image": "assets/products/GR22_209.jpg"
+  },
+  {
+    "id": "GR22_210",
+    "label": "GR22_210",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.41,
+    "imageKey": "GR22210",
+    "image": "assets/products/GR22_210.jpg"
+  },
+  {
+    "id": "GR22_22",
+    "label": "GR22_22",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 8.3,
+    "imageKey": "GR2222",
+    "image": "assets/products/GR22_22.jpg"
+  },
+  {
+    "id": "GR22_233",
+    "label": "GR22_233",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.18,
+    "imageKey": "GR22233",
+    "image": "assets/products/GR22_233.jpg"
+  },
+  {
+    "id": "GR22_235",
+    "label": "GR22_235",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 6.14,
+    "imageKey": "GR22235",
+    "image": "assets/products/GR22_235.jpg"
+  },
+  {
+    "id": "GR22_237",
+    "label": "GR22_237",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.67,
+    "imageKey": "GR22237",
+    "image": "assets/products/GR22_237.jpg"
+  },
+  {
+    "id": "GR22_239",
+    "label": "GR22_239",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.75,
+    "imageKey": "GR22239",
+    "image": "assets/products/GR22_239.jpg"
+  },
+  {
+    "id": "GR22_24",
+    "label": "GR22_24",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.28,
+    "imageKey": "GR2224",
+    "image": "assets/products/GR22_24.jpg"
+  },
+  {
+    "id": "GR22_27",
+    "label": "GR22_27",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.04,
+    "imageKey": "GR2227",
+    "image": "assets/products/GR22_27.jpg"
+  },
+  {
+    "id": "GR22_33",
+    "label": "GR22_33",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.79,
+    "imageKey": "GR2233",
+    "image": "assets/products/GR22_33.jpg"
+  },
+  {
+    "id": "GR22_34",
+    "label": "GR22_34",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.33,
+    "imageKey": "GR2234",
+    "image": "assets/products/GR22_34.jpg"
+  },
+  {
+    "id": "GR22_35",
+    "label": "GR22_35",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.57,
+    "imageKey": "GR2235",
+    "image": "assets/products/GR22_35.jpg"
+  },
+  {
+    "id": "GR22_36",
+    "label": "GR22_36",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.12,
+    "imageKey": "GR2236",
+    "image": "assets/products/GR22_36.jpg"
+  },
+  {
+    "id": "GR22_37",
+    "label": "GR22_37",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.74,
+    "imageKey": "GR2237",
+    "image": "assets/products/GR22_37.jpg"
+  },
+  {
+    "id": "GR22_38",
+    "label": "GR22_38",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.45,
+    "imageKey": "GR2238",
+    "image": "assets/products/GR22_38.jpg"
+  },
+  {
+    "id": "GR22_42",
+    "label": "GR22_42",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.31,
+    "imageKey": "GR2242",
+    "image": "assets/products/GR22_42.jpg"
+  },
+  {
+    "id": "GR22_43",
+    "label": "GR22_43",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.58,
+    "imageKey": "GR2243",
+    "image": "assets/products/GR22_43.jpg"
+  },
+  {
+    "id": "GR22_44",
+    "label": "GR22_44",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.05,
+    "imageKey": "GR2244",
+    "image": "assets/products/GR22_44.jpg"
+  },
+  {
+    "id": "GR22_45",
+    "label": "GR22_45",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.51,
+    "imageKey": "GR2245",
+    "image": "assets/products/GR22_45.jpg"
+  },
+  {
+    "id": "GR22_47",
+    "label": "GR22_47",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.69,
+    "imageKey": "GR2247",
+    "image": "assets/products/GR22_47.jpg"
+  },
+  {
+    "id": "GR22_5",
+    "label": "GR22_5",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.07,
+    "imageKey": "GR225",
+    "image": "assets/products/GR22_5.jpg"
+  },
+  {
+    "id": "GR22_50",
+    "label": "GR22_50",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.54,
+    "imageKey": "GR2250",
+    "image": "assets/products/GR22_50.jpg"
+  },
+  {
+    "id": "GR22_54",
+    "label": "GR22_54",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.13,
+    "imageKey": "GR2254",
+    "image": "assets/products/GR22_54.jpg"
+  },
+  {
+    "id": "GR22_58",
+    "label": "GR22_58",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.87,
+    "imageKey": "GR2258",
+    "image": "assets/products/GR22_58.jpg"
+  },
+  {
+    "id": "GR22_62",
+    "label": "GR22_62",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.97,
+    "imageKey": "GR2262",
+    "image": "assets/products/GR22_62.jpg"
+  },
+  {
+    "id": "GR22_63",
+    "label": "GR22_63",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.13,
+    "imageKey": "GR2263",
+    "image": "assets/products/GR22_63.jpg"
+  },
+  {
+    "id": "GR22_66",
+    "label": "GR22_66",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.12,
+    "imageKey": "GR2266",
+    "image": "assets/products/GR22_66.jpg"
+  },
+  {
+    "id": "GR22_67",
+    "label": "GR22_67",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.44,
+    "imageKey": "GR2267",
+    "image": "assets/products/GR22_67.jpg"
+  },
+  {
+    "id": "GR22_68",
+    "label": "GR22_68",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.89,
+    "imageKey": "GR2268",
+    "image": "assets/products/GR22_68.jpg"
+  },
+  {
+    "id": "GR22_7",
+    "label": "GR22_7",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.03,
+    "imageKey": "GR227",
+    "image": "assets/products/GR22_7.jpg"
+  },
+  {
+    "id": "GR22_70",
+    "label": "GR22_70",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.03,
+    "imageKey": "GR2270",
+    "image": "assets/products/GR22_70.jpg"
+  },
+  {
+    "id": "GR22_73",
+    "label": "GR22_73",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 5.39,
+    "imageKey": "GR2273",
+    "image": "assets/products/GR22_73.jpg"
+  },
+  {
+    "id": "GR22_74",
+    "label": "GR22_74",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.01,
+    "imageKey": "GR2274",
+    "image": "assets/products/GR22_74.jpg"
+  },
+  {
+    "id": "GR22_77",
+    "label": "GR22_77",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.04,
+    "imageKey": "GR2277",
+    "image": "assets/products/GR22_77.jpg"
+  },
+  {
+    "id": "GR22_78",
+    "label": "GR22_78",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.49,
+    "imageKey": "GR2278",
+    "image": "assets/products/GR22_78.jpg"
+  },
+  {
+    "id": "GR22_79",
+    "label": "GR22_79",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 9.55,
+    "imageKey": "GR2279",
+    "image": "assets/products/GR22_79.jpg"
+  },
+  {
+    "id": "GR22_8",
+    "label": "GR22_8",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.23,
+    "imageKey": "GR228",
+    "image": "assets/products/GR22_8.jpg"
+  },
+  {
+    "id": "GR22_80",
+    "label": "GR22_80",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.45,
+    "imageKey": "GR2280",
+    "image": "assets/products/GR22_80.jpg"
+  },
+  {
+    "id": "GR22_81",
+    "label": "GR22_81",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.23,
+    "imageKey": "GR2281",
+    "image": "assets/products/GR22_81.jpg"
+  },
+  {
+    "id": "GR22_86",
+    "label": "GR22_86",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 3.39,
+    "imageKey": "GR2286",
+    "image": "assets/products/GR22_86.jpg"
+  },
+  {
+    "id": "GR22_9",
+    "label": "GR22_9",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.33,
+    "imageKey": "GR229",
+    "image": "assets/products/GR22_9.jpg"
+  },
+  {
+    "id": "GR22_93",
+    "label": "GR22_93",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 4.23,
+    "imageKey": "GR2293",
+    "image": "assets/products/GR22_93.jpg"
+  },
+  {
+    "id": "GR22_96",
+    "label": "GR22_96",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": 2.27,
+    "imageKey": "GR2296",
+    "image": "assets/products/GR22_96.jpg"
+  },
+  {
+    "id": "IMG_6692",
+    "label": "IMG_6692",
+    "category": "gentsrings",
+    "categoryName": "Gents Rings",
+    "karat": null,
+    "weight": null,
+    "imageKey": "IMG6692",
+    "image": "assets/products/IMG_6692.jpg"
+  },
+  {
+    "id": "JB22_1",
+    "label": "JB22_1",
+    "category": "jhumka22",
+    "categoryName": "Jhumkas",
+    "karat": 22,
+    "weight": 9.01,
+    "imageKey": "JB221",
+    "image": "assets/products/JB22_1.jpg"
+  },
+  {
+    "id": "JB22_101",
+    "label": "JB22_101",
+    "category": "jhumka22",
+    "categoryName": "Jhumkas",
+    "karat": 22,
+    "weight": 6.46,
+    "imageKey": "JB22101",
+    "image": "assets/products/JB22_101.jpg"
+  },
+  {
+    "id": "JB22_11",
+    "label": "JB22_11",
+    "category": "jhumka22",
+    "categoryName": "Jhumkas",
+    "karat": 22,
+    "weight": 6.73,
+    "imageKey": "JB2211",
+    "image": "assets/products/JB22_11.jpg"
+  },
+  {
+    "id": "LR18_11",
+    "label": "LR18_11",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.59,
+    "imageKey": "LR1811",
+    "image": "assets/products/LR18_11.jpg"
+  },
+  {
+    "id": "LR18_13",
+    "label": "LR18_13",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.52,
+    "imageKey": "LR1813",
+    "image": "assets/products/LR18_13.jpg"
+  },
+  {
+    "id": "LR18_16",
+    "label": "LR18_16",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.57,
+    "imageKey": "LR1816",
+    "image": "assets/products/LR18_16.jpg"
+  },
+  {
+    "id": "LR18_17",
+    "label": "LR18_17",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.82,
+    "imageKey": "LR1817",
+    "image": "assets/products/LR18_17.jpg"
+  },
+  {
+    "id": "LR18_2",
+    "label": "LR18_2",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.06,
+    "imageKey": "LR182",
+    "image": "assets/products/LR18_2.jpg"
+  },
+  {
+    "id": "LR18_20",
+    "label": "LR18_20",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.62,
+    "imageKey": "LR1820",
+    "image": "assets/products/LR18_20.jpg"
+  },
+  {
+    "id": "LR18_22",
+    "label": "LR18_22",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.03,
+    "imageKey": "LR1822",
+    "image": "assets/products/LR18_22.jpg"
+  },
+  {
+    "id": "LR18_23",
+    "label": "LR18_23",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.53,
+    "imageKey": "LR1823",
+    "image": "assets/products/LR18_23.jpg"
+  },
+  {
+    "id": "LR18_26",
+    "label": "LR18_26",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.37,
+    "imageKey": "LR1826",
+    "image": "assets/products/LR18_26.jpg"
+  },
+  {
+    "id": "LR18_28",
+    "label": "LR18_28",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.59,
+    "imageKey": "LR1828",
+    "image": "assets/products/LR18_28.jpg"
+  },
+  {
+    "id": "LR18_29",
+    "label": "LR18_29",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.5,
+    "imageKey": "LR1829",
+    "image": "assets/products/LR18_29.jpg"
+  },
+  {
+    "id": "LR18_30",
+    "label": "LR18_30",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.42,
+    "imageKey": "LR1830",
+    "image": "assets/products/LR18_30.jpg"
+  },
+  {
+    "id": "LR18_31",
+    "label": "LR18_31",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.61,
+    "imageKey": "LR1831",
+    "image": "assets/products/LR18_31.jpg"
+  },
+  {
+    "id": "LR18_35",
+    "label": "LR18_35",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.5,
+    "imageKey": "LR1835",
+    "image": "assets/products/LR18_35.jpg"
+  },
+  {
+    "id": "LR18_37",
+    "label": "LR18_37",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.32,
+    "imageKey": "LR1837",
+    "image": "assets/products/LR18_37.jpg"
+  },
+  {
+    "id": "LR18_38",
+    "label": "LR18_38",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.36,
+    "imageKey": "LR1838",
+    "image": "assets/products/LR18_38.jpg"
+  },
+  {
+    "id": "LR18_39",
+    "label": "LR18_39",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.35,
+    "imageKey": "LR1839",
+    "image": "assets/products/LR18_39.jpg"
+  },
+  {
+    "id": "LR18_4",
+    "label": "LR18_4",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.85,
+    "imageKey": "LR184",
+    "image": "assets/products/LR18_4.jpg"
+  },
+  {
+    "id": "LR18_5",
+    "label": "LR18_5",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.6,
+    "imageKey": "LR185",
+    "image": "assets/products/LR18_5.jpg"
+  },
+  {
+    "id": "LR18_6",
+    "label": "LR18_6",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.3,
+    "imageKey": "LR186",
+    "image": "assets/products/LR18_6.jpg"
+  },
+  {
+    "id": "LR22_10",
+    "label": "LR22_10",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.1,
+    "imageKey": "LR2210",
+    "image": "assets/products/LR22_10.jpg"
+  },
+  {
+    "id": "LR22_100",
+    "label": "LR22_100",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.11,
+    "imageKey": "LR22100",
+    "image": "assets/products/LR22_100.jpg"
+  },
+  {
+    "id": "LR22_101",
+    "label": "LR22_101",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 5.01,
+    "imageKey": "LR22101",
+    "image": "assets/products/LR22_101.jpg"
+  },
+  {
+    "id": "LR22_102",
+    "label": "LR22_102",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.09,
+    "imageKey": "LR22102",
+    "image": "assets/products/LR22_102.jpg"
+  },
+  {
+    "id": "LR22_103",
+    "label": "LR22_103",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.91,
+    "imageKey": "LR22103",
+    "image": "assets/products/LR22_103.jpg"
+  },
+  {
+    "id": "LR22_104",
+    "label": "LR22_104",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 6.42,
+    "imageKey": "LR22104",
+    "image": "assets/products/LR22_104.jpg"
+  },
+  {
+    "id": "LR22_108",
+    "label": "LR22_108",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.2,
+    "imageKey": "LR22108",
+    "image": "assets/products/LR22_108.jpg"
+  },
+  {
+    "id": "LR22_109",
+    "label": "LR22_109",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3,
+    "imageKey": "LR22109",
+    "image": "assets/products/LR22_109.jpg"
+  },
+  {
+    "id": "LR22_11",
+    "label": "LR22_11",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.9,
+    "imageKey": "LR2211",
+    "image": "assets/products/LR22_11.jpg"
+  },
+  {
+    "id": "LR22_110",
+    "label": "LR22_110",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.23,
+    "imageKey": "LR22110",
+    "image": "assets/products/LR22_110.jpg"
+  },
+  {
+    "id": "LR22_112",
+    "label": "LR22_112",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.82,
+    "imageKey": "LR22112",
+    "image": "assets/products/LR22_112.jpg"
+  },
+  {
+    "id": "LR22_113",
+    "label": "LR22_113",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.73,
+    "imageKey": "LR22113",
+    "image": "assets/products/LR22_113.jpg"
+  },
+  {
+    "id": "LR22_117",
+    "label": "LR22_117",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.13,
+    "imageKey": "LR22117",
+    "image": "assets/products/LR22_117.jpg"
+  },
+  {
+    "id": "LR22_119",
+    "label": "LR22_119",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.96,
+    "imageKey": "LR22119",
+    "image": "assets/products/LR22_119.jpg"
+  },
+  {
+    "id": "LR22_12",
+    "label": "LR22_12",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 7.14,
+    "imageKey": "LR2212",
+    "image": "assets/products/LR22_12.jpg"
+  },
+  {
+    "id": "LR22_124",
+    "label": "LR22_124",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.32,
+    "imageKey": "LR22124",
+    "image": "assets/products/LR22_124.jpg"
+  },
+  {
+    "id": "LR22_128",
+    "label": "LR22_128",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 4.01,
+    "imageKey": "LR22128",
+    "image": "assets/products/LR22_128.jpg"
+  },
+  {
+    "id": "LR22_129",
+    "label": "LR22_129",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.21,
+    "imageKey": "LR22129",
+    "image": "assets/products/LR22_129.jpg"
+  },
+  {
+    "id": "LR22_132",
+    "label": "LR22_132",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.02,
+    "imageKey": "LR22132",
+    "image": "assets/products/LR22_132.jpg"
+  },
+  {
+    "id": "LR22_142",
+    "label": "LR22_142",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "LR22142",
+    "image": "assets/products/LR22_142.jpg"
+  },
+  {
+    "id": "LR22_143",
+    "label": "LR22_143",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.22,
+    "imageKey": "LR22143",
+    "image": "assets/products/LR22_143.jpg"
+  },
+  {
+    "id": "LR22_147",
+    "label": "LR22_147",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.46,
+    "imageKey": "LR22147",
+    "image": "assets/products/LR22_147.jpg"
+  },
+  {
+    "id": "LR22_149",
+    "label": "LR22_149",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.74,
+    "imageKey": "LR22149",
+    "image": "assets/products/LR22_149.jpg"
+  },
+  {
+    "id": "LR22_150",
+    "label": "LR22_150",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "LR22150",
+    "image": "assets/products/LR22_150.jpg"
+  },
+  {
+    "id": "LR22_151",
+    "label": "LR22_151",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.89,
+    "imageKey": "LR22151",
+    "image": "assets/products/LR22_151.jpg"
+  },
+  {
+    "id": "LR22_154",
+    "label": "LR22_154",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.11,
+    "imageKey": "LR22154",
+    "image": "assets/products/LR22_154.jpg"
+  },
+  {
+    "id": "LR22_158",
+    "label": "LR22_158",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.72,
+    "imageKey": "LR22158",
+    "image": "assets/products/LR22_158.jpg"
+  },
+  {
+    "id": "LR22_159",
+    "label": "LR22_159",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.91,
+    "imageKey": "LR22159",
+    "image": "assets/products/LR22_159.jpg"
+  },
+  {
+    "id": "LR22_164",
+    "label": "LR22_164",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.53,
+    "imageKey": "LR22164",
+    "image": "assets/products/LR22_164.jpg"
+  },
+  {
+    "id": "LR22_170",
+    "label": "LR22_170",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.66,
+    "imageKey": "LR22170",
+    "image": "assets/products/LR22_170.jpg"
+  },
+  {
+    "id": "LR22_171",
+    "label": "LR22_171",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.02,
+    "imageKey": "LR22171",
+    "image": "assets/products/LR22_171.jpg"
+  },
+  {
+    "id": "LR22_173",
+    "label": "LR22_173",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.68,
+    "imageKey": "LR22173",
+    "image": "assets/products/LR22_173.jpg"
+  },
+  {
+    "id": "LR22_174",
+    "label": "LR22_174",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.27,
+    "imageKey": "LR22174",
+    "image": "assets/products/LR22_174.jpg"
+  },
+  {
+    "id": "LR22_175",
+    "label": "LR22_175",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.89,
+    "imageKey": "LR22175",
+    "image": "assets/products/LR22_175.jpg"
+  },
+  {
+    "id": "LR22_177",
+    "label": "LR22_177",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.97,
+    "imageKey": "LR22177",
+    "image": "assets/products/LR22_177.jpg"
+  },
+  {
+    "id": "LR22_179",
+    "label": "LR22_179",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "LR22179",
+    "image": "assets/products/LR22_179.jpg"
+  },
+  {
+    "id": "LR22_18",
+    "label": "LR22_18",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.16,
+    "imageKey": "LR2218",
+    "image": "assets/products/LR22_18.jpg"
+  },
+  {
+    "id": "LR22_186",
+    "label": "LR22_186",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.45,
+    "imageKey": "LR22186",
+    "image": "assets/products/LR22_186.jpg"
+  },
+  {
+    "id": "LR22_188",
+    "label": "LR22_188",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "LR22188",
+    "image": "assets/products/LR22_188.jpg"
+  },
+  {
+    "id": "LR22_190",
+    "label": "LR22_190",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.63,
+    "imageKey": "LR22190",
+    "image": "assets/products/LR22_190.jpg"
+  },
+  {
+    "id": "LR22_191",
+    "label": "LR22_191",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.13,
+    "imageKey": "LR22191",
+    "image": "assets/products/LR22_191.jpg"
+  },
+  {
+    "id": "LR22_193",
+    "label": "LR22_193",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.5,
+    "imageKey": "LR22193",
+    "image": "assets/products/LR22_193.jpg"
+  },
+  {
+    "id": "LR22_195",
+    "label": "LR22_195",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.69,
+    "imageKey": "LR22195",
+    "image": "assets/products/LR22_195.jpg"
+  },
+  {
+    "id": "LR22_196",
+    "label": "LR22_196",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.39,
+    "imageKey": "LR22196",
+    "image": "assets/products/LR22_196.jpg"
+  },
+  {
+    "id": "LR22_197",
+    "label": "LR22_197",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.04,
+    "imageKey": "LR22197",
+    "image": "assets/products/LR22_197.jpg"
+  },
+  {
+    "id": "LR22_199",
+    "label": "LR22_199",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.64,
+    "imageKey": "LR22199",
+    "image": "assets/products/LR22_199.jpg"
+  },
+  {
+    "id": "LR22_208",
+    "label": "LR22_208",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.26,
+    "imageKey": "LR22208",
+    "image": "assets/products/LR22_208.jpg"
+  },
+  {
+    "id": "LR22_216",
+    "label": "LR22_216",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.78,
+    "imageKey": "LR22216",
+    "image": "assets/products/LR22_216.jpg"
+  },
+  {
+    "id": "LR22_219",
+    "label": "LR22_219",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.68,
+    "imageKey": "LR22219",
+    "image": "assets/products/LR22_219.jpg"
+  },
+  {
+    "id": "LR22_221",
+    "label": "LR22_221",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.62,
+    "imageKey": "LR22221",
+    "image": "assets/products/LR22_221.jpg"
+  },
+  {
+    "id": "LR22_222",
+    "label": "LR22_222",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.85,
+    "imageKey": "LR22222",
+    "image": "assets/products/LR22_222.jpg"
+  },
+  {
+    "id": "LR22_225",
+    "label": "LR22_225",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 5.06,
+    "imageKey": "LR22225",
+    "image": "assets/products/LR22_225.jpg"
+  },
+  {
+    "id": "LR22_226",
+    "label": "LR22_226",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.21,
+    "imageKey": "LR22226",
+    "image": "assets/products/LR22_226.jpg"
+  },
+  {
+    "id": "LR22_227",
+    "label": "LR22_227",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 6.86,
+    "imageKey": "LR22227",
+    "image": "assets/products/LR22_227.jpg"
+  },
+  {
+    "id": "LR22_228",
+    "label": "LR22_228",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.87,
+    "imageKey": "LR22228",
+    "image": "assets/products/LR22_228.jpg"
+  },
+  {
+    "id": "LR22_235",
+    "label": "LR22_235",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.14,
+    "imageKey": "LR22235",
+    "image": "assets/products/LR22_235.jpg"
+  },
+  {
+    "id": "LR22_236",
+    "label": "LR22_236",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.45,
+    "imageKey": "LR22236",
+    "image": "assets/products/LR22_236.jpg"
+  },
+  {
+    "id": "LR22_237",
+    "label": "LR22_237",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "LR22237",
+    "image": "assets/products/LR22_237.jpg"
+  },
+  {
+    "id": "LR22_238",
+    "label": "LR22_238",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.53,
+    "imageKey": "LR22238",
+    "image": "assets/products/LR22_238.jpg"
+  },
+  {
+    "id": "LR22_25",
+    "label": "LR22_25",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.52,
+    "imageKey": "LR2225",
+    "image": "assets/products/LR22_25.jpg"
+  },
+  {
+    "id": "LR22_250",
+    "label": "LR22_250",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.43,
+    "imageKey": "LR22250",
+    "image": "assets/products/LR22_250.jpg"
+  },
+  {
+    "id": "LR22_252",
+    "label": "LR22_252",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.16,
+    "imageKey": "LR22252",
+    "image": "assets/products/LR22_252.jpg"
+  },
+  {
+    "id": "LR22_257",
+    "label": "LR22_257",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.01,
+    "imageKey": "LR22257",
+    "image": "assets/products/LR22_257.jpg"
+  },
+  {
+    "id": "LR22_258",
+    "label": "LR22_258",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.12,
+    "imageKey": "LR22258",
+    "image": "assets/products/LR22_258.jpg"
+  },
+  {
+    "id": "LR22_259",
+    "label": "LR22_259",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.52,
+    "imageKey": "LR22259",
+    "image": "assets/products/LR22_259.jpg"
+  },
+  {
+    "id": "LR22_262",
+    "label": "LR22_262",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.87,
+    "imageKey": "LR22262",
+    "image": "assets/products/LR22_262.jpg"
+  },
+  {
+    "id": "LR22_267",
+    "label": "LR22_267",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.39,
+    "imageKey": "LR22267",
+    "image": "assets/products/LR22_267.jpg"
+  },
+  {
+    "id": "LR22_268",
+    "label": "LR22_268",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "LR22268",
+    "image": "assets/products/LR22_268.jpg"
+  },
+  {
+    "id": "LR22_27",
+    "label": "LR22_27",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.87,
+    "imageKey": "LR2227",
+    "image": "assets/products/LR22_27.jpg"
+  },
+  {
+    "id": "LR22_271",
+    "label": "LR22_271",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.96,
+    "imageKey": "LR22271",
+    "image": "assets/products/LR22_271.jpg"
+  },
+  {
+    "id": "LR22_274",
+    "label": "LR22_274",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.33,
+    "imageKey": "LR22274",
+    "image": "assets/products/LR22_274.jpg"
+  },
+  {
+    "id": "LR22_276",
+    "label": "LR22_276",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "LR22276",
+    "image": "assets/products/LR22_276.jpg"
+  },
+  {
+    "id": "LR22_281",
+    "label": "LR22_281",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "LR22281",
+    "image": "assets/products/LR22_281.jpg"
+  },
+  {
+    "id": "LR22_282",
+    "label": "LR22_282",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.7,
+    "imageKey": "LR22282",
+    "image": "assets/products/LR22_282.jpg"
+  },
+  {
+    "id": "LR22_286",
+    "label": "LR22_286",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.31,
+    "imageKey": "LR22286",
+    "image": "assets/products/LR22_286.jpg"
+  },
+  {
+    "id": "LR22_29",
+    "label": "LR22_29",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.84,
+    "imageKey": "LR2229",
+    "image": "assets/products/LR22_29.jpg"
+  },
+  {
+    "id": "LR22_30",
+    "label": "LR22_30",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.7,
+    "imageKey": "LR2230",
+    "image": "assets/products/LR22_30.jpg"
+  },
+  {
+    "id": "LR22_32",
+    "label": "LR22_32",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.94,
+    "imageKey": "LR2232",
+    "image": "assets/products/LR22_32.jpg"
+  },
+  {
+    "id": "LR22_322",
+    "label": "LR22_322",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.08,
+    "imageKey": "LR22322",
+    "image": "assets/products/LR22_322.jpg"
+  },
+  {
+    "id": "LR22_328",
+    "label": "LR22_328",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 0.51,
+    "imageKey": "LR22328",
+    "image": "assets/products/LR22_328.jpg"
+  },
+  {
+    "id": "LR22_329",
+    "label": "LR22_329",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 0.5,
+    "imageKey": "LR22329",
+    "image": "assets/products/LR22_329.jpg"
+  },
+  {
+    "id": "LR22_33",
+    "label": "LR22_33",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.19,
+    "imageKey": "LR2233",
+    "image": "assets/products/LR22_33.jpg"
+  },
+  {
+    "id": "LR22_330",
+    "label": "LR22_330",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 0.99,
+    "imageKey": "LR22330",
+    "image": "assets/products/LR22_330.jpg"
+  },
+  {
+    "id": "LR22_336",
+    "label": "LR22_336",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 0.49,
+    "imageKey": "LR22336",
+    "image": "assets/products/LR22_336.jpg"
+  },
+  {
+    "id": "LR22_339",
+    "label": "LR22_339",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 0.49,
+    "imageKey": "LR22339",
+    "image": "assets/products/LR22_339.jpg"
+  },
+  {
+    "id": "LR22_340",
+    "label": "LR22_340",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "LR22340",
+    "image": "assets/products/LR22_340.jpg"
+  },
+  {
+    "id": "LR22_342",
+    "label": "LR22_342",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 0.51,
+    "imageKey": "LR22342",
+    "image": "assets/products/LR22_342.jpg"
+  },
+  {
+    "id": "LR22_385",
+    "label": "LR22_385",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.15,
+    "imageKey": "LR22385",
+    "image": "assets/products/LR22_385.jpg"
+  },
+  {
+    "id": "LR22_386",
+    "label": "LR22_386",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.68,
+    "imageKey": "LR22386",
+    "image": "assets/products/LR22_386.jpg"
+  },
+  {
+    "id": "LR22_39",
+    "label": "LR22_39",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 4.51,
+    "imageKey": "LR2239",
+    "image": "assets/products/LR22_39.jpg"
+  },
+  {
+    "id": "LR22_390",
+    "label": "LR22_390",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.45,
+    "imageKey": "LR22390",
+    "image": "assets/products/LR22_390.jpg"
+  },
+  {
+    "id": "LR22_392",
+    "label": "LR22_392",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.62,
+    "imageKey": "LR22392",
+    "image": "assets/products/LR22_392.jpg"
+  },
+  {
+    "id": "LR22_397",
+    "label": "LR22_397",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.43,
+    "imageKey": "LR22397",
+    "image": "assets/products/LR22_397.jpg"
+  },
+  {
+    "id": "LR22_399",
+    "label": "LR22_399",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.63,
+    "imageKey": "LR22399",
+    "image": "assets/products/LR22_399.jpg"
+  },
+  {
+    "id": "LR22_4",
+    "label": "LR22_4",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.75,
+    "imageKey": "LR224",
+    "image": "assets/products/LR22_4.jpg"
+  },
+  {
+    "id": "LR22_40",
+    "label": "LR22_40",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 4.22,
+    "imageKey": "LR2240",
+    "image": "assets/products/LR22_40.jpg"
+  },
+  {
+    "id": "LR22_400",
+    "label": "LR22_400",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "LR22400",
+    "image": "assets/products/LR22_400.jpg"
+  },
+  {
+    "id": "LR22_401",
+    "label": "LR22_401",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.87,
+    "imageKey": "LR22401",
+    "image": "assets/products/LR22_401.jpg"
+  },
+  {
+    "id": "LR22_403",
+    "label": "LR22_403",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.91,
+    "imageKey": "LR22403",
+    "image": "assets/products/LR22_403.jpg"
+  },
+  {
+    "id": "LR22_409",
+    "label": "LR22_409",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.76,
+    "imageKey": "LR22409",
+    "image": "assets/products/LR22_409.jpg"
+  },
+  {
+    "id": "LR22_411",
+    "label": "LR22_411",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.9,
+    "imageKey": "LR22411",
+    "image": "assets/products/LR22_411.jpg"
+  },
+  {
+    "id": "LR22_413",
+    "label": "LR22_413",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.18,
+    "imageKey": "LR22413",
+    "image": "assets/products/LR22_413.jpg"
+  },
+  {
+    "id": "LR22_415",
+    "label": "LR22_415",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.53,
+    "imageKey": "LR22415",
+    "image": "assets/products/LR22_415.jpg"
+  },
+  {
+    "id": "LR22_417",
+    "label": "LR22_417",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.15,
+    "imageKey": "LR22417",
+    "image": "assets/products/LR22_417.jpg"
+  },
+  {
+    "id": "LR22_42",
+    "label": "LR22_42",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.66,
+    "imageKey": "LR2242",
+    "image": "assets/products/LR22_42.jpg"
+  },
+  {
+    "id": "LR22_425",
+    "label": "LR22_425",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.32,
+    "imageKey": "LR22425",
+    "image": "assets/products/LR22_425.jpg"
+  },
+  {
+    "id": "LR22_426",
+    "label": "LR22_426",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.66,
+    "imageKey": "LR22426",
+    "image": "assets/products/LR22_426.jpg"
+  },
+  {
+    "id": "LR22_432",
+    "label": "LR22_432",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.43,
+    "imageKey": "LR22432",
+    "image": "assets/products/LR22_432.jpg"
+  },
+  {
+    "id": "LR22_438",
+    "label": "LR22_438",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.24,
+    "imageKey": "LR22438",
+    "image": "assets/products/LR22_438.jpg"
+  },
+  {
+    "id": "LR22_439",
+    "label": "LR22_439",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.66,
+    "imageKey": "LR22439",
+    "image": "assets/products/LR22_439.jpg"
+  },
+  {
+    "id": "LR22_44",
+    "label": "LR22_44",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.52,
+    "imageKey": "LR2244",
+    "image": "assets/products/LR22_44.jpg"
+  },
+  {
+    "id": "LR22_450",
+    "label": "LR22_450",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.35,
+    "imageKey": "LR22450",
+    "image": "assets/products/LR22_450.jpg"
+  },
+  {
+    "id": "LR22_451",
+    "label": "LR22_451",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.3,
+    "imageKey": "LR22451",
+    "image": "assets/products/LR22_451.jpg"
+  },
+  {
+    "id": "LR22_458",
+    "label": "LR22_458",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.48,
+    "imageKey": "LR22458",
+    "image": "assets/products/LR22_458.jpg"
+  },
+  {
+    "id": "LR22_46",
+    "label": "LR22_46",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 4.96,
+    "imageKey": "LR2246",
+    "image": "assets/products/LR22_46.jpg"
+  },
+  {
+    "id": "LR22_47",
+    "label": "LR22_47",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.31,
+    "imageKey": "LR2247",
+    "image": "assets/products/LR22_47.jpg"
+  },
+  {
+    "id": "LR22_48",
+    "label": "LR22_48",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.11,
+    "imageKey": "LR2248",
+    "image": "assets/products/LR22_48.jpg"
+  },
+  {
+    "id": "LR22_5",
+    "label": "LR22_5",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 4.85,
+    "imageKey": "LR225",
+    "image": "assets/products/LR22_5.jpg"
+  },
+  {
+    "id": "LR22_50",
+    "label": "LR22_50",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.95,
+    "imageKey": "LR2250",
+    "image": "assets/products/LR22_50.jpg"
+  },
+  {
+    "id": "LR22_55",
+    "label": "LR22_55",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.68,
+    "imageKey": "LR2255",
+    "image": "assets/products/LR22_55.jpg"
+  },
+  {
+    "id": "LR22_57",
+    "label": "LR22_57",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.21,
+    "imageKey": "LR2257",
+    "image": "assets/products/LR22_57.jpg"
+  },
+  {
+    "id": "LR22_59",
+    "label": "LR22_59",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.28,
+    "imageKey": "LR2259",
+    "image": "assets/products/LR22_59.jpg"
+  },
+  {
+    "id": "LR22_6",
+    "label": "LR22_6",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.42,
+    "imageKey": "LR226",
+    "image": "assets/products/LR22_6.jpg"
+  },
+  {
+    "id": "LR22_64",
+    "label": "LR22_64",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.16,
+    "imageKey": "LR2264",
+    "image": "assets/products/LR22_64.jpg"
+  },
+  {
+    "id": "LR22_66",
+    "label": "LR22_66",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.47,
+    "imageKey": "LR2266",
+    "image": "assets/products/LR22_66.jpg"
+  },
+  {
+    "id": "LR22_67",
+    "label": "LR22_67",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.13,
+    "imageKey": "LR2267",
+    "image": "assets/products/LR22_67.jpg"
+  },
+  {
+    "id": "LR22_68",
+    "label": "LR22_68",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.58,
+    "imageKey": "LR2268",
+    "image": "assets/products/LR22_68.jpg"
+  },
+  {
+    "id": "LR22_69",
+    "label": "LR22_69",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 4.21,
+    "imageKey": "LR2269",
+    "image": "assets/products/LR22_69.jpg"
+  },
+  {
+    "id": "LR22_7",
+    "label": "LR22_7",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.74,
+    "imageKey": "LR227",
+    "image": "assets/products/LR22_7.jpg"
+  },
+  {
+    "id": "LR22_72",
+    "label": "LR22_72",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.87,
+    "imageKey": "LR2272",
+    "image": "assets/products/LR22_72.jpg"
+  },
+  {
+    "id": "LR22_75",
+    "label": "LR22_75",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 4.13,
+    "imageKey": "LR2275",
+    "image": "assets/products/LR22_75.jpg"
+  },
+  {
+    "id": "LR22_76",
+    "label": "LR22_76",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 8.22,
+    "imageKey": "LR2276",
+    "image": "assets/products/LR22_76.jpg"
+  },
+  {
+    "id": "LR22_78",
+    "label": "LR22_78",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.83,
+    "imageKey": "LR2278",
+    "image": "assets/products/LR22_78.jpg"
+  },
+  {
+    "id": "LR22_8",
+    "label": "LR22_8",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.06,
+    "imageKey": "LR228",
+    "image": "assets/products/LR22_8.jpg"
+  },
+  {
+    "id": "LR22_81",
+    "label": "LR22_81",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.64,
+    "imageKey": "LR2281",
+    "image": "assets/products/LR22_81.jpg"
+  },
+  {
+    "id": "LR22_82",
+    "label": "LR22_82",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.42,
+    "imageKey": "LR2282",
+    "image": "assets/products/LR22_82.jpg"
+  },
+  {
+    "id": "LR22_83",
+    "label": "LR22_83",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.5,
+    "imageKey": "LR2283",
+    "image": "assets/products/LR22_83.jpg"
+  },
+  {
+    "id": "LR22_88",
+    "label": "LR22_88",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.25,
+    "imageKey": "LR2288",
+    "image": "assets/products/LR22_88.jpg"
+  },
+  {
+    "id": "LR22_9",
+    "label": "LR22_9",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 4.36,
+    "imageKey": "LR229",
+    "image": "assets/products/LR22_9.jpg"
+  },
+  {
+    "id": "LR22_90",
+    "label": "LR22_90",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "LR2290",
+    "image": "assets/products/LR22_90.jpg"
+  },
+  {
+    "id": "LR22_91",
+    "label": "LR22_91",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.83,
+    "imageKey": "LR2291",
+    "image": "assets/products/LR22_91.jpg"
+  },
+  {
+    "id": "LR22_92",
+    "label": "LR22_92",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.55,
+    "imageKey": "LR2292",
+    "image": "assets/products/LR22_92.jpg"
+  },
+  {
+    "id": "LR22_93",
+    "label": "LR22_93",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.77,
+    "imageKey": "LR2293",
+    "image": "assets/products/LR22_93.jpg"
+  },
+  {
+    "id": "LR22_95",
+    "label": "LR22_95",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 5.51,
+    "imageKey": "LR2295",
+    "image": "assets/products/LR22_95.jpg"
+  },
+  {
+    "id": "LR22_96",
+    "label": "LR22_96",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 3.28,
+    "imageKey": "LR2296",
+    "image": "assets/products/LR22_96.jpg"
+  },
+  {
+    "id": "LR22_97",
+    "label": "LR22_97",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.97,
+    "imageKey": "LR2297",
+    "image": "assets/products/LR22_97.jpg"
+  },
+  {
+    "id": "LR22_98",
+    "label": "LR22_98",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 2.15,
+    "imageKey": "LR2298",
+    "image": "assets/products/LR22_98.jpg"
+  },
+  {
+    "id": "LR22_99",
+    "label": "LR22_99",
+    "category": "ladiesring22",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 1.93,
+    "imageKey": "LR2299",
+    "image": "assets/products/LR22_99.jpg"
+  },
+  {
+    "id": "WT22_140_stitched",
+    "label": "WT22_140_stitched",
+    "category": "wati22",
+    "categoryName": "Wati",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "WT22140stitched",
+    "image": "assets/products/WT22_140_stitched.jpg"
+  },
+  {
+    "id": "WT22_1_2",
+    "label": "WT22_1_2",
+    "category": "wati22",
+    "categoryName": "Wati",
+    "karat": 22,
+    "weight": 2.93,
+    "imageKey": "WT2212",
+    "image": "assets/products/WT22_1_2.jpg"
+  },
+  {
+    "id": "WT22_1_stitched",
+    "label": "WT22_1_stitched",
+    "category": "wati22",
+    "categoryName": "Wati",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "WT221stitched",
+    "image": "assets/products/WT22_1_stitched.jpg"
+  },
+  {
+    "id": "image-1787137131177",
+    "label": "image-1787137131177",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "image1787137131177",
+    "image": "assets/products/image-1787137131177.jpg"
+  },
+  {
+    "id": "image-1787142374333",
+    "label": "image-1787142374333",
+    "category": "gentsrings",
+    "categoryName": "Gents Rings",
+    "karat": null,
+    "weight": null,
+    "imageKey": "image1787142374333",
+    "image": "assets/products/image-1787142374333.jpg"
+  },
+  {
+    "id": "image-1787144439380",
+    "label": "image-1787144439380",
+    "category": "gentsring22",
+    "categoryName": "Gents Rings",
+    "karat": 22,
+    "weight": null,
+    "imageKey": "image1787144439380",
+    "image": "assets/products/image-1787144439380.jpg"
+  },
+  {
+    "id": "HERO-RING-001",
+    "label": "HERO-RING-001",
+    "category": "rings",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 8.5,
+    "imageKey": "HERO-RING-001",
+    "image": "",
+    "threeD": {
+      "glbUrl": "asset:///assets/test-ring.glb",
+      "posterImageKey": null,
+      "materialVariants": [
+        {
+          "id": "yellow_22k",
+          "label": "22K Yellow Gold",
+          "metalColor": "yellow",
+          "purity": 22,
+          "glbUrl": "asset:///assets/test-ring.glb",
+          "hexAccent": "#D4A843"
+        },
+        {
+          "id": "yellow_18k",
+          "label": "18K Yellow Gold",
+          "metalColor": "yellow",
+          "purity": 18,
+          "glbUrl": "asset:///assets/test-ring.glb",
+          "hexAccent": "#E0B85A"
+        },
+        {
+          "id": "rose_18k",
+          "label": "18K Rose Gold",
+          "metalColor": "rose",
+          "purity": 18,
+          "glbUrl": "asset:///assets/test-ring.glb",
+          "hexAccent": "#C2907A"
+        }
+      ],
+      "purityOptions": [
+        {
+          "karat": 22,
+          "label": "22K (916 Hallmark)",
+          "rateMultiplier": 1
+        },
+        {
+          "karat": 18,
+          "label": "18K (750 Hallmark)",
+          "rateMultiplier": 0.75
+        }
+      ],
+      "totalWeight": 8.5,
+      "stones": [],
+      "cameraPreset": {
+        "position": [
+          0,
+          30,
+          60
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "fov": 35,
+        "near": 0.1,
+        "far": 1000
+      },
+      "arEligible": true,
+      "availability": "in_stock",
+      "lod": {
+        "low": "asset:///assets/test-ring.glb",
+        "medium": "asset:///assets/test-ring.glb",
+        "high": "asset:///assets/test-ring.glb"
+      },
+      "dimensions": {
+        "width": 25,
+        "height": 5,
+        "depth": 25
+      }
+    }
+  },
+  {
+    "id": "HERO-RING-002",
+    "label": "HERO-RING-002",
+    "category": "rings",
+    "categoryName": "Rings",
+    "karat": 18,
+    "weight": 6.2,
+    "imageKey": "HERO-RING-002",
+    "image": "",
+    "threeD": {
+      "glbUrl": "asset:///assets/test-solitaire.glb",
+      "posterImageKey": null,
+      "materialVariants": [
+        {
+          "id": "yellow_18k",
+          "label": "18K Yellow Gold",
+          "metalColor": "yellow",
+          "purity": 18,
+          "glbUrl": "asset:///assets/test-solitaire.glb",
+          "hexAccent": "#E0B85A"
+        },
+        {
+          "id": "white_18k",
+          "label": "18K White Gold",
+          "metalColor": "white",
+          "purity": 18,
+          "glbUrl": "asset:///assets/test-solitaire.glb",
+          "hexAccent": "#E8E8E8"
+        }
+      ],
+      "purityOptions": [
+        {
+          "karat": 18,
+          "label": "18K (750 Hallmark)",
+          "rateMultiplier": 0.75
+        }
+      ],
+      "totalWeight": 6.2,
+      "stones": [
+        {
+          "type": "diamond",
+          "count": 1,
+          "totalCaratWeight": 0.5,
+          "clarity": "VS1",
+          "setting": "prong"
+        }
+      ],
+      "cameraPreset": {
+        "position": [
+          0,
+          35,
+          55
+        ],
+        "target": [
+          0,
+          5,
+          0
+        ],
+        "fov": 35,
+        "near": 0.1,
+        "far": 1000
+      },
+      "arEligible": true,
+      "availability": "in_stock",
+      "lod": {
+        "low": "asset:///assets/test-solitaire.glb",
+        "medium": "asset:///assets/test-solitaire.glb",
+        "high": "asset:///assets/test-solitaire.glb"
+      },
+      "dimensions": {
+        "width": 22,
+        "height": 20,
+        "depth": 22
+      }
+    }
+  },
+  {
+    "id": "HERO-RING-003",
+    "label": "HERO-RING-003",
+    "category": "rings",
+    "categoryName": "Rings",
+    "karat": 22,
+    "weight": 10.1,
+    "imageKey": "HERO-RING-003",
+    "image": "",
+    "threeD": {
+      "glbUrl": "asset:///assets/test-filigree.glb",
+      "posterImageKey": null,
+      "materialVariants": [
+        {
+          "id": "yellow_22k",
+          "label": "22K Yellow Gold",
+          "metalColor": "yellow",
+          "purity": 22,
+          "glbUrl": "asset:///assets/test-filigree.glb",
+          "hexAccent": "#D4A843"
+        }
+      ],
+      "purityOptions": [
+        {
+          "karat": 22,
+          "label": "22K (916 Hallmark)",
+          "rateMultiplier": 1
+        }
+      ],
+      "totalWeight": 10.1,
+      "stones": [],
+      "cameraPreset": {
+        "position": [
+          0,
+          30,
+          60
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "fov": 35,
+        "near": 0.1,
+        "far": 1000
+      },
+      "arEligible": true,
+      "availability": "made_to_order",
+      "lod": {
+        "low": "asset:///assets/test-filigree.glb",
+        "medium": "asset:///assets/test-filigree.glb",
+        "high": "asset:///assets/test-filigree.glb"
+      },
+      "dimensions": {
+        "width": 26,
+        "height": 5,
+        "depth": 26
+      }
+    }
+  },
+  {
+    "id": "HERO-EARR-001",
+    "label": "HERO-EARR-001",
+    "category": "jhumkas",
+    "categoryName": "Jhumkas",
+    "karat": 22,
+    "weight": 12.4,
+    "imageKey": "HERO-EARR-001",
+    "image": "",
+    "threeD": {
+      "glbUrl": "asset:///assets/test-jhumka.glb",
+      "posterImageKey": null,
+      "materialVariants": [
+        {
+          "id": "yellow_22k",
+          "label": "22K Yellow Gold",
+          "metalColor": "yellow",
+          "purity": 22,
+          "glbUrl": "asset:///assets/test-jhumka.glb",
+          "hexAccent": "#D4A843"
+        }
+      ],
+      "purityOptions": [
+        {
+          "karat": 22,
+          "label": "22K (916 Hallmark)",
+          "rateMultiplier": 1
+        }
+      ],
+      "totalWeight": 12.4,
+      "stones": [],
+      "cameraPreset": {
+        "position": [
+          0,
+          20,
+          50
+        ],
+        "target": [
+          0,
+          5,
+          0
+        ],
+        "fov": 35,
+        "near": 0.1,
+        "far": 1000
+      },
+      "arEligible": true,
+      "availability": "in_stock",
+      "lod": {
+        "low": "asset:///assets/test-jhumka.glb",
+        "medium": "asset:///assets/test-jhumka.glb",
+        "high": "asset:///assets/test-jhumka.glb"
+      },
+      "dimensions": {
+        "width": 12,
+        "height": 25,
+        "depth": 12
+      }
+    }
+  },
+  {
+    "id": "HERO-EARR-002",
+    "label": "HERO-EARR-002",
+    "category": "earrings",
+    "categoryName": "Earrings",
+    "karat": 18,
+    "weight": 4.8,
+    "imageKey": "HERO-EARR-002",
+    "image": "",
+    "threeD": {
+      "glbUrl": "asset:///assets/test-stud-halo.glb",
+      "posterImageKey": null,
+      "materialVariants": [
+        {
+          "id": "white_18k",
+          "label": "18K White Gold",
+          "metalColor": "white",
+          "purity": 18,
+          "glbUrl": "asset:///assets/test-stud-halo.glb",
+          "hexAccent": "#E8E8E8"
+        }
+      ],
+      "purityOptions": [
+        {
+          "karat": 18,
+          "label": "18K (750 Hallmark)",
+          "rateMultiplier": 0.75
+        }
+      ],
+      "totalWeight": 4.8,
+      "stones": [
+        {
+          "type": "diamond",
+          "count": 12,
+          "totalCaratWeight": 0.6,
+          "clarity": "VS2",
+          "setting": "prong"
+        }
+      ],
+      "cameraPreset": {
+        "position": [
+          0,
+          15,
+          40
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "fov": 35,
+        "near": 0.1,
+        "far": 1000
+      },
+      "arEligible": true,
+      "availability": "in_stock",
+      "lod": {
+        "low": "asset:///assets/test-stud-halo.glb",
+        "medium": "asset:///assets/test-stud-halo.glb",
+        "high": "asset:///assets/test-stud-halo.glb"
+      },
+      "dimensions": {
+        "width": 15,
+        "height": 15,
+        "depth": 5
+      }
+    }
+  },
+  {
+    "id": "HERO-BGL-001",
+    "label": "HERO-BGL-001",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 28.5,
+    "imageKey": "HERO-BGL-001",
+    "image": "",
+    "threeD": {
+      "glbUrl": "asset:///assets/test-bangle-plain.glb",
+      "posterImageKey": null,
+      "materialVariants": [
+        {
+          "id": "yellow_22k",
+          "label": "22K Yellow Gold",
+          "metalColor": "yellow",
+          "purity": 22,
+          "glbUrl": "asset:///assets/test-bangle-plain.glb",
+          "hexAccent": "#D4A843"
+        }
+      ],
+      "purityOptions": [
+        {
+          "karat": 22,
+          "label": "22K (916 Hallmark)",
+          "rateMultiplier": 1
+        }
+      ],
+      "totalWeight": 28.5,
+      "stones": [],
+      "cameraPreset": {
+        "position": [
+          0,
+          25,
+          55
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "fov": 35,
+        "near": 0.1,
+        "far": 1000
+      },
+      "arEligible": true,
+      "availability": "in_stock",
+      "lod": {
+        "low": "asset:///assets/test-bangle-plain.glb",
+        "medium": "asset:///assets/test-bangle-plain.glb",
+        "high": "asset:///assets/test-bangle-plain.glb"
+      },
+      "dimensions": {
+        "width": 60,
+        "height": 4,
+        "depth": 60
+      }
+    }
+  },
+  {
+    "id": "HERO-BGL-002",
+    "label": "HERO-BGL-002",
+    "category": "bangle22",
+    "categoryName": "Bangles",
+    "karat": 22,
+    "weight": 32,
+    "imageKey": "HERO-BGL-002",
+    "image": "",
+    "threeD": {
+      "glbUrl": "asset:///assets/test-bangle-studded.glb",
+      "posterImageKey": null,
+      "materialVariants": [
+        {
+          "id": "yellow_22k",
+          "label": "22K Yellow Gold",
+          "metalColor": "yellow",
+          "purity": 22,
+          "glbUrl": "asset:///assets/test-bangle-studded.glb",
+          "hexAccent": "#D4A843"
+        }
+      ],
+      "purityOptions": [
+        {
+          "karat": 22,
+          "label": "22K (916 Hallmark)",
+          "rateMultiplier": 1
+        }
+      ],
+      "totalWeight": 32,
+      "stones": [
+        {
+          "type": "diamond",
+          "count": 16,
+          "totalCaratWeight": 0.8,
+          "clarity": "SI1",
+          "setting": "bezel"
+        }
+      ],
+      "cameraPreset": {
+        "position": [
+          0,
+          25,
+          55
+        ],
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "fov": 35,
+        "near": 0.1,
+        "far": 1000
+      },
+      "arEligible": false,
+      "availability": "made_to_order",
+      "lod": {
+        "low": "asset:///assets/test-bangle-studded.glb",
+        "medium": "asset:///assets/test-bangle-studded.glb",
+        "high": "asset:///assets/test-bangle-studded.glb"
+      },
+      "dimensions": {
+        "width": 60,
+        "height": 4,
+        "depth": 60
+      }
+    }
+  },
+  {
+    "id": "HERO-PEND-001",
+    "label": "HERO-PEND-001",
+    "category": "pendants",
+    "categoryName": "Pendants",
+    "karat": 22,
+    "weight": 5.2,
+    "imageKey": "HERO-PEND-001",
+    "image": "",
+    "threeD": {
+      "glbUrl": "asset:///assets/test-pendant.glb",
+      "posterImageKey": null,
+      "materialVariants": [
+        {
+          "id": "yellow_22k",
+          "label": "22K Yellow Gold",
+          "metalColor": "yellow",
+          "purity": 22,
+          "glbUrl": "asset:///assets/test-pendant.glb",
+          "hexAccent": "#D4A843"
+        }
+      ],
+      "purityOptions": [
+        {
+          "karat": 22,
+          "label": "22K (916 Hallmark)",
+          "rateMultiplier": 1
+        }
+      ],
+      "totalWeight": 5.2,
+      "stones": [],
+      "cameraPreset": {
+        "position": [
+          0,
+          15,
+          40
+        ],
+        "target": [
+          0,
+          2,
+          0
+        ],
+        "fov": 35,
+        "near": 0.1,
+        "far": 1000
+      },
+      "arEligible": true,
+      "availability": "in_stock",
+      "lod": {
+        "low": "asset:///assets/test-pendant.glb",
+        "medium": "asset:///assets/test-pendant.glb",
+        "high": "asset:///assets/test-pendant.glb"
+      },
+      "dimensions": {
+        "width": 12,
+        "height": 18,
+        "depth": 5
+      }
+    }
+  },
+  {
+    "id": "HERO-NECK-001",
+    "label": "HERO-NECK-001",
+    "category": "necklaces",
+    "categoryName": "Necklaces",
+    "karat": 22,
+    "weight": 45,
+    "imageKey": "HERO-NECK-001",
+    "image": "",
+    "threeD": {
+      "glbUrl": "asset:///assets/test-necklace.glb",
+      "posterImageKey": null,
+      "materialVariants": [
+        {
+          "id": "yellow_22k",
+          "label": "22K Yellow Gold",
+          "metalColor": "yellow",
+          "purity": 22,
+          "glbUrl": "asset:///assets/test-necklace.glb",
+          "hexAccent": "#D4A843"
+        }
+      ],
+      "purityOptions": [
+        {
+          "karat": 22,
+          "label": "22K (916 Hallmark)",
+          "rateMultiplier": 1
+        }
+      ],
+      "totalWeight": 45,
+      "stones": [],
+      "cameraPreset": {
+        "position": [
+          0,
+          30,
+          80
+        ],
+        "target": [
+          0,
+          5,
+          0
+        ],
+        "fov": 35,
+        "near": 0.1,
+        "far": 1000
+      },
+      "arEligible": false,
+      "availability": "made_to_order",
+      "lod": {
+        "low": "asset:///assets/test-necklace.glb",
+        "medium": "asset:///assets/test-necklace.glb",
+        "high": "asset:///assets/test-necklace.glb"
+      },
+      "dimensions": {
+        "width": 36,
+        "height": 25,
+        "depth": 10
+      }
+    }
+  },
+  {
+    "id": "HERO-SET-001",
+    "label": "HERO-SET-001",
+    "category": "bridal sets",
+    "categoryName": "Bridal Sets",
+    "karat": 22,
+    "weight": 70,
+    "imageKey": "HERO-SET-001",
+    "image": "",
+    "threeD": {
+      "glbUrl": "asset:///assets/test-bridal-set.glb",
+      "posterImageKey": null,
+      "materialVariants": [
+        {
+          "id": "yellow_22k",
+          "label": "22K Yellow Gold",
+          "metalColor": "yellow",
+          "purity": 22,
+          "glbUrl": "asset:///assets/test-bridal-set.glb",
+          "hexAccent": "#D4A843"
+        }
+      ],
+      "purityOptions": [
+        {
+          "karat": 22,
+          "label": "22K (916 Hallmark)",
+          "rateMultiplier": 1
+        }
+      ],
+      "totalWeight": 70,
+      "stones": [],
+      "cameraPreset": {
+        "position": [
+          0,
+          35,
+          90
+        ],
+        "target": [
+          0,
+          10,
+          0
+        ],
+        "fov": 35,
+        "near": 0.1,
+        "far": 1000
+      },
+      "arEligible": false,
+      "availability": "made_to_order",
+      "lod": {
+        "low": "asset:///assets/test-bridal-set.glb",
+        "medium": "asset:///assets/test-bridal-set.glb",
+        "high": "asset:///assets/test-bridal-set.glb"
+      },
+      "dimensions": {
+        "width": 40,
+        "height": 35,
+        "depth": 15
+      }
+    }
+  }
+]
