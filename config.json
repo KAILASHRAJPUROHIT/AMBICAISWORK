@@ -1,0 +1,258 @@
+{
+  "_comment": "Aradhana Jewellers - Gold Rate Monitor. Edit recipients + thresholds here, then restart.",
+  "poll": {
+    "intervalMs": 1000,
+    "timeoutMs": 4000,
+    "maxConsecutiveFailures": 10
+  },
+  "primary": {
+    "label": "Safari Bullions",
+    "url": "https://bcast.safaribullions.com/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/safari",
+    "refRows": {
+      "gst999": {
+        "code": "2365",
+        "namePattern": "RTGS.*999.*GST"
+      },
+      "gold995": {
+        "code": "2275",
+        "namePattern": "INDIAN[\\s-]*BIS\\s+995\\s+1KG"
+      },
+      "costing": {
+        "code": "2148",
+        "namePattern": "^GOLD\\s+COSTING"
+      },
+      "spotUsd": {
+        "code": "2147",
+        "namePattern": "^GOLD\\(\\$\\)"
+      },
+      "usdInr": {
+        "code": "2149",
+        "namePattern": "^INR$"
+      }
+    },
+    "targetCandidates": [
+      {
+        "code": "2287",
+        "namePattern": "^GOLD\\s+INDIAN[\\s-]*BIS\\s+999\\b",
+        "field": "sell"
+      },
+      {
+        "code": "2157",
+        "namePattern": "^GOLD\\s+IMPORTED\\s+999\\b",
+        "field": "sell"
+      },
+      {
+        "code": "2154",
+        "namePattern": "^GOLD\\s+IMPORTED\\s+999\\b",
+        "field": "sell"
+      }
+    ]
+  },
+  "business": {
+    "purityFactor": 0.95,
+    "premiumAdd": 200,
+    "label": "22KT",
+    "unit": "per 10 g",
+    "rounding": "none",
+    "gstPercent": 3,
+    "variants": [
+      {
+        "key": "18kt",
+        "label": "18KT",
+        "purityFactor": 0.77
+      }
+    ],
+    "premiumAdd24kt": 1500
+  },
+  "validation": {
+    "internal": {
+      "enabled": true,
+      "blocking": true,
+      "gstFactor": 1.03,
+      "gstToleranceAbs": 3,
+      "purityRatioMin": 1,
+      "purityRatioMax": 1.015,
+      "costingBandPct": 3,
+      "absoluteMin": 20000,
+      "absoluteMax": 1000000,
+      "gstBlocking": false
+    },
+    "kaka": {
+      "enabled": true,
+      "blocking": true,
+      "label": "Kaka Gold",
+      "url": "https://bcast.kakagold.xyz/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/kaka",
+      "refRows": {
+        "gst999Candidates": [
+          {
+            "code": "4619",
+            "namePattern": "999.*BIS.*GST"
+          },
+          {
+            "code": "4433",
+            "namePattern": "999.*IMP.*GST"
+          }
+        ]
+      },
+      "refreshMs": 5000,
+      "maxAgeMs": 120000,
+      "warnPct": 0.5,
+      "failPct": 1.5,
+      "gstFactor": 1.03,
+      "targetCandidates": [
+        {
+          "code": "4620",
+          "namePattern": "^GOLD\\s+999\\s+BIS\\s+APPROVED\\b",
+          "field": "sell"
+        },
+        {
+          "code": "4635",
+          "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
+          "field": "sell"
+        },
+        {
+          "code": "4616",
+          "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
+          "field": "sell"
+        }
+      ],
+      "secondaryCandidates": [
+        {
+          "code": "4616",
+          "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
+          "field": "sell"
+        },
+        {
+          "code": "4635",
+          "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
+          "field": "sell"
+        },
+        {
+          "code": "4620",
+          "namePattern": "^GOLD\\s+999\\s+BIS\\s+APPROVED\\b",
+          "field": "sell"
+        }
+      ]
+    },
+    "parity": {
+      "_comment": "Advisory sanity floor only - never blocks a publish. Set enabled:false to make Kaka Gold the sole external reference.",
+      "enabled": true,
+      "blocking": false,
+      "xauUrl": "https://api.gold-api.com/price/XAU",
+      "fxUrl": "https://open.er-api.com/v6/latest/USD",
+      "refreshMs": 60000,
+      "maxAgeMs": 900000,
+      "spotTolerancePct": 1.5,
+      "fxTolerancePct": 1,
+      "premiumMin": 1.03,
+      "premiumMax": 1.3
+    },
+    "temporal": {
+      "enabled": true,
+      "blocking": true,
+      "maxTickJumpPct": 1.5,
+      "confirmTicks": 3,
+      "staleWarnMinutes": 25
+    }
+  },
+  "marketHours": {
+    "timezone": "Asia/Kolkata",
+    "openHHMM": "09:00",
+    "closeHHMM": "23:30",
+    "days": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ]
+  },
+  "whatsapp": {
+    "enabled": true,
+    "scheduleStartHour": 9,
+    "scheduleEndHour": 21,
+    "intervalMinutes": 60,
+    "sendOnlyWhenVerified": true,
+    "alertOnBlocked": true,
+    "alertCooldownMinutes": 30,
+    "groupNames": [],
+    "numbers": [
+      "8956143245"
+    ],
+    "businessName": "Aradhana Jewellers"
+  },
+  "server": {
+    "port": 8080,
+    "host": "0.0.0.0",
+    "publicDomain": "aradhana-gold-monitor.onrender.com"
+  },
+  "storage": {
+    "historyPoints": 2880,
+    "csvLog": true
+  },
+  "silver": {
+    "primary": {
+      "label": "Safari Bullions (Silver)",
+      "url": "https://bcast.safaribullions.com/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/safarisilver",
+      "target": {
+        "code": "2356",
+        "namePattern": "^SILVER\\s+COSTING$",
+        "field": "sell"
+      }
+    },
+    "business": {
+      "premiumAdd": 5000,
+      "pureLabel": "Silver Pure",
+      "ornamentLabel": "Silver Ornament",
+      "ornamentDiscountPct": 2.5,
+      "unit": "per kg",
+      "rounding": "none"
+    },
+    "validation": {
+      "kaka": {
+        "enabled": true,
+        "blocking": true,
+        "label": "Kaka Gold (Silver Bar)",
+        "gstFactor": 1.03,
+        "url": "https://bcast.kakagold.xyz/VOTSBroadcastStreaming/Services/xml/GetLiveRateByTemplateID/kakasilverbar",
+        "refRows": {
+          "gst999Candidates": [
+            {
+              "code": "4650",
+              "namePattern": "SILVER\\s+999.*GST"
+            }
+          ]
+        },
+        "refreshMs": 5000,
+        "maxAgeMs": 120000,
+        "warnPct": 1,
+        "failPct": 3,
+        "targetCandidates": [
+          {
+            "code": "4656",
+            "namePattern": "^SILVER\\s+999\\s+PETI",
+            "field": "sell"
+          },
+          {
+            "code": "4649",
+            "namePattern": "^SILVER\\s+999\\s+CUTTING",
+            "field": "sell"
+          },
+          {
+            "code": "4651",
+            "namePattern": "^SILVER\\s+999\\s+CHORSA",
+            "field": "sell"
+          }
+        ]
+      },
+      "temporal": {
+        "enabled": true,
+        "blocking": true,
+        "maxTickJumpPct": 3,
+        "confirmTicks": 3,
+        "staleWarnMinutes": 25
+      }
+    }
+  }
+}

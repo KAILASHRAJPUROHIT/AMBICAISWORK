@@ -1,0 +1,23 @@
+{
+  "name": "aradhana-gold-rate-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Live 999 gold rate monitor for Aradhana Jewellers - Safari Bullions primary feed, Kaka Gold cross-validation, WhatsApp hourly broadcast, live web page.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "monitor": "node src/index.js --no-whatsapp",
+    "check": "node src/selftest.js",
+    "wa-login": "node src/index.js --wa-login-only"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.22.2",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.26.0"
+  }
+}
