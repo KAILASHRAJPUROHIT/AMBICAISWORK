@@ -1,0 +1,77 @@
+PDF INGESTION DUPLICATE LOOP HARDENING REPORT
+
+Branch:
+- feature/pdf-ingestion-hardening
+
+Scope:
+- PDF duplicate ingestion/lifecycle hardening only.
+- Did not touch reconciliation, auth, dashboard UI, LAN launcher, or financial record mutation logic.
+- No PDFs are deleted.
+- Original duplicate files remain untouched when archive/move permission fails.
+
+Root cause:
+- Duplicate PDFs from the Windows share were detected repeatedly.
+- When moving duplicates to the duplicate/archive folder failed with WinError 5 / Access Denied, the file stayed in the watched share.
+- The next scan retried the same move and emitted the same failure again, creating an endless duplicate retry loop.
+
+Changes made:
+- backend/invoice_lifecycle.py
+  - Added duplicate permission ledger using AuditLog.
+  - Added status DUPLICATE_MOVE_FAILED_PERMISSION.
+  - Added operator message:
+    "Duplicate PDF detected but archive move failed due to Windows share permission."
+  - If duplicate move succeeds, behavior remains DUPLICATE_MOVE with file moved to duplicate folder.
+  - If duplicate move fails due to Access Denied:
+    - Original PDF is left untouched.
+    - AuditLog records DUPLICATE_MOVE_FAILED_PERMISSION once per file/hash per day.
+    - Later scans skip retrying the move for that file/hash that day.
+    - Later skips are debug-level only to avoid noisy repeated logs.
+  - Added get_duplicate_quarantine_summary().
+
+- backend/pdf_ingestion.py
+  - Duplicate handling now passes file_hash into handle_duplicate().
+  - Added ingestion_status counters:
+    - duplicate_move_failed_permission
+    - duplicate_ignored_until_permission_fixed
+  - Sets last_error to the operator message when permission hardening is triggered.
+
+- backend/review_api.py
+  - Added read-only diagnostic endpoint:
+    GET /api/admin/pdf-duplicate-quarantine
+  - Returns:
+    - total_duplicates
+    - failed_moves
+    - ignored_until_permission_fixed
+    - operator_message
+
+- tests/test_invoice_lifecycle.py
+  - Added tests for Access Denied behavior.
+  - Updated older lifecycle tests to use temp directories instead of the live Windows share.
+
+Safety behavior:
+- No hard delete.
+- No invoice mutation on duplicate skip.
+- No duplicate invoice creation when a duplicate PDF cannot be moved.
+- Audit trail is preserved through AuditLog.
+- Read-only fallback is used when Windows share permission blocks the move.
+
+Tests run:
+- python -m pytest tests/test_invoice_lifecycle.py
+  - Result: 4 passed
+- cd frontend && npm run build
+  - Result: passed
+- python -m pytest
+  - Result: 172 passed, 12 failed
+  - Failures are pre-existing/unrelated areas outside this task:
+    - RBAC permission enum handling tests
+    - API permissions endpoint tests
+    - hardening status text assertion tests
+    - production filtering endpoint/auth shape tests
+  - The PDF ingestion lifecycle tests passed.
+
+Remaining issues:
+- Windows share permissions still need operator/IT correction for duplicate files to be physically moved.
+- Until permissions are fixed, duplicates are tracked and ignored for the day to stop the retry loop.
+
+Commit:
+- No commit made.

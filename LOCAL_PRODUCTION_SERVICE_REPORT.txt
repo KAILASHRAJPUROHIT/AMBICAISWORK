@@ -1,0 +1,58 @@
+# LOCAL PRODUCTION SERVICE & AUTOSTART REPORT
+
+**Branch:** `feature/local-production-service`
+
+## 1. Summary of Final Changes (2026-06-06)
+
+This rollout finalizes the local production server, turning it into a hardened, auto-starting service. The key improvements are:
+- **Robust Health Checks:** Both backend and frontend processes are now concretely verified before being "adopted," preventing the launcher from grabbing unknown processes.
+- **Windows Autostart:** The production server is now configured to start automatically on user login via a hidden Windows Scheduled Task.
+- **Improved Status Command:** The status script provides more detailed, actionable information about running processes.
+
+## 2. Files Changed or Created
+- `scripts/aradhana_service_control.ps1` (major update)
+- `frontend/index.html` (updated for health check)
+- `install_production_autostart.bat` (new)
+- `uninstall_production_autostart.bat` (new)
+- `LAN_SINGLE_INSTANCE_REPORT.txt` (new)
+- `LOCAL_PRODUCTION_SERVICE_REPORT.txt` (this file)
+
+## 3. Feature Breakdown
+
+### 3.1. Hardened Health Checks & Single-Instance Logic
+The core script `aradhana_service_control.ps1` was updated with the following:
+
+- **Backend Health Check (No Change):** Continues to validate `GET /health` and `GET /api/version`.
+- **Frontend Health Check (New):**
+  - No longer assumes any process on port 5173 is the correct one.
+  - It now fetches the root page (`/`) and verifies that the HTML contains `<title>Aradhana Payment Auditor</title>`.
+  - Only if this check passes will an existing frontend process be adopted.
+- **Improved Status Command:**
+  - `status_production_server.bat` now provides more detail:
+    - `RUNNING (Managed)` vs. `RUNNING (Unmanaged)`
+    - `(Healthy)` vs. `(UNHEALTHY / UNKNOWN)`
+  - This gives a clear picture of the state of the services.
+
+### 3.2. Windows Autostart on Login
+
+- **`install_production_autostart.bat`:**
+  - Creates a Windows Scheduled Task named `AradhanaAuditorProductionAutostart`.
+  - The task runs `powershell.exe` with `-WindowStyle Hidden` to execute the production start command (`start-prod`).
+  - This ensures no windows are visible to the user during the automatic startup.
+  - The task is triggered whenever any user logs on.
+- **`uninstall_production_autostart.bat`:**
+  - Provides a simple way to remove the scheduled task.
+
+## 4. Manual Validation Plan
+The following manual tests must be passed before committing:
+1. Run `start_aradhana_lan_server.bat` -> Services should start.
+2. Run `start_aradhana_lan_server.bat` again -> Script should adopt healthy services and exit gracefully.
+3. Run `status_production_server.bat` -> Should show `RUNNING (Managed)` and `(Healthy)` status for both services.
+4. Run `install_production_autostart.bat` as Administrator.
+5. Verify task creation with `schtasks /query /tn "AradhanaAuditorProductionAutostart"`.
+6. Reboot the machine and log in. Verify services are running using `status_production_server.bat`.
+7. Run `start_dev_instance.bat` -> Dev services should start on their separate ports.
+8. Run `start_dev_instance.bat` again -> Should adopt and exit.
+9. Run `stop_dev_instance.bat` -> Dev services should stop.
+
+**Commit Status:** Not committed pending successful manual validation.

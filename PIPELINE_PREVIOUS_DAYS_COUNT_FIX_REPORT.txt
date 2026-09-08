@@ -1,0 +1,83 @@
+PIPELINE PREVIOUS DAYS COUNT FIX REPORT
+
+SCOPE
+- Read-only feed/display fix.
+- No auth, OTP, RBAC, reconciliation decision logic, payment statuses, reviews, or financial records were changed.
+- Negative Net Pay values were left unchanged.
+
+FILES CHANGED
+- backend/review_api.py
+- frontend/src/pages/DashboardPage.tsx
+
+BACKEND COUNT BY DATE
+- 2026-06-04=19
+- 2026-06-03=24
+- 2026-06-02=22
+- 2026-06-01=11
+- 2026-04-27=1
+- 2025-11-02=1
+- None=5
+
+RUNNING API COUNT BY DATE BEFORE BACKEND RELOAD
+GET /api/invoices/live-feed?days=7&per_day=20
+- 2026-06-04=19
+- 2026-06-03=24
+- 2026-06-02=5
+- 2026-04-27=1
+- 2025-11-02=1
+- TOTAL_RETURNED=50
+
+NEW ENDPOINT LOGIC COUNT BY DATE
+Directly verified against get_live_feed(days=7, per_day=20):
+- 2026-06-04=19
+- 2026-06-03=20
+- 2026-06-02=20
+- 2026-06-01=11
+- None=5
+- TOTAL_RETURNED=75
+
+UI COUNT BY DATE VERIFIED IN BROWSER
+Using the currently running API response:
+- Collapsed dashboard:
+  2026-06-04 — 5 of 19 shown
+  2026-06-03 — 10 of 24 shown
+- Open Full Pipeline:
+  2026-06-04 — 19 of 19 shown
+- 2026-06-02 count is constrained by the currently running old API response to 5 returned records. After backend reload with the new endpoint logic, the dashboard request will receive 20 records for 2026-06-02 and show 10 of 20 by default, with Expand/Open Full Pipeline available.
+
+ROOT CAUSE
+- Backend /api/invoices/live-feed used a global limit(50), ordered by ingested_at desc.
+- Frontend then applied liveFeed.slice(0, 8) before grouping by invoice_date.
+- This produced a double truncation:
+  1. The backend global limit starved older dates, so 2026-06-02 had only 5 of 22 database records in the API response.
+  2. The frontend global slice kept only the first 8 records total before grouping, so previous-day groups could show only 1 row even when the API had more records.
+
+FIX
+- Backend:
+  Added read-only query params to /api/invoices/live-feed:
+  days=7
+  per_day=20
+  The endpoint now selects candidates within the requested date window and caps rows per invoice date instead of applying one global cap.
+- Frontend:
+  Dashboard now requests /api/invoices/live-feed?days=7&per_day=20.
+  Removed global liveFeed.slice(0, 8) before grouping.
+  Groups now count all returned records per date.
+  Latest date shows 5 rows by default.
+  Previous date groups show 10 rows by default.
+  Collapsed headers show "YYYY-MM-DD — x of y shown".
+  Each collapsed group has Expand.
+  Open Full Pipeline toggles all returned records visible.
+
+VERIFICATION RESULT
+- npm run build: PASS.
+- Browser dashboard verification: PASS for current running API.
+- Current-day/latest group still displays.
+- 2026-06-03 no longer shows 1 row; it shows 10 of 24 by default with Expand.
+- Open Full Pipeline shows all returned rows for the latest group.
+- Negative Net Pay values such as ₹-3,877 and ₹-15,240 remained unchanged.
+- Browser console warning/error logs during verification: none.
+
+REMAINING NOTE
+- The running backend process had not reloaded backend/review_api.py during browser verification, so HTTP still returned the old global-limit 50-record response.
+- The new endpoint logic was verified by direct function execution against the local DB.
+- Restart/reload the backend process before expecting /api/invoices/live-feed?days=7&per_day=20 to return the new per-day capped response over HTTP.

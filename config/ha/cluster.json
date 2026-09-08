@@ -1,0 +1,15 @@
+{
+  "cluster_id": "aradhana-payment-auditor-lan",
+  "mode": "postgresql-ha-planned",
+  "nodes": [
+    { "id": "server2k22", "hostname": "SERVER2K22", "expected_ipv4": "192.168.0.100", "priority": 300 },
+    { "id": "billing-pc", "hostname": "PC2", "expected_ipv4": "192.168.0.13", "priority": 200 },
+    { "id": "aradhana", "hostname": "ARADHANA", "expected_ipv4": "192.168.0.12", "priority": 100 }
+  ],
+  "ports": { "application": 8000, "dashboard": 5173, "postgresql": 5432 },
+  "safety": {
+    "single_reconciliation_leader": true,
+    "require_postgresql_before_multi_node_writes": true,
+    "never_auto_confirm_ambiguous_payments": true
+  }
+}

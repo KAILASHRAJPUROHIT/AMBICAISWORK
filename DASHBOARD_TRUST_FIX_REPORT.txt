@@ -1,0 +1,99 @@
+DASHBOARD OPERATIONAL TRUST FIX REPORT
+
+FILES CHANGED
+- backend/review_api.py
+- frontend/src/pages/DashboardPage.tsx
+- frontend/src/pages/ReportsPage.tsx
+
+RELATED PENDING FRONTEND CHANGES FROM PRIOR P0 FIX
+- frontend/src/api/client.ts
+- frontend/src/pages/LoginPage.tsx
+- frontend/src/pages/ReconciliationQueuePage.tsx
+- frontend/vite.config.ts
+
+API FIELDS USED
+- /api/admin/ingestion-status:
+  watcher_running, path_exists, pdf_files_found, last_processed_time, files_processed, failed_files, last_error
+- /api/dashboard/live existing:
+  totalBillsToday, importedToday, pendingPreviousDays, verified, pendingReview, unverifiedAdvancesCount, pdfCountInShare, is_owner
+- /api/dashboard/live new read-only fields:
+  totalSaleToday, cashInHandToday, bankConfirmedToday, chequesPendingToday, totalReview, financialDataAvailable, latestOperationalDate
+- /api/invoices/live-feed:
+  bill_number, invoice_date, invoice_time, customer_name, net_payable, pipeline_delay_seconds, status, status_text, pdf_path
+- /reports/owner:
+  generated_at, processed_count, open_reviews
+- /api/reports/payment-bifurcation:
+  mode, total, verified, unverified, count
+
+ROOT CAUSE OF ZERO FINANCIAL CARDS
+- Existing dashboard cards mapped to totalCollection/cashCollection/bankCollection/chequeCollection.
+- Those values were computed from PaymentModel rows attached to bills where invoice_date equals the server current date.
+- The current server date is 2026-06-05, but the latest real invoice data in the local database is 2026-06-04.
+- Existing bills/feed data therefore loaded correctly while strict "today" collection fields were legitimately zero for 2026-06-05.
+- Added read-only aggregate fields with explicit names and financialDataAvailable/latestOperationalDate so the UI can show Data unavailable instead of a misleading money zero when no current-day financial data exists.
+- No values are faked and no payment statuses or financial records are changed.
+
+ROOT CAUSE OF WATCHER OFFLINE/PDF CONTRADICTION
+- The watcher card previously used watcher_running alone to decide Online vs Offline.
+- /api/admin/ingestion-status exposes both path_exists and watcher_running.
+- A reachable share with watcher_running=false is not the same as Offline.
+- The UI now classifies:
+  Green / Online = path_exists true and watcher_running true
+  Yellow / Share Reachable, Watcher Paused = path_exists true and watcher_running false
+  Red / Offline = path_exists false
+- The card now also shows PDF count, Last Scan, Processed, Failed, and last_error.
+
+PIPELINE STATUS DISPLAY
+- Added deterministic UI-only status styling.
+- Green: CLEARED, VERIFIED, PAID
+- Yellow: PENDING, INITIATED, AWAITING_CONFIRMATION
+- Orange: DELIVERY_APPROVED_BEFORE_PAYMENT, APPROVAL_DELIVERY
+- Red: MISMATCH, ERROR, PAYMENT_TOTAL_MISMATCH, FRAUD_RISK
+- Blue: CHEQUE_DEPOSITED, CHEQUE_CLEARING, REALIZING_CHEQUE
+- Grey: ARCHIVED, CLOSED
+- Stored statuses are not modified.
+
+DELAY DISPLAY
+- Delay is now labeled by operational threshold:
+  < 15 minutes = Normal
+  15 minutes to 2 hours = Watch
+  2 hours to 24 hours = Review
+  > 24 hours = Escalate
+- This is visual emphasis only. No escalation records are created.
+
+LABEL CLARITY
+- Unverified Adv -> Advance Verification Queue
+- Pending Previous -> Pending Previous Days
+- Total Review -> Review Queue
+- Verified Cleared remains Verified Cleared
+
+TESTS RUN
+- cd frontend && npm run build
+  Result: PASS
+- python -m pytest
+  Result: FAIL during collection because untracked scripts/test_verify_contract.py imports missing requests.
+- python -m pytest tests
+  Result: 155 passed, 14 failed.
+  Observed failures are pre-existing/out-of-scope categories:
+  RBAC enum/string mismatch, hardening status-text wording expectations, permission errors writing to \\PC2\AradhanaInvoicePDFs, LAN/auth expectations in production filtering tests.
+- Direct read-only aggregate sanity check:
+  Result: PASS. Current strict date totals for 2026-06-05 are 0.0; latestOperationalDate is 2026-06-04.
+
+BROWSER VERIFICATION
+- Login works with OWNER-01 dev credentials and OTP flow.
+- Dashboard opens.
+- Invoice Watcher no longer shows contradictory Offline + PDFs; it shows Online with 175 PDFs in share.
+- PDF count is visible.
+- Last Scan, Processed, and Failed are visible.
+- Financial cards show Data unavailable rather than misleading rupee zero because no bills are dated 2026-06-05; latest invoice data is 2026-06-04.
+- Pipeline feed loads.
+- Status labels display Cleared/Pending/Error states with deterministic UI styling.
+- Delay >24h is visibly labeled Escalate.
+- Reconciliation no longer fails from missing token and loads the available review queue route.
+- Reports no longer fail from /api/reports/owner 404 or stale response mapping; report summary and bifurcation load.
+
+REMAINING ISSUES
+- The backend process serving the browser may need restart to expose the new /api/dashboard/live read-only fields; the built frontend already handles absent fields by showing Data unavailable.
+- There is no current-day invoice data for 2026-06-05 in the local DB, so strict Today finance cards correctly do not show 2026-06-04 amounts as today amounts.
+- Full pytest is not clean due existing unrelated failures and one untracked script dependency issue.
+- Reconciliation page now uses /reviews/open because route dump has no /api/reconciliations route; it displays review queue data, not a dedicated reconciliation-result endpoint.
