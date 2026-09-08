@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Today's Gold Rate Poster</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 480px; margin: 24px auto; padding: 0 16px; }
+    input, button { font-size: 18px; padding: 10px; width: 100%; box-sizing: border-box; margin-top: 8px; }
+    button { background: #97611f; color: #fff; border: none; border-radius: 6px; }
+    img { max-width: 100%; margin-top: 16px; border-radius: 8px; }
+    .error { color: #b00020; margin-top: 8px; }
+    a.dl { display: inline-block; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h2>Today's Gold Rate Poster</h2>
+  <form method="post">
+    <label>Today's rate (per 10 gram)</label>
+    <input type="text" name="rate" placeholder="e.g. 135000" required>
+    <button type="submit">Generate Poster</button>
+  </form>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if image_url %}
+    <img src="{{ image_url }}" alt="Gold rate poster">
+    <br><a class="dl" href="{{ image_url }}" download>Download image</a>
+  {% endif %}
+</body>
+</html>

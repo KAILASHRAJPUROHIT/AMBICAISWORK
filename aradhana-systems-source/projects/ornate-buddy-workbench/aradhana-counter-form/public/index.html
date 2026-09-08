@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aradhana Jewellers – Counter Slip</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="brand">ARADHANA JEWELLERS</div>
+        <h1>Counter Slip</h1>
+      </div>
+      <div class="status-stack">
+        <span id="rateStatus" class="pill neutral">Rates loading…</span>
+        <span id="waStatus" class="pill neutral">WhatsApp loading…</span>
+      </div>
+    </header>
+
+    <section class="rate-strip">
+      <div><span>22KT Gold</span><strong id="gold22">—</strong><small>/10 g ex-GST</small></div>
+      <div><span>24KT Gold</span><strong id="gold24">—</strong><small>/10 g ex-GST</small></div>
+      <div><span>Silver Pure</span><strong id="silverPure">—</strong><small>/kg ex-GST</small></div>
+      <div><span>Updated</span><strong id="rateUpdated">—</strong><small>verified monitor</small></div>
+    </section>
+
+    <form id="slipForm" autocomplete="off">
+      <section class="card customer-card">
+        <div class="section-title">Customer</div>
+        <div class="grid customer-grid">
+          <label>Name<input id="customerName" name="customerName" /></label>
+          <label>Mobile<input id="customerMobile" name="customerMobile" inputmode="numeric" maxlength="15" /></label>
+          <label class="wide">Address<input id="customerAddress" name="customerAddress" /></label>
+        </div>
+      </section>
+
+      <div class="material-grid">
+        <section class="card material new">
+          <div class="section-title">NEW GOLD</div>
+          <div class="grid line-grid">
+            <label>Item<select id="newGoldItem"></select></label>
+            <label>Weight (g)<input id="newGoldWeight" type="number" min="0" step="0.001" inputmode="decimal" /></label>
+            <label>Purity<input id="newGoldPurity" type="number" min="1" max="1000" step="0.01" list="goldPurities" placeholder="e.g. 916" /></label>
+          </div>
+          <datalist id="goldPurities"><option value="999"></option><option value="916"></option><option value="750"></option><option value="585"></option></datalist>
+          <div class="calc-row"><span>Rate</span><b id="newGoldRate">—</b></div>
+          <div class="calc-row"><span>Metal value</span><b id="newGoldValue">—</b></div>
+          <div class="calc-row"><span>GST 3%</span><b id="newGoldGst">—</b></div>
+          <div class="calc-row total"><span>Total incl. GST</span><b id="newGoldTotal">₹0.00</b></div>
+        </section>
+
+        <section class="card material new">
+          <div class="section-title">NEW SILVER</div>
+          <div class="grid line-grid">
+            <label>Item<select id="newSilverItem"></select></label>
+            <label>Weight (g)<input id="newSilverWeight" type="number" min="0" step="0.001" inputmode="decimal" /></label>
+            <label>Purity<input id="newSilverPurity" type="number" min="1" max="1000" step="0.01" list="silverPurities" placeholder="e.g. 999 / 925 / 800" /></label>
+          </div>
+          <datalist id="silverPurities"><option value="999"></option><option value="975"></option><option value="925"></option><option value="800"></option><option value="700"></option><option value="500"></option></datalist>
+          <div class="calc-row"><span>Rate</span><b id="newSilverRate">—</b></div>
+          <div class="calc-row"><span>Metal value</span><b id="newSilverValue">—</b></div>
+          <div class="calc-row"><span>GST 3%</span><b id="newSilverGst">—</b></div>
+          <div class="calc-row total"><span>Total incl. GST</span><b id="newSilverTotal">₹0.00</b></div>
+        </section>
+
+        <section class="card material old">
+          <div class="section-title">OLD GOLD <span>manual only</span></div>
+          <div class="old-head"><span>#</span><span>Weight (g)</span><span>Purity</span><span>Amount ₹</span></div>
+          <div id="oldGoldRows"></div>
+          <div class="calc-row total muted-total"><span>Entered amount total</span><b id="oldGoldTotal">₹0.00</b></div>
+        </section>
+
+        <section class="card material old">
+          <div class="section-title">OLD SILVER <span>manual only</span></div>
+          <div class="old-head"><span>#</span><span>Weight (g)</span><span>Purity</span><span>Amount ₹</span></div>
+          <div id="oldSilverRows"></div>
+          <div class="calc-row total muted-total"><span>Entered amount total</span><b id="oldSilverTotal">₹0.00</b></div>
+        </section>
+      </div>
+
+      <section class="card">
+        <div class="section-title">URD</div>
+        <div class="grid urd-grid">
+          <label>URD No.<input id="urdNo" /></label>
+          <label>URD Amount<input id="urdAmount" type="number" min="0" step="0.01" inputmode="decimal" /></label>
+          <label>URD Txn No.<input id="urdTxnNo" /></label>
+        </div>
+      </section>
+
+      <section class="card final-card">
+        <div class="section-title">FINAL</div>
+        <div class="final-amount">
+          <span>Final Bill Amount</span>
+          <strong id="finalBill">₹0.00</strong>
+          <small>NEW Gold + NEW Silver only. OLD amounts are not deducted.</small>
+        </div>
+        <div class="grid final-grid">
+          <label>Payment<select id="payment"><option value="">Select</option><option>Cash</option><option>UPI</option><option>Card</option><option>Mixed</option></select></label>
+          <label>Salesman<input id="salesman" list="salespeople" /></label>
+          <label>Billing<input id="billing" list="billingPeople" /></label>
+        </div>
+        <datalist id="salespeople"></datalist><datalist id="billingPeople"></datalist>
+      </section>
+
+      <div id="formMessage" class="message" hidden></div>
+      <div class="actions">
+        <button type="button" class="secondary" id="clearBtn">Clear</button>
+        <button type="submit" class="primary" id="submitBtn">Submit & Send WhatsApp</button>
+      </div>
+      <p class="destination">WhatsApp: <b>+91 89561 43245</b> → <b>+91 94226 82086</b></p>
+    </form>
+  </main>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

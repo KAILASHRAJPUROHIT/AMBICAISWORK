@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Board Control — Aradhana Jewellers</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --blue:#23519d; --blue-deep:#173a75;
+    --gold:#cca137; --gold-lite:#f7ca5b; --gold-dim:#a5822a;
+    --ivory:#fff8e7; --white:#ffffff;
+    --ink:#1c3a6e; --muted:#5b6b8c; --line:#e9dfc0;
+    --ok:#1f9d55; --bad:#c23a3a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:linear-gradient(180deg,var(--blue),var(--blue-deep));
+    min-height:100dvh;color:var(--white);font-family:Inter,system-ui,sans-serif;
+    padding:32px 20px 60px;
+  }
+  .wrap{max-width:480px;margin:0 auto}
+  h1{
+    font-family:'Cormorant Garamond',Georgia,serif;font-weight:700;color:var(--gold-lite);
+    font-size:26px;text-align:center;margin-bottom:4px;
+  }
+  .sub{text-align:center;color:rgba(255,255,255,.7);font-size:13px;margin-bottom:28px}
+
+  .card{background:var(--ivory);border:1px solid var(--gold);border-radius:16px;padding:20px;margin-bottom:16px}
+  .card h2{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--gold-dim);margin-bottom:14px;font-weight:700}
+
+  .layouts{display:flex;flex-direction:column;gap:10px}
+  .layout-btn{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:14px 16px;border-radius:12px;border:1.5px solid var(--line);background:var(--white);
+    color:var(--ink);font-family:Inter,sans-serif;font-size:15px;font-weight:600;cursor:pointer;
+    transition:border-color .15s,background .15s;
+  }
+  .layout-btn:hover{border-color:var(--gold)}
+  .layout-btn.active{border-color:var(--blue);background:rgba(35,81,157,.07)}
+  .layout-btn .check{
+    width:18px;height:18px;border-radius:50%;border:2px solid var(--line);flex:none;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .layout-btn.active .check{border-color:var(--blue);background:var(--blue)}
+  .layout-btn.active .check::after{content:'';width:7px;height:7px;border-radius:50%;background:#fff}
+
+  .refresh-btn{
+    width:100%;padding:15px;border-radius:12px;border:none;background:var(--gold);
+    color:#2a1f04;font-family:Inter,sans-serif;font-size:15px;font-weight:700;cursor:pointer;
+    letter-spacing:.02em;
+  }
+  .refresh-btn:active{background:var(--gold-dim)}
+  .refresh-btn:disabled{opacity:.6;cursor:default}
+
+  .status{font-size:12.5px;color:var(--muted);line-height:1.7}
+  .status b{color:var(--ink)}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:6px}
+  .dot.bad{background:var(--bad)}
+
+  .toast{
+    position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);
+    background:var(--ink);color:#fff;padding:10px 18px;border-radius:999px;font-size:13px;
+    opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;white-space:nowrap;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Board Control</h1>
+  <div class="sub">Applies to every /board.html display within ~1 second</div>
+
+  <div class="card">
+    <h2>Layout</h2>
+    <div class="layouts" id="layouts">
+      <div class="layout-btn" data-value="fullbleed"><span><div class="check"></div></span><span style="flex:1;margin-left:10px">Full-Bleed Stack</span></div>
+      <div class="layout-btn" data-value="diagonal"><span><div class="check"></div></span><span style="flex:1;margin-left:10px">Diagonal Cascade</span></div>
+      <div class="layout-btn" data-value="medallion"><span><div class="check"></div></span><span style="flex:1;margin-left:10px">Medallion Cluster</span></div>
+      <div class="layout-btn" data-value="bands"><span><div class="check"></div></span><span style="flex:1;margin-left:10px">Metal Bands</span></div>
+      <div class="layout-btn" data-value="waterfall"><span><div class="check"></div></span><span style="flex:1;margin-left:10px">Waterfall Cascade</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>All displays</h2>
+    <button class="refresh-btn" id="refreshBtn">Force Refresh All Displays</button>
+  </div>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div class="status" id="status">Loading…</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let currentLayout = null;
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+function paintLayoutButtons() {
+  document.querySelectorAll('.layout-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.value === currentLayout);
+  });
+}
+
+document.querySelectorAll('.layout-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const layout = btn.dataset.value;
+    if (layout === currentLayout) return;
+    currentLayout = layout;
+    paintLayoutButtons();
+    fetch('/api/board-control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layout }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok) toast('Layout set to ' + btn.textContent.trim());
+        else toast('Failed: ' + (d.error || 'unknown error'));
+      })
+      .catch(() => toast('Could not reach the server'));
+  });
+});
+
+$('refreshBtn').addEventListener('click', () => {
+  $('refreshBtn').disabled = true;
+  fetch('/api/board-control', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ forceRefresh: true }),
+  })
+    .then((r) => r.json())
+    .then((d) => toast(d.ok ? 'All displays reloading…' : 'Failed: ' + (d.error || 'unknown error')))
+    .catch(() => toast('Could not reach the server'))
+    .finally(() => setTimeout(() => { $('refreshBtn').disabled = false; }, 1200));
+});
+
+function renderStatus(s) {
+  if (s.boardControl && s.boardControl.layout !== currentLayout) {
+    currentLayout = s.boardControl.layout;
+    paintLayoutButtons();
+  }
+  const p = s.published;
+  const ok = p && p.status !== 'BLOCKED';
+  $('status').innerHTML =
+    '<span class="dot' + (ok ? '' : ' bad') + '"></span>' + (ok ? 'Feed healthy' : 'Feed blocked/held') +
+    (p ? '<br><b>22KT</b> ₹' + Number(p.rate22kt).toLocaleString('en-IN') + ' · updated ' + p.atIst : '');
+}
+
+function poll() {
+  fetch('/api/rate', { cache: 'no-store' })
+    .then((r) => r.json())
+    .then(renderStatus)
+    .catch(() => { $('status').innerHTML = '<span class="dot bad"></span>Could not reach the server'; });
+}
+poll();
+setInterval(poll, 2000);
+</script>
+</body>
+</html>

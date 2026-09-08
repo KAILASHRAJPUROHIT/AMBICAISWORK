@@ -1,0 +1,224 @@
+/* Styles for Reconciliation Queue Page */
+.reconciliation-queue-page {
+    padding: 20px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.reconciliation-queue-page h1 {
+    color: #333;
+    margin-bottom: 10px;
+}
+
+.reconciliation-queue-page p {
+    color: #666;
+    margin-bottom: 20px;
+}
+
+/* Table container for overflow scrolling */
+.reconciliation-table-container {
+    overflow-x: auto;
+    margin-top: 20px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Base table styles */
+.reconciliation-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px; /* Ensure table is wide enough for all columns */
+}
+
+.reconciliation-table th,
+.reconciliation-table td {
+    text-align: left;
+    padding: 12px 15px;
+    border-bottom: 1px solid #eee;
+}
+
+.reconciliation-table th {
+    background-color: #f8f8f8;
+    color: #555;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.9em;
+}
+
+.reconciliation-table tbody tr {
+    background-color: #fff;
+    transition: background-color 0.2s ease;
+    cursor: pointer;
+}
+
+.reconciliation-table tbody tr:hover {
+    background-color: #f0f0f0;
+}
+
+.reconciliation-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* Status Badges */
+.status-badge {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: white;
+    text-align: center;
+    min-width: 90px; /* Ensure consistent badge width */
+}
+
+.status-verified {
+    background-color: #28a745; /* Green */
+}
+
+.status-pending {
+    background-color: #ffc107; /* Yellow */
+    color: #333; /* Darker text for contrast */
+}
+
+.status-delivered-before-payment {
+    background-color: #fd7e14; /* Orange */
+}
+
+.status-risk-mismatch {
+    background-color: #dc3545; /* Red */
+}
+
+.status-cheque-pending {
+    background-color: #007bff; /* Blue */
+}
+
+.status-archived {
+    background-color: #6c757d; /* Grey */
+}
+
+/* Empty state and Loading indicator styles */
+.empty-state, .loading-indicator {
+    text-align: center;
+    padding: 40px;
+    color: #777;
+    font-size: 1.1em;
+    background-color: #fdfdfd;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+.loading-indicator {
+    color: #007bff;
+}
+
+/* Drawer styles (InvoiceDetailDrawer) */
+.drawer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: flex-end;
+    z-index: 1000;
+}
+
+.drawer-content {
+    background-color: white;
+    width: 450px;
+    height: 100%;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.2);
+    overflow-y: auto;
+    transform: translateX(100%);
+    animation: slideIn 0.3s forwards;
+    display: flex;
+    flex-direction: column;
+}
+
+@keyframes slideIn {
+    to {
+        transform: translateX(0);
+    }
+}
+
+.drawer-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #f8f8f8;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.drawer-header h2 {
+    margin: 0;
+    color: #333;
+    font-size: 1.2em;
+}
+
+.drawer-close-button {
+    background: none;
+    border: none;
+    font-size: 1.5em;
+    cursor: pointer;
+    color: #555;
+}
+
+.drawer-close-button:hover {
+    color: #333;
+}
+
+.drawer-body {
+    padding: 20px;
+    flex-grow: 1;
+}
+
+.drawer-section {
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px dashed #eee;
+}
+
+.drawer-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.drawer-section h3 {
+    color: #333;
+    font-size: 1.1em;
+    margin-top: 0;
+    margin-bottom: 15px;
+    border-left: 4px solid #007bff;
+    padding-left: 10px;
+}
+
+.detail-item {
+    display: flex;
+    margin-bottom: 10px;
+    font-size: 0.95em;
+}
+
+.detail-label {
+    font-weight: 600;
+    color: #555;
+    min-width: 120px;
+    flex-shrink: 0;
+}
+
+.detail-value {
+    color: #333;
+    flex-grow: 1;
+}
+
+.payment-details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}

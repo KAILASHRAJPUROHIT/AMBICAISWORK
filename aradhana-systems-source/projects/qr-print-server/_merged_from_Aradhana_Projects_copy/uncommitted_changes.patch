@@ -1,0 +1,36 @@
+diff --git a/app.py b/app.py
+index a607206..4538529 100644
+--- a/app.py
++++ b/app.py
+@@ -17,7 +17,7 @@ app = Flask(__name__)
+ # CONFIG
+ # =========================
+ 
+-BASE = Path(r"C:\WhatsappAutoPrint")
++BASE = Path(r"C:\Aradhana Projects\WhatsappAutoPrint")
+ UPLOADS = BASE / "Uploads"
+ OUTPUT = BASE / "Output"
+ PRINTED = BASE / "Printed"
+diff --git a/launch_hidden.vbs b/launch_hidden.vbs
+index c8f6ecb..3fd743e 100644
+--- a/launch_hidden.vbs
++++ b/launch_hidden.vbs
+@@ -1,2 +1,2 @@
+ Set WshShell = CreateObject("WScript.Shell")
+-WshShell.Run "cmd /c cd /d C:\aradhana_qr_print_server_v3 && python app.py", 0, False
+\ No newline at end of file
++WshShell.Run "cmd /c cd /d ""C:\Aradhana Projects\aradhana_qr_print_server_v3"" && python app.py", 0, False
+\ No newline at end of file
+diff --git a/make_qr.py b/make_qr.py
+index 348d7e7..c31e537 100644
+--- a/make_qr.py
++++ b/make_qr.py
+@@ -16,7 +16,7 @@ def get_local_ip():
+ ip = get_local_ip()
+ url = f"http://{ip}:5000"
+ 
+-out_dir = Path(r"C:\WhatsappAutoPrint")
++out_dir = Path(r"C:\Aradhana Projects\WhatsappAutoPrint")
+ out_dir.mkdir(parents=True, exist_ok=True)
+ 
+ qr = qrcode.QRCode(box_size=12, border=3)

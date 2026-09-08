@@ -1,0 +1,7 @@
+# Copy the existing PC2 config first. Append these lines only on a controlled test PC.
+# Do not enable on PC2/Dell production until marked test print approval.
+DocumentWorkflowEnabled=false
+DocumentWorkflowRoot=C:\AradhanaSystems\platform\plugins\document-print-workflow
+DocumentWorkflowApi=http://127.0.0.1:8310
+# Replace with the deployed QR Scanner server URL during test setup.
+DocumentScannerApi=

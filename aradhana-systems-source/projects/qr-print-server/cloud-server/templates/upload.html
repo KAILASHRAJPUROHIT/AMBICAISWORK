@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aradhana Jewellers | Smart Scan & Print</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <style>
+        :root {
+            --navy: #06142E;
+            --navy-light: #112244;
+            --gold: #D4AF37;
+            --gold-light: #F3E5AB;
+            --bg-color: #F7F5F0;
+            --text-light: #FFFFFF;
+            --error: #E74C3C;
+            --success: #27AE60;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .btn-action {
+            background: var(--navy-light);
+            border: 2px solid var(--gold);
+            border-radius: 16px;
+            padding: 20px 10px;
+            color: var(--gold-light);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-height: 100px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .btn-action:active {
+            transform: scale(0.95);
+            background: rgba(212, 175, 55, 0.1);
+        }
+
+        .btn-action span { font-size: 32px; }
+        .btn-action strong { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+
+        .header { text-align: center; margin: 10px 0; }
+        .header h1 { color: var(--navy); font-family: Georgia, serif; font-size: 24px; letter-spacing: 2px; text-transform: uppercase; }
+
+        .container { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; }
+
+        .card {
+            background: var(--navy);
+            border: 2px solid var(--gold);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(6, 20, 46, 0.2);
+            color: white;
+            position: relative;
+        }
+
+        .hidden { display: none !important; }
+
+        /* Debug UI */
+        .debug-overlay {
+            display: {% if production_mode %}none{% else %}block{% endif %};
+            position: absolute;
+            top: 60px; left: 10px;
+            background: rgba(0,0,0,0.85);
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            font-size: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 110;
+            pointer-events: none;
+            max-width: 250px;
+            line-height: 1.4;
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        .debug-row { display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid rgba(0, 255, 0, 0.1); padding: 2px 0; }
+        .debug-val { color: #fff; font-weight: bold; }
+
+        /* Queue UI */
+        .queue-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            min-height: 120px;
+            border: 1px solid rgba(212, 175, 55, 0.2);
+        }
+
+        .queue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 12px;
+            color: var(--gold);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: bold;
+        }
+
+        .queue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; }
+
+        .queue-item {
+            position: relative;
+            aspect-ratio: 3/4;
+            background: #111;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid var(--gold);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .queue-item img { width: 100%; height: 100%; object-fit: contain; }
+
+        .queue-item .pdf-icon {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: var(--gold);
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .queue-item .pdf-icon small {
+            font-size: 10px;
+            color: #aaa;
+            max-width: 90px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-align: center;
+            padding: 0 4px;
+        }
+
+        .btn-remove {
+            position: absolute;
+            top: 2px; right: 2px;
+            background: var(--error);
+            color: white;
+            border: none;
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            font-size: 15px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 5;
+        }
+
+        /* Camera View */
+        .camera-wrapper {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: black;
+            z-index: 1000;
+            display: flex; flex-direction: column;
+        }
+
+        .camera-container { position: relative; flex: 1; overflow: hidden; }
+
+        #camera-video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+
+        #detection-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            object-fit: contain;
+            z-index: 100;
+            pointer-events: none;
+        }
+
+        .camera-guide {
+            position: absolute;
+            top: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.65);
+            color: white;
+            padding: 8px 18px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 10;
+            white-space: nowrap;
+            transition: background 0.3s;
+        }
+
+        .camera-guide.guide-locked {
+            background: rgba(39, 174, 96, 0.85);
+            color: #fff;
+            font-weight: bold;
+        }
+
+        /* Auto-capture ring */
+        #autocapture-ring {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80px; height: 80px;
+            border-radius: 50%;
+            border: 4px solid var(--gold);
+            z-index: 105;
+            pointer-events: none;
+            display: none;
+        }
+
+        #autocapture-ring.visible { display: block; }
+        #autocapture-ring.flash { background: rgba(212,175,55,0.4); }
+
+        .camera-controls {
+            height: 120px;
+            background: rgba(0,0,0,0.8);
+            display: flex; justify-content: space-around; align-items: center;
+            padding: 0 20px;
+            z-index: 10;
+        }
+
+        .btn-shutter {
+            width: 70px; height: 70px;
+            border-radius: 50%;
+            border: 5px solid white;
+            background: transparent;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .btn-shutter::after {
+            content: '';
+            position: absolute;
+            top: 5px; left: 5px; right: 5px; bottom: 5px;
+            background: white;
+            border-radius: 50%;
+        }
+
+        .btn-camera-cancel { color: white; background: transparent; border: none; font-size: 16px; cursor: pointer; }
+        @keyframes successPop { 0%{transform:scale(0);opacity:0} 70%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
+        @keyframes stampReveal { 0%{transform:scale(1.4) rotate(-4deg);opacity:0} 60%{transform:scale(0.96) rotate(1deg);opacity:1} 100%{transform:scale(1) rotate(0deg);opacity:1} }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+        @keyframes statusPrint { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+        /* Crop View */
+        .crop-wrapper { display: flex; flex-direction: column; gap: 15px; }
+
+        .crop-container {
+            width: 100%;
+            height: auto;
+            max-height: 60vh;
+            background: #000;
+            overflow: hidden;
+            border-radius: 12px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(212, 175, 55, 0.4);
+            margin-bottom: 10px;
+        }
+
+        #crop-image {
+            width: 100%;
+            max-height: 60vh;
+            object-fit: contain;
+            display: block;
+        }
+
+        /* Print Options */
+        .section-label { font-size: 12px; color: var(--gold); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; display: block; }
+
+        .print-types { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+
+        .type-card input { display: none; }
+        .type-content {
+            background: var(--navy-light);
+            border: 2px solid rgba(212, 175, 55, 0.3);
+            border-radius: 10px;
+            padding: 12px 10px;
+            text-align: center;
+            transition: 0.2s;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .type-content .mode-icon { font-size: 24px; }
+        .type-content .mode-desc { font-size: 10px; color: #aaa; margin-top: 2px; }
+
+        .type-card input:checked + .type-content {
+            border-color: var(--gold);
+            background: rgba(212, 175, 55, 0.15);
+        }
+        .type-card input:checked + .type-content .mode-desc { color: var(--gold-light); }
+
+        .btn-master {
+            background: linear-gradient(135deg, #D4AF37 0%, #C5A059 100%);
+            color: var(--navy);
+            border: 0;
+            border-radius: 12px;
+            padding: 18px;
+            font-size: 18px;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 5px 15px rgba(212,175,55,0.4);
+        }
+
+        .btn-master:disabled { background: #444; color: #777; box-shadow: none; cursor: not-allowed; }
+
+        .loader-overlay { text-align: center; padding: 40px 0; }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid rgba(212, 175, 55, 0.1);
+            border-top-color: var(--gold);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #cv-loading-bar {
+            position: fixed;
+            bottom: 0; left: 0; width: 0%;
+            background: var(--gold);
+            height: 3px;
+            z-index: 2000;
+            transition: width 0.3s;
+        }
+
+        /* Toast Notifications */
+        #toast-container {
+            position: fixed;
+            bottom: 30px; left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            pointer-events: none;
+            width: 90%;
+            max-width: 400px;
+        }
+
+        .toast {
+            background: #1a1a2e;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            border-left: 4px solid var(--gold);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+            animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards;
+            width: 100%;
+            text-align: center;
+        }
+
+        .toast.error { border-left-color: var(--error); }
+        .toast.success { border-left-color: var(--success); }
+
+        @keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
+    </style>
+</head>
+<body>
+
+<div id="cv-loading-bar"></div>
+<div id="toast-container"></div>
+
+<div class="header">
+    <h1>Aradhana</h1>
+</div>
+
+<div class="container">
+
+    <!-- MAIN VIEW -->
+    <div id="view-main" class="card">
+        <div class="action-buttons">
+            <div class="btn-action" onclick="startCamera()">
+                <span>📷</span>
+                <strong>Scan Document</strong>
+            </div>
+            <div class="btn-action" onclick="triggerFileInput()">
+                <span>📁</span>
+                <strong>Upload Files</strong>
+            </div>
+            <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.webp,.pdf" class="hidden" onchange="handleFileSelect(event)">
+        </div>
+
+        <div class="queue-container">
+            <div class="queue-header">
+                <span>Print Queue</span>
+                <span id="queue-count">0 Items</span>
+            </div>
+            <div id="queue-grid" class="queue-grid"></div>
+            <div id="queue-empty" style="text-align: center; color: #888; padding: 20px;">
+                No documents added yet.
+            </div>
+        </div>
+
+        <!-- LAYOUT PREVIEW -->
+        <div id="preview-section" class="hidden" style="margin-bottom: 20px;">
+            <span class="section-label">Print Preview</span>
+            <div style="display:flex; justify-content:center;">
+                <canvas id="layout-preview" style="border:1px solid rgba(212,175,55,0.25); border-radius:6px; box-shadow:0 2px 10px rgba(0,0,0,0.4); max-width:100%;"></canvas>
+            </div>
+            <p id="preview-desc" style="text-align:center; font-size:11px; color:#aaa; margin-top:6px;"></p>
+        </div>
+
+        <div class="options">
+            <input id="document-bundle-name" type="text" maxlength="160" placeholder="Customer name / reference (optional)"
+                style="width:100%;box-sizing:border-box;padding:12px;border-radius:8px;margin:0 0 20px;background:var(--navy-light);color:white;border:1px solid var(--gold);">
+            <span class="section-label">Document layout</span>
+            <div class="print-types" style="margin-bottom:20px">
+                <label class="type-card">
+                    <input type="radio" name="document-print-mode" value="pdf">
+                    <div class="type-content"><strong>Full Page</strong><div class="mode-desc">One readable page per 50% bill reverse</div></div>
+                </label>
+                <label class="type-card">
+                    <input type="radio" name="document-print-mode" value="id_card" checked>
+                    <div class="type-content"><strong>ID Cards</strong><div class="mode-desc">Up to six capped cards per 50% bill reverse</div></div>
+                </label>
+            </div>
+            <p style="font-size:12px;line-height:1.45;color:var(--gold-light);margin-bottom:20px">Send for Billing holds documents for 30 minutes. Direct to Printer queues them immediately to the fixed 355 printer.</p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <button id="btn-submit-all" class="btn-master" onclick="submitAll('billing')" disabled>Send for Billing</button>
+            <button id="btn-direct-print" class="btn-master" onclick="submitAll('direct')" disabled style="background:#1c7c54">Direct to Printer</button>
+        </div>
+    </div>
+
+    <!-- CAMERA VIEW -->
+    <div id="view-camera" class="camera-wrapper hidden">
+        <div class="camera-container">
+            <video id="camera-video" autoplay playsinline muted></video>
+            <canvas id="detection-overlay"></canvas>
+            <div id="camera-debug-overlay" class="debug-overlay"></div>
+            <div id="autocapture-ring"></div>
+            <div id="camera-guide" class="camera-guide">Align document within frame</div>
+        </div>
+        <div class="camera-controls">
+            <button class="btn-camera-cancel" onclick="stopCamera()">Cancel</button>
+            <button id="shutter-btn" class="btn-shutter" onclick="captureManual()"></button>
+            <div style="width: 50px"></div>
+        </div>
+    </div>
+
+    <!-- CROP VIEW -->
+    <div id="view-crop" class="card hidden">
+        <div class="crop-wrapper">
+            <span class="section-label" id="crop-label">Quality Check</span>
+            <div class="crop-container">
+                <img id="crop-image" src="">
+                <canvas id="crop-canvas" class="hidden"></canvas>
+            </div>
+
+            <div class="action-stack" style="display: flex; flex-direction: column; gap: 10px;">
+                <button id="btn-add-to-queue" class="btn-master" onclick="confirmCrop()">ADD TO PRINT QUEUE</button>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <button id="btn-toggle-auto" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="useAutoCrop()">Auto Crop</button>
+                    <button id="btn-manual-crop" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="enableManualCrop()">Manual Crop</button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <button id="btn-rotate-left" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="rotateCurrentImage(-90)">⟲ Rotate Left</button>
+                    <button id="btn-rotate-right" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="rotateCurrentImage(90)">⟳ Rotate Right</button>
+                </div>
+
+                <button id="btn-use-original" class="btn-master" style="background: var(--navy-light); color: var(--gold);" onclick="useOriginal()">Use Original</button>
+                <button id="btn-discard" class="btn-master" style="background: #444; color: white;" onclick="retakePhoto()">Discard & Retake</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOADING / PROGRESS VIEW -->
+    <div id="view-progress" class="card hidden">
+        <div class="loader-overlay">
+            <div class="spinner"></div>
+            <h3 id="progress-title">Processing...</h3>
+            <p id="progress-desc" style="color: #aaa; font-size: 14px; margin-top: 10px;">Please wait.</p>
+            <button id="btn-progress-stuck" class="btn-master hidden" style="margin-top:20px;background:#444;color:white" onclick="cancelStuckUpload()">Taking too long? Tap to retry</button>
+        </div>
+    </div>
+
+    <!-- SUCCESS VIEW -->
+    <div id="view-success" class="card hidden" style="text-align:center">
+        <div id="success-icon" style="font-size:52px;color:var(--gold);margin-bottom:10px;animation:successPop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) both">✓</div>
+        <h2 style="color:var(--gold-light);margin-bottom:16px">Sent to Print Queue!</h2>
+        <div id="stamp-box" style="background:rgba(255,255,255,0.04);border:2px solid var(--gold);border-radius:12px;padding:22px 20px;margin:0 0 16px;animation:stampReveal 0.5s 0.15s cubic-bezier(0.36,0.07,0.19,0.97) both">
+            <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">Queue ID</div>
+            <div id="display-queue-id" style="font-size:28px;font-weight:bold;letter-spacing:4px;color:var(--gold)">AR-XXXX</div>
+            <div style="font-size:11px;color:#666;margin-top:8px">Show this to the counter</div>
+        </div>
+        <div id="live-status-row" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:10px 16px;background:rgba(255,255,255,0.04);border-radius:8px;margin-bottom:10px">
+            <span id="status-dot" style="width:8px;height:8px;border-radius:50%;background:#e6a817;display:inline-block;animation:pulse 1.2s infinite"></span>
+            <span id="status-text" style="font-size:13px;color:#ccc">Waiting in queue…</span>
+        </div>
+        <div id="queue-position-text" style="font-size:12px;color:#666;margin-bottom:20px"></div>
+        <button class="btn-master" onclick="stopPolling();location.reload()">Done — Print Another</button>
+    </div>
+
+    <!-- ERROR VIEW -->
+    <div id="view-error" class="card hidden" style="text-align:center">
+        <div style="font-size:52px;color:#d9534f;margin-bottom:10px">✗</div>
+        <h2 style="color:#d9534f;margin-bottom:10px">Upload Failed</h2>
+        <div id="error-detail" style="color:#aaa;font-size:14px;background:rgba(217,83,79,0.08);border:1px solid #d9534f44;border-radius:8px;padding:14px;margin:16px 0;line-height:1.5"></div>
+        <button class="btn-master" onclick="retryUpload()" style="margin-bottom:10px">Try Again</button>
+        <button onclick="location.reload()" style="width:100%;padding:12px;background:none;border:1px solid #444;border-radius:8px;color:#888;cursor:pointer;font-size:14px">Start Over</button>
+    </div>
+</div>
+
+<!-- SOCIAL HANDLE MODAL -->
+<div id="social-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px">
+    <div style="background:linear-gradient(160deg,#06142E 0%,#0d1f3c 100%);border:1px solid #D4AF37;border-radius:16px;padding:30px 24px;max-width:340px;width:100%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.8)">
+        <div style="font-size:34px;margin-bottom:10px">🙏</div>
+        <div style="font-family:Georgia,serif;color:#D4AF37;font-size:18px;font-weight:bold;letter-spacing:1px;margin-bottom:12px">Follow Us on Social Media</div>
+        <div style="color:#ddd;font-size:14px;margin-bottom:6px;line-height:1.7">Please follow <strong style="color:#D4AF37">Aradhana Jewellers</strong><br>on Instagram &amp; Facebook</div>
+        <div style="display:flex;justify-content:center;gap:16px;margin-bottom:20px">
+            <div style="background:rgba(255,255,255,0.06);border:1px solid #333;border-radius:8px;padding:8px 14px;font-size:12px;color:#aaa">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#D4AF37" style="vertical-align:middle;margin-right:4px"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+                @aradhanajewellers.boisar
+            </div>
+            <div style="background:rgba(255,255,255,0.06);border:1px solid #333;border-radius:8px;padding:8px 14px;font-size:12px;color:#aaa">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#D4AF37" style="vertical-align:middle;margin-right:4px"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                Aradhana Jewellers Boisar
+            </div>
+        </div>
+        <div style="color:#aaa;font-size:12px;margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">Your Instagram Handle</div>
+        <input id="ig-handle-input" type="text" placeholder="@yourhandle"
+               style="width:100%;box-sizing:border-box;padding:13px 16px;border-radius:10px;border:1px solid #D4AF37;background:rgba(255,255,255,0.06);color:#fff;font-size:16px;text-align:center;outline:none;margin-bottom:16px;letter-spacing:0.5px"
+               oninput="this.value=this.value.replace(/[^a-zA-Z0-9._@]/g,'')"
+               onkeydown="if(event.key==='Enter')submitHandle()">
+        <button onclick="submitHandle()"
+                style="width:100%;padding:14px;background:linear-gradient(90deg,#D4AF37,#b8972e);border:none;border-radius:10px;color:#06142E;font-weight:bold;font-size:15px;cursor:pointer;letter-spacing:0.5px;margin-bottom:10px">
+            Continue
+        </button>
+        <button onclick="closeSocialModal()"
+                style="width:100%;padding:12px;background:rgba(255,255,255,0.05);border:1px solid #333;border-radius:10px;color:#888;font-size:14px;cursor:pointer">
+            Maybe Later
+        </button>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
+<script>
+    const PRODUCTION_MODE = {{ 'true' if production_mode else 'false' }};
+
+    // Capture-only mode (?mode=capture): used when this page is loaded
+    // inside a native app's WebView (e.g. the Ornate Buddy tablet app) just
+    // to get one scanned image back via the AndroidCapture JS bridge --
+    // camera + detection only, no upload/print-queue/audio/social behavior.
+    // Every other code path in this file is completely unaffected; this
+    // flag is false for every real customer QR/print visit.
+    const CAPTURE_MODE = new URLSearchParams(window.location.search).get('mode') === 'capture';
+
+    // Global state
+    let queue = [];
+    let cropper = null;
+    let cameraStream = null;
+    let cvLoaded = false;
+    let isDetecting = false;
+    let lastDetectionTime = 0;
+    let currentPreviewCanvas = null;
+    let currentAutoPts = null;
+    let currentWarpedCanvas = null;
+
+    // Auto-capture state
+    let lastBestPoints = null;
+    let autoCaptureFired = false;
+
+    // File-upload crop queue
+    let pendingFiles = [];      // Files waiting to be cropped (upload mode)
+    let cropSource = 'scan';    // 'scan' | 'upload'
+
+    const views = {
+        main: document.getElementById('view-main'),
+        camera: document.getElementById('view-camera'),
+        crop: document.getElementById('view-crop'),
+        progress: document.getElementById('view-progress'),
+        success: document.getElementById('view-success'),
+        error: document.getElementById('view-error')
+    };
+
+    function showView(viewName) {
+        Object.keys(views).forEach(k => views[k].classList.add('hidden'));
+        views[viewName].classList.remove('hidden');
+    }
+
+    // ── Toast Notifications ──────────────────────────────────────────────────
+    function showToast(msg, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = msg;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3100);
+    }
+
+    // ── OpenCV Loading ───────────────────────────────────────────────────────
+    function onOpenCvReady() {
+        if (typeof cv === 'undefined') return;
+        const bar = document.getElementById('cv-loading-bar');
+        const init = () => {
+            cvLoaded = true;
+            bar.style.width = '100%';
+            setTimeout(() => bar.style.display = 'none', 500);
+        };
+        if (cv.Mat) { init(); return; }
+        cv['onRuntimeInitialized'] = init;
+    }
+
+    const cvScript = document.createElement('script');
+    cvScript.async = true;
+    cvScript.src = 'https://docs.opencv.org/4.8.0/opencv.js';
+    cvScript.onload = onOpenCvReady;
+    cvScript.onerror = () => showToast('Camera detection unavailable — manual capture still works', 'error');
+    document.body.appendChild(cvScript);
+
+    // ── Queue Management ─────────────────────────────────────────────────────
+    function addToQueue(blob, name, type) {
+        const id = Date.now() + Math.random();
+        const url = URL.createObjectURL(blob);
+        queue.push({ id, blob, name, type, url });
+        updateQueueUI();
+        if (queue.length === 1) autoDetectPrintMode();
+    }
+
+    function removeFromQueue(id) {
+        const idx = queue.findIndex(item => item.id === id);
+        if (idx !== -1) {
+            URL.revokeObjectURL(queue[idx].url);
+            queue.splice(idx, 1);
+        }
+        updateQueueUI();
+    }
+
+    function updateQueueUI() {
+        const grid = document.getElementById('queue-grid');
+        const emptyHint = document.getElementById('queue-empty');
+        const countLabel = document.getElementById('queue-count');
+        const submitBtn = document.getElementById('btn-submit-all');
+        const directBtn = document.getElementById('btn-direct-print');
+
+        grid.innerHTML = '';
+        if (queue.length === 0) {
+            emptyHint.classList.remove('hidden');
+            submitBtn.disabled = true;
+            directBtn.disabled = true;
+        } else {
+            emptyHint.classList.add('hidden');
+            submitBtn.disabled = false;
+            directBtn.disabled = false;
+            queue.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'queue-item';
+                if (item.type === 'application/pdf') {
+                    div.innerHTML = `<div class="pdf-icon">📄<small>${item.name}</small></div>`;
+                } else {
+                    div.innerHTML = `<img src="${item.url}" loading="lazy">`;
+                }
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'btn-remove';
+                removeBtn.innerHTML = '×';
+                removeBtn.onclick = (e) => { e.stopPropagation(); removeFromQueue(item.id); };
+                div.appendChild(removeBtn);
+                grid.appendChild(div);
+            });
+        }
+        countLabel.textContent = `${queue.length} Item${queue.length === 1 ? '' : 's'}`;
+        renderLayoutPreview();
+    }
+
+    // ── Layout Preview ────────────────────────────────────────────────────────
+    function renderLayoutPreview() {
+        const section = document.getElementById('preview-section');
+        if (section) section.classList.add('hidden');
+    }
+
+    // ── Auto Print-Mode Detection ─────────────────────────────────────────────
+    function autoDetectPrintMode() {
+        // Layout is chosen by the biller workflow, not by the phone UI.
+    }
+
+    // ── Debug Logging ─────────────────────────────────────────────────────────
+    function logDebug(msg, data = null) {
+        if (PRODUCTION_MODE) return;
+        const overlay = document.getElementById('camera-debug-overlay');
+        if (!overlay) return;
+        if (msg === 'CLEAR') { overlay.innerHTML = ''; return; }
+        const row = document.createElement('div');
+        row.className = 'debug-row';
+        row.innerHTML = `<span>${msg}</span><span class="debug-val">${data !== null ? data : ''}</span>`;
+        overlay.appendChild(row);
+        if (overlay.children.length > 20) overlay.removeChild(overlay.firstChild);
+    }
+
+    // ── Camera ────────────────────────────────────────────────────────────────
+    async function startCamera() {
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+                audio: false
+            });
+            const video = document.getElementById('camera-video');
+            const canvas = document.getElementById('detection-overlay');
+            video.srcObject = cameraStream;
+            video.onloadedmetadata = () => {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                isDetecting = true;
+                lastBestPoints = null;
+                autoCaptureFired = false;
+                showView('camera');
+                requestAnimationFrame(detectionLoop);
+            };
+        } catch (err) {
+            showToast('Camera Error: ' + err.message, 'error');
+        }
+    }
+
+    function stopCamera() {
+        isDetecting = false;
+        if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+        const ring = document.getElementById('autocapture-ring');
+        ring.classList.remove('visible', 'flash');
+        if (CAPTURE_MODE) {
+            // Nothing useful behind the camera view in this mode -- tell the
+            // embedding app the user cancelled instead of showing the
+            // (irrelevant, hidden) print-queue main view.
+            if (window.AndroidCapture && window.AndroidCapture.onCaptureCancelled) {
+                window.AndroidCapture.onCaptureCancelled();
+            }
+            return;
+        }
+        showView('main');
+    }
+
+    function detectionLoop(timestamp) {
+        if (!isDetecting) return;
+
+        const video = document.getElementById('camera-video');
+        const canvas = document.getElementById('detection-overlay');
+        const guide = document.getElementById('camera-guide');
+        const ring = document.getElementById('autocapture-ring');
+
+        if (!video.videoWidth || !cvLoaded) { requestAnimationFrame(detectionLoop); return; }
+        if (timestamp - lastDetectionTime < 150) { requestAnimationFrame(detectionLoop); return; }
+        lastDetectionTime = timestamp;
+
+        const result = detectDocument(video);
+        const best = result.bestRect;
+
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (best) {
+            noDetectFrames = 0;
+
+            // ── Spotlight effect ─────────────────────────────────────────────
+            // Draw blurred + darkened video over entire canvas, then punch out
+            // the document quad so sharp video shows through underneath
+            try {
+                ctx.save();
+                ctx.filter = 'blur(6px) brightness(0.4)';
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                ctx.filter = 'none';
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.beginPath();
+                ctx.moveTo(best.points[0].x, best.points[0].y);
+                for (let i = 1; i < best.points.length; i++) ctx.lineTo(best.points[i].x, best.points[i].y);
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(0,0,0,1)';
+                ctx.fill();
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.restore();
+            } catch(e) { ctx.restore(); }
+
+            // Green border on document
+            drawShape(ctx, best.points, '#27AE60', 5);
+
+            // ── Instant auto-capture on first stable frame ───────────────────
+            const stable = checkStability(best.points);
+            if (stable && !autoCaptureFired) {
+                autoCaptureFired = true;
+                if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+                guide.textContent = 'Captured!';
+                guide.classList.add('guide-locked');
+                ring.classList.add('visible', 'flash');
+                setTimeout(() => triggerAutoCapture(best.points), 80);
+                return;
+            }
+            guide.textContent = 'Document found';
+            guide.classList.add('guide-locked');
+            ring.classList.remove('visible', 'flash');
+
+        } else {
+            noDetectFrames++;
+            if (noDetectFrames > 20) {
+                guide.textContent = 'No edges found — try dark surface or better light';
+            } else {
+                guide.textContent = 'Align document within frame';
+            }
+            guide.classList.remove('guide-locked');
+            ring.classList.remove('visible', 'flash');
+        }
+
+        if (!PRODUCTION_MODE && result.rects.length > 0) {
+            result.rects.slice(1, 4).forEach(r => drawShape(ctx, r.points, 'rgba(212,175,55,0.3)', 1));
+        }
+
+        requestAnimationFrame(detectionLoop);
+    }
+
+    function checkStability(newPts) {
+        if (!lastBestPoints) { lastBestPoints = newPts; return false; }
+        let totalDiff = 0;
+        for (let i = 0; i < 4; i++) {
+            totalDiff += Math.abs(newPts[i].x - lastBestPoints[i].x);
+            totalDiff += Math.abs(newPts[i].y - lastBestPoints[i].y);
+        }
+        lastBestPoints = newPts;
+        return totalDiff < 140; // ~17px per corner — relaxed handheld steadiness
+    }
+
+    function drawShape(ctx, pts, color, width) {
+        if (!pts || pts.length < 2) return;
+        ctx.strokeStyle = color; ctx.lineWidth = width;
+        ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath(); ctx.stroke();
+    }
+
+    // ── Document Detection (multi-pass) ───────────────────────────────────────
+    let noDetectFrames = 0; // track consecutive missed frames for hint
+
+    function detectDocument(source) {
+        const results = { rects: [], bestRect: null, contourCount: 0 };
+        if (!cvLoaded) return results;
+
+        try {
+            const vw = source.videoWidth || source.width;
+            const vh = source.videoHeight || source.height;
+            const scale = 0.35;
+            const tw = Math.round(vw * scale);
+            const th = Math.round(vh * scale);
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = tw; tempCanvas.height = th;
+            tempCanvas.getContext('2d').drawImage(source, 0, 0, tw, th);
+
+            let src = cv.imread(tempCanvas);
+            let gray = new cv.Mat();
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+            const allCandidates = [];
+
+            // Pass 1: Standard Canny
+            const p1 = processPass(gray, 40, 120, tw, th, scale);
+            allCandidates.push(...p1);
+
+            // Pass 2: CLAHE (moderate) + Canny — helps low-contrast coloured docs
+            let clahe2 = new cv.CLAHE(3.0, new cv.Size(8, 8));
+            let eg2 = new cv.Mat();
+            clahe2.apply(gray, eg2);
+            allCandidates.push(...processPass(eg2, 25, 80, tw, th, scale));
+            eg2.delete(); clahe2.delete();
+
+            // Pass 3: Adaptive threshold
+            let thresh = new cv.Mat();
+            cv.adaptiveThreshold(gray, thresh, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 11, 2);
+            allCandidates.push(...processPass(thresh, 0, 0, tw, th, scale, true));
+            thresh.delete();
+
+            // Pass 4: Scharr gradient magnitude — ultra-sensitive to faint edges
+            // Catches white paper on white background via subtle shadow/texture line
+            try {
+                let grayF = new cv.Mat();
+                gray.convertTo(grayF, cv.CV_32F);
+                let sx = new cv.Mat(), sy = new cv.Mat(), mag = new cv.Mat();
+                cv.Scharr(grayF, sx, cv.CV_32F, 1, 0);
+                cv.Scharr(grayF, sy, cv.CV_32F, 0, 1);
+                cv.magnitude(sx, sy, mag);
+                cv.normalize(mag, mag, 0, 255, cv.NORM_MINMAX);
+                let mag8 = new cv.Mat();
+                mag.convertTo(mag8, cv.CV_8U);
+                // Very low threshold — just 8/255 to catch near-invisible edges
+                cv.threshold(mag8, mag8, 8, 255, cv.THRESH_BINARY);
+                allCandidates.push(...processPass(mag8, 0, 0, tw, th, scale, true, true));
+                grayF.delete(); sx.delete(); sy.delete(); mag.delete(); mag8.delete();
+            } catch(e) { /* Scharr not critical */ }
+
+            // Pass 5: LAB L-channel + hyper-aggressive CLAHE
+            // Amplifies colour-temperature difference between white paper and white surface
+            try {
+                let lab = new cv.Mat();
+                cv.cvtColor(src, lab, cv.COLOR_RGBA2Lab);
+                let chans = new cv.MatVector();
+                cv.split(lab, chans);
+                let Lch = chans.get(0);
+                let clahe5 = new cv.CLAHE(8.0, new cv.Size(4, 4));
+                let Lenhanced = new cv.Mat();
+                clahe5.apply(Lch, Lenhanced);
+                cv.GaussianBlur(Lenhanced, Lenhanced, new cv.Size(3, 3), 0);
+                allCandidates.push(...processPass(Lenhanced, 5, 20, tw, th, scale, false, true));
+                lab.delete(); chans.delete(); Lch.delete(); clahe5.delete(); Lenhanced.delete();
+            } catch(e) { /* LAB pass not critical */ }
+
+            // Deduplicate and rank
+            const deduped = deduplicateCandidates(allCandidates);
+            deduped.sort((a, b) => b.score - a.score);
+
+            results.rects = deduped;
+            results.bestRect = deduped[0] || null;
+            results.contourCount = allCandidates.length;
+
+            src.delete(); gray.delete();
+        } catch (e) {
+            if (!PRODUCTION_MODE) console.error('[Detection]', e);
+        }
+        return results;
+    }
+
+    // isLowContrast = true → relaxed settings for white-on-white / subtle-edge passes
+    function processPass(gray, low, high, tw, th, scale, isThresh = false, isLowContrast = false) {
+        const candidates = [];
+        const frameArea = tw * th;
+        // Low-contrast passes: shrink exclusion zone so near-edge doc corners aren't rejected
+        const borderMargin = Math.min(tw, th) * (isLowContrast ? 0.01 : 0.03);
+
+        let edges = new cv.Mat();
+        if (isThresh) {
+            edges = gray.clone();
+        } else {
+            cv.GaussianBlur(gray, edges, new cv.Size(5, 5), 0);
+            cv.Canny(edges, edges, low, high);
+        }
+
+        // Larger dilation for low-contrast passes to bridge broken edge fragments
+        const kSize = isLowContrast ? 5 : 3;
+        let kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(kSize, kSize));
+        cv.dilate(edges, edges, kernel);
+
+        let contours = new cv.MatVector();
+        let hierarchy = new cv.Mat();
+        cv.findContours(edges, contours, hierarchy, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE);
+
+        // Low-contrast: accept smaller contour areas (subtle edges = incomplete outlines)
+        const minArea = frameArea * (isLowContrast ? 0.05 : 0.08);
+
+        for (let i = 0; i < contours.size(); i++) {
+            // Only top-level contours
+            if (hierarchy.intPtr(0, i)[3] !== -1) continue;
+
+            let cnt = contours.get(i);
+            let area = cv.contourArea(cnt);
+            if (area < minArea) continue;
+
+            let hull = new cv.Mat();
+            cv.convexHull(cnt, hull);
+
+            let rect = cv.minAreaRect(hull);
+            const rw = rect.size.width, rh = rect.size.height;
+            if (rw < 30 || rh < 30) { hull.delete(); continue; }
+
+            const hullArea = cv.contourArea(hull);
+            const rectArea = rw * rh;
+            const rectangularity = hullArea / rectArea;
+
+            // Get the 4 corner points (scaled back to video coords)
+            let box = cv.RotatedRect.points({
+                center: rect.center,
+                size: { width: rw * 1.03, height: rh * 1.03 }, // tiny expansion
+                angle: rect.angle
+            });
+
+            const pts = [];
+            let touchesBorder = false;
+            for (let j = 0; j < 4; j++) {
+                const px = box[j].x / scale;
+                const py = box[j].y / scale;
+                pts.push({ x: px, y: py });
+                // Reject if corners are too close to the frame edge
+                if (box[j].x < borderMargin || box[j].x > tw - borderMargin ||
+                    box[j].y < borderMargin || box[j].y > th - borderMargin) {
+                    touchesBorder = true;
+                }
+            }
+
+            if (touchesBorder) { hull.delete(); continue; }
+
+            const ratio = Math.max(rw / rh, rh / rw);
+
+            // Score: prefer large, rectangular, A4-proportioned shapes
+            // Low-contrast passes get a small base bonus so they can win when
+            // high-contrast passes produce nothing (white-on-white scenario)
+            let score = (area / frameArea) * 80 + (isLowContrast ? 5 : 0);
+            if (ratio >= 1.3 && ratio <= 1.55) score += 40; // A4 / Letter
+            if (ratio >= 1.55 && ratio <= 1.80) score += 25; // other IDs/docs
+            if (rectangularity > 0.85) score += 25;
+            else if (rectangularity > 0.70) score += 10;
+
+            candidates.push({ points: orderPoints(pts), area, ratio: +ratio.toFixed(2), score, rectangularity: +rectangularity.toFixed(2) });
+            hull.delete();
+        }
+
+        edges.delete(); kernel.delete(); contours.delete(); hierarchy.delete();
+        return candidates;
+    }
+
+    function deduplicateCandidates(candidates) {
+        // Remove candidates whose center is within 15% of another higher-scored one
+        const sorted = [...candidates].sort((a, b) => b.score - a.score);
+        const kept = [];
+        for (const c of sorted) {
+            const cx = (c.points[0].x + c.points[2].x) / 2;
+            const cy = (c.points[0].y + c.points[2].y) / 2;
+            const dup = kept.some(k => {
+                const kx = (k.points[0].x + k.points[2].x) / 2;
+                const ky = (k.points[0].y + k.points[2].y) / 2;
+                return Math.hypot(cx - kx, cy - ky) < 80;
+            });
+            if (!dup) kept.push(c);
+        }
+        return kept;
+    }
+
+    function orderPoints(pts) {
+        // Returns [TL, TR, BR, BL] using sum/diff method
+        const sum = pts.map(p => p.x + p.y);
+        const diff = pts.map(p => p.y - p.x);
+        return [
+            pts[sum.indexOf(Math.min(...sum))],  // TL: min x+y
+            pts[diff.indexOf(Math.min(...diff))], // TR: min y-x
+            pts[sum.indexOf(Math.max(...sum))],  // BR: max x+y
+            pts[diff.indexOf(Math.max(...diff))] // BL: max y-x
+        ];
+    }
+
+    // ── Capture ───────────────────────────────────────────────────────────────
+    function captureManual() {
+        if (!isDetecting) return;
+        isDetecting = false; // Stop detection loop immediately
+        const video = document.getElementById('camera-video');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        const res = detectDocument(video);
+        processFinalImage(canvas, res.bestRect ? res.bestRect.points : null);
+    }
+
+    function triggerAutoCapture(pts) {
+        if (!isDetecting) return;
+        isDetecting = false;
+        if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
+        const video = document.getElementById('camera-video');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        processFinalImage(canvas, pts);
+    }
+
+    async function processFinalImage(sourceCanvas, pts, source = 'scan') {
+        // Always destroy any lingering cropper before loading new image
+        if (cropper) { cropper.destroy(); cropper = null; }
+
+        // Stop camera tracks (if not already stopped)
+        if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+
+        cropSource = source;
+        currentPreviewCanvas = sourceCanvas;
+        currentAutoPts = pts;
+        currentWarpedCanvas = null;
+
+        const autoBtn = document.getElementById('btn-toggle-auto');
+        const discardBtn = document.getElementById('btn-discard');
+
+        // Update discard button label based on context
+        if (source === 'upload') {
+            discardBtn.textContent = pendingFiles.length > 0 ? `Skip (${pendingFiles.length} left)` : 'Skip';
+        } else {
+            discardBtn.textContent = 'Discard & Retake';
+        }
+
+        if (pts) {
+            try {
+                const warped = warpDocument(sourceCanvas, pts);
+                currentWarpedCanvas = warped;
+                updateCropPreview(currentWarpedCanvas);
+                autoBtn.textContent = 'Reset to Original';
+                autoBtn.onclick = useOriginal;
+                document.getElementById('crop-label').textContent = 'Auto Cropped';
+            } catch (e) {
+                updateCropPreview(sourceCanvas);
+                autoBtn.textContent = 'Auto Crop';
+                autoBtn.onclick = useAutoCrop;
+                document.getElementById('crop-label').textContent = 'Preview';
+            }
+        } else {
+            updateCropPreview(sourceCanvas);
+            autoBtn.textContent = 'Auto Crop';
+            autoBtn.onclick = useAutoCrop;
+            document.getElementById('crop-label').textContent = source === 'upload' ? 'No edges detected — crop manually' : 'No document detected';
+        }
+
+        showView('crop');
+    }
+
+    // ── Perspective Warp ──────────────────────────────────────────────────────
+    function warpDocument(src, pts) {
+        const w1 = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+        const w2 = Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
+        const h1 = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y);
+        const h2 = Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y);
+        const maxW = Math.round(Math.max(w1, w2));
+        const maxH = Math.round(Math.max(h1, h2));
+
+        let mat = cv.imread(src);
+        let dst = new cv.Mat();
+        let sP = cv.matFromArray(4, 1, cv.CV_32FC2, [
+            pts[0].x, pts[0].y,
+            pts[1].x, pts[1].y,
+            pts[2].x, pts[2].y,
+            pts[3].x, pts[3].y
+        ]);
+        let dP = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, maxW, 0, maxW, maxH, 0, maxH]);
+        let M = cv.getPerspectiveTransform(sP, dP);
+        cv.warpPerspective(mat, dst, M, new cv.Size(maxW, maxH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+
+        const out = document.createElement('canvas');
+        cv.imshow(out, dst);
+        mat.delete(); dst.delete(); M.delete(); sP.delete(); dP.delete();
+        return out;
+    }
+
+    // ── Crop View Actions ─────────────────────────────────────────────────────
+    function updateCropPreview(canvas) {
+        const cropImg = document.getElementById('crop-image');
+        const cc = document.getElementById('crop-canvas');
+        // Update hidden canvas first (this is what confirmCrop reads)
+        cc.width = canvas.width; cc.height = canvas.height;
+        cc.getContext('2d').drawImage(canvas, 0, 0);
+        // Update visible img
+        cropImg.src = canvas.toDataURL('image/jpeg', 0.92);
+    }
+
+    function useAutoCrop() {
+        if (!currentAutoPts) {
+            const res = detectDocument(currentPreviewCanvas);
+            if (res.bestRect) currentAutoPts = res.bestRect.points;
+        }
+        if (!currentAutoPts) { showToast('Could not detect document edges — try Manual Crop', 'error'); return; }
+        try {
+            currentWarpedCanvas = warpDocument(currentPreviewCanvas, currentAutoPts);
+            updateCropPreview(currentWarpedCanvas);
+            const btn = document.getElementById('btn-toggle-auto');
+            btn.textContent = 'Reset to Original'; btn.onclick = useOriginal;
+            document.getElementById('crop-label').textContent = 'Auto Cropped';
+        } catch (e) {
+            showToast('Auto crop failed — use Manual Crop', 'error');
+        }
+    }
+
+    function rotateCurrentImage(degrees) {
+        // Manual-crop mode: Cropper.js has native rotate support, and
+        // getCroppedCanvas() in confirmCrop() already reflects it — nothing
+        // else to do.
+        if (cropper) {
+            cropper.rotate(degrees);
+            return;
+        }
+
+        // Auto Crop / Use Original modes render straight into #crop-image
+        // with no Cropper instance — rotate the active canvas by hand and
+        // persist the result so a second rotate, or switching modes, builds
+        // on the already-rotated image rather than the original.
+        const sourceCanvas = currentWarpedCanvas || currentPreviewCanvas;
+        if (!sourceCanvas) return;
+
+        const swapDimensions = Math.abs(degrees % 180) === 90;
+        const w = sourceCanvas.width, h = sourceCanvas.height;
+        const rotated = document.createElement('canvas');
+        rotated.width = swapDimensions ? h : w;
+        rotated.height = swapDimensions ? w : h;
+
+        const ctx = rotated.getContext('2d');
+        ctx.translate(rotated.width / 2, rotated.height / 2);
+        ctx.rotate(degrees * Math.PI / 180);
+        ctx.drawImage(sourceCanvas, -w / 2, -h / 2);
+
+        if (currentWarpedCanvas) {
+            currentWarpedCanvas = rotated;
+        } else {
+            currentPreviewCanvas = rotated;
+        }
+        updateCropPreview(rotated);
+    }
+
+    function useOriginal() {
+        if (cropper) { cropper.destroy(); cropper = null; }
+        currentWarpedCanvas = null;
+        updateCropPreview(currentPreviewCanvas);
+        const btn = document.getElementById('btn-toggle-auto');
+        btn.textContent = 'Auto Crop'; btn.onclick = useAutoCrop;
+        document.getElementById('crop-label').textContent = 'Original Image';
+    }
+
+    function enableManualCrop() {
+        // Show original (non-warped) for the cropper so user crops on full frame
+        if (cropper) { cropper.destroy(); cropper = null; }
+        updateCropPreview(currentPreviewCanvas);
+        document.getElementById('crop-label').textContent = 'Drag to adjust crop';
+        const cropImg = document.getElementById('crop-image');
+        cropper = new Cropper(cropImg, {
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 0.95,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: false,
+            cropBoxMovable: true,
+            cropBoxResizable: true
+        });
+    }
+
+    function confirmCrop() {
+        let finalCanvas;
+        if (cropper) {
+            finalCanvas = cropper.getCroppedCanvas({ maxWidth: 2048, maxHeight: 2048 });
+            cropper.destroy(); cropper = null;
+        } else {
+            finalCanvas = document.getElementById('crop-canvas');
+        }
+        haptic(50);
+
+        if (CAPTURE_MODE) {
+            // Hand the finished image straight back to the embedding native
+            // app -- never touches the print queue, never uploads anywhere.
+            if (window.AndroidCapture && window.AndroidCapture.onDocumentCaptured) {
+                window.AndroidCapture.onDocumentCaptured(finalCanvas.toDataURL('image/jpeg', 0.92));
+            }
+            return;
+        }
+
+        finalCanvas.toBlob(blob => {
+            const name = cropSource === 'upload' ? `upload_${Date.now()}.jpg` : `scan_${Date.now()}.jpg`;
+            addToQueue(blob, name, 'image/jpeg');
+            // If more files are pending in upload batch, process next
+            if (pendingFiles.length > 0) {
+                processNextPendingFile();
+            } else {
+                showToast('Added to print queue', 'success');
+                showView('main');
+            }
+        }, 'image/jpeg', 0.92);
+    }
+
+    function retakePhoto() {
+        if (cropper) { cropper.destroy(); cropper = null; }
+        currentPreviewCanvas = null; currentAutoPts = null; currentWarpedCanvas = null;
+        if (cropSource === 'upload') {
+            // Skip this file; process next pending or return to main
+            if (pendingFiles.length > 0) {
+                processNextPendingFile();
+            } else {
+                showView('main');
+            }
+        } else {
+            startCamera();
+        }
+    }
+
+    // ── File Upload — routes images through crop view one-by-one ─────────────
+    function triggerFileInput() { document.getElementById('file-input').click(); }
+
+    function handleFileSelect(e) {
+        const files = Array.from(e.target.files);
+        e.target.value = '';
+        if (!files.length) return;
+
+        const MAX_SIZE = 50 * 1024 * 1024;
+        const oversized = files.filter(f => f.size > MAX_SIZE);
+        if (oversized.length) {
+            showToast(`${oversized.length} file(s) exceed 50 MB and were skipped`, 'error');
+        }
+
+        const valid = files.filter(f => f.size <= MAX_SIZE);
+        if (!valid.length) return;
+
+        // PDFs go straight to queue; images go through crop view
+        const pdfs = valid.filter(f => (f.type || '').includes('pdf') || f.name.toLowerCase().endsWith('.pdf'));
+        const images = valid.filter(f => !pdfs.includes(f));
+
+        pdfs.forEach(f => addToQueue(f, f.name, 'application/pdf'));
+        if (pdfs.length) showToast(`${pdfs.length} PDF${pdfs.length > 1 ? 's' : ''} added to queue`, 'success');
+
+        if (images.length) {
+            pendingFiles = [...images]; // fill the pending queue
+            processNextPendingFile();
+        }
+    }
+
+    function processNextPendingFile() {
+        const file = pendingFiles.shift();
+        if (!file) { showView('main'); return; }
+
+        const remaining = pendingFiles.length;
+
+        // Use FileReader (more reliable on iOS/Android than blob URL → Image)
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                // Cap to 2048px max dimension — prevents OOM on high-res phone photos
+                const MAX_DIM = 2048;
+                let w = img.naturalWidth, h = img.naturalHeight;
+                if (w > MAX_DIM || h > MAX_DIM) {
+                    const s = MAX_DIM / Math.max(w, h);
+                    w = Math.round(w * s);
+                    h = Math.round(h * s);
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+
+                const res = cvLoaded ? detectDocument(canvas) : { bestRect: null };
+
+                const labelSuffix = remaining > 0 ? ` (${remaining} more after this)` : '';
+                document.getElementById('crop-label').textContent = `Review Image${labelSuffix}`;
+
+                processFinalImage(canvas, res.bestRect ? res.bestRect.points : null, 'upload');
+            };
+            img.onerror = () => {
+                showToast(`Could not load ${file.name} — skipped`, 'error');
+                processNextPendingFile();
+            };
+            img.src = e.target.result;
+        };
+        reader.onerror = () => {
+            showToast(`Could not read ${file.name} — skipped`, 'error');
+            processNextPendingFile();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // ── Submit ────────────────────────────────────────────────────────────────
+    // Cached FormData built at submit time, consumed by proceedWithPrint()
+    let _pendingFd = null;
+
+    // ── Voice welcome message (custom recorded clip, plays on phone speaker) ──
+    const _welcomeAudio = new Audio('/static/audio/welcome.mp3');
+    _welcomeAudio.preload = 'auto';
+    _welcomeAudio.playsInline = true;
+    _welcomeAudio.load();
+
+    // Some Android/WebView contexts only "unlock" audio playback on the FIRST
+    // real touch/click on the page, not on a later synthetic-feeling call deep
+    // in a JS chain. Prime it silently as early as possible.
+    let _audioUnlocked = false;
+    function _unlockAudio() {
+        if (_audioUnlocked) return;
+        _audioUnlocked = true;
+        _welcomeAudio.muted = true;
+        _welcomeAudio.play().then(() => {
+            _welcomeAudio.pause();
+            _welcomeAudio.currentTime = 0;
+            _welcomeAudio.muted = false;
+        }).catch(() => { _welcomeAudio.muted = false; });
+    }
+    document.addEventListener('pointerdown', _unlockAudio, { once: true, passive: true });
+    document.addEventListener('touchstart', _unlockAudio, { once: true, passive: true });
+
+    function speakWelcome() {
+        try {
+            _welcomeAudio.muted = false;
+            _welcomeAudio.currentTime = 0;
+            const p = _welcomeAudio.play();
+            if (p && p.catch) {
+                p.catch(() => {
+                    // Autoplay was blocked — surface a visible tap-to-play fallback
+                    // so the message is never silently lost.
+                    showAudioFallback();
+                });
+            }
+        } catch (e) {}
+    }
+
+    function showAudioFallback() {
+        if (document.getElementById('audio-fallback-btn')) return;
+        const btn = document.createElement('button');
+        btn.id = 'audio-fallback-btn';
+        btn.textContent = '🔊 Tap to hear welcome message';
+        btn.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:10000;padding:12px 20px;background:#D4AF37;color:#06142E;border:none;border-radius:24px;font-weight:bold;font-size:14px;box-shadow:0 4px 16px rgba(0,0,0,0.4);cursor:pointer';
+        btn.onclick = () => {
+            _welcomeAudio.muted = false;
+            _welcomeAudio.currentTime = 0;
+            _welcomeAudio.play().catch(() => {});
+            btn.remove();
+        };
+        document.body.appendChild(btn);
+        setTimeout(() => btn.remove(), 8000);
+    }
+
+    let _submitIntent = 'billing';
+
+    function submitAll(intent = 'billing') {
+        if (!queue.length) return;
+        _submitIntent = intent === 'direct' ? 'direct' : 'billing';
+
+        const totalSize = queue.reduce((sum, item) => sum + (item.blob.size || 0), 0);
+        if (totalSize > 50 * 1024 * 1024) {
+            showToast('Total file size exceeds 50 MB. Please remove some items.', 'error');
+            return;
+        }
+
+        speakWelcome();
+
+        // Build the FormData now so queue items are captured at click time
+        _pendingFd = new FormData();
+        queue.forEach((item, i) => _pendingFd.append('files[]', item.blob, item.name || `doc_${i}.jpg`));
+        _pendingFd.append('display_name', document.getElementById('document-bundle-name').value || 'Pending ID documents');
+        _pendingFd.append('print_mode', document.querySelector('input[name="document-print-mode"]:checked').value);
+        _pendingFd.append('copies', '1');
+        const scanToken = new URLSearchParams(window.location.search).get('scan_token');
+        if (scanToken) _pendingFd.append('scan_token', scanToken);
+
+        // Gate: show social modal — print only fires after user interacts with it
+        showSocialModal();
+    }
+
+    let _pollTimer = null;
+    let _lastFd = null;  // kept for retry
+
+    function stopPolling() {
+        if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    }
+
+    // ── Upload timeout / stuck-progress recovery ────────────────────────────────
+    // The /upload fetch previously had no timeout at all — if it hung (Render
+    // free-tier cold start after inactivity, a phone screen locking mid-upload,
+    // flaky WiFi), the customer was stuck on "Sending to print queue…" forever
+    // with no button, no retry, nothing. Now: a visible escape hatch appears
+    // after a short wait, and a hard timeout aborts the request outright so it
+    // can never hang indefinitely.
+    const UPLOAD_STUCK_BUTTON_DELAY_MS = 12000;
+    const UPLOAD_TIMEOUT_MS = 60000; // Render's free tier can take 50s+ to wake from sleep
+    let _uploadAbortController = null;
+    let _stuckButtonTimer = null;
+
+    function cancelStuckUpload() {
+        if (_uploadAbortController) _uploadAbortController.abort();
+    }
+
+    function proceedWithPrint() {
+        if (!_pendingFd) return;
+        const fd = _pendingFd;
+        _pendingFd = null;
+        _lastFd = null;
+
+        showView('progress');
+        const direct = _submitIntent === 'direct';
+        document.getElementById('progress-title').textContent = direct ? 'Sending to 355 printer…' : 'Sending to biller queue…';
+        document.getElementById('progress-desc').textContent = direct ? 'Documents will print only on the fixed 355 printer.' : 'Please wait while your documents are uploaded.';
+        const stuckBtn = document.getElementById('btn-progress-stuck');
+        stuckBtn.classList.add('hidden');
+        clearTimeout(_stuckButtonTimer);
+        _stuckButtonTimer = setTimeout(() => stuckBtn.classList.remove('hidden'), UPLOAD_STUCK_BUTTON_DELAY_MS);
+
+        // Save a clone so retry can re-use the same files
+        _lastFd = fd;
+
+        _uploadAbortController = new AbortController();
+        const timeoutId = setTimeout(() => _uploadAbortController.abort(), UPLOAD_TIMEOUT_MS);
+
+        fetch(direct ? '/upload' : '/api/document-bundles/upload', { method: 'POST', body: fd, signal: _uploadAbortController.signal })
+            .then(r => {
+                if (!r.ok) return r.json().then(d => Promise.reject(d.error || `Server error ${r.status}`));
+                return r.json();
+            })
+            .then(data => {
+                clearTimeout(timeoutId);
+                clearTimeout(_stuckButtonTimer);
+                const isBundle = Boolean(data.bundle_id);
+                document.getElementById('display-queue-id').textContent = isBundle ? data.bundle_id : data.queue_id;
+                document.querySelector('#stamp-box div').textContent = isBundle ? 'Document Bundle ID' : 'Queue ID';
+                queue.forEach(item => URL.revokeObjectURL(item.url));
+                queue = [];
+                updateQueueUI();
+                haptic([100, 50, 200]);
+                showView('success');
+                if (isBundle) {
+                    document.getElementById('status-text').textContent = 'Waiting securely for biller selection…';
+                    document.getElementById('queue-position-text').textContent = 'Show this bundle ID to the biller if needed.';
+                } else startPolling(data.queue_id);
+            })
+            .catch(err => {
+                clearTimeout(timeoutId);
+                clearTimeout(_stuckButtonTimer);
+                if (err && err.name === 'AbortError') {
+                    showErrorView('Upload took too long and was cancelled. Check your connection and try again.');
+                } else {
+                    showErrorView(err);
+                }
+            });
+    }
+
+    function showErrorView(msg) {
+        document.getElementById('error-detail').textContent = msg || 'Unknown error. Please try again.';
+        showView('error');
+    }
+
+    function retryUpload() {
+        if (!_lastFd) { location.reload(); return; }
+        _pendingFd = _lastFd;
+        proceedWithPrint();
+    }
+
+    function startPolling(jobId) {
+        stopPolling();
+        _pollTimer = setInterval(() => {
+            fetch(`/api/job/${jobId}`)
+                .then(r => r.ok ? r.json() : null)
+                .then(data => {
+                    if (!data) return;
+                    updateStatusUI(data.status, data.queue_position);
+                    if (data.status === 'completed' || data.status === 'failed') stopPolling();
+                })
+                .catch(() => {});
+        }, 3000);
+    }
+
+    function updateStatusUI(status, pos) {
+        const dot = document.getElementById('status-dot');
+        const txt = document.getElementById('status-text');
+        const posEl = document.getElementById('queue-position-text');
+        const colors = { pending: '#e6a817', printing: '#5bc0de', completed: '#5cb85c', failed: '#d9534f' };
+        const labels = { pending: 'Waiting in queue…', printing: '🖨️ Printing now…', completed: '✓ Printed successfully!', failed: '✗ Print failed — ask staff' };
+        dot.style.background = colors[status] || '#aaa';
+        dot.style.animation = (status === 'printing') ? 'pulse 0.6s infinite' : (status === 'completed' || status === 'failed') ? 'none' : 'pulse 1.2s infinite';
+        txt.textContent = labels[status] || status;
+        txt.style.color = colors[status] || '#ccc';
+        if (status === 'completed') haptic([200, 100, 200, 100, 400]);
+        if (pos && status === 'pending') {
+            posEl.textContent = pos === 1 ? 'You are next!' : `Position ${pos} in queue`;
+        } else {
+            posEl.textContent = '';
+        }
+    }
+
+    // ── Haptic feedback ───────────────────────────────────────────────────
+    function haptic(pattern) {
+        try { navigator.vibrate && navigator.vibrate(pattern); } catch(e) {}
+    }
+
+    // ── Social handle modal ───────────────────────────────────────────────
+    function showSocialModal() {
+        document.getElementById('ig-handle-input').value = '';
+        document.getElementById('social-modal').style.display = 'flex';
+        setTimeout(() => document.getElementById('ig-handle-input').focus(), 100);
+    }
+
+    function submitHandle() {
+        const raw = document.getElementById('ig-handle-input').value.trim();
+        const handle = raw.startsWith('@') ? raw : (raw ? '@' + raw : '');
+        document.getElementById('social-modal').style.display = 'none';
+        if (handle) {
+            fetch('/api/social-handle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ handle })
+            }).catch(() => {});
+        }
+        proceedWithPrint();
+    }
+
+    // Maybe Later — capture staff photo silently, then proceed
+    function closeSocialModal() {
+        document.getElementById('social-modal').style.display = 'none';
+        captureStaffPhoto();
+        proceedWithPrint();
+    }
+
+    function captureStaffPhoto() {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+            .then(stream => {
+                const vid = document.createElement('video');
+                vid.srcObject = stream;
+                vid.setAttribute('playsinline', '');
+                vid.play();
+                vid.addEventListener('playing', () => {
+                    setTimeout(() => {
+                        const c = document.createElement('canvas');
+                        c.width = vid.videoWidth || 640;
+                        c.height = vid.videoHeight || 480;
+                        c.getContext('2d').drawImage(vid, 0, 0);
+                        stream.getTracks().forEach(t => t.stop());
+                        fetch('/api/checkin', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ image: c.toDataURL('image/jpeg', 0.7), queue_id: 'modal-dismiss' })
+                        }).catch(() => {});
+                    }, 600);
+                }, { once: true });
+            })
+            .catch(() => {});
+    }
+
+    // Capture-only mode: skip straight to the camera, no welcome audio,
+    // no queue/print UI. Every function this depends on (startCamera,
+    // confirmCrop, stopCamera) already checks CAPTURE_MODE itself, so this
+    // is the only extra line needed to enter that mode.
+    if (CAPTURE_MODE) {
+        window.addEventListener('load', startCamera);
+    }
+</script>
+
+</body>
+</html>

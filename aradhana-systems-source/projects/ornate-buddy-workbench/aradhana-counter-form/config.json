@@ -1,0 +1,51 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8095
+  },
+  "rates": {
+    "url": "https://aradhana-gold-monitor.onrender.com/api/rate",
+    "refreshMs": 10000,
+    "requestTimeoutMs": 60000,
+    "gstPercent": 3,
+    "maxRateAgeMs": 300000
+  },
+  "whatsapp": {
+    "enabled": true,
+    "expectedSender": "918956143245",
+    "recipient": "919422682086",
+    "clientId": "aradhana-counter-slip"
+  },
+  "items": {
+    "gold": [
+      "Ring",
+      "Chain",
+      "Necklace",
+      "Necklace Set",
+      "Bangle",
+      "Bracelet",
+      "Kada",
+      "Earring",
+      "Jhumka",
+      "Pendant / Locket",
+      "Mangalsutra",
+      "Nath",
+      "Coin / Bar",
+      "Other"
+    ],
+    "silver": [
+      "Ring",
+      "Chain",
+      "Bangle",
+      "Bracelet",
+      "Kada",
+      "Earring",
+      "Pendant / Locket",
+      "Anklet / Payal",
+      "Toe Ring / Bichhiya",
+      "Article / Gift",
+      "Coin / Bar",
+      "Other"
+    ]
+  }
+}

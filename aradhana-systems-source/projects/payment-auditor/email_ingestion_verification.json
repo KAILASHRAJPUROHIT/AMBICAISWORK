@@ -1,0 +1,30 @@
+{
+  "timestamp": "2026-05-31T16:53:00.000Z",
+  "source_type": "Gmail IMAP",
+  "connection_details": {
+    "mailbox": "shreearadhana1001@gmail.com",
+    "labels_found": [
+      "BANK_BOB",
+      "BANK_CREDIT",
+      "BANK_DEBIT",
+      "BANK_HDFC",
+      "BANK_ICICI",
+      "BANK_IMPORTANT",
+      "BANK_KOTAK",
+      "BANK_PNB",
+      "BANK_PROMOTIONAL",
+      "BANK_SAMPLES",
+      "BANK_SBI",
+      "BANK_STATEMENT",
+      "BANK_UCO",
+      "BANK_UNKNOWN",
+      "INBOX"
+    ],
+    "target_label": "BANK_ICICI",
+    "emails_fetched": 20,
+    "emails_successfully_parsed": 0,
+    "emails_failed_validation": 20
+  },
+  "findings": "Real Gmail IMAP connection established. Found BANK_ICICI label with active emails. Existing parser regexes failed to match real-world ICICI alert formats (captured in audit logs), resulting in 0 successful parses. Environment bitness and connectivity confirmed.",
+  "status": "LIVE_IMAP_ACTIVE"
+}

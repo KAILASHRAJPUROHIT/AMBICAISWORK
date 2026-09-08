@@ -1,0 +1,15 @@
+.env
+*.db
+*.sqlite
+__pycache__/
+.venv/
+node_modules/
+dist/
+.DS_Store
+*.log
+.aider*
+AradhanaPaymentAuditor.spec
+build/
+
+logs/
+*.pid

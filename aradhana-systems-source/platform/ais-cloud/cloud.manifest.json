@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "component": "ais-cloud-gateway",
+  "organization": "Aradhana Jewellers",
+  "public_hostname": "ais.aradhanajewellers.com",
+  "routing": {
+    "/": "ais-portal",
+    "/payments": "payment-notifier",
+    "/documents": "document-print-workflow",
+    "/print": "qr-print-server",
+    "/catalogue": "catalogue-capture",
+    "/gold": "gold-rate-monitor"
+  },
+  "runtime": {
+    "platform": "Azure Container Apps",
+    "database": "Azure Database for PostgreSQL Flexible Server",
+    "object_storage": "Azure Blob Storage",
+    "secrets": "Azure Key Vault",
+    "edge": "Cloudflare DNS and Zero Trust"
+  },
+  "network": {
+    "public_services": ["ais-cloud-gateway"],
+    "local_agents": "outbound HTTPS only",
+    "forbidden": ["public SMB", "public printer ports", "public Windows remote control", "agent command execution"]
+  }
+}

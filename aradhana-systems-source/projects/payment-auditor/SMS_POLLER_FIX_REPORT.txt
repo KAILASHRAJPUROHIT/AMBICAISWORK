@@ -1,0 +1,17 @@
+SMS Poller Stabilization Report
+
+Status: Fixed
+Date: 2026-06-04
+
+1. Root Cause:
+   The `backend/sms_poller.py` script was crashing due to a `KeyError: parsed_confidence` when the parsed SMS data dictionary lacked this key.
+
+2. Fix Applied:
+   - Modified `backend/sms_poller.py` to use `.get("parsed_confidence")` for safe dictionary access.
+   - Implemented a check to detect if `parsed_confidence` is `None`.
+   - If missing, the system now logs a `logger.warning` with the SMS ID and defaults the confidence value to `0.0`.
+   - The polling thread is now wrapped to continue processing even if this specific data point is missing, ensuring stability.
+
+3. Verification:
+   - The code now handles the missing key gracefully.
+   - Logging provides visibility into the issue without halting the service.

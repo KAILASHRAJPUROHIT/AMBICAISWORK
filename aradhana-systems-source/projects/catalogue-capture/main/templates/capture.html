@@ -1,0 +1,2998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Aradhana — Capture</title>
+<script src="/static/jsQR.js"></script>
+<style>
+:root {
+  --gold: #6d5ef8; --gold-light: #8b7cfa; --gold-glow: rgba(109,94,248,0.20);
+  --bg: #0d0e17; --bg-card: #141623; --bg-card2: #1a1d2e; --bg-hover: #21253a;
+  --border: #242840; --border-lit: #34395c;
+  --text: #e4e7f5; --text-muted: #8188a8; --text-dim: #4a5074;
+  --success: #34d399; --danger: #fb7185; --warning: #fbbf24;
+  --radius: 10px; --radius-lg: 14px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; padding: 16px; padding-bottom: 40px;
+}
+.topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.logo {
+  width: 34px; height: 34px; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+  border-radius: 9px; display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 900; color: #fff;
+}
+.topbar h1 { font-size: 16px; font-weight: 700; }
+.topbar .sub { font-size: 11px; color: var(--text-dim); }
+.back-link { margin-left: auto; font-size: 12px; color: var(--text-muted); text-decoration: none; padding: 8px; }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+label { font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 8px; letter-spacing: 0.3px; }
+select, input[type="text"] {
+  width: 100%;
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-size: 16px;
+  color: var(--text);
+}
+select:focus, input[type="text"]:focus { outline: none; border-color: var(--gold); }
+
+.btn {
+  display: block; width: 100%;
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+  border: none; border-radius: var(--radius);
+  padding: 20px; font-size: 17px; font-weight: 800; color: #fff;
+  text-align: center; cursor: pointer; margin-top: 12px;
+}
+.btn:disabled { opacity: 0.4; }
+.btn.secondary { background: var(--bg-card2); border: 1px solid var(--border-lit); color: var(--text); }
+.btn.danger { background: rgba(251,113,133,0.15); border: 1px solid var(--danger); color: var(--danger); }
+.btn.success-solid { background: var(--success); color: #06281d; }
+.btn.small { padding: 10px; font-size: 13px; margin-top: 8px; font-weight: 600; }
+.btn-row { display: flex; gap: 10px; }
+.btn-row .btn { margin-top: 0; }
+.link-btn {
+  display: block; width: 100%; text-align: center; background: none; border: none;
+  color: var(--text-muted); font-size: 13px; padding: 10px; margin-top: 6px; cursor: pointer;
+}
+
+.tray-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; color: var(--text-muted); margin-bottom: 10px;
+}
+.tray-bar b { color: var(--text); }
+.tray-bar-buttons { display: flex; gap: 8px; }
+.tray-bar button { background: var(--bg-card2); border: 1px solid var(--border-lit); color: var(--text);
+  border-radius: var(--radius); padding: 8px 12px; font-size: 12px; font-weight: 600; }
+
+.captured-list {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  max-height: 240px; overflow-y: auto;
+  margin-bottom: 16px;
+}
+.captured-list .row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.captured-list .row:last-child { border-bottom: none; }
+.captured-list .row .n { color: var(--text-dim); width: 22px; flex-shrink: 0; }
+.captured-list .row .code { font-weight: 700; flex: 1; }
+.captured-list .empty { padding: 18px 14px; color: var(--text-dim); font-size: 13px; text-align: center; }
+
+/* ── Capture memory panel ─────────────────────────────────────────────── */
+.mem-card { padding: 0; overflow: hidden; }
+.mem-toggle {
+  display: flex; justify-content: space-between; align-items: center;
+  width: 100%; background: none; border: none; cursor: pointer;
+  padding: 16px 20px; font-size: 15px; font-weight: 700; color: var(--text-muted);
+}
+.mem-toggle:hover { background: var(--bg-hover); color: var(--text); }
+#mem-body { padding: 0 20px 18px; }
+.mem-switch {
+  display: flex; align-items: center; gap: 12px;
+  font-size: 15px; font-weight: 600; color: var(--text);
+  padding: 10px 0; cursor: pointer;
+}
+/* 24px is below the 44px touch-target minimum, but this control is
+   deliberately hard to hit by accident — it disarms duplicate protection. */
+.mem-switch input { width: 24px; height: 24px; accent-color: var(--gold); cursor: pointer; }
+.mem-hint { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; margin-bottom: 14px; }
+.mem-hint.warn { color: var(--warning); }
+.mem-folders {
+  background: var(--bg-card2); border: 1px solid var(--border);
+  border-radius: var(--radius); max-height: 260px; overflow-y: auto;
+}
+.mem-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 11px 13px; border-bottom: 1px solid var(--border);
+}
+.mem-row:last-child { border-bottom: none; }
+.mem-row .name { font-size: 14px; font-weight: 600; color: var(--text); }
+.mem-row .count { font-size: 12px; color: var(--text-dim); }
+.mem-clear {
+  background: none; border: 1px solid var(--border-lit); border-radius: 8px;
+  color: var(--danger); font-size: 12.5px; font-weight: 700;
+  padding: 7px 12px; cursor: pointer; white-space: nowrap;
+}
+.mem-clear:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+.mem-clear:disabled { opacity: .5; cursor: default; }
+
+.center-cta { text-align: center; }
+.center-cta .icon { font-size: 48px; margin-bottom: 14px; }
+.center-cta .hint { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+
+.capture-input { display: none; }
+
+/* ── full-screen popup overlay — used only when something needs the
+   user's attention (couldn't auto-read, duplicate, or the required
+   between-items tap); a clean scan never shows one at all. ── */
+.popup-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(5,6,12,0.92);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.popup-box {
+  width: 100%; max-width: 420px;
+  text-align: center;
+}
+.popup-box .step-tag {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.6px;
+  color: var(--text-dim); text-transform: uppercase; margin-bottom: 10px;
+}
+.popup-box h2 { font-size: 20px; margin-bottom: 6px; }
+.popup-box .sub-hint { font-size: 13px; color: var(--text-muted); margin-bottom: 18px; }
+.popup-box .thumb {
+  width: 100%; max-height: 220px; object-fit: contain; border-radius: var(--radius);
+  border: 1px solid var(--border); background: #000; margin-bottom: 16px;
+}
+/* Tag photo shown with a colored pass/fail ribbon overlaid on top of it —
+   lets whoever's watching (or the person capturing) see at a glance
+   whether the QR/barcode read correctly, right on the actual photo, not
+   just as text — makes it obvious in the moment if e.g. a thumb is
+   covering the code, rather than only surfacing on a later audit. */
+.tag-preview-wrap { position: relative; margin-bottom: 16px; }
+.tag-preview-wrap .thumb { margin-bottom: 0; }
+.read-badge {
+  position: absolute; top: 10px; left: 10px; right: 10px;
+  padding: 10px 14px; border-radius: var(--radius);
+  font-weight: 800; font-size: 15px; text-align: center;
+}
+.read-badge.ok { background: rgba(52,211,153,0.94); color: #06281d; }
+.read-badge.bad { background: rgba(251,113,133,0.94); color: #2a060a; }
+
+.tag-code-display {
+  font-size: 24px; font-weight: 800; letter-spacing: 0.5px;
+  background: var(--bg-card2); border: 2px solid var(--border-lit);
+  border-radius: var(--radius); padding: 16px 12px; margin-bottom: 6px;
+  color: var(--text); width: 100%; text-align: center;
+}
+.tag-code-display.empty { color: var(--danger); font-size: 15px; font-weight: 600; }
+.tag-code-display:focus { outline: none; border-color: var(--gold); }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.badge.success { background: rgba(52,211,153,0.15); color: var(--success); }
+.badge.warning { background: rgba(251,191,36,0.15); color: var(--warning); }
+.badge.danger { background: rgba(251,113,133,0.15); color: var(--danger); }
+.dup-banner {
+  background: rgba(251,113,133,0.1); border: 1px solid var(--danger);
+  border-radius: var(--radius); padding: 12px; font-size: 13px; color: var(--danger);
+  margin-bottom: 14px; text-align: left;
+}
+.spinner {
+  width: 40px; height: 40px; border-radius: 50%;
+  border: 3px solid var(--border-lit); border-top-color: var(--gold);
+  margin: 0 auto 16px; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Non-blocking success toast — auto-shows after a clean auto-save,
+   auto-dismisses, doesn't require a tap to acknowledge. */
+.toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%);
+  background: var(--success); color: #06281d; font-weight: 700; font-size: 14px;
+  padding: 12px 20px; border-radius: 999px; z-index: 1100;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  opacity: 0; transition: opacity 0.2s;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+.big-next-btn {
+  display: block; width: 100%;
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+  border: none; border-radius: var(--radius-lg);
+  padding: 28px; font-size: 19px; font-weight: 800; color: #fff;
+  cursor: pointer;
+}
+.secondary-next-btn {
+  display: block; width: 100%; margin-top: 10px;
+  background: var(--bg-card2); border: 1px solid var(--border-lit);
+  border-radius: var(--radius-lg);
+  padding: 14px; font-size: 14px; font-weight: 600; color: var(--text-muted);
+  cursor: pointer;
+}
+.stock-alert-overlay {
+  position: fixed; inset: 0; z-index: 2200; padding: 18px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5,6,12,.92);
+}
+.stock-alert-overlay[hidden] { display: none; }
+.stock-alert-card {
+  width: min(560px, 100%); max-height: 84vh; overflow: hidden;
+  display: flex; flex-direction: column; gap: 12px; padding: 20px;
+  border: 1px solid var(--warning); border-radius: var(--radius-lg);
+  background: var(--bg-card); box-shadow: 0 20px 70px rgba(0,0,0,.6);
+}
+.stock-alert-card h2 { margin: 0; color: var(--warning); font-size: 21px; }
+.stock-alert-card p { margin: 0; color: var(--text-muted); line-height: 1.4; }
+.stock-alert-search {
+  width: 100%; padding: 10px 12px; color: var(--text);
+  background: var(--bg-card2); border: 1px solid var(--border-lit);
+  border-radius: var(--radius); font: inherit;
+}
+.stock-alert-list {
+  margin: 0; padding: 0; list-style: none; overflow: auto;
+  border: 1px solid var(--border); border-radius: var(--radius);
+}
+.stock-alert-list li {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 9px 11px; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.stock-alert-list li:last-child { border-bottom: 0; }
+.stock-alert-list span:last-child { color: var(--text-muted); text-align: right; }
+.capture-plan {
+  margin-bottom: 14px; padding: 15px; border: 1px solid var(--gold);
+  border-radius: var(--radius); background: rgba(109,94,248,.09);
+}
+.capture-plan-label {
+  color: var(--gold-light); font-size: 11px; font-weight: 800;
+  letter-spacing: .7px; text-transform: uppercase;
+}
+.capture-plan-main {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px 12px;
+  margin-top: 7px;
+}
+.capture-plan-tag { color: var(--text); font-size: 24px; font-weight: 850; }
+.capture-plan-category { color: var(--success); font-size: 15px; font-weight: 700; }
+.capture-plan-detail { margin-top: 7px; color: var(--text-muted); font-size: 12px; }
+.capture-view-guide {
+  margin-top: 10px; padding: 10px 12px; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.12); background: rgba(5,6,10,.35);
+}
+.capture-view-guide-title {
+  color: var(--gold-light); font-size: 11px; font-weight: 800;
+  letter-spacing: .7px; text-transform: uppercase;
+}
+.capture-view-guide-text { margin-top: 6px; color: var(--text); font-size: 13px; font-weight: 700; }
+.capture-view-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.capture-view-chip {
+  padding: 6px 10px; border-radius: 999px; border: 1px solid var(--border-lit);
+  background: var(--bg-card2); color: var(--text-muted); font-size: 12px; font-weight: 700;
+}
+.capture-view-chip.active {
+  border-color: var(--success); color: #d1fae5; background: rgba(52,211,153,.12);
+}
+.camera-overlay {
+  position: fixed; inset: 0; z-index: 3000; display: flex;
+  flex-direction: column; background: #05060a; color: #fff;
+}
+.camera-overlay.hidden { display: none; }
+.camera-topbar {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  background: rgba(5,6,10,.94); flex: 0 0 auto;
+}
+.camera-topbar strong { flex: 1; }
+.camera-viewport {
+  position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; background: #000;
+}
+.camera-viewport video { width: 100%; height: 100%; object-fit: contain; position: relative; z-index: 1; }
+.camera-analysis-canvas {
+  position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%;
+  pointer-events: none;
+}
+.camera-focus-guide {
+  position: absolute; width: min(58vw, 320px); aspect-ratio: 1;
+  border: 2px solid rgba(255,255,255,.72); border-radius: 18px;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,.12); pointer-events: none; z-index: 3;
+}
+.camera-focus-guide.tag { width: min(82vw, 480px); aspect-ratio: 1.55; }
+.camera-focus-guide.ready { border-color: var(--success); box-shadow: 0 0 18px rgba(52,211,153,.55), 0 0 0 9999px rgba(0,0,0,.08); }
+.camera-quality-hud {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 4;
+  min-width: min(86vw, 360px); padding: 8px 12px; border-radius: 999px;
+  background: rgba(5,6,10,.78); border: 1px solid rgba(255,255,255,.18);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 12px; backdrop-filter: blur(7px);
+}
+.camera-quality-hud.ready { border-color: var(--success); color: #d1fae5; }
+.camera-quality-score { color: var(--warning); font-variant-numeric: tabular-nums; font-weight: 800; }
+.camera-quality-hud.ready .camera-quality-score { color: var(--success); }
+.camera-controls {
+  flex: 0 0 auto; padding: 12px; background: rgba(5,6,10,.96);
+  display: grid; gap: 10px;
+}
+.camera-profile-row { display: flex; gap: 7px; flex-wrap: wrap; }
+.camera-profile-row button {
+  flex: 1; min-width: 95px; padding: 8px; border-radius: 9px;
+  border: 1px solid #3c4054; background: #171925; color: #d8d9e5;
+}
+.camera-profile-row button.active { border-color: var(--gold); color: #fff; }
+.camera-mode-row { display: flex; align-items: center; gap: 10px; }
+.camera-auto-switch {
+  display: flex;
+  flex: 1; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 11px; border: 1px solid #3c4054; border-radius: 9px;
+  background: #171925; color: #d8d9e5; font-size: 12px; font-weight: 700;
+}
+.camera-auto-switch input { width: 20px; height: 20px; accent-color: var(--success); }
+.camera-auto-switch.active { border-color: var(--success); color: #d1fae5; }
+.camera-score-track { height: 5px; flex: 1; overflow: hidden; border-radius: 999px; background: #25283a; }
+.camera-score-fill { height: 100%; width: 0; background: var(--warning); transition: width .12s linear; }
+.camera-score-fill.ready { background: var(--success); }
+.camera-zoom-row { display: grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px; }
+.camera-zoom-row input { width: 100%; accent-color: var(--gold); }
+.camera-status { min-height: 18px; color: #b7bad0; font-size: 12px; text-align: center; }
+.camera-shutter {
+  width: 70px; height: 70px; justify-self: center; border-radius: 50%;
+  border: 5px solid #fff; background: var(--gold); box-shadow: inset 0 0 0 4px #151722;
+}
+.camera-shutter:disabled { opacity: .45; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">AJ</div>
+  <div>
+    <h1>Capture</h1>
+    <div class="sub">Aradhana Catalogue Studio</div>
+  </div>
+  <a href="/" class="back-link">&larr; Home</a>
+</div>
+
+<!-- Capture memory admin — collapsed by default: a rare, deliberate action,
+     and putting a "forget everything" control anywhere near the per-item
+     capture flow invites a mis-tap that silently disarms duplicate
+     protection mid-tray. -->
+<div id="screen-memory" class="card mem-card">
+  <button class="mem-toggle" id="mem-toggle">
+    <span>⚙️ Capture memory</span><span id="mem-caret">▸</span>
+  </button>
+  <div id="mem-body" class="hidden">
+    <label class="mem-switch">
+      <input type="checkbox" id="mem-enabled">
+      <span>Block already-captured tags</span>
+    </label>
+    <div class="mem-hint" id="mem-hint"></div>
+    <div class="mem-search-row">
+      <input type="text" id="mem-search-input" placeholder="Search by tag number (e.g. GR22/1)…" inputmode="text">
+      <button class="btn secondary" id="mem-search-btn">Find</button>
+    </div>
+    <div class="mem-folders" id="mem-search-result"></div>
+  </div>
+</div>
+
+<!-- The only screen — there is no category picker. Every item's category is
+     decided automatically from its tag code (see resolveCategory) the
+     instant the tag photo is decoded; the tray bar below just reflects
+     whichever category the most recently captured item resolved to, for
+     staff visibility, not as a choice anyone makes. -->
+<div id="screen-capture">
+  <div id="capture-plan" class="capture-plan" aria-live="polite">
+    <div class="capture-plan-label">Recommended next capture</div>
+    <div class="capture-plan-main">
+      <strong id="capture-plan-tag" class="capture-plan-tag">Checking…</strong>
+      <span id="capture-plan-category" class="capture-plan-category"></span>
+    </div>
+    <div id="capture-plan-detail" class="capture-plan-detail">
+      Started categories with the fewest remaining items are completed first.
+    </div>
+    <div id="camera-api-state" class="capture-plan-detail"></div>
+    <div id="capture-step-hint" class="capture-plan-detail"></div>
+    <div class="capture-view-guide" aria-label="Capture orientation guide">
+      <div class="capture-view-guide-title">Capture bundle</div>
+      <div class="capture-view-guide-text">One auto-capture of the whole ornament, then the tag photo.</div>
+      <div class="capture-view-list">
+        <span class="capture-view-chip active" id="capture-chip-front">Jewellery</span>
+        <span class="capture-view-chip" id="capture-chip-tag">Tag</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tray-bar">
+    <div>Tray: <b id="cur-tray-label">—</b> &middot; <span id="session-count">0</span> captured</div>
+    <div class="tray-bar-buttons">
+      <button id="btn-undo">Undo last</button>
+      <button id="btn-new-tray">New tray</button>
+    </div>
+  </div>
+
+  <div class="captured-list" id="captured-list">
+    <div class="empty">Nothing captured yet</div>
+  </div>
+
+  <button class="big-next-btn" id="btn-start-item-app">📷 Capture with app</button>
+  <button class="secondary-next-btn" id="btn-start-item">Use browser camera instead</button>
+</div>
+
+<div id="stock-alert" class="stock-alert-overlay" hidden role="dialog" aria-modal="true"
+     aria-labelledby="stock-alert-title">
+  <div class="stock-alert-card">
+    <h2 id="stock-alert-title">Stock items need capture</h2>
+    <p id="stock-alert-summary"></p>
+    <p id="stock-alert-recommendation" class="capture-plan-category"></p>
+    <input id="stock-alert-search" class="stock-alert-search" type="search"
+           placeholder="Search tag or category" autocomplete="off">
+    <ul id="stock-alert-list" class="stock-alert-list"></ul>
+    <button type="button" class="btn" id="stock-alert-close">Start capturing</button>
+  </div>
+</div>
+
+<!-- popup overlay — only shown when a decision is actually needed -->
+<div id="popup-overlay" class="popup-overlay hidden">
+  <div class="popup-box" id="popup-box"></div>
+</div>
+
+<div id="camera-overlay" class="camera-overlay hidden" role="dialog" aria-modal="true"
+     aria-labelledby="camera-title">
+  <div class="camera-topbar">
+    <strong id="camera-title">Jewellery photo</strong>
+    <button type="button" class="btn secondary" id="camera-native">Native camera</button>
+    <button type="button" class="btn secondary" id="camera-cancel">Cancel</button>
+  </div>
+  <div class="camera-viewport">
+    <video id="camera-video" autoplay muted playsinline></video>
+    <canvas id="camera-analysis-canvas" class="camera-analysis-canvas" aria-hidden="true"></canvas>
+    <div id="camera-focus-guide" class="camera-focus-guide" aria-hidden="true"></div>
+    <div id="camera-quality-hud" class="camera-quality-hud" aria-live="polite">
+      <span id="camera-quality-label">Starting analysis…</span>
+      <strong id="camera-quality-score" class="camera-quality-score">0</strong>
+    </div>
+  </div>
+  <div class="camera-controls">
+    <div class="camera-profile-row" aria-label="Device camera profile">
+      <button type="button" id="camera-profile-nothing">Nothing Phone (4a) Pro · main lens · 1×</button>
+      <button type="button" id="camera-profile-redmi">REDMI Pad 2 Pro · main lens · 1×</button>
+      <button type="button" id="camera-recheck-lens">Recheck rear lens</button>
+    </div>
+    <div class="camera-mode-row">
+      <label id="camera-auto-switch" class="camera-auto-switch">
+        <span id="camera-auto-label">Assist mode · manual shutter</span>
+        <input id="camera-auto-enabled" type="checkbox" aria-label="Enable automatic capture">
+      </label>
+      <div class="camera-score-track" aria-hidden="true"><div id="camera-score-fill" class="camera-score-fill"></div></div>
+    </div>
+    <div class="camera-zoom-row">
+      <span>Zoom</span>
+      <input id="camera-zoom" type="range" min="1" max="4" step="0.1" value="1">
+      <strong id="camera-zoom-value">1.0×</strong>
+    </div>
+    <div id="camera-plan-detail" class="capture-plan-detail"></div>
+    <div id="camera-status" class="camera-status">Starting camera…</div>
+    <button type="button" id="camera-shutter" class="camera-shutter" aria-label="Take photo"></button>
+  </div>
+</div>
+
+<!-- Deliberately its own small, self-contained overlay rather than reusing
+     camera-overlay's markup -- that overlay's controls (shutter, zoom,
+     assist-mode toggle) are wired to the still-photo quality-analysis flow,
+     and reusing its DOM here would mean carefully avoiding every one of
+     those existing event listeners. A separate overlay keeps 360-spin
+     recording fully independent of that flow. -->
+<div id="spin-overlay" class="camera-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="spin-title">
+  <div class="camera-topbar">
+    <strong id="spin-title">Record 360° spin</strong>
+    <button type="button" class="btn secondary" id="spin-cancel">Cancel</button>
+  </div>
+  <div class="camera-viewport">
+    <video id="spin-video" autoplay muted playsinline></video>
+  </div>
+  <div class="camera-controls">
+    <div id="spin-status" class="camera-status">Start the turntable, then tap Record.</div>
+    <button type="button" id="spin-record-btn" class="btn btn-coral">⏺ Record</button>
+    <button type="button" id="spin-stop-btn" class="btn btn-coral" style="display:none">⏹ Stop &amp; upload</button>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<input type="file" accept="image/*" capture="environment" class="capture-input" id="jewel-input">
+<input type="file" accept="image/*" capture="environment" class="capture-input" id="tag-input">
+
+<script>
+(function stockCaptureReminder() {
+  const overlay = document.getElementById('stock-alert');
+  const summary = document.getElementById('stock-alert-summary');
+  const alertRecommendation = document.getElementById('stock-alert-recommendation');
+  const search = document.getElementById('stock-alert-search');
+  const list = document.getElementById('stock-alert-list');
+  const close = document.getElementById('stock-alert-close');
+  const planTag = document.getElementById('capture-plan-tag');
+const planCategory = document.getElementById('capture-plan-category');
+const planDetail = document.getElementById('capture-plan-detail');
+  let pending = false;
+  let shownSignature = null;
+  const acknowledgedKey = 'aradhana_stock_transition_capture_v1';
+  let currentItems = [];
+
+  close.addEventListener('click', () => {
+    if (shownSignature) localStorage.setItem(acknowledgedKey, shownSignature);
+    overlay.hidden = true;
+  });
+  search.addEventListener('input', () => renderRows(search.value));
+
+  function renderRows(query) {
+    const needle = String(query || '').trim().toLocaleUpperCase();
+    const fragment = document.createDocumentFragment();
+    currentItems.forEach(item => {
+      const searchable = String(item.label || item.safe_tag || '') + ' ' +
+        String(item.category || '');
+      if (needle && !searchable.toLocaleUpperCase().includes(needle)) return;
+      const row = document.createElement('li');
+      const tag = document.createElement('strong');
+      const category = document.createElement('span');
+      tag.textContent = item.label || item.safe_tag || 'Unknown tag';
+      category.textContent = item.category || 'Unknown category';
+      row.append(tag, category);
+      fragment.appendChild(row);
+    });
+    list.replaceChildren(fragment);
+  }
+
+  function render(data) {
+    if (!data.ok || !data.notification_ready || !data.signature || data.signature === shownSignature ||
+        localStorage.getItem(acknowledgedKey) === data.signature) return;
+    shownSignature = data.signature;
+    const newCount = Number(data.new_pending_capture_count || 0);
+    const soldCount = Array.isArray(data.sold_tags) ? data.sold_tags.length : 0;
+    const addedCount = Array.isArray(data.new_tags) ? data.new_tags.length : 0;
+    summary.textContent = soldCount + ' item' + (soldCount === 1 ? '' : 's') + ' sold · ' +
+      addedCount + ' item' + (addedCount === 1 ? '' : 's') + ' added. ' +
+      data.pending_capture_count + ' current-stock item' +
+      (data.pending_capture_count === 1 ? '' : 's') + ' still need raw photos' +
+      (newCount ? ' (' + newCount + ' newly added).' : '.') + ' Source: ' +
+      (data.current_workbook || 'latest stock file') + '.';
+    currentItems = Array.isArray(data.pending_capture) ? data.pending_capture : [];
+    search.value = '';
+    renderRows('');
+    overlay.hidden = false;
+  }
+
+  function renderPlan(data) {
+    const next = data && data.next_capture;
+    if (!next) {
+      planTag.textContent = data && data.pending_capture_count === 0
+        ? 'All current stock captured' : 'Recommendation unavailable';
+      planCategory.textContent = '';
+      planDetail.textContent = data && data.pending_capture_count === 0
+        ? 'No current-stock raw photos remain.'
+        : 'Capture remains available; stock status will retry automatically.';
+      alertRecommendation.textContent = planTag.textContent;
+      return;
+    }
+    planTag.textContent = next.next_tag || next.next_safe_tag || 'Unknown tag';
+    planCategory.textContent = next.category || 'Unknown category';
+    planDetail.textContent = next.captured + ' of ' + next.total + ' captured · ' +
+      next.remaining + ' remaining · ' +
+      (next.started ? 'finish this started category first' : 'next unstarted category');
+    alertRecommendation.textContent = 'Start with ' + planTag.textContent + ' · ' +
+      planCategory.textContent + ' · ' + next.remaining + ' remaining';
+  }
+
+  async function check() {
+    if (pending) return null;
+    pending = true;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch('/api/stock/reconciliation', {
+        cache: 'no-store', signal: controller.signal,
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const data = await response.json();
+      renderPlan(data);
+      render(data);
+      return data;
+    } catch (_) {
+      // Capture remains available even if the stock file is invalid/unavailable.
+      return null;
+    } finally {
+      clearTimeout(timer);
+      pending = false;
+    }
+  }
+
+  // Zoom hint for a capture-plan detail region that couldn't be identified.
+  const DETAIL_ZOOM_HINTS = { nothing: {label: 'Nothing', zoom: 3.4}, redmi: {label: 'Redmi Pad', zoom: 2.2} };
+
+  window.refreshStockCapturePlan = check;
+  check();
+  setInterval(check, 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') check();
+  });
+})();
+
+const curTrayLabel      = document.getElementById('cur-tray-label');
+const sessionCountEl    = document.getElementById('session-count');
+const btnNewTray        = document.getElementById('btn-new-tray');
+const btnUndo           = document.getElementById('btn-undo');
+const btnStartItem      = document.getElementById('btn-start-item');
+const btnStartItemApp   = document.getElementById('btn-start-item-app');
+const capturedListEl    = document.getElementById('captured-list');
+const toastEl           = document.getElementById('toast');
+
+const jewelInput   = document.getElementById('jewel-input');
+const tagInput     = document.getElementById('tag-input');
+const popupOverlay = document.getElementById('popup-overlay');
+const popupBox     = document.getElementById('popup-box');
+const cameraOverlay = document.getElementById('camera-overlay');
+const cameraVideo = document.getElementById('camera-video');
+const cameraTitle = document.getElementById('camera-title');
+const cameraStatus = document.getElementById('camera-status');
+const cameraZoom = document.getElementById('camera-zoom');
+const cameraZoomValue = document.getElementById('camera-zoom-value');
+const cameraPlanDetail = document.getElementById('camera-plan-detail');
+const cameraShutter = document.getElementById('camera-shutter');
+const cameraAnalysisCanvas = document.getElementById('camera-analysis-canvas');
+const cameraFocusGuide = document.getElementById('camera-focus-guide');
+const cameraQualityHud = document.getElementById('camera-quality-hud');
+const cameraQualityLabel = document.getElementById('camera-quality-label');
+const cameraQualityScore = document.getElementById('camera-quality-score');
+const cameraScoreFill = document.getElementById('camera-score-fill');
+const cameraAutoEnabled = document.getElementById('camera-auto-enabled');
+const cameraAutoSwitch = document.getElementById('camera-auto-switch');
+const cameraAutoLabel = document.getElementById('camera-auto-label');
+const cameraNative = document.getElementById('camera-native');
+const cameraCancel = document.getElementById('camera-cancel');
+const cameraProfileNothing = document.getElementById('camera-profile-nothing');
+const cameraProfileRedmi = document.getElementById('camera-profile-redmi');
+const cameraRecheckLens = document.getElementById('camera-recheck-lens');
+const cameraApiState = document.getElementById('camera-api-state');
+const captureChipFront = document.getElementById('capture-chip-front');
+const captureChipTag = document.getElementById('capture-chip-tag');
+const captureStepHint = document.getElementById('capture-step-hint');
+const spinOverlay = document.getElementById('spin-overlay');
+const spinVideo = document.getElementById('spin-video');
+const spinStatus = document.getElementById('spin-status');
+const spinRecordBtn = document.getElementById('spin-record-btn');
+const spinStopBtn = document.getElementById('spin-stop-btn');
+const spinCancelBtn = document.getElementById('spin-cancel');
+// Disabled for now (2026-08-16) while the still-photo auto-zoom/focus/
+// capture flow gets fine-tuned -- code kept intact, just hidden from the
+// post-save popup. Flip back to true to re-enable.
+const SPIN_CAPTURE_ENABLED = false;
+let _spinStream = null, _spinRecorder = null, _spinChunks = [];
+
+let currentCategory = null;
+let jewelBlob = null, tagBlob = null;
+let _capturePhase = 'front';
+let capturedItems = [];   // [{code, pair}] this tray, newest first
+let _pollTimer = null;
+// Set only while waiting for a RETAKE of the jewel photo after a blur
+// warning — the jewel-input change handler checks this to skip straight
+// back to a save attempt instead of re-running the "now shoot the tag"
+// step, since the tag was already captured and confirmed.
+let blurRetakeContext = null;   // {tagCode, overrideDuplicate} | null
+let visibilityRetakeContext = null;   // {tagCode, overrideDuplicate} | null
+
+// ── Optimized in-page camera ───────────────────────────────────────────────
+// HTML file-input capture launches a separate Android camera app; the web page
+// cannot pass zoom/focus settings to that app. On a secure origin, Chrome's
+// MediaStreamTrack API can control supported zoom/focus/exposure capabilities.
+// Native file-input capture remains the automatic fallback.
+const CAMERA_PROFILES = {
+  nothing: {label: 'Nothing Phone (4a) Pro', zoom: 1, settleMs: 550},
+  redmi: {label: 'REDMI Pad 2 Pro', zoom: 1, settleMs: 850},
+};
+const CAPTURE_PHASE_RULES = {
+  nothing: {
+    front: {score: 70, sharpness: 36, points: 12, cells: 3},
+    tag: {score: 72, sharpness: 32, points: 10, cells: 3},
+  },
+  redmi: {
+    front: {score: 68, sharpness: 34, points: 10, cells: 3},
+    tag: {score: 70, sharpness: 30, points: 8, cells: 3},
+  },
+};
+const CAPTURE_PHASE_PROMPTS = {
+  front: 'Hold steady. Zooming in to fill the frame, then capturing automatically.',
+  tag: 'Show tag now. Keep the code square and sharp.',
+};
+// Target fraction of the frame the ornament should occupy before the
+// capture gate runs (see the zoom-to-fill step in startQualityAnalysis's
+// tick()). Only applies to the 'front' (jewel) phase, never 'tag' -- the
+// QR/label needs the whole tag in frame at native 1x to decode.
+const CAPTURE_FILL_TARGET = 0.90;
+// Minimum live coverage (fraction of frame AREA the gold/silver blob's
+// bounding box occupies) before a frame is even considered "enough of the
+// piece is in view" -- deliberately low. This is no longer the thing that
+// decides when to stop zooming (see advanceCapturePipeline): sharpness and
+// stability are verified at EVERY zoom level before advancing to the next
+// one, so the moment all four conditions (material, sharp, stable, this
+// floor) are true together, that IS the stopping point -- there's no
+// reason to hold out for a bigger number once a clean, in-focus frame
+// exists. Final framing tightness in the saved photo is still handled
+// separately by the digital crop (cropToFillOrnament, CAPTURE_FILL_TARGET).
+const CAPTURE_MIN_LIVE_COVERAGE = 0.10;
+// How many genuine focus-lock retries a single zoom level gets before the
+// pipeline concedes that level isn't resolving and steps back, rather than
+// pushing forward into an even harder-to-focus level.
+const CAPTURE_MAX_FOCUS_RETRIES = 2;
+// Absolute backstop: if a piece with material detected still hasn't gone
+// green this long after arming (retry/backoff cycling, or a subject this
+// lens genuinely can't resolve at any reachable zoom), stop cycling and
+// accept the best frame rather than holding the operator on "Focusing…"
+// indefinitely. See the safety-valve check in advanceCapturePipeline.
+const CAPTURE_MAX_STALL_MS = 12000;
+let _cameraStream = null;
+let _cameraTrack = null;
+let _cameraImageCapture = null;
+let _cameraKind = null;
+let _cameraCapabilities = {};
+let _cameraDeviceId = null;
+let _cameraDeviceLabel = '';
+let _cameraProfile = null;
+let _cameraFingerprint = null;
+let _cameraDetectionReason = null;
+let _qualityWorker = null;
+let _qualityWorkerSequence = 0;
+let _qualityPending = new Map();
+let _qualityTimer = null;
+let _qualitySession = 0;
+let _qualityFrameBusy = false;
+let _qualityLastAnalysisAt = 0;
+let _qualityLastDetailAt = 0;
+let _qualityDetailConfirmation = null;
+let _qualityStableFrames = 0;
+let _qualityAutoFired = false;
+let _qualityLastResult = null;
+let _qualityLastPlan = null;
+let _qualityLastTagScanAt = 0;
+let _qualityTagScanBusy = false;
+let _qualityTagHistory = [];
+let _qualityStableTag = null;
+let _qualityTagCorners = [];
+let _qualityBarcodeDetectorPromise = null;
+let _qualityCooldownUntil = 0;
+// True once the ornament has actually been seen in frame for the jewel
+// ('front') phase -- gates zoom-to-fill/auto-capture so the operator gets
+// a real placement window without a fixed timer. Tag phase is armed
+// immediately (see openCaptureCamera).
+let _qualityArmed = true;
+// Timestamp _qualityArmed last became true -- drives CAPTURE_MAX_STALL_MS,
+// the absolute safety valve in advanceCapturePipeline.
+let _qualityArmedAt = 0;
+const _qualityTagCanvas = document.createElement('canvas');
+
+try {
+  cameraAutoEnabled.checked = (localStorage.getItem('aradhana_auto_capture_v1') || 'auto') !== 'manual';
+} catch (_) {
+  cameraAutoEnabled.checked = true;
+}
+
+function updateAutoCaptureMode() {
+  const enabled = !!cameraAutoEnabled.checked;
+  cameraAutoLabel.textContent = enabled ? 'Assist mode · auto capture' : 'Assist mode · manual shutter';
+  cameraAutoSwitch.classList.toggle('active', enabled);
+  _qualityStableFrames = 0;
+  _qualityAutoFired = false;
+  try { localStorage.setItem('aradhana_auto_capture_v1', enabled ? 'auto' : 'manual'); } catch (_) {}
+}
+cameraAutoEnabled.addEventListener('change', updateAutoCaptureMode);
+updateAutoCaptureMode();
+
+function currentCameraProfileKey() {
+  return CAMERA_PROFILES[_cameraProfile] ? _cameraProfile : 'nothing';
+}
+
+function currentPhaseRule() {
+  const profile = currentCameraProfileKey();
+  const phase = _capturePhase && CAPTURE_PHASE_RULES[profile] && CAPTURE_PHASE_RULES[profile][_capturePhase]
+    ? _capturePhase : 'front';
+  return CAPTURE_PHASE_RULES[profile][phase];
+}
+
+function updateCameraPlanDetail(text) {
+  if (cameraPlanDetail) cameraPlanDetail.textContent = text || '';
+}
+
+function describeCurrentPlan(plan, phase) {
+  if (!plan) return '';
+  if (phase === 'tag') return 'Tag next · main lens · native 1×';
+  return 'Whole ornament · zooming to fill frame · main lens';
+}
+
+function updateCaptureGuide(phase, customText) {
+  const activePhase = phase && CAPTURE_PHASE_PROMPTS[phase] ? phase : 'front';
+  captureChipFront.classList.toggle('active', activePhase === 'front');
+  captureChipTag.classList.toggle('active', activePhase === 'tag');
+  const profileLabel = (CAMERA_PROFILES[currentCameraProfileKey()] || CAMERA_PROFILES.nothing).label;
+  captureStepHint.textContent = customText || `${profileLabel} · ${CAPTURE_PHASE_PROMPTS[activePhase]}`;
+}
+
+updateCaptureGuide('front', 'Move closer. Start with the jewellery photo.');
+
+// Starting (and only) zoom when a phase's camera opens -- both phases stay
+// at native 1x. The 75%-frame-fill "zoom in" happens as a digital crop on
+// the captured photo instead (see cropToFillOrnament / CAPTURE_FILL_TARGET),
+// not as live hardware zoom, since hardware zoom re-centers around the
+// frame middle and fights the box-alignment/focus-stability checks.
+function captureZoomForPhase(profile, phase, plan) {
+  const settings = CAMERA_PROFILES[profile] || CAMERA_PROFILES.nothing;
+  const phaseZoom = {
+    nothing: {front: 1, tag: 1},
+    redmi: {front: 1, tag: 1},
+  };
+  return phaseZoom[profile]?.[phase] || settings.zoom || 1;
+}
+
+// Gates purely on material detection: is there a well-localised gold/silver
+// blob (isGoldTargetCandidate/goldBoundsUsable -- looksLikeMetal() in the
+// worker already covers both gold AND silver), is IT sharp, is the frame
+// stable. Deliberately does NOT check framing/box-fit, skin ratio, or glare
+// -- each of those caused a real false-block this session (box-fit fights
+// live zoom's re-centering; skin ratio misfired on a saturated pink display
+// clip that was never a hand; glare misfires on legitimate diamond sparkle
+// once zoomed in). None of that is needed to know "the metal is in frame
+// and it's sharp." Mirrors the worker's own metalPass criterion
+// (capture_quality_worker.js) so the live gate and the burst's own
+// re-validation agree -- and uses the REFINED sharpness/detail values from
+// addTargetSharpnessConfirmation() (a sharper crop of just the item; the
+// full-frame downscaled analysis under-measures fine detail like pavé
+// stones), not result.pass directly, which stays the original unrefined
+// verdict and would otherwise block a piece the refined measurement already
+// confirmed is sharp.
+function isCaptureGateReady(result) {
+  if (!result) return false;
+  if (_cameraKind === 'tag') {
+    return !!_qualityStableTag;
+  }
+  if (!isGoldTargetCandidate(result)) return false;
+  const coverage = result.capturePlan && typeof result.capturePlan.coverage === 'number'
+    ? result.capturePlan.coverage : 0;
+  if (coverage < CAPTURE_MIN_LIVE_COVERAGE) return false;
+  const sharpEnough = result.detailSharpnessConfirmed === true &&
+    result.sharpnessScore >= (coverage >= 0.02 ? 34 : 38);
+  if (!sharpEnough) return false;
+  return result.motion !== null && result.motion <= 0.08;
+}
+
+// Names the single most likely reason isCaptureGateReady is blocking
+// capture -- material not detected, not enough of the frame filled, not
+// sharp yet, or too much motion.
+function _captureGateBlockReason(result) {
+  if (!result) return 'Waiting on camera…';
+  if (isCaptureGateReady(result)) return 'Ready. Capturing…';
+  if (!isGoldTargetCandidate(result)) return 'Gold/silver piece not detected — reposition';
+  const coverage = result.capturePlan && typeof result.capturePlan.coverage === 'number'
+    ? result.capturePlan.coverage : 0;
+  if (coverage < CAPTURE_MIN_LIVE_COVERAGE) return 'Move closer or zoom in';
+  const sharpEnough = result.detailSharpnessConfirmed === true &&
+    result.sharpnessScore >= (coverage >= 0.02 ? 34 : 38);
+  if (!sharpEnough) return 'Not sharp enough yet — hold steady, focusing…';
+  return 'Too much motion — hold the phone steady';
+}
+
+cameraApiState.textContent = window.isSecureContext && navigator.mediaDevices
+  ? 'Optimized browser camera ready.'
+  : 'Native 1× fallback active: this exact capture URL is not a secure origin.';
+
+function nativeCameraInput(kind) {
+  return kind === 'tag' ? tagInput : jewelInput;
+}
+
+function destroyQualityWorker() {
+  if (_qualityWorker) _qualityWorker.terminate();
+  _qualityWorker = null;
+  for (const pending of _qualityPending.values()) {
+    clearTimeout(pending.timer);
+    pending.reject(new Error('Quality analyser stopped'));
+  }
+  _qualityPending.clear();
+}
+
+function ensureQualityWorker() {
+  if (_qualityWorker) return _qualityWorker;
+  if (!window.Worker || !window.OffscreenCanvas || !window.createImageBitmap) return null;
+  // Keep the worker cache tied to this page version so gate tweaks load after refresh.
+  const worker = new Worker('/static/capture_quality_worker.js?v=' + encodeURIComponent(PAGE_VERSION));
+  worker.onmessage = event => {
+    const message = event.data || {};
+    const pending = _qualityPending.get(message.id);
+    if (!pending) return;
+    _qualityPending.delete(message.id);
+    clearTimeout(pending.timer);
+    if (message.ok) pending.resolve(message.result);
+    else pending.reject(new Error(message.error || 'Quality analysis failed'));
+  };
+  worker.onerror = () => {
+    cameraQualityLabel.textContent = 'Assist unavailable · manual shutter works';
+    cameraShutter.disabled = false;
+    destroyQualityWorker();
+  };
+  _qualityWorker = worker;
+  return worker;
+}
+
+function requestQualityAnalysis(bitmap, kind, finalFrame) {
+  const worker = ensureQualityWorker();
+  if (!worker) {
+    try { bitmap.close(); } catch (_) {}
+    return Promise.reject(new Error('This browser cannot run local quality analysis'));
+  }
+  const id = ++_qualityWorkerSequence;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      _qualityPending.delete(id);
+      reject(new Error('Quality analysis timed out'));
+    }, finalFrame ? 5000 : 2500);
+    _qualityPending.set(id, {resolve, reject, timer});
+    worker.postMessage({id, bitmap, kind, finalFrame: !!finalFrame}, [bitmap]);
+  });
+}
+
+async function createVideoAnalysisBitmap(maximum, bounds) {
+  const sourceWidth = cameraVideo.videoWidth || 1;
+  const sourceHeight = cameraVideo.videoHeight || 1;
+  let x = 0, y = 0, width = sourceWidth, height = sourceHeight;
+  if (bounds) {
+    const marginX = Math.max(0.04, (bounds.x1 - bounds.x0) * 0.18);
+    const marginY = Math.max(0.04, (bounds.y1 - bounds.y0) * 0.18);
+    const x0 = Math.max(0, bounds.x0 - marginX);
+    const y0 = Math.max(0, bounds.y0 - marginY);
+    const x1 = Math.min(1, bounds.x1 + marginX);
+    const y1 = Math.min(1, bounds.y1 + marginY);
+    x = Math.round(x0 * sourceWidth);
+    y = Math.round(y0 * sourceHeight);
+    width = Math.max(1, Math.round((x1 - x0) * sourceWidth));
+    height = Math.max(1, Math.round((y1 - y0) * sourceHeight));
+  }
+  const scale = Math.min(1, maximum / Math.max(width, height));
+  const resizeWidth = Math.max(1, Math.round(width * scale));
+  const resizeHeight = Math.max(1, Math.round(height * scale));
+  try {
+    return await createImageBitmap(cameraVideo, x, y, width, height, {
+      resizeWidth, resizeHeight, resizeQuality: 'high',
+    });
+  } catch (_) {
+    return await createImageBitmap(cameraVideo, x, y, width, height);
+  }
+}
+
+function isGoldTargetCandidate(result) {
+  // goldBoxArea catches a piece paved with diamonds/stones: its gold pixels
+  // are fragmented into thin slivers around a large non-gold-coloured face,
+  // so the density-based checks (goldBlobCoverage/goldRatio) stay low even
+  // when the piece is sharp and dead-centre -- but the sparse slivers still
+  // span the whole piece, so the blob's bounding box is large. See the
+  // matching comment in capture_quality_worker.js where this is computed.
+  return !!(result && result.goldBounds && (
+    result.goldDominant || result.goldBlobCoverage >= 0.012 || result.goldRatio >= 0.035 ||
+    result.goldBoxArea >= 0.05
+  ));
+}
+
+async function addTargetSharpnessConfirmation(result) {
+  if (!isGoldTargetCandidate(result) || result.motion === null || result.motion > 0.08) {
+    _qualityDetailConfirmation = null;
+    return result;
+  }
+  const now = Date.now();
+  if (!_qualityDetailConfirmation || now - _qualityLastDetailAt >= 400) {
+    const detailBitmap = await createVideoAnalysisBitmap(720, result.goldBounds);
+    const detail = await requestQualityAnalysis(detailBitmap, _cameraKind, true);
+    _qualityLastDetailAt = now;
+    _qualityDetailConfirmation = {
+      sharpness: detail.sharpness,
+      sharpnessScore: detail.sharpnessScore,
+      clippedRatio: detail.clippedRatio,
+      expiresAt: now + 650,
+    };
+  }
+  if (!_qualityDetailConfirmation || _qualityDetailConfirmation.expiresAt < now) return result;
+  return {
+    ...result,
+    sharpness: _qualityDetailConfirmation.sharpness,
+    sharpnessScore: _qualityDetailConfirmation.sharpnessScore,
+    clippedRatio: _qualityDetailConfirmation.clippedRatio,
+    detailSharpnessConfirmed: true,
+  };
+}
+
+function resetQualityState() {
+  _qualityStableFrames = 0;
+  _qualityAutoFired = false;
+  _qualityLastResult = null;
+  _qualityLastTagScanAt = 0;
+  _qualityTagScanBusy = false;
+  _qualityTagHistory = [];
+  _qualityStableTag = null;
+  _qualityTagCorners = [];
+  _qualityLastAnalysisAt = 0;
+  _qualityLastDetailAt = 0;
+  _qualityDetailConfirmation = null;
+  cameraQualityHud.classList.remove('ready');
+  cameraFocusGuide.classList.remove('ready');
+  cameraQualityScore.textContent = '0';
+  cameraScoreFill.style.width = '0%';
+  cameraScoreFill.classList.remove('ready');
+  cameraQualityLabel.textContent = 'Starting analysis…';
+  updateCameraPlanDetail('');
+}
+
+function videoDisplayRect() {
+  const width = cameraAnalysisCanvas.clientWidth;
+  const height = cameraAnalysisCanvas.clientHeight;
+  const videoWidth = cameraVideo.videoWidth || width || 1;
+  const videoHeight = cameraVideo.videoHeight || height || 1;
+  const scale = Math.min(width / videoWidth, height / videoHeight);
+  const shownWidth = videoWidth * scale;
+  const shownHeight = videoHeight * scale;
+  return {x: (width - shownWidth) / 2, y: (height - shownHeight) / 2, width: shownWidth, height: shownHeight};
+}
+
+function renderQualityOverlay(result) {
+  const cssWidth = cameraAnalysisCanvas.clientWidth;
+  const cssHeight = cameraAnalysisCanvas.clientHeight;
+  if (!cssWidth || !cssHeight) return;
+  const ratio = Math.min(2, window.devicePixelRatio || 1);
+  const pixelWidth = Math.round(cssWidth * ratio);
+  const pixelHeight = Math.round(cssHeight * ratio);
+  if (cameraAnalysisCanvas.width !== pixelWidth || cameraAnalysisCanvas.height !== pixelHeight) {
+    cameraAnalysisCanvas.width = pixelWidth;
+    cameraAnalysisCanvas.height = pixelHeight;
+  }
+  const context = cameraAnalysisCanvas.getContext('2d');
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, cssWidth, cssHeight);
+  const rect = videoDisplayRect();
+  const color = result.pass ? '#34d399' : '#fbbf24';
+  context.fillStyle = color;
+  context.shadowColor = color;
+  context.shadowBlur = 5;
+  for (const point of (result.points || []).slice(0, 80)) {
+    context.beginPath();
+    context.arc(rect.x + point.x * rect.width, rect.y + point.y * rect.height, result.pass ? 2.5 : 2, 0, Math.PI * 2);
+    context.fill();
+  }
+  if (_cameraKind === 'tag' && _qualityTagCorners.length >= 4) {
+    context.shadowBlur = 7;
+    context.lineWidth = 3;
+    context.strokeStyle = _qualityStableTag ? '#34d399' : '#fbbf24';
+    context.beginPath();
+    _qualityTagCorners.forEach((point, index) => {
+      const x = rect.x + point.x * rect.width;
+      const y = rect.y + point.y * rect.height;
+      if (!index) context.moveTo(x, y); else context.lineTo(x, y);
+    });
+    context.closePath();
+    context.stroke();
+  }
+  context.shadowBlur = 0;
+}
+
+function updateQualityDisplay(result) {
+  _qualityLastResult = result;
+  if (result && result.capturePlan) _qualityLastPlan = result.capturePlan;
+  const ready = isCaptureGateReady(result);
+  cameraQualityHud.classList.toggle('ready', ready);
+  cameraFocusGuide.classList.toggle('ready', ready);
+  cameraQualityScore.textContent = String(result.score);
+  cameraScoreFill.style.width = Math.max(0, Math.min(100, result.score)) + '%';
+  cameraScoreFill.classList.toggle('ready', ready);
+  if (_cameraKind === 'tag' && _qualityStableTag) {
+    cameraQualityLabel.textContent = 'Tag ' + _qualityStableTag + ' · QR ready';
+  } else if (_cameraKind === 'tag' && _qualityTagHistory.length) {
+    cameraQualityLabel.textContent = 'Reading ' + _qualityTagHistory[_qualityTagHistory.length - 1] + ' · hold steady';
+  } else {
+    cameraQualityLabel.textContent = result.reason + ' · ' + result.pointCount + ' points';
+  }
+  updateCameraPlanDetail(
+    _cameraKind === 'tag'
+      ? 'Tag mode · QR only'
+      : describeCurrentPlan(_qualityLastPlan, _capturePhase || 'front')
+  );
+  updateCaptureGuide(_capturePhase || 'front', ready
+    ? 'Ready. Capture now.'
+    : `${(CAMERA_PROFILES[currentCameraProfileKey()] || CAMERA_PROFILES.nothing).label} · ${CAPTURE_PHASE_PROMPTS[_capturePhase || 'front']} (${result.reason})`);
+  renderQualityOverlay(result);
+  cameraShutter.disabled = !ready;
+}
+
+async function getLiveBarcodeDetector() {
+  if (!('BarcodeDetector' in window)) return null;
+  if (!_qualityBarcodeDetectorPromise) {
+    _qualityBarcodeDetectorPromise = (async () => {
+      try {
+        const formats = await window.BarcodeDetector.getSupportedFormats();
+        return new BarcodeDetector({formats});
+      } catch (_) { return null; }
+    })();
+  }
+  return await _qualityBarcodeDetectorPromise;
+}
+
+async function scanLiveTag() {
+  const detector = await getLiveBarcodeDetector();
+  if (detector) {
+    try {
+      const codes = await detector.detect(cameraVideo);
+      if (codes.length && codes[0].rawValue) {
+        const width = cameraVideo.videoWidth || 1;
+        const height = cameraVideo.videoHeight || 1;
+        const corners = (codes[0].cornerPoints || []).map(point => ({x: point.x / width, y: point.y / height}));
+        return {code: codes[0].rawValue, corners};
+      }
+    } catch (_) {}
+  }
+  if (typeof jsQR !== 'function' || cameraVideo.readyState < 2) return null;
+  const sourceWidth = cameraVideo.videoWidth;
+  const sourceHeight = cameraVideo.videoHeight;
+  const scale = Math.min(1, 620 / Math.max(sourceWidth, sourceHeight));
+  _qualityTagCanvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  _qualityTagCanvas.height = Math.max(1, Math.round(sourceHeight * scale));
+  const context = _qualityTagCanvas.getContext('2d', {willReadFrequently: true});
+  context.drawImage(cameraVideo, 0, 0, _qualityTagCanvas.width, _qualityTagCanvas.height);
+  const image = context.getImageData(0, 0, _qualityTagCanvas.width, _qualityTagCanvas.height);
+  const result = jsQR(image.data, image.width, image.height, {inversionAttempts: 'attemptBoth'});
+  if (!result || !result.data) return null;
+  const location = result.location || {};
+  const rawCorners = [location.topLeftCorner, location.topRightCorner, location.bottomRightCorner, location.bottomLeftCorner].filter(Boolean);
+  return {
+    code: result.data,
+    corners: rawCorners.map(point => ({x: point.x / image.width, y: point.y / image.height})),
+  };
+}
+
+function recordLiveTag(read) {
+  if (!read || !read.code) {
+    _qualityTagHistory = [];
+    _qualityStableTag = null;
+    _qualityTagCorners = [];
+    return;
+  }
+  const code = String(read.code).trim();
+  const prior = _qualityTagHistory[_qualityTagHistory.length - 1];
+  _qualityTagHistory = prior === code ? _qualityTagHistory.concat(code).slice(-3) : [code];
+  _qualityStableTag = _qualityTagHistory.length >= 2 ? code : null;
+  _qualityTagCorners = read.corners || [];
+}
+
+// Capture pipeline: at the CURRENT zoom, lock focus decisively, wait for
+// the lock to settle, then judge material/sharpness/motion/coverage on
+// that SAME settled frame together (advanceCapturePipeline). Zoom only
+// ever advances by exactly one step, and only after the current level has
+// already been confirmed clean -- never while blurry. This replaces an
+// earlier design that climbed zoom on coverage alone and only judged
+// sharpness after the whole climb finished, which could (and did) end up
+// firing the shutter on a frame that had never actually been confirmed
+// sharp at the zoom level it was captured at.
+const CAPTURE_ZOOM_BACKOFF_RATIO = 0.8;
+// Grace period after a single decisive focus-lock trigger before the
+// sharpness gate is judged -- gives the lens time to actually complete one
+// focus pass rather than being judged mid-search.
+const CAPTURE_FOCUS_SETTLE_MS = 500;
+let _qualityMaxUsableZoom = Infinity; // soft ceiling after a level proves unfocusable
+let _qualityFocusLockedAt = 0;
+// Consecutive ticks with no LIVE material detection while already zoomed
+// in -- signals the item has drifted out of frame from centre-anchored
+// zoom (see advanceCapturePipeline).
+let _qualityLostFrames = 0;
+// How many focus retries have been used at the CURRENT zoom level. Reset
+// whenever zoom actually changes so each new level gets its own budget.
+let _stepFocusAttempts = 0;
+
+// Fires exactly ONE decisive focus action per call, not continuous
+// re-evaluation. Continuous AF on a shiny, reflective, low-texture subject
+// (polished gold, faceted diamonds) is prone to "hunting" -- racking back
+// and forth without locking, because it keeps re-searching for a confident
+// contrast peak. Repeatedly re-triggering continuous mode (tried first, on
+// every zoom step) made this WORSE by restarting that search mid-hunt every
+// time. single-shot mode -- when the device supports it -- performs one
+// focus pass and then holds, which is both faster and far less prone to
+// hunting.
+//
+// forceRetrigger is used by advanceCapturePipeline's focus retries: on
+// several Android/Chrome camera stacks, re-applying the SAME focusMode
+// value the track already reports is a silent no-op -- the platform camera
+// HAL only re-runs an AF sweep on an actual state transition, not a
+// repeated identical constraint. That is a plausible reason a single
+// "decisive" pass at high zoom can leave the frame stuck blurred: the
+// retry looked like it fired, but the hardware never actually re-focused.
+// Toggling through 'none' first (a no-parameter, universally cheap value
+// when supported) forces a real transition so the retry is a genuine fresh
+// AF sweep, not another no-op of the mode already in effect.
+async function _lockFocusOnce(forceRetrigger) {
+  if (!_cameraTrack) return;
+  const supported = _cameraCapabilities.focusMode;
+  const mode = Array.isArray(supported) && supported.includes('single-shot')
+    ? 'single-shot'
+    : (Array.isArray(supported) && supported.includes('continuous') ? 'continuous' : null);
+  if (mode) {
+    if (forceRetrigger && Array.isArray(supported) && supported.includes('none') && mode !== 'none') {
+      try { await _cameraTrack.applyConstraints({advanced: [{focusMode: 'none'}]}); } catch (_) {}
+    }
+    try { await _cameraTrack.applyConstraints({advanced: [{focusMode: mode}]}); } catch (_) {}
+  }
+  _qualityFocusLockedAt = Date.now();
+}
+
+function _ornamentPresent(result) {
+  return !!(result && (
+    result.pass ||
+    result.goldDominant ||
+    result.goldBlobCoverage >= 0.012 ||
+    result.goldRatio >= 0.035 ||
+    (result.capturePlan && result.capturePlan.coverage >= 0.01)
+  ));
+}
+
+// Single state machine covering placement, zoom, and focus for the jewel
+// phase. At the CURRENT zoom: lock focus decisively, wait for the lock to
+// settle, then judge material + sharpness + motion + coverage TOGETHER on
+// that one settled frame. Returns true while still working (caller should
+// skip the capture gate this tick); false the instant everything is green
+// at once -- that frame IS the one to capture, nothing zooms past it.
+async function advanceCapturePipeline(result, now) {
+  if (!_qualityArmed) {
+    if (!_ornamentPresent(result)) {
+      cameraStatus.textContent = 'Place the item in frame…';
+      return true;
+    }
+    _qualityArmed = true;
+    _qualityArmedAt = now;
+    cameraStatus.textContent = 'Item detected. Focusing…';
+  }
+
+  // Step 1: one decisive focus pass at the CURRENT zoom -- no repeated AF
+  // triggers here, that's what caused hunting.
+  if (!_qualityFocusLockedAt) {
+    await _lockFocusOnce();
+    cameraStatus.textContent = 'Focusing…';
+    return true;
+  }
+  // Step 2: grace period for that pass to actually complete before judging
+  // anything -- judged mid-search is a guaranteed false "not sharp".
+  if (now - _qualityFocusLockedAt < CAPTURE_FOCUS_SETTLE_MS) return true;
+
+  // Step 3: judge material/sharpness/motion/coverage on the SAME settled
+  // frame, all together -- not sharpness-after-the-climb-finished like the
+  // old design, which is what let a never-actually-confirmed-sharp frame
+  // through to the shutter.
+  const material = isGoldTargetCandidate(result);
+  const plan = result.capturePlan;
+  const coverage = plan && typeof plan.coverage === 'number' ? plan.coverage : 0;
+  const sharpEnough = result.detailSharpnessConfirmed === true &&
+    result.sharpnessScore >= (coverage >= 0.02 ? 34 : 38);
+  const stable = result.motion !== null && result.motion <= 0.08;
+  const coverageOk = coverage >= CAPTURE_MIN_LIVE_COVERAGE;
+
+  if (material && coverageOk && sharpEnough && stable) {
+    // First green signal on a confirmed-clean frame -- stop here. Do NOT
+    // keep zooming past a piece that is already sharp, stable, and
+    // identified: that's exactly the wasted-time overshoot this replaces.
+    return false;
+  }
+
+  const range = _cameraCapabilities.zoom;
+  const currentZoom = Number((_cameraTrack && _cameraTrack.getSettings().zoom) || cameraZoom.value || 1);
+  const noZoomCapability = !range || typeof range.max !== 'number';
+  const atDeviceMax = !noZoomCapability && currentZoom >= range.max - 0.01;
+
+  // Absolute safety valve: whatever branch below would otherwise keep this
+  // item cycling, don't let it hold the operator forever. Once genuinely
+  // stuck this long with material present, accept the best frame on offer
+  // instead of sitting on "Focusing…"/"Refocusing…" indefinitely.
+  if (material && now - _qualityArmedAt > CAPTURE_MAX_STALL_MS) return false;
+
+  if (!material) {
+    // No blob to reason about. At 1x that's normal placement noise --
+    // _ornamentPresent already gated arming. Once already zoomed in,
+    // though, this is browser zoom's centre-anchoring walking an
+    // off-centre item toward the edge and out of frame (there is no API to
+    // zoom around the item's own box, only the frame's centre -- see
+    // applyCameraZoom) -- give it a couple of ticks in case it's one missed
+    // analysis frame, then ease back to re-acquire instead of sitting here
+    // or drifting further on an empty background.
+    if (currentZoom <= 1.05) { _qualityLostFrames = 0; return true; }
+    _qualityLostFrames += 1;
+    if (_qualityLostFrames < 3) return true;
+    _qualityLostFrames = 0;
+    const recovered = Math.max((range && range.min) || 1, currentZoom * CAPTURE_ZOOM_BACKOFF_RATIO);
+    if (recovered < currentZoom - 0.05) await applyCameraZoom(recovered);
+    _qualityFocusLockedAt = 0;
+    _stepFocusAttempts = 0;
+    cameraQualityLabel.textContent = `Lost the piece · easing back to ${recovered.toFixed(1)}×`;
+    cameraStatus.textContent = 'Re-centre the item…';
+    return true;
+  }
+  _qualityLostFrames = 0;
+
+  if (!coverageOk) {
+    // The blob is still too small in frame for the sharpness reading to be
+    // trustworthy: addTargetSharpnessConfirmation crops to the blob's own
+    // bounds and upscales that crop for analysis, and upscaling a small
+    // crop softens it regardless of true focus. Judging "not sharp" here
+    // would be a false reading no amount of refocusing could ever fix --
+    // that was the exact deadlock this caused (permanently "Waiting for
+    // sharp focus" at low zoom, with nowhere to back off to). So: keep
+    // climbing on coverage alone here, same as the piece being too small
+    // to judge at all -- sharpness only starts gating once the crop is
+    // actually big enough to measure honestly (the branch below).
+    if (noZoomCapability || atDeviceMax || currentZoom >= _qualityMaxUsableZoom - 0.01) {
+      // Nowhere left to climb and still not big enough -- accept what's on
+      // offer rather than blocking forever on an unreachable floor.
+      return false;
+    }
+    const nextZoom = Math.min(clampCameraZoom(currentZoom * 1.15), _qualityMaxUsableZoom);
+    await applyCameraZoom(nextZoom);
+    _qualityFocusLockedAt = 0; // the new zoom level needs its own fresh lock + judgement
+    _stepFocusAttempts = 0;
+    cameraQualityLabel.textContent = `Zooming in… ${nextZoom.toFixed(1)}×`;
+    cameraStatus.textContent = 'Filling frame before capture…';
+    return true;
+  }
+
+  // From here on the crop is large enough that a sharpness reading means
+  // something -- this is where "never advance while blurry" applies.
+  if (!sharpEnough || !stable) {
+    // A single AF pass on a reflective, faceted subject can simply fail to
+    // land, so give it a couple of genuine retries at this SAME zoom
+    // before conceding -- never advance zoom while still blurry, that only
+    // makes focus harder.
+    _stepFocusAttempts += 1;
+    if (_stepFocusAttempts <= CAPTURE_MAX_FOCUS_RETRIES) {
+      await _lockFocusOnce(true); // forced re-trigger, not a same-value no-op
+      cameraStatus.textContent = 'Refocusing…';
+      return true;
+    }
+    // Retries exhausted at this level -- step BACK (never forward into a
+    // level even less likely to resolve) and cap future climbs at it. This
+    // naturally drops coverage back under the trust floor too, so the next
+    // pass re-enters the climb branch above and re-earns its way back up
+    // rather than re-judging sharpness on the same zoom that just failed.
+    _stepFocusAttempts = 0;
+    const backedOff = (range && typeof range.min === 'number')
+      ? Math.max(range.min, currentZoom * CAPTURE_ZOOM_BACKOFF_RATIO) : currentZoom;
+    if (backedOff < currentZoom - 0.05) {
+      _qualityMaxUsableZoom = backedOff;
+      await applyCameraZoom(backedOff);
+      cameraQualityLabel.textContent = `Easing zoom for sharper focus… ${backedOff.toFixed(1)}×`;
+    }
+    _qualityFocusLockedAt = 0; // forces a fresh lock + full re-judgement
+    cameraStatus.textContent = 'Refocusing…';
+    return true;
+  }
+
+  // coverageOk && sharpEnough && stable && material is exactly the green
+  // condition already handled above -- unreachable in practice, kept only
+  // as a safe fallback rather than falling through undefined.
+  return true;
+}
+
+function maybeAutoCapture(result) {
+  if (!result || _qualityAutoFired || !cameraShutter || cameraShutter.disabled) return;
+  if (!cameraAutoEnabled.checked) return;
+  if (_qualityCooldownUntil && Date.now() < _qualityCooldownUntil) return;
+  const isTag = _cameraKind === 'tag';
+  // Same criteria as isCaptureGateReady (see its comment) -- a separate,
+  // looser check here would reintroduce the fire-then-fail-then-retry loop.
+  const canFireNow = isTag ? !!_qualityStableTag : isCaptureGateReady(result);
+  if (!canFireNow) {
+    _qualityStableFrames = 0;
+    return;
+  }
+  // Two consecutive green analyses add only about 240 ms but prevent one
+  // reflected highlight or autofocus pulse from firing the shutter.
+  const neededFrames = isTag ? 1 : 2;
+  _qualityStableFrames += 1;
+  if (_qualityStableFrames < neededFrames) return;
+  _qualityAutoFired = true;
+  cameraStatus.textContent = isTag
+    ? 'Tag locked. Reading QR now…'
+    : (result.goldDominant ? 'Gold fill detected. Capturing best of 5…' : 'Green. Capturing best of 5…');
+  captureOptimizedPhoto('auto', isTag ? _qualityStableTag : null);
+}
+
+function startQualityAnalysis() {
+  _qualityLastPlan = null;
+  resetQualityState();
+  const session = ++_qualitySession;
+  const scheduleNext = () => {
+    if (session !== _qualitySession || !_cameraTrack) return;
+    if (typeof cameraVideo.requestVideoFrameCallback === 'function') {
+      cameraVideo.requestVideoFrameCallback(() => {
+        if (session === _qualitySession && _cameraTrack) tick();
+      });
+    } else {
+      _qualityTimer = setTimeout(tick, 45);
+    }
+  };
+  if (_cameraKind === 'tag') {
+    cameraQualityLabel.textContent = 'Scanning QR…';
+    cameraStatus.textContent = 'Show the tag code';
+    cameraShutter.disabled = true;
+    const tick = async () => {
+      if (session !== _qualitySession || !_cameraTrack) return;
+      if (!_qualityTagScanBusy && cameraVideo.readyState >= 2 && Date.now() - _qualityLastTagScanAt >= 180) {
+        _qualityTagScanBusy = true;
+        _qualityLastTagScanAt = Date.now();
+        try { recordLiveTag(await scanLiveTag()); }
+        finally { _qualityTagScanBusy = false; }
+        const ready = !!_qualityStableTag;
+        cameraQualityHud.classList.toggle('ready', ready);
+        cameraFocusGuide.classList.toggle('ready', ready);
+        cameraQualityScore.textContent = ready ? '100' : '0';
+        cameraScoreFill.style.width = ready ? '100%' : '0%';
+        cameraScoreFill.classList.toggle('ready', ready);
+        cameraQualityLabel.textContent = ready
+          ? 'Tag ' + _qualityStableTag + ' · QR ready'
+          : (_qualityTagHistory.length ? 'Reading ' + _qualityTagHistory[_qualityTagHistory.length - 1] + ' · hold steady' : 'Scanning QR…');
+        updateCameraPlanDetail('Tag mode · QR only');
+        updateCaptureGuide(_capturePhase || 'tag', ready ? 'Ready. Capture now.' : 'Show the QR code.');
+        cameraShutter.disabled = !ready;
+        if (ready && !_qualityAutoFired && cameraAutoEnabled.checked) {
+          _qualityAutoFired = true;
+          cameraStatus.textContent = 'QR locked. Reading now…';
+          captureOptimizedPhoto('auto', _qualityStableTag);
+          return;
+        }
+      }
+      scheduleNext();
+    };
+    tick();
+    return;
+  }
+  const worker = ensureQualityWorker();
+  if (!worker) {
+    cameraQualityLabel.textContent = 'Assist unavailable · manual shutter works';
+    cameraShutter.disabled = false;
+    return;
+  }
+  const tick = async () => {
+    if (session !== _qualitySession || !_cameraTrack) return;
+    const now = Date.now();
+    if (!_qualityFrameBusy && cameraVideo.readyState >= 2 && now - _qualityLastAnalysisAt >= 200) {
+      _qualityFrameBusy = true;
+      _qualityLastAnalysisAt = now;
+      try {
+        const bitmap = await createVideoAnalysisBitmap(360, null);
+        let result = await requestQualityAnalysis(bitmap, _cameraKind, false);
+        result = await addTargetSharpnessConfirmation(result);
+        if (session === _qualitySession && _cameraTrack) {
+          updateQualityDisplay(result);
+          if (!(await advanceCapturePipeline(result, now))) {
+            maybeAutoCapture(result);
+            if (!_qualityAutoFired) cameraStatus.textContent = _captureGateBlockReason(result);
+          }
+        }
+      } catch (_) {
+        if (session === _qualitySession) cameraQualityLabel.textContent = 'Analysis retrying · manual shutter works';
+      } finally {
+        _qualityFrameBusy = false;
+      }
+    }
+    scheduleNext();
+  };
+  tick();
+}
+
+function stopQualityAnalysis() {
+  _qualitySession += 1;
+  clearTimeout(_qualityTimer);
+  _qualityTimer = null;
+  _qualityFrameBusy = false;
+  _qualityStableFrames = 0;
+  const context = cameraAnalysisCanvas.getContext('2d');
+  context.clearRect(0, 0, cameraAnalysisCanvas.width, cameraAnalysisCanvas.height);
+  destroyQualityWorker();
+  resetQualityState();
+}
+
+function stopOptimizedCamera() {
+  stopQualityAnalysis();
+  if (_cameraStream) _cameraStream.getTracks().forEach(track => track.stop());
+  cameraVideo.srcObject = null;
+  _cameraStream = null;
+  _cameraTrack = null;
+  _cameraImageCapture = null;
+  _cameraCapabilities = {};
+  _cameraDeviceId = null;
+  _cameraDeviceLabel = '';
+  cameraOverlay.classList.add('hidden');
+}
+
+// Optional post-save step: record the turntable rotation and hand it to
+// spin_processor.py (server-side, ffmpeg + OpenCV) for multi-angle frame
+// extraction, a 360 interactive viewer, and a cropped 360 video. No quality
+// gating/auto-capture here -- the operator just watches the turntable
+// complete one visible rotation and taps Stop; the server-side processing
+// does the real work.
+function _stopSpinStream() {
+  if (_spinStream) _spinStream.getTracks().forEach(track => track.stop());
+  _spinStream = null;
+  spinVideo.srcObject = null;
+  spinRecordBtn.style.display = '';
+  spinStopBtn.style.display = 'none';
+  spinOverlay.classList.add('hidden');
+}
+
+async function startSpinRecording(tagCode, category) {
+  spinOverlay.classList.remove('hidden');
+  spinStatus.textContent = 'Starting camera…';
+  spinRecordBtn.style.display = '';
+  spinStopBtn.style.display = 'none';
+  try {
+    _spinStream = await requestCameraStream(_cameraProfile || 'nothing', null);
+    spinVideo.srcObject = _spinStream;
+    await spinVideo.play();
+    spinStatus.textContent = 'Start the turntable, then tap Record.';
+  } catch (error) {
+    spinStatus.textContent = 'Camera unavailable: ' + (error.message || String(error));
+    return;
+  }
+
+  spinRecordBtn.onclick = () => {
+    _spinChunks = [];
+    const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+      .find(type => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || '';
+    try {
+      _spinRecorder = mimeType ? new MediaRecorder(_spinStream, {mimeType}) : new MediaRecorder(_spinStream);
+    } catch (error) {
+      spinStatus.textContent = 'Could not start recording: ' + (error.message || String(error));
+      return;
+    }
+    _spinRecorder.ondataavailable = event => { if (event.data && event.data.size) _spinChunks.push(event.data); };
+    _spinRecorder.start();
+    spinRecordBtn.style.display = 'none';
+    spinStopBtn.style.display = '';
+    spinStatus.textContent = 'Recording… spin the turntable through one full rotation, then tap Stop.';
+  };
+
+  spinStopBtn.onclick = async () => {
+    if (!_spinRecorder) return;
+    spinStopBtn.disabled = true;
+    spinStatus.textContent = 'Uploading…';
+    const uploadPromise = new Promise(resolve => { _spinRecorder.onstop = resolve; });
+    _spinRecorder.stop();
+    await uploadPromise;
+    const blob = new Blob(_spinChunks, {type: _spinRecorder.mimeType || 'video/webm'});
+    _stopSpinStream();
+    const fd = new FormData();
+    fd.append('category', category);
+    fd.append('tag_code', tagCode);
+    fd.append('video', blob, 'spin.webm');
+    try {
+      const r = await fetch('/api/capture/spin', {method: 'POST', body: fd});
+      const j = await r.json().catch(() => ({}));
+      showToast(r.ok && j.ok ? '360 spin uploaded — processing…' : ('Spin upload failed: ' + (j.error || r.status)));
+    } catch (error) {
+      showToast('Spin upload failed: ' + (error.message || String(error)));
+    }
+    spinStopBtn.disabled = false;
+  };
+
+  spinCancelBtn.onclick = () => {
+    if (_spinRecorder && _spinRecorder.state !== 'inactive') _spinRecorder.stop();
+    _stopSpinStream();
+  };
+}
+
+function compactFingerprint(value) {
+  // FNV-1a: stable local identifier without storing/sending the raw device UA.
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+async function detectedCameraProfile() {
+  let model = '';
+  let platform = navigator.platform || '';
+  let identity = navigator.userAgent || '';
+  try {
+    if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+      const hints = await navigator.userAgentData.getHighEntropyValues(['model', 'platform']);
+      model = hints.model || '';
+      platform = hints.platform || platform;
+      identity += ' ' + model;
+    }
+  } catch (_) {}
+  const shortEdge = Math.min(screen.width, screen.height);
+  const longEdge = Math.max(screen.width, screen.height);
+  const fingerprintSource = [
+    identity, platform, model, shortEdge, longEdge,
+    window.devicePixelRatio || 1, navigator.maxTouchPoints || 0,
+  ].join('|');
+  _cameraFingerprint = compactFingerprint(fingerprintSource);
+  try {
+    const saved = JSON.parse(localStorage.getItem('aradhana_camera_profile_v2') || 'null');
+    if (saved && saved.fingerprint === _cameraFingerprint && CAMERA_PROFILES[saved.profile]) {
+      _cameraDetectionReason = 'saved device fingerprint';
+      return saved.profile;
+    }
+  } catch (_) {}
+
+  let profile;
+  if (/nothing.*4a.*pro|phone\s*\(4a\)\s*pro|phone\s*4a\s*pro|a059/i.test(identity)) {
+    profile = 'nothing';
+    _cameraDetectionReason = model ? 'Android model' : 'user agent';
+  } else if (/redmi|xiaomi|pad\s*2\s*pro/i.test(identity)) {
+    profile = 'redmi';
+    _cameraDetectionReason = model ? 'Android model' : 'user agent';
+  } else {
+  // Chrome's reduced Android UA often exposes only an opaque model code.
+  // These are the only two shop capture devices: distinguish phone/tablet
+    // using screen/touch characteristics, then bind it to this fingerprint.
+    profile = shortEdge >= 600 && navigator.maxTouchPoints > 0 ? 'redmi' : 'nothing';
+    _cameraDetectionReason = 'screen/touch fingerprint';
+  }
+  try {
+    localStorage.setItem('aradhana_camera_profile_v2', JSON.stringify({
+      fingerprint: _cameraFingerprint, profile,
+    }));
+  } catch (_) {}
+  return profile;
+}
+
+function setActiveCameraProfile(profile, reason) {
+  _cameraProfile = CAMERA_PROFILES[profile] ? profile : null;
+  if (reason) _cameraDetectionReason = reason;
+  cameraProfileNothing.classList.toggle('active', profile === 'nothing');
+  cameraProfileRedmi.classList.toggle('active', profile === 'redmi');
+  cameraProfileNothing.textContent = CAMERA_PROFILES.nothing.label + ' · main lens · 1×';
+  cameraProfileRedmi.textContent = CAMERA_PROFILES.redmi.label + ' · main lens · 1×';
+  updateCaptureGuide(_capturePhase || 'front');
+  if (_cameraProfile && _cameraFingerprint) {
+    try {
+      localStorage.setItem('aradhana_camera_profile_v2', JSON.stringify({
+        fingerprint: _cameraFingerprint, profile: _cameraProfile,
+      }));
+    } catch (_) {}
+  }
+}
+
+function clampCameraZoom(value) {
+  const range = _cameraCapabilities.zoom;
+  if (!range || typeof range.min !== 'number' || typeof range.max !== 'number') return 1;
+  return Math.min(range.max, Math.max(range.min, Number(value)));
+}
+
+async function applyCameraZoom(value) {
+  if (!_cameraTrack || !_cameraCapabilities.zoom) return null;
+  const target = clampCameraZoom(value);
+  try {
+    await _cameraTrack.applyConstraints({advanced: [{zoom: target}]});
+  } catch (_) {
+    return null;
+  }
+  const actual = Number(_cameraTrack.getSettings().zoom || target);
+  cameraZoom.value = String(actual);
+  cameraZoomValue.textContent = actual.toFixed(1) + '×';
+  return actual;
+}
+
+async function applyContinuousCameraControls() {
+  if (!_cameraTrack) return;
+  const modes = [
+    ['focusMode', 'continuous'],
+    ['exposureMode', 'continuous'],
+    ['whiteBalanceMode', 'continuous'],
+  ];
+  for (const [name, value] of modes) {
+    const supported = _cameraCapabilities[name];
+    if (!Array.isArray(supported) || !supported.includes(value)) continue;
+    try { await _cameraTrack.applyConstraints({advanced: [{[name]: value}]}); }
+    catch (_) {}
+  }
+  try { _cameraTrack.contentHint = 'detail'; } catch (_) {}
+}
+
+function cameraDevicePreferenceKey() {
+  return 'aradhana_camera_device_v1_' + (_cameraFingerprint || 'unknown');
+}
+
+function cameraDeviceScore(device, currentDeviceId) {
+  const label = String(device.label || '').toLowerCase();
+  if (/front|user|selfie/.test(label)) return -10000;
+  let score = device.deviceId === currentDeviceId ? 25 : 0;
+  if (/back|rear|environment/.test(label)) score += 100;
+  if (/main|primary/.test(label)) score += 220;
+  if (/camera2\s*0\b/.test(label)) score += 180;
+  if (/\bwide\b/.test(label) && !/ultra/.test(label)) score += 45;
+  if (/ultra[ -]?wide|tele|periscope|macro|depth/.test(label)) score -= 300;
+  return score;
+}
+
+async function chooseRearCameraDevice(currentDeviceId) {
+  if (!navigator.mediaDevices.enumerateDevices) return null;
+  const devices = (await navigator.mediaDevices.enumerateDevices())
+    .filter(device => device.kind === 'videoinput');
+  if (!devices.length) return null;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(cameraDevicePreferenceKey()) || 'null'); }
+  catch (_) {}
+  if (saved && devices.some(device => device.deviceId === saved.deviceId)) {
+    const device = devices.find(item => item.deviceId === saved.deviceId);
+    return {deviceId: device.deviceId, label: device.label || saved.label || 'saved rear camera', reason: 'saved main lens'};
+  }
+  const rearCandidates = devices.filter(device => !/front|user|selfie/i.test(device.label || ''));
+  const candidates = rearCandidates.length ? rearCandidates : devices;
+  candidates.sort((left, right) =>
+    cameraDeviceScore(right, currentDeviceId) - cameraDeviceScore(left, currentDeviceId));
+  const winner = candidates[0];
+  if (!winner) return null;
+  const choice = {
+    deviceId: winner.deviceId,
+    label: winner.label || 'rear camera',
+    reason: candidates.length > 1 ? 'automatic main-lens selection' : 'only rear lens',
+  };
+  try { localStorage.setItem(cameraDevicePreferenceKey(), JSON.stringify(choice)); }
+  catch (_) {}
+  return choice;
+}
+
+async function requestCameraStream(profile, deviceId) {
+  const baseVideoConstraints = {
+    width: {ideal: profile === 'redmi' ? 1280 : 1600},
+    height: {ideal: profile === 'redmi' ? 720 : 900},
+    frameRate: {ideal: 30, max: 30},
+  };
+  if (deviceId) baseVideoConstraints.deviceId = {exact: deviceId};
+  else baseVideoConstraints.facingMode = {ideal: 'environment'};
+  const supported = navigator.mediaDevices.getSupportedConstraints
+    ? navigator.mediaDevices.getSupportedConstraints() : {};
+  const permissionConstraints = {...baseVideoConstraints};
+  if (supported.zoom) permissionConstraints.zoom = true;
+  try {
+    return await navigator.mediaDevices.getUserMedia({audio: false, video: permissionConstraints});
+  } catch (ptzError) {
+    if (!supported.zoom) throw ptzError;
+    return await navigator.mediaDevices.getUserMedia({audio: false, video: baseVideoConstraints});
+  }
+}
+
+async function openCaptureCamera(kind) {
+  _cameraKind = kind;
+  const fallback = nativeCameraInput(kind);
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showPopup(`
+      <div class="step-tag">Camera unavailable</div>
+      <h2>Use the native camera</h2>
+      <div class="sub-hint">This page cannot open the optimized camera here. Open the native camera instead.</div>
+      <button class="btn" id="camera-fallback-native">Open native camera</button>
+      <button class="btn secondary" id="camera-fallback-cancel">Cancel</button>
+    `);
+    document.getElementById('camera-fallback-native').addEventListener('click', () => {
+      closePopup();
+      fallback.click();
+    });
+    document.getElementById('camera-fallback-cancel').addEventListener('click', closePopup);
+    return;
+  }
+
+  cameraOverlay.classList.remove('hidden');
+  const cameraTitles = {
+    front: 'Jewellery shot',
+    tag: 'Tag shot',
+  };
+  const cameraPrompts = {
+    front: 'Place the item. Zooms in and captures automatically.',
+    tag: 'Show tag now. Keep the code square.',
+  };
+  cameraTitle.textContent = cameraTitles[kind] || 'Jewellery photo';
+  cameraFocusGuide.classList.toggle('tag', kind === 'tag');
+  cameraStatus.textContent = cameraPrompts[kind] || 'Move closer.';
+  cameraShutter.disabled = true;
+  const profile = await detectedCameraProfile();
+  setActiveCameraProfile(profile);
+  const desiredZoom = captureZoomForPhase(profile || currentCameraProfileKey(), kind, _qualityLastPlan);
+
+  try {
+    // Open once to obtain permission and full device labels, then lock the
+    // saved/most likely main rear lens by exact deviceId. This avoids Android
+    // silently choosing an ultra-wide or periscope camera for close work.
+    _cameraStream = await requestCameraStream(profile, null);
+    _cameraTrack = _cameraStream.getVideoTracks()[0];
+    const provisionalSettings = _cameraTrack.getSettings ? _cameraTrack.getSettings() : {};
+    const chosenDevice = await chooseRearCameraDevice(provisionalSettings.deviceId || null);
+    if (chosenDevice && chosenDevice.deviceId && chosenDevice.deviceId !== provisionalSettings.deviceId) {
+      _cameraStream.getTracks().forEach(track => track.stop());
+      _cameraStream = await requestCameraStream(profile, chosenDevice.deviceId);
+      _cameraTrack = _cameraStream.getVideoTracks()[0];
+    }
+    const selectedSettings = _cameraTrack.getSettings ? _cameraTrack.getSettings() : {};
+    _cameraDeviceId = selectedSettings.deviceId || (chosenDevice && chosenDevice.deviceId) || null;
+    _cameraDeviceLabel = _cameraTrack.label || (chosenDevice && chosenDevice.label) || 'rear camera';
+    if (_cameraDeviceId) {
+      try {
+        localStorage.setItem(cameraDevicePreferenceKey(), JSON.stringify({
+          deviceId: _cameraDeviceId,
+          label: _cameraDeviceLabel,
+          reason: chosenDevice ? chosenDevice.reason : 'active rear lens',
+        }));
+      } catch (_) {}
+    }
+    _cameraCapabilities = _cameraTrack.getCapabilities ? _cameraTrack.getCapabilities() : {};
+    cameraVideo.srcObject = _cameraStream;
+    await cameraVideo.play();
+    await applyContinuousCameraControls();
+
+    if (_cameraCapabilities.zoom && typeof _cameraCapabilities.zoom.min === 'number') {
+      const range = _cameraCapabilities.zoom;
+      cameraZoom.disabled = false;
+      cameraZoom.min = String(range.min);
+      cameraZoom.max = String(range.max);
+      cameraZoom.step = String(range.step || 0.1);
+      const actual = await applyCameraZoom(desiredZoom);
+      await applyContinuousCameraControls();
+      cameraStatus.textContent = actual === null
+        ? 'Requested ' + desiredZoom.toFixed(1) + '×. Chrome rejected zoom control.'
+        : 'Requested ' + desiredZoom.toFixed(1) + '× · applied ' +
+          actual.toFixed(1) + '× · supported ' + range.min + '–' + range.max + '×';
+      const liveSettings = _cameraTrack.getSettings ? _cameraTrack.getSettings() : {};
+      cameraApiState.textContent = actual === null
+        ? 'Camera ready, but Chrome rejected zoom control.'
+        : (CAMERA_PROFILES[_cameraProfile || 'nothing'] || {label: 'Camera'}).label +
+          ' · ' + _cameraDeviceLabel + ' locked · ' + actual.toFixed(1) + '× · focus ' +
+          (liveSettings.focusMode || 'device controlled') + '.';
+    } else {
+      cameraZoom.min = '1'; cameraZoom.max = '1'; cameraZoom.value = '1';
+      cameraZoomValue.textContent = 'N/A'; cameraZoom.disabled = true;
+      cameraStatus.textContent = 'No browser zoom on this lens. Use Native camera if needed.';
+      const liveSettings = _cameraTrack.getSettings ? _cameraTrack.getSettings() : {};
+      cameraApiState.textContent = _cameraDeviceLabel + ' locked · native 1× · focus ' +
+        (liveSettings.focusMode || 'device controlled') + '.';
+    }
+    updateCameraPlanDetail(describeCurrentPlan(_qualityLastPlan, kind));
+    if (window.ImageCapture) {
+      try { _cameraImageCapture = new ImageCapture(_cameraTrack); } catch (_) {}
+    }
+    // Placement preview: the live feed + quality HUD run immediately so the
+    // operator can see framing feedback while placing the item, but the
+    // auto-capture gate stays disarmed (see _qualityArmed /
+    // advanceCapturePipeline) until the ornament is actually detected in
+    // frame -- not a fixed timer, so it never rushes a slow placement or
+    // stalls a fast one. Tag mode has no placement step and arms immediately.
+    _qualityArmed = kind !== 'front';
+    _qualityArmedAt = Date.now();
+    _qualityMaxUsableZoom = Infinity;
+    _qualityFocusLockedAt = 0;
+    _stepFocusAttempts = 0;
+    _qualityLostFrames = 0;
+    if (kind === 'front') cameraStatus.textContent = 'Place the item in frame…';
+    startQualityAnalysis();
+    const settleMs = _cameraProfile && CAMERA_PROFILES[_cameraProfile]
+      ? CAMERA_PROFILES[_cameraProfile].settleMs : 650;
+    setTimeout(() => {
+      if (_cameraTrack && cameraShutter.disabled && _qualityArmed) {
+        cameraStatus.textContent = cameraStatus.textContent || 'Hold steady.';
+      }
+    }, settleMs);
+  } catch (error) {
+    stopOptimizedCamera();
+    showPopup(`
+      <div class="step-tag">Camera unavailable</div>
+      <h2>Use the native camera</h2>
+      <div class="sub-hint">Optimized browser camera could not start. ${escapeHtml(error.message || String(error))}</div>
+      <button class="btn" id="camera-error-native">Open native camera</button>
+      <button class="btn secondary" id="camera-error-cancel">Cancel</button>
+    `);
+    document.getElementById('camera-error-native').addEventListener('click', () => {
+      closePopup(); fallback.click();
+    });
+    document.getElementById('camera-error-cancel').addEventListener('click', closePopup);
+  }
+}
+
+function normalisedTagCode(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+async function validateAutomaticCapture(blob, kind, expectedTag) {
+  if (kind === 'tag') {
+    const decoded = await tryDecodeBarcode(blob);
+    if (!decoded) return {ok: false, reason: 'Final photo could not read the QR'};
+    if (normalisedTagCode(decoded) !== normalisedTagCode(expectedTag)) {
+      return {ok: false, reason: 'Preview/final tag mismatch — capture blocked'};
+    }
+    return {ok: true, decodedTag: decoded};
+  }
+  let bitmap;
+  let result = null;
+  try {
+    bitmap = await createImageBitmap(blob);
+    result = await requestQualityAnalysis(bitmap, kind, true);
+    if (!result.pass) return {ok: false, reason: result.reason + ' (final photo ' + result.score + '/100)', result};
+  } catch (error) {
+    return {ok: false, reason: error.message || String(error)};
+  }
+  return {ok: true, result};
+}
+
+async function captureStillBlob() {
+  let blob = null;
+  if (_cameraImageCapture) {
+    let settings = undefined;
+    try {
+      const caps = await _cameraImageCapture.getPhotoCapabilities();
+      if (caps.imageWidth && caps.imageHeight) {
+        settings = {imageWidth: caps.imageWidth.max, imageHeight: caps.imageHeight.max};
+      }
+    } catch (_) {}
+    try {
+      blob = await _cameraImageCapture.takePhoto(settings);
+    } catch (sizedCaptureError) {
+      blob = await _cameraImageCapture.takePhoto();
+    }
+  } else {
+    const canvas = document.createElement('canvas');
+    canvas.width = cameraVideo.videoWidth;
+    canvas.height = cameraVideo.videoHeight;
+    canvas.getContext('2d').drawImage(cameraVideo, 0, 0);
+    blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 1.0));
+  }
+  if (!blob) throw new Error('Camera returned no image');
+  return blob;
+}
+
+async function capturePreviewBlob() {
+  if (_cameraImageCapture && typeof _cameraImageCapture.grabFrame === 'function') {
+    const bitmap = await _cameraImageCapture.grabFrame();
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width || cameraVideo.videoWidth || 1;
+      canvas.height = bitmap.height || cameraVideo.videoHeight || 1;
+      canvas.getContext('2d').drawImage(bitmap, 0, 0);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+      if (!blob) throw new Error('Preview frame returned no image');
+      return blob;
+    } finally {
+      try { bitmap.close(); } catch (_) {}
+    }
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = cameraVideo.videoWidth || 1;
+  canvas.height = cameraVideo.videoHeight || 1;
+  canvas.getContext('2d').drawImage(cameraVideo, 0, 0);
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+  if (!blob) throw new Error('Preview frame returned no image');
+  return blob;
+}
+
+async function captureAutoJewelBurst(kind) {
+  const burstCount = 5;
+  let best = null;
+  const burstStartedAt = Date.now();
+  const burstSpacingMs = 200;
+  for (let index = 0; index < burstCount; index += 1) {
+    cameraStatus.textContent = `Auto burst ${index + 1}/${burstCount}…`;
+    const targetAt = burstStartedAt + (index * burstSpacingMs);
+    const waitMs = targetAt - Date.now();
+    if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+    const bitmap = await createVideoAnalysisBitmap(720, null);
+    const result = await requestQualityAnalysis(bitmap, kind, true);
+    const validation = {ok: !!result.pass, reason: result.reason, result};
+    if (!best || result.score >= best.validation.result.score) best = {validation};
+  }
+  if (!best || !best.validation || !best.validation.ok) {
+    throw new Error(best && best.validation ? best.validation.reason : 'Auto burst did not find a usable frame');
+  }
+  // Preview frames can be sampled at 5 fps, but saving one would silently
+  // reduce a 12 MP phone photograph to the browser video's 720p/900p stream.
+  // Once the burst proves the scene is stable, take one native maximum-size
+  // still and validate that exact file before accepting it.
+  cameraStatus.textContent = 'Burst locked. Saving maximum-resolution still…';
+  const fullBlob = await captureStillBlob();
+  const fullValidation = await validateAutomaticCapture(fullBlob, kind, null);
+  if (!fullValidation.ok) throw new Error(fullValidation.reason);
+  return {blob: fullBlob, validation: fullValidation, previewValidation: best.validation};
+}
+
+async function captureAutoTagFrame(expectedTag) {
+  const retryCount = 3;
+  let lastFailure = null;
+  for (let index = 0; index < retryCount; index += 1) {
+    cameraStatus.textContent = index === 0 ? 'Reading tag…' : `Reading tag again ${index + 1}/${retryCount}…`;
+    const blob = await capturePreviewBlob();
+    const validation = await validateAutomaticCapture(blob, 'tag', expectedTag);
+    if (validation.ok) return {blob, validation};
+    lastFailure = validation;
+    await new Promise(resolve => setTimeout(resolve, 80));
+  }
+  throw new Error(lastFailure ? lastFailure.reason : 'Final photo could not read the tag');
+}
+
+async function captureOptimizedPhoto(source, expectedTag) {
+  if (!_cameraTrack || cameraShutter.disabled) return;
+  const automatic = source === 'auto';
+  cameraShutter.disabled = true;
+  cameraStatus.textContent = 'Capturing full-resolution photo…';
+  const kind = _cameraKind;
+  // Stop the live analyser before the burst. Otherwise it competes with the
+  // five burst validations for the same worker and causes Android stutter.
+  stopQualityAnalysis();
+  try {
+    let best = null;
+    if (automatic) {
+      if (kind === 'tag') best = await captureAutoTagFrame(expectedTag || _qualityStableTag || '');
+      else best = await captureAutoJewelBurst(kind);
+    } else {
+      const blob = await captureStillBlob();
+      // Manual shutter tap: no burst validation runs, but we still want the
+      // ornament's position for the post-capture crop, so run one analysis
+      // pass on the actual still (best-effort -- a failure here just means
+      // this photo doesn't get cropped, not that the capture fails).
+      let manualResult = null;
+      if (kind !== 'tag') {
+        try {
+          const manualBitmap = await createImageBitmap(blob);
+          manualResult = await requestQualityAnalysis(manualBitmap, kind, true);
+        } catch (_) {}
+      }
+      best = {blob, validation: {ok: true, decodedTag: null, result: manualResult}};
+    }
+    const blob = best.blob;
+    const validation = best.validation || {ok: true};
+    if (validation.result && validation.result.capturePlan) {
+      _qualityLastPlan = validation.result.capturePlan;
+    } else if (!automatic && _qualityLastResult && _qualityLastResult.capturePlan) {
+      _qualityLastPlan = _qualityLastResult.capturePlan;
+    }
+    if (automatic && !validation.ok) {
+      _qualityCooldownUntil = Date.now() + 1500;
+      _qualityAutoFired = false;
+      _qualityStableFrames = 0;
+      cameraStatus.textContent = validation.reason + ' · trying again';
+      cameraShutter.disabled = false;
+      startQualityAnalysis();
+      return;
+    }
+    const validatedTag = validation.decodedTag || null;
+    stopOptimizedCamera();
+    if (automatic) {
+      showAutoProceedPreview(
+        blob,
+        kind === 'tag' ? 'Tag preview' : 'Photo preview',
+        kind === 'tag' ? (validatedTag || 'Tag locked') : 'Best frame selected',
+        () => {
+          if (kind === 'tag') handleTagBlob(blob, validatedTag);
+          else handleJewelBlob(blob, validation.result && validation.result.goldBounds);
+        }
+      );
+    } else if (kind === 'tag') {
+      handleTagBlob(blob, validatedTag);
+    } else {
+      handleJewelBlob(blob, validation.result && validation.result.goldBounds);
+    }
+  } catch (error) {
+    // maybeAutoCapture sets _qualityAutoFired = true BEFORE calling this
+    // function, as a synchronous guard against double-firing while the
+    // burst/analysis is in flight. If that burst then throws (transient
+    // ImageCapture/camera error -- more likely right after the heavy
+    // zoom/refocus churn this page just went through), the shutter used to
+    // come back but _qualityAutoFired stayed stuck true forever: analysis
+    // kept running and could show a perfectly sharp, steady frame, but
+    // maybeAutoCapture's very first line (`if (... || _qualityAutoFired ||
+    // ...) return`) silently refused to ever fire again for this item. That
+    // reads to the operator as the whole thing just sitting there frozen,
+    // with no error visible once the status text scrolls past. Must reset
+    // here, matching the other two places autoFired is cleared on retry
+    // (the validation-failed branch above, and a fresh item start).
+    _qualityAutoFired = false;
+    cameraStatus.textContent = 'Capture failed: ' + (error.message || String(error));
+    cameraShutter.disabled = false;
+    if (_cameraTrack) startQualityAnalysis();
+  }
+}
+
+cameraZoom.addEventListener('input', () => {
+  cameraZoomValue.textContent = Number(cameraZoom.value).toFixed(1) + '×';
+});
+cameraZoom.addEventListener('change', () => { applyCameraZoom(cameraZoom.value); });
+cameraProfileNothing.addEventListener('click', async () => {
+  setActiveCameraProfile('nothing', 'manual override');
+  await applyCameraZoom(CAMERA_PROFILES.nothing.zoom);
+});
+cameraProfileRedmi.addEventListener('click', async () => {
+  setActiveCameraProfile('redmi', 'manual override');
+  await applyCameraZoom(CAMERA_PROFILES.redmi.zoom);
+});
+cameraRecheckLens.addEventListener('click', async () => {
+  const kind = _cameraKind;
+  try { localStorage.removeItem(cameraDevicePreferenceKey()); } catch (_) {}
+  stopOptimizedCamera();
+  if (kind) await openCaptureCamera(kind);
+});
+cameraShutter.addEventListener('click', () => captureOptimizedPhoto('manual', null));
+cameraCancel.addEventListener('click', stopOptimizedCamera);
+cameraNative.addEventListener('click', () => {
+  const fallback = nativeCameraInput(_cameraKind);
+  stopOptimizedCamera();
+  fallback.click();
+});
+
+// ── Resume-after-tab-kill support ──────────────────────────────────────────
+// Real incident: on Android, opening the native camera app backgrounds the
+// browser tab, and the OS sometimes reclaims that backgrounded tab's memory
+// under pressure. Returning from the camera then silently reloads the page
+// from scratch — wiping jewelBlob, currentCategory, everything — with no
+// visible error, which looked exactly like "nothing happens after taking a
+// picture." Blobs can't survive in sessionStorage, but IndexedDB can hold
+// them, so the jewel photo is persisted there the moment it's taken —
+// BEFORE the risky "camera backgrounds the tab" window even opens — and any
+// fresh page load checks for one and offers to resume instead of losing it.
+const RESUME_DB_NAME = 'aradhana_capture_resume';
+const RESUME_STORE = 'pending';
+
+function _openResumeDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(RESUME_DB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(RESUME_STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function currentCaptureSnapshot() {
+  return {phase: _capturePhase, jewelBlob, tagBlob};
+}
+
+async function saveResumeState(state) {
+  try {
+    const db = await _openResumeDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(RESUME_STORE, 'readwrite');
+      tx.objectStore(RESUME_STORE).put({state, ts: Date.now()}, 'current');
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) { console.warn('saveResumeState failed', e); }
+}
+
+async function loadResumeState() {
+  try {
+    const db = await _openResumeDB();
+    return await new Promise((resolve, reject) => {
+      const req = db.transaction(RESUME_STORE, 'readonly').objectStore(RESUME_STORE).get('current');
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { return null; }
+}
+
+async function clearResumeState() {
+  try {
+    const db = await _openResumeDB();
+    db.transaction(RESUME_STORE, 'readwrite').objectStore(RESUME_STORE).delete('current');
+  } catch (e) {}
+}
+
+// Checked once on every fresh page load (which is exactly what happens
+// after the tab-kill this is defending against) — if a capture step is
+// still sitting there unsaved, offer to pick up right where it left off
+// instead of the item silently vanishing.
+(async function checkForResumableCapture() {
+  const pending = await loadResumeState();
+  const state = pending && (pending.state || pending);
+  if (!state || (!state.jewelBlob && !state.tagBlob)) return;
+  jewelBlob = state.jewelBlob || null;
+  tagBlob = state.tagBlob || null;
+  _capturePhase = state.phase || 'front';
+  const resumeLabel = _capturePhase === 'tag'
+    ? 'Continue — photo the tag'
+    : 'Continue — photo the jewellery';
+  showPopup(`
+    <div class="step-tag">Recovered item</div>
+    <h2>Unfinished capture found</h2>
+    <div class="sub-hint">A capture step was interrupted while the camera was open. Continue it, or discard?</div>
+    <div class="btn-row">
+      <button class="btn secondary" id="resume-discard">Discard</button>
+      <button class="btn success-solid" id="resume-continue">${escapeHtml(resumeLabel)}</button>
+    </div>
+  `);
+  document.getElementById('resume-discard').addEventListener('click', () => {
+    clearResumeState();
+    closePopup();
+  });
+  document.getElementById('resume-continue').addEventListener('click', () => {
+    closePopup();
+    openCaptureCamera(_capturePhase || 'front');
+  });
+})();
+
+if (_pollTimer) clearInterval(_pollTimer);
+_pollTimer = setInterval(() => {
+  if (popupOverlay.classList.contains('hidden') && currentCategory) refreshSessionCount();
+}, 6000);
+
+btnNewTray.addEventListener('click', () => {
+  if (!currentCategory) { alert('Capture at least one item first — the tray to advance is decided by its tag category.'); return; }
+  if (!confirm('Start a new tray? The current tray stays exactly as captured — this just begins a fresh one.')) return;
+  btnNewTray.disabled = true;
+  const fd = new FormData();
+  fd.append('category', currentCategory);
+  fetch('/api/capture/start_new_tray', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(d => {
+      btnNewTray.disabled = false;
+      if (!d.ok) { alert('Could not start new tray: ' + (d.error || 'unknown error')); return; }
+      curTrayLabel.textContent = d.folder;
+      sessionCountEl.textContent = 0;
+      capturedItems = [];
+      renderCapturedList();
+    })
+    .catch(e => { btnNewTray.disabled = false; alert('Could not start new tray: ' + e); });
+});
+
+btnUndo.addEventListener('click', () => {
+  if (!capturedItems.length) { alert('Nothing captured yet in this tray.'); return; }
+  const last = capturedItems[0];
+  if (!confirm(`Remove the last captured item (#${last.pair}${last.code ? ': ' + last.code : ''})?`)) return;
+  const fd = new FormData();
+  fd.append('category', currentCategory);
+  fetch('/api/capture/undo_last', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) { alert('Undo failed: ' + (d.error || 'unknown error')); return; }
+      refreshSessionCount();
+      showToast(`Removed ${d.removed_code || 'item'}`);
+    })
+    .catch(e => alert('Undo failed: ' + e));
+});
+
+btnStartItem.addEventListener('click', () => {
+  jewelBlob = null; tagBlob = null;
+  _capturePhase = 'front';
+  saveResumeState(currentCaptureSnapshot());
+  openCaptureCamera('front');
+});
+
+// Hands off to CaptureCam (Android companion app, see MainActivity.kt) via
+// a capturecam://start deep link. That app does its own auto-zoom/focus/
+// capture for BOTH the jewel and tag shots using real Camera2 AF state
+// (not achievable from a browser at all -- see advanceCapturePipeline's
+// comments for what the web flow above has to work around instead), then
+// uploads directly to this same server's /api/capture/save and returns
+// here. This tab doesn't send or receive anything for that capture -- it
+// only refreshes its own tray view afterward (see the visibilitychange
+// listener near refreshSessionCount).
+btnStartItemApp.addEventListener('click', () => {
+  window.location.href = 'capturecam://start';
+});
+
+function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(id));
+}
+
+// CaptureCam (the native companion app, see btnStartItemApp below) uploads
+// straight to the server and hands control back to this tab -- refresh the
+// tray/recommended-item state the moment we're visible again so it isn't
+// showing stale "22 of 24" counts from before that upload landed.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') refreshSessionCount();
+});
+
+let _sessionSummaryPending = false;
+function refreshSessionCount() {
+  if (_sessionSummaryPending) return;
+  _sessionSummaryPending = true;
+  fetchWithTimeout(`/api/capture/session_summary?category=${encodeURIComponent(currentCategory)}`, {}, 5000)
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(d => {
+      if (d.captured === undefined) throw new Error('Invalid response');
+      sessionCountEl.textContent = d.captured;
+      curTrayLabel.textContent = d.folder || '—';
+      capturedItems = (d.items || []).slice().reverse().map(i => ({ code: i.code, pair: i.pair }));
+      renderCapturedList();
+    })
+    .catch(() => {})
+    .finally(() => { _sessionSummaryPending = false; });
+}
+
+function renderCapturedList() {
+  if (!capturedItems.length) {
+    capturedListEl.innerHTML = '<div class="empty">Nothing captured in this tray yet</div>';
+    return;
+  }
+  capturedListEl.innerHTML = capturedItems.map(item =>
+    `<div class="row"><span class="n">${item.pair}.</span><span class="code">${escapeHtml(item.code || '(no code)')}</span><span class="badge success">✓</span></div>`
+  ).join('');
+}
+function escapeHtml(s) { return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+let _toastTimer = null;
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => toastEl.classList.remove('show'), 1600);
+}
+
+function showPopup(html) {
+  popupBox.innerHTML = html;
+  popupOverlay.classList.remove('hidden');
+}
+function closePopup() {
+  popupOverlay.classList.add('hidden');
+  popupBox.innerHTML = '';
+  clearTimeout(_capturePreviewTimer);
+  _capturePreviewTimer = null;
+  if (_popupImgUrl) { URL.revokeObjectURL(_popupImgUrl); _popupImgUrl = null; }
+}
+
+// One object URL per popup — reused across the read-overlay and the
+// verify-tag popup so the same photo carries over, revoked whenever the
+// popup closes or a fresh one replaces it so these don't pile up over a
+// whole tray's worth of items.
+let _popupImgUrl = null;
+let _capturePreviewTimer = null;
+function tagThumbHtml(ok, label) {
+  if (_popupImgUrl) { URL.revokeObjectURL(_popupImgUrl); _popupImgUrl = null; }
+  _popupImgUrl = URL.createObjectURL(tagBlob);
+  return `
+    <div class="tag-preview-wrap">
+      <img src="${_popupImgUrl}" class="thumb">
+      <div class="read-badge ${ok ? 'ok' : 'bad'}">${label}</div>
+    </div>`;
+}
+
+function showAutoProceedPreview(blob, title, label, onProceed) {
+  closePopup();
+  if (_popupImgUrl) { URL.revokeObjectURL(_popupImgUrl); _popupImgUrl = null; }
+  _popupImgUrl = URL.createObjectURL(blob);
+  showPopup(`
+    <div class="step-tag">${escapeHtml(title)}</div>
+    <h2>Captured</h2>
+    <div class="tag-preview-wrap">
+      <img src="${_popupImgUrl}" class="thumb">
+      <div class="read-badge ok">${escapeHtml(label)} · auto-proceeding in 3 sec</div>
+    </div>
+    <div class="sub-hint">Preview only. Continuing automatically.</div>
+  `);
+  _capturePreviewTimer = setTimeout(() => {
+    _capturePreviewTimer = null;
+    closePopup();
+    onProceed();
+  }, 3000);
+}
+
+// Shown right after every tag scan attempt — a colored ribbon over the
+// actual tag photo saying whether it read correctly, so whoever's
+// capturing (or watching) can see it at a glance instead of only finding
+// out from a failed decode later. Auto-continues after a beat; no tap
+// needed for a clean read, keeping the fast-capture flow intact.
+function showReadOverlay(code, ok, onDone, categoryLabel) {
+  const label = ok
+    ? `✓ ${escapeHtml(code)}${categoryLabel ? ' → ' + escapeHtml(categoryLabel) : ''}`
+    : "✗ Couldn't read tag";
+  showPopup(tagThumbHtml(ok, label));
+  setTimeout(onDone, 900);
+}
+
+function promptTagCapture() {
+  updateCaptureGuide('tag');
+  showPopup(`
+    <div class="step-tag">Step 2 of 2</div>
+    <h2>Show tag</h2>
+    <div class="sub-hint">Get the barcode/QR sharp and well-lit.</div>
+    <button class="btn" id="popup-tag-btn">🏷️ Open camera</button>
+    <button class="btn secondary" id="popup-cancel">Cancel this item</button>
+  `);
+  document.getElementById('popup-tag-btn').addEventListener('click', () => {
+    _capturePhase = 'tag';
+    saveResumeState(currentCaptureSnapshot());
+    closePopup();
+    openCaptureCamera('tag');
+  });
+  document.getElementById('popup-cancel').addEventListener('click', () => { clearResumeState(); closePopup(); });
+}
+
+// Crops the just-captured photo so the ornament fills roughly targetFill of
+// the frame, using the gold blob position (normalized 0-1, from analyzing
+// this exact captured blob -- see the callers, which pass
+// validation.result.goldBounds from validateAutomaticCapture/the manual
+// capture's own analysis pass, NOT a stale live-tick global: captureOptimizedPhoto
+// calls stopQualityAnalysis() before the burst even starts, which clears
+// _qualityLastResult, so reading that global here always missed). This is
+// the "zoom in" step -- done as a digital crop after a reliably-captured
+// native-framing photo, not as live hardware zoom (which fights the
+// box-alignment and focus-stability checks -- see the comment above
+// captureZoomForPhase). Falls back to the uncropped blob if there's no
+// detection to crop around, or if anything about the crop fails.
+async function cropToFillOrnament(blob, targetFill, bounds) {
+  if (!bounds) return blob;
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const w = bitmap.width, h = bitmap.height;
+    const boxW = Math.max(0.02, bounds.x1 - bounds.x0);
+    const boxH = Math.max(0.02, bounds.y1 - bounds.y0);
+    const cx = (bounds.x0 + bounds.x1) / 2;
+    const cy = (bounds.y0 + bounds.y1) / 2;
+    let cropW = boxW / targetFill;
+    let cropH = boxH / targetFill;
+    // Keep the crop at the source's aspect ratio rather than the ornament's.
+    const srcAspect = w / h;
+    if (cropW / cropH > srcAspect) cropH = cropW / srcAspect;
+    else cropW = cropH * srcAspect;
+    cropW = Math.min(1, cropW);
+    cropH = Math.min(1, cropH);
+    let x0 = Math.max(0, Math.min(1 - cropW, cx - cropW / 2));
+    let y0 = Math.max(0, Math.min(1 - cropH, cy - cropH / 2));
+    const sx = Math.round(x0 * w), sy = Math.round(y0 * h);
+    const sw = Math.max(1, Math.round(cropW * w)), sh = Math.max(1, Math.round(cropH * h));
+    const canvas = document.createElement('canvas');
+    canvas.width = sw; canvas.height = sh;
+    canvas.getContext('2d').drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh);
+    if (bitmap.close) bitmap.close();
+    const cropped = await new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/jpeg', 0.92));
+    return cropped || blob;
+  } catch (_) {
+    return blob;
+  }
+}
+
+// The one jewel/ornament photo (auto-captured, then cropped to fill the
+// frame) routes through this same capture input.
+async function handleJewelBlob(blob, goldBounds) {
+  if (!blob) return;
+  blob = await cropToFillOrnament(blob, CAPTURE_FILL_TARGET, goldBounds);
+  if (blurRetakeContext) {
+    // Re-shot just the front photo after a blur warning — the tag was
+    // already captured/confirmed earlier, so skip straight back to saving
+    // instead of re-running the tag step.
+    jewelBlob = blob;
+    saveResumeState(currentCaptureSnapshot());
+    const ctx = blurRetakeContext;
+    blurRetakeContext = null;
+    attemptSave(ctx.tagCode, ctx.overrideDuplicate, false, false);
+    return;
+  }
+  if (visibilityRetakeContext) {
+    // Re-shot just the front photo after a "not clearly visible" warning —
+    // same short-circuit as the blur retake above.
+    jewelBlob = blob;
+    saveResumeState(currentCaptureSnapshot());
+    const ctx = visibilityRetakeContext;
+    visibilityRetakeContext = null;
+    attemptSave(ctx.tagCode, ctx.overrideDuplicate, false, false);
+    return;
+  }
+
+  jewelBlob = blob;
+  _capturePhase = 'tag';
+  saveResumeState(currentCaptureSnapshot());
+  promptTagCapture();
+}
+
+jewelInput.addEventListener('change', () => {
+  if (!jewelInput.files.length) return;
+  const blob = jewelInput.files[0];
+  jewelInput.value = '';
+  handleJewelBlob(blob);
+});
+
+function handleTagBlob(blob, predecodedCode) {
+  if (!blob) return;
+  tagBlob = blob;
+  _capturePhase = 'tag';
+  saveResumeState(currentCaptureSnapshot());
+  processTagPhoto(predecodedCode || null);
+}
+
+tagInput.addEventListener('change', () => {
+  if (!tagInput.files.length) return;
+  const blob = tagInput.files[0];
+  tagInput.value = '';
+  handleTagBlob(blob);
+});
+
+// The tag's own code prefix is the sole source of truth for its category —
+// nobody picks one. Resolved server-side (ornament_code_map.py) right after
+// decode, before duplicate-checking or saving, so a code whose prefix isn't
+// recognised gets caught here with the same "verify tag" popup used for a
+// failed barcode read, rather than surfacing as a confusing save error.
+async function resolveCategory(tagCode) {
+  try {
+    const r = await fetch(`/api/capture/resolve_category?tag_code=${encodeURIComponent(tagCode)}`);
+    const d = await r.json();
+    return d.ok ? d : null;
+  } catch (e) { return null; }
+}
+
+async function processTagPhoto(predecodedCode) {
+  showPopup(`<div class="spinner"></div><h2>Reading tag…</h2>`);
+  const decoded = predecodedCode || await tryDecodeBarcode(tagBlob);
+
+  if (decoded) {
+    const category = await resolveCategory(decoded);
+    if (!category) {
+      showReadOverlay(decoded, false, () => showConfirmPopup(decoded, null, true));
+      return;
+    }
+    currentCategory = category.key;
+    const dup = await checkDuplicate(decoded);
+    showReadOverlay(decoded, true, () => {
+      if (!dup) {
+        // Clean read, known category, no duplicate — auto-save with zero
+        // extra taps (unless the jewel photo turns out blurry, which
+        // attemptSave surfaces).
+        attemptSave(decoded, false, false, false);
+      } else {
+        showConfirmPopup(decoded, dup);
+      }
+    }, category.label);
+    return;
+  }
+  showReadOverlay(null, false, () => showConfirmPopup(null, null));
+}
+
+// jsQR (bundled locally, see /static/jsQR.js) is the primary decoder — it's
+// pure JavaScript running against a canvas, so it works identically on
+// every device (crucially including iPhone Safari, which has NO native
+// BarcodeDetector support at all — that was the actual root cause of
+// "always couldn't read", not image quality). The native BarcodeDetector
+// API is tried first only as a fast-path bonus on browsers that do support
+// it (and support more formats than QR), never relied on as the only path.
+async function tryDecodeBarcode(blob) {
+  const viaNative = await tryNativeBarcodeDetector(blob);
+  if (viaNative) return viaNative;
+  return await tryJsQR(blob);
+}
+
+async function tryNativeBarcodeDetector(blob) {
+  if (!('BarcodeDetector' in window)) return null;
+  try {
+    const formats = await window.BarcodeDetector.getSupportedFormats();
+    const detector = new BarcodeDetector({ formats });
+    const bitmap = await createImageBitmap(blob);
+    const codes = await detector.detect(bitmap);
+    if (codes.length) return codes[0].rawValue;
+  } catch (e) {
+    console.warn('native BarcodeDetector failed', e);
+  }
+  return null;
+}
+
+async function tryJsQR(blob) {
+  if (typeof jsQR !== 'function') {
+    console.warn('jsQR did not load — /static/jsQR.js missing or blocked');
+    return null;
+  }
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(blob);
+  } catch (e) {
+    return null;
+  }
+  // Real phone photos are huge (e.g. 4032x3024) — try a few scaled-down
+  // sizes (faster, often more reliable for jsQR's scan) before falling
+  // back to native resolution, and try both normal + inverted scan modes
+  // since tag photos vary a lot in lighting/glare.
+  const sizesToTry = [900, 1400, 2000, Math.max(bitmap.width, bitmap.height)];
+  const tried = new Set();
+  for (const maxDim of sizesToTry) {
+    if (tried.has(maxDim)) continue;
+    tried.add(maxDim);
+    const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    let imageData;
+    try {
+      imageData = ctx.getImageData(0, 0, w, h);
+    } catch (e) {
+      continue;
+    }
+    const result = jsQR(imageData.data, w, h, { inversionAttempts: 'attemptBoth' });
+    if (result && result.data) return result.data;
+  }
+  return null;
+}
+
+async function checkDuplicate(tagCode) {
+  try {
+    const r = await fetch(`/api/capture/check_duplicate?tag_code=${encodeURIComponent(tagCode)}`);
+    const d = await r.json();
+    return d.duplicate ? d.prior : null;
+  } catch (e) { return null; }
+}
+
+// ── Only shown when something needs a human decision: couldn't read the
+// barcode, the tag's code prefix wasn't recognised, or it's a duplicate.
+// A clean scan of a known category never reaches this. ──
+function showConfirmPopup(decodedCode, dupInfo, unrecognisedCategory) {
+  const hasCode = !!decodedCode;
+  const title = dupInfo ? 'Already captured — confirm'
+    : unrecognisedCategory ? "Tag code not recognised"
+    : "Couldn't auto-read";
+  showPopup(`
+    ${tagThumbHtml(hasCode && !unrecognisedCategory, hasCode ? `✓ Read: ${escapeHtml(decodedCode)}` : "✗ Couldn't read tag")}
+    <div class="step-tag">Verify tag</div>
+    <h2>${title}</h2>
+    ${dupInfo ? `<div class="dup-banner">⚠ ${escapeHtml(dupInfo.category)} / ${escapeHtml(dupInfo.folder)} / ${escapeHtml(dupInfo.filename || '')}</div>` : ''}
+    ${unrecognisedCategory ? `<div class="dup-banner">⚠ No category matches this code — check it's typed correctly, then Save will look it up again.</div>` : ''}
+    <input type="text" id="popup-tag-code" class="tag-code-display ${hasCode ? '' : 'empty'}"
+           value="${escapeHtml(decodedCode || '')}" placeholder="Type tag number…" inputmode="text" autofocus>
+    <div class="btn-row">
+      <button class="btn secondary" id="popup-retake">Retake tag photo</button>
+      <button class="btn success-solid" id="popup-confirm">${dupInfo ? 'Save anyway' : 'Save'}</button>
+    </div>
+    ${dupInfo ? `<button class="btn danger" id="popup-discard">Discard this item — capture next</button>` : ''}
+  `);
+  const codeInput = document.getElementById('popup-tag-code');
+  const confirmBtn = document.getElementById('popup-confirm');
+  document.getElementById('popup-retake').addEventListener('click', () => openCaptureCamera('tag'));
+  codeInput.addEventListener('input', () => codeInput.classList.toggle('empty', !codeInput.value.trim()));
+  confirmBtn.addEventListener('click', async () => {
+    const code = codeInput.value.trim();
+    if (!code) { codeInput.classList.add('empty'); codeInput.focus(); return; }
+    confirmBtn.disabled = true;
+    const category = await resolveCategory(code);
+    if (!category) {
+      confirmBtn.disabled = false;
+      alert(`Still no category matches ${code} — check the tag and try again.`);
+      return;
+    }
+    currentCategory = category.key;
+    attemptSave(code, !!dupInfo, false, false, confirmBtn);
+  });
+  if (dupInfo) {
+    // Confirmed genuine repeat (same ornament/tag already on file) — throw
+    // away this jewel+tag pair without saving and go straight to the next
+    // item. The button click itself is the real user gesture, so the next
+    // camera can open immediately with no extra "tap to continue" step.
+    document.getElementById('popup-discard').addEventListener('click', () => {
+      closePopup();
+      showToast('Discarded — capture the next item');
+      clearResumeState();
+      jewelBlob = null; tagBlob = null;
+      _capturePhase = 'front';
+      saveResumeState(currentCaptureSnapshot());
+      openCaptureCamera('front');
+    });
+  }
+  if (!hasCode) setTimeout(() => codeInput.focus(), 50);
+}
+
+// ── Only shown when the jewellery photo's focus check fails. Doesn't
+// re-run the tag step on retake — the tag was already captured/confirmed,
+// only the jewel photo needs reshooting (see blurRetakeContext). ──
+function showBlurWarningPopup(tagCode, overrideDuplicate) {
+  showPopup(`
+    <div class="step-tag">Check jewellery photo</div>
+    <h2>⚠️ Photo looks blurry</h2>
+    <div class="sub-hint">Retake for a sharper shot, or save anyway if it's actually fine.</div>
+    <div class="btn-row">
+      <button class="btn secondary" id="popup-retake-jewel">Retake jewellery photo</button>
+      <button class="btn success-solid" id="popup-save-blurry">Save anyway</button>
+    </div>
+  `);
+  document.getElementById('popup-retake-jewel').addEventListener('click', () => {
+    blurRetakeContext = { tagCode, overrideDuplicate };
+    openCaptureCamera('front');
+  });
+  document.getElementById('popup-save-blurry').addEventListener('click', (e) => {
+    attemptSave(tagCode, overrideDuplicate, true, false, e.target);
+  });
+}
+
+// ── Only shown when the jewellery photo fails the "clearly visible" check
+// (e.g. a tag/QR close-up got submitted as the jewel photo by mistake — a
+// tag being IN FRAME is fine, this only fires when the jewellery itself
+// isn't clearly the visible subject). Same retake-only-the-jewel-photo
+// shortcut as the blur warning. ──
+function showVisibilityWarningPopup(tagCode, overrideDuplicate, reason) {
+  showPopup(`
+    <div class="step-tag">Check jewellery photo</div>
+    <h2>⚠️ Jewellery not clearly visible</h2>
+    <div class="sub-hint">${escapeHtml(reason || 'The jewellery item isn\'t clearly visible in this photo.')}</div>
+    <div class="btn-row">
+      <button class="btn secondary" id="popup-retake-jewel-vis">Retake jewellery photo</button>
+      <button class="btn success-solid" id="popup-save-not-visible">Save anyway</button>
+    </div>
+  `);
+  document.getElementById('popup-retake-jewel-vis').addEventListener('click', () => {
+    visibilityRetakeContext = { tagCode, overrideDuplicate };
+    openCaptureCamera('front');
+  });
+  document.getElementById('popup-save-not-visible').addEventListener('click', (e) => {
+    attemptSave(tagCode, overrideDuplicate, false, true, e.target);
+  });
+}
+
+// Single save path for every route into it (clean auto-save, duplicate
+// confirm, blur/visibility "save anyway") — avoids re-implementing the same
+// FormData/response handling three times.
+function attemptSave(tagCode, overrideDuplicate, overrideBlur, overrideVisibility, btn) {
+  const fd = new FormData();
+  fd.append('category', currentCategory);
+  fd.append('tag_code', tagCode);
+  fd.append('jewel', jewelBlob, 'jewel.jpg');
+  fd.append('tag', tagBlob, 'tag.jpg');
+  if (overrideDuplicate) fd.append('override_duplicate', '1');
+  if (overrideBlur) fd.append('override_blur', '1');
+  if (overrideVisibility) fd.append('override_visibility', '1');
+  if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
+
+  fetch('/api/capture/save', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) { onSaved(tagCode, d); return; }
+      if (d.error === 'blurry') { showBlurWarningPopup(tagCode, overrideDuplicate); return; }
+      if (d.error === 'not_clearly_visible') { showVisibilityWarningPopup(tagCode, overrideDuplicate, d.reason); return; }
+      if (d.error === 'duplicate') {
+        // Lost a race (someone else saved the same tag between our check
+        // and now), or this was the clean-auto-save path — either way,
+        // fall back to the interactive popup rather than silently dropping.
+        showConfirmPopup(tagCode, d.prior || null);
+        return;
+      }
+      if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+      alert('Save failed: ' + (d.error || 'unknown error'));
+    })
+    .catch(e => {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save'; alert('Save failed: ' + e); }
+      else showConfirmPopup(tagCode, null);
+    });
+}
+
+function onSaved(tagCode, d) {
+  clearResumeState();
+  jewelBlob = null; tagBlob = null;
+  _capturePhase = 'front';
+  sessionCountEl.textContent = d.session_captured;
+  refreshSessionCount();   // pulls the real ordered list (with correct display numbers) from the server
+  closePopup();
+  showToast(`✓ ${tagCode} saved`);
+  // Requires one tap to continue — browsers won't allow opening the next
+  // native camera without a fresh user gesture at this point (the save was
+  // an async network call, so any "sticky" activation from earlier taps
+  // has expired). This is the one unavoidable tap per item.
+  showPopup(`
+    <div class="badge success" style="margin-bottom:14px">✓ Saved: ${escapeHtml(tagCode)}</div>
+    <div class="sub-hint" id="popup-next-recommendation">Updating next recommendation…</div>
+    <button class="big-next-btn" id="popup-next-item">📷 Next item</button>
+    ${SPIN_CAPTURE_ENABLED ? '<button class="btn secondary" id="popup-spin">🔄 Record 360° spin</button>' : ''}
+    <button class="btn secondary" id="popup-done-tray">Done with this tray</button>
+  `);
+  document.getElementById('popup-next-item').addEventListener('click', () => {
+    closePopup();
+    jewelBlob = null; tagBlob = null;
+    _capturePhase = 'front';
+    saveResumeState(currentCaptureSnapshot());
+    openCaptureCamera('front');
+  });
+  if (SPIN_CAPTURE_ENABLED) {
+    document.getElementById('popup-spin').addEventListener('click', () => {
+      closePopup();
+      startSpinRecording(tagCode, currentCategory);
+    });
+  }
+  document.getElementById('popup-done-tray').addEventListener('click', closePopup);
+  if (window.refreshStockCapturePlan) {
+    window.refreshStockCapturePlan().then(data => {
+      const hint = document.getElementById('popup-next-recommendation');
+      if (!hint || !data || !data.next_capture) return;
+      hint.textContent = 'Next: ' + data.next_capture.next_tag + ' · ' +
+        data.next_capture.category + ' · ' + data.next_capture.remaining + ' remaining';
+    });
+  }
+}
+
+// Keep-alive only — NOT a shutdown-on-close signal. Multiple staff may be
+// on /capture (and someone else on the main tool) at once; one phone's
+// browser closing must never take the shared server down for everyone
+// else. This just stops the 10-minute idle watchdog from mistaking an
+// active capture session (with the main page's tab long since closed) for
+// "nobody's using the tool anymore".
+//
+// Also carries a version check: mobile browsers routinely keep a tab's JS
+// alive in memory across screen-lock/app-switch instead of re-fetching the
+// page, so a deployed update (e.g. the tag read-status overlay) can sit on
+// the server indefinitely without ever reaching an already-open phone —
+// exactly what happened here. PAGE_VERSION is this page's mtime at the
+// moment it was rendered; every heartbeat compares it against the server's
+// current version and shows a dismissible, non-blocking banner (never a
+// forced reload, which could yank a mid-capture popup out from under
+// someone) once they differ.
+const PAGE_VERSION = {{ capture_version }};
+let _updateBannerShown = false;
+
+function showUpdateBanner() {
+  if (_updateBannerShown) return;
+  _updateBannerShown = true;
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:1200;background:var(--gold);' +
+    'color:#fff;font-weight:700;font-size:13px;padding:10px 16px;text-align:center;cursor:pointer;';
+  bar.textContent = '⟳ New version available — tap to reload';
+  bar.addEventListener('click', () => location.reload());
+  document.body.appendChild(bar);
+}
+
+// ── Capture memory panel: search one item by tag, review it, delete it ─────
+// 2026-08-01: replaced whole-folder Forget — deleting an entire tray's
+// history at once was too coarse an action for "I need to fix one item."
+// Search finds exactly one captured item; delete removes only its own
+// jewel+tag photo and dedup record, resetting duplicate-blocking for that
+// tag alone. Loaded lazily on first expand, same as before.
+(function () {
+  const toggle    = document.getElementById('mem-toggle');
+  const body      = document.getElementById('mem-body');
+  const caret     = document.getElementById('mem-caret');
+  const chk       = document.getElementById('mem-enabled');
+  const hint      = document.getElementById('mem-hint');
+  const searchBtn = document.getElementById('mem-search-btn');
+  const searchIn  = document.getElementById('mem-search-input');
+  const resultEl  = document.getElementById('mem-search-result');
+  if (!toggle) return;
+  let loaded = false;
+
+  function renderHint(enabled) {
+    hint.textContent = enabled
+      ? 'On — a tag captured before will ask for confirmation before saving again.'
+      : 'OFF — duplicate tags save silently.';
+    hint.classList.toggle('warn', !enabled);
+  }
+
+  function readJson(response) {
+    return response.json()
+      .catch(() => ({}))
+      .then(data => {
+        if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+        return data;
+      });
+  }
+
+  function load() {
+    return fetch('/api/capture/memory')
+      .then(readJson)
+      .then(d => { chk.checked = !!d.enabled; renderHint(d.enabled); })
+      .catch(() => {});
+  }
+
+  toggle.addEventListener('click', () => {
+    const open = body.classList.toggle('hidden') === false;
+    caret.textContent = open ? '▾' : '▸';
+    if (open && !loaded) { loaded = true; load(); }
+  });
+
+  chk.addEventListener('change', () => {
+    const want = chk.checked;
+    const fd = new FormData(); fd.append('enabled', want ? '1' : '0');
+    fetch('/api/capture/memory/toggle', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(d => {
+        if (!d.ok) throw new Error(d.error || 'failed');
+        chk.checked = !!d.enabled;
+        renderHint(d.enabled);
+        showToast(d.enabled ? 'Duplicate blocking on' : 'Duplicate blocking OFF');
+      })
+      .catch(() => { chk.checked = !want; renderHint(chk.checked); showToast("Couldn't change setting"); });
+  });
+
+  function renderNotFound(tagCode) {
+    resultEl.innerHTML = `<div class="empty">No captured item found for ${escapeHtml(tagCode)}</div>`;
+  }
+
+  function renderItem(item) {
+    resultEl.innerHTML = `
+      <div class="mem-row" data-tag="${escapeHtml(item.tag_code)}">
+        <div>
+          <div class="name">${escapeHtml(item.tag_code)}</div>
+          <div class="count">${escapeHtml(item.category || '')} · ${escapeHtml(item.folder)} / ${escapeHtml(item.filename)}
+            ${item.jewel_exists ? '' : ' · front photo missing'}
+            ${item.studs_exists ? ' · studs photo saved' : ''}
+            ${item.detail_exists ? ' · detail photo saved' : ''}
+            ${item.tag_embedded ? ' · tag metadata embedded' : ' · tag metadata missing'}</div>
+        </div>
+        <button class="mem-clear" id="mem-delete-btn">Delete</button>
+      </div>`;
+    document.getElementById('mem-delete-btn').addEventListener('click', () => confirmDelete(item));
+  }
+
+  function doSearch() {
+    const tagCode = searchIn.value.trim();
+    if (!tagCode) return;
+    resultEl.innerHTML = '<div class="empty">Searching…</div>';
+    fetchWithTimeout(`/api/capture/search_item?tag_code=${encodeURIComponent(tagCode)}`, {}, 5000)
+      .then(readJson)
+      .then(d => renderItem(d.item))
+      .catch(() => renderNotFound(tagCode));
+  }
+  searchBtn.addEventListener('click', doSearch);
+  searchIn.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+  function confirmDelete(item) {
+    showPopup(`
+      <div class="step-tag">Permanent deletion</div>
+      <h2>⚠️ Delete ${escapeHtml(item.tag_code)}?</h2>
+      <div class="dup-banner">This permanently deletes this item's jewel and tag photo and its duplicate-history record. Every other item stays untouched.</div>
+      <div class="btn-row">
+        <button class="btn secondary" id="popup-item-no">No — keep it</button>
+        <button class="btn danger" id="popup-item-yes">Yes — permanently delete</button>
+      </div>
+    `);
+    document.getElementById('popup-item-no').addEventListener('click', closePopup);
+    document.getElementById('popup-item-yes').addEventListener('click', async () => {
+      const yes = document.getElementById('popup-item-yes');
+      const no = document.getElementById('popup-item-no');
+      yes.disabled = true; no.disabled = true; yes.textContent = 'Deleting…';
+      const fd = new FormData();
+      fd.append('tag_code', item.tag_code);
+      fd.append('confirm_tag_code', item.tag_code);
+      try {
+        const result = await fetch('/api/capture/delete_item', { method: 'POST', body: fd }).then(readJson);
+        if (!result.ok) throw new Error(result.error || 'Delete failed');
+        closePopup();
+        showToast(`Deleted ${item.tag_code}`);
+        resultEl.innerHTML = '';
+        searchIn.value = '';
+      } catch (error) {
+        showPopup(`
+          <div class="step-tag">Deletion error</div>
+          <h2>⚠️ Delete did not complete</h2>
+          <div class="sub-hint">${escapeHtml(error.message || String(error))}</div>
+          <button class="btn danger" id="popup-item-error-close">Close</button>
+        `);
+        document.getElementById('popup-item-error-close').addEventListener('click', closePopup);
+      }
+    });
+  }
+})();
+
+(function () {
+  let _beatPending = false;
+  const beat = () => {
+    if (_beatPending) return;
+    _beatPending = true;
+    fetchWithTimeout('/api/heartbeat', {method: 'POST'}, 5000)
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(d => {
+        if (d.capture_version && d.capture_version !== PAGE_VERSION) showUpdateBanner();
+      })
+      .catch(() => {})
+      .finally(() => { _beatPending = false; });
+  };
+  setInterval(beat, 8000);
+  beat();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') beat();
+  });
+})();
+</script>
+</body>
+</html>

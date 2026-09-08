@@ -1,0 +1,546 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Three-column layout (explicit request, 2026-08-29): the capture area in
+     the center column must stay completely clear. Every status/debug/
+     graph readout lives in the left sidebar, every actionable control lives
+     in the right sidebar. Only BoundsOverlayView's own on-jewellery marks
+     (gold points, target/guide/silhouette boxes) may appear over the
+     preview itself. All view IDs are unchanged from the previous stacked
+     layout; only their container placement moved, so MainActivity's
+     bindings need no changes. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/black">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal">
+
+        <!-- LEFT SIDEBAR: step progress, status, debug readouts, fps graph. -->
+        <ScrollView
+            android:layout_width="280dp"
+            android:layout_height="match_parent"
+            android:background="@color/black"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <!-- Step progress: TAG/QR CODE, then MAIN VIEW, then LEFT ANGLE,
+                     then RIGHT ANGLE. Stacked vertically here (was a horizontal
+                     row across the top of the preview) so it never sits over
+                     the image. Purely a progress indicator; MainActivity's
+                     updateStepIndicator() drives active/done/inactive styling
+                     from existing phase state, no capture logic lives here. -->
+                <TextView
+                    android:id="@+id/stepTag"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"
+                    android:background="@drawable/bg_step_active"
+                    android:gravity="center"
+                    android:letterSpacing="0.04"
+                    android:paddingVertical="8dp"
+                    android:text="TAG / QR"
+                    android:textColor="@color/white"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/stepMain"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"
+                    android:background="@drawable/bg_step_inactive"
+                    android:gravity="center"
+                    android:letterSpacing="0.04"
+                    android:paddingVertical="8dp"
+                    android:text="MAIN VIEW"
+                    android:textColor="@color/text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/stepLeft"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"
+                    android:background="@drawable/bg_step_inactive"
+                    android:gravity="center"
+                    android:letterSpacing="0.04"
+                    android:paddingVertical="8dp"
+                    android:text="LEFT ANGLE"
+                    android:textColor="@color/text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/stepRight"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:background="@drawable/bg_step_inactive"
+                    android:gravity="center"
+                    android:letterSpacing="0.04"
+                    android:paddingVertical="8dp"
+                    android:text="RIGHT ANGLE"
+                    android:textColor="@color/text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <!-- Durable capture-to-laptop pipeline. Newest card is left;
+                     swipe horizontally for the previous nine. Values are fed
+                     only from the disk-backed upload queue: Laptop flips YES
+                     only after the server accepts the originals; Stitched
+                     flips YES only after a successful 3-angle save. -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"
+                    android:text="LAST 10 CAPTURE PIPELINE"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:fillViewport="true"
+                    android:scrollbars="none">
+
+                    <LinearLayout
+                        android:id="@+id/capturePipelineContainer"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal" />
+                </HorizontalScrollView>
+
+                <TextView
+                    android:id="@+id/statusText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:background="@drawable/bg_card"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="@string/status_starting"
+                    android:textColor="@color/white"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/gimbalStatusText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:background="@drawable/bg_card"
+                    android:gravity="center"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="10dp"
+                    android:text="Gimbal: —"
+                    android:textColor="@color/white"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/debugText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:background="@drawable/bg_card"
+                    android:fontFamily="monospace"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="8dp"
+                    android:textColor="@color/text_muted"
+                    android:textSize="11sp" />
+
+                <!-- Live per-frame fps sparkline (2026-08-26, explicit request):
+                     on-device stutter diagnosis without pulling logcat. Green =
+                     healthy, red = a frame arrived at less than half the
+                     current cadence. See FpsGraphView / MainActivity's
+                     onFrameTiming wiring. -->
+                <com.aradhana.capturecam.FpsGraphView
+                    android:id="@+id/fpsGraph"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginBottom="8dp"
+                    android:background="@drawable/bg_card" />
+
+                <!-- Stud/rhodium-accent status (2026-08-19, explicit request): a
+                     live guess with a persistent per-tag correction, not just a
+                     per-photo note. Tap toggles and saves via
+                     UploadClient.setStudFlag; see MainActivity.updateStudStatusUi. -->
+                <TextView
+                    android:id="@+id/studStatusText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:background="@drawable/bg_card"
+                    android:gravity="center"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="10dp"
+                    android:textColor="@color/white"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <!-- Live physical-placement guide. This reports how far the
+                     stand must move so the detected ornament fills its safe
+                     target box at the Sony lens' verified 50mm/3.125x optical
+                     limit. It is an overlay only and is never part of the
+                     captured JPEG. -->
+                <TextView
+                    android:id="@+id/standGuideText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:background="@drawable/bg_card"
+                    android:gravity="center"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="10dp"
+                    android:textColor="@color/amber_working"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tagCodeText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_card"
+                    android:gravity="center"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:textColor="@color/white"
+                    android:textSize="15sp" />
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- CENTER: the capture area. Nothing but the live preview and its
+             on-jewellery overlay marks (gold points, target/guide/silhouette
+             boxes) may render here: no status text, no buttons. -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <androidx.camera.view.PreviewView
+                android:id="@+id/previewView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <!-- Primary production source. Hidden until a decoded Sony Live
+                 View frame proves the remote session healthy; CameraX remains
+                 visible underneath as the automatic fallback. -->
+            <ImageView
+                android:id="@+id/sonyPreviewView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/black"
+                android:contentDescription="Sony camera live view"
+                android:scaleType="fitCenter"
+                android:visibility="gone" />
+
+            <com.aradhana.capturecam.BoundsOverlayView
+                android:id="@+id/boundsOverlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <View
+                android:id="@+id/statusBorder"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/transparent" />
+        </FrameLayout>
+
+        <!-- RIGHT SIDEBAR: every actionable control: settings, zoom,
+             exposure, manual capture, ready-to-capture. -->
+        <ScrollView
+            android:layout_width="180dp"
+            android:layout_height="match_parent"
+            android:background="@color/black"
+            android:scrollbars="none">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <Button
+                    android:id="@+id/settingsButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:text="@string/settings" />
+
+                <!-- Shape/stand-position guidance is advice for the human
+                     placing the item, never a capture gate (explicit
+                     request, 2026-08-29): this lets staff hide it
+                     entirely when it's more distracting than helpful.
+                     MainActivity persists the choice and short-circuits
+                     renderStandDistanceGuide() when off. -->
+                <Button
+                    android:id="@+id/guidanceToggleButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:text="@string/guides_on" />
+
+                <!-- Manual controls: zoom +/-, exposure slider, and the
+                     resume-auto button. Visible any time a gimbal/camera
+                     session is live; MainActivity shows/hides
+                     resumeAutoButton based on manualModeActive, and updates
+                     manualModeText so staff always know whether
+                     auto-tracking is standing by. Tap-to-focus/long-press-
+                     to-lock-focus is handled directly on previewView, not a
+                     visible control here. -->
+                <TextView
+                    android:id="@+id/manualModeText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp"
+                    android:gravity="center"
+                    android:textColor="@color/text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:text="@string/auto_tracking" />
+
+                <LinearLayout
+                    android:id="@+id/manualControlsRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:background="@drawable/bg_card"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="6dp"
+                    android:paddingVertical="6dp"
+                    android:gravity="center_vertical">
+
+                    <Button
+                        android:id="@+id/zoomOutButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:minWidth="0dp"
+                        android:text="@string/zoom_out" />
+
+                    <Button
+                        android:id="@+id/zoomInButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:minWidth="0dp"
+                        android:text="@string/zoom_in" />
+                </LinearLayout>
+
+                <!-- Manual gimbal joystick (explicit request, 2026-08-29):
+                     4-direction D-pad, not a diagonal-capable analog stick.
+                     MainActivity's own centering code found a combined
+                     tilt+pan command triggers a real BLE disconnect on this
+                     gimbal, so every move here is single-axis-only, same
+                     as the proven-safe auto-centering nudges. -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"
+                    android:gravity="center"
+                    android:text="@string/gimbal_label"
+                    android:textColor="@color/text_muted"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:background="@drawable/bg_card"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:paddingVertical="8dp">
+
+                    <Button
+                        android:id="@+id/gimbalUpButton"
+                        android:layout_width="56dp"
+                        android:layout_height="wrap_content"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:text="@string/gimbal_up" />
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginVertical="4dp"
+                        android:orientation="horizontal"
+                        android:gravity="center">
+
+                        <Button
+                            android:id="@+id/gimbalLeftButton"
+                            android:layout_width="56dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="4dp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:text="@string/gimbal_left" />
+
+                        <Button
+                            android:id="@+id/gimbalRightButton"
+                            android:layout_width="56dp"
+                            android:layout_height="wrap_content"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:text="@string/gimbal_right" />
+                    </LinearLayout>
+
+                    <Button
+                        android:id="@+id/gimbalDownButton"
+                        android:layout_width="56dp"
+                        android:layout_height="wrap_content"
+                        android:minWidth="0dp"
+                        android:minHeight="0dp"
+                        android:text="@string/gimbal_down" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/exposureRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:background="@drawable/bg_card"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="6dp">
+
+                    <TextView
+                        android:id="@+id/exposureLabel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="@string/exposure_label"
+                        android:textColor="@color/text_muted"
+                        android:textSize="11sp" />
+
+                    <SeekBar
+                        android:id="@+id/exposureSeekBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
+
+                    <Button
+                        android:id="@+id/resumeAutoButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minWidth="0dp"
+                        android:text="@string/resume_auto"
+                        android:visibility="gone" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/readyButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp"
+                    android:paddingVertical="20dp"
+                    android:backgroundTint="#2E7D32"
+                    android:text="@string/ready_capture_angle"
+                    android:textColor="@color/white"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    android:elevation="6dp" />
+
+                <Button
+                    android:id="@+id/manualShutterButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/manual_shutter" />
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/previewOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#E6000000"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="24dp">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:clipChildren="true">
+
+                <ImageView
+                    android:id="@+id/previewImage"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:adjustViewBounds="true"
+                    android:scaleType="fitCenter" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/previewCountdown"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:textColor="@color/white"
+                android:textSize="16sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/previewRetakeButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="4dp"
+                    android:text="@string/retake" />
+
+                <Button
+                    android:id="@+id/previewContinueButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp"
+                    android:text="@string/continue_now" />
+
+                <Button
+                    android:id="@+id/previewCompleteButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp"
+                    android:text="@string/complete_item"
+                    android:visibility="gone" />
+
+                <Button
+                    android:id="@+id/previewCancelButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginStart="4dp"
+                    android:text="@string/cancel_item" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>

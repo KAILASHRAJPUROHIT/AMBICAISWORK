@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aradhana Catalogue Studio — Login</title>
+<style>
+:root {
+  --gold: #6d5ef8; --gold-light: #8b7cfa; --gold-glow: rgba(109,94,248,0.20);
+  --bg: #0d0e17; --bg-card: #141623; --bg-card2: #1a1d2e;
+  --border: #242840; --text: #e4e7f5; --text-muted: #8188a8; --danger: #fb7185;
+  --radius: 10px; --radius-lg: 14px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--text);
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 36px 32px;
+  width: 100%;
+  max-width: 360px;
+}
+.logo {
+  width: 48px; height: 48px;
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 900; color: #fff;
+  box-shadow: 0 2px 16px var(--gold-glow);
+  margin: 0 auto 18px;
+}
+h1 { font-size: 17px; text-align: center; margin-bottom: 4px; }
+.sub { font-size: 12px; color: var(--text-muted); text-align: center; margin-bottom: 26px; letter-spacing: 0.5px; }
+label { font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px; }
+input[type="password"] {
+  width: 100%;
+  background: var(--bg-card2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 13px 14px;
+  font-size: 16px;
+  color: var(--text);
+  margin-bottom: 16px;
+}
+input[type="password"]:focus { outline: none; border-color: var(--gold); }
+button {
+  width: 100%;
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+  border: none;
+  border-radius: var(--radius);
+  padding: 13px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+}
+button:active { opacity: 0.85; }
+.error {
+  background: rgba(251,113,133,0.12);
+  border: 1px solid rgba(251,113,133,0.35);
+  color: var(--danger);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">AJ</div>
+  <h1>Aradhana Catalogue Studio</h1>
+  <div class="sub">PASSWORD + EMAIL VERIFICATION</div>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password" autofocus autocomplete="current-password">
+    <button type="submit">Continue</button>
+  </form>
+</div>
+</body>
+</html>

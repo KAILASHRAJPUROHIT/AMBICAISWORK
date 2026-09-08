@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "document-print-workflow",
+  "display_name": "Aradhana Document Print Workflow",
+  "version": "1.0.0-beta.1",
+  "owner_project": "print-router",
+  "contracts": ["document-bundle.v1", "print-session.v1"],
+  "runtime": {
+    "kind": "scheduled-task",
+    "interactive": true
+  },
+  "ota": {
+    "target": "document-workflow-pc2",
+    "rollback": "Reinstall prior signed bundle; verify the local health endpoint before enabling router integration."
+  }
+}

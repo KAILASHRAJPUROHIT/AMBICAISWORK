@@ -1,0 +1,39 @@
+# Secrets and local configuration
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.pfx
+*.p12
+local.properties
+local.secrets.properties
+
+# Local data and logs
+*.db
+*.sqlite
+*.sqlite3
+*.log
+data/
+runtime/
+logs/
+uploads/
+storage/
+
+# Generated dependencies and builds
+node_modules/
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+dist/
+build/
+out/
+coverage/
+*.apk
+*.aab
+*.exe
+*.dll
+*.zip
+*.rar
+*.7z

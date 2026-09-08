@@ -1,0 +1,96 @@
+TODAY RECONCILIATION RUNTIME RECOVERY REPORT
+
+Branch
+- feature/reconciliation-runtime-recovery
+
+Files changed
+- backend/review_api.py
+- frontend/src/api/client.ts
+- frontend/src/pages/ReconciliationQueuePage.tsx
+- tests/test_reconciliation_contract.py
+- tests/test_reconciliation_real_endpoint.py
+
+Root cause
+- ReconciliationQueuePage was directly fetching /reviews/open.
+- frontend/src/api/client.ts getOpenReviews was calling /api/reviews/open.
+- The app could receive an SPA HTML response or legacy managed-review/mock response and then attempt JSON parsing/mapping, producing JSON.parse: unexpected character at line 1 column 1.
+
+Backend route
+- Added/confirmed GET /api/reconciliation/open.
+- Runtime OpenAPI confirms /api/reconciliation/open exists.
+- Route requires X-Session-Token.
+- Route returns application/json only.
+- Route returns an array.
+
+Frontend route contract
+- getOpenReviews now calls only /api/reconciliation/open.
+- ReconciliationQueuePage now uses getOpenReviews.
+- ReconciliationQueuePage no longer calls /reviews/open directly.
+- Frontend reconciliation path no longer uses /api/reviews/open, /reviews/open, or /open.
+
+Fetch recovery behavior
+- getOpenReviews checks response.ok.
+- getOpenReviews checks content-type includes application/json.
+- Non-JSON responses now throw a clear diagnostic:
+  Failed to fetch open reconciliation items (Expected JSON but received ...)
+- Invalid non-array JSON now throws a clear invalid response shape diagnostic.
+- Raw JSON.parse errors should no longer be shown to the user.
+
+Real data mapping
+- bill_no -> billNo
+- customer_name -> customer
+- invoice_amount -> invoiceAmount
+- bank_amount -> bankAmount
+- difference -> difference
+- payment_mode -> paymentMode
+- confidence -> matchConfidence
+- status -> status
+- invoice_date is included in the backend response.
+
+Contract guard
+- ReconciliationQueuePage rejects rows containing:
+  ---
+  Review Item
+  REVIEW
+  mock_review_1
+  pay_001
+  bill_002
+- Rows without bill_no are rejected.
+
+Empty state
+- A valid empty array displays:
+  No open reconciliation items
+
+Tests run
+- python -m pytest tests/test_reconciliation_contract.py
+  Result: 2 passed.
+- python -m pytest tests/test_reconciliation_real_endpoint.py
+  Result: 2 passed.
+- cd frontend && npm run build
+  Result: passed.
+
+Runtime verification
+- Backend restarted on port 8000 to load the new route.
+- /health returned healthy.
+- OpenAPI confirms /api/reconciliation/open exists.
+- Authenticated GET /api/reconciliation/open returned:
+  StatusCode: 200
+  Content-Type: application/json
+  IsArray: true
+  Count: 33
+  First real row: SS-514 / RAJU GITE
+- No mock_review_1, pay_001, or bill_002 appeared in the tested endpoint response.
+
+Browser verification
+- Browser reached /reconciliation but was redirected to /login because the visible browser session was not authenticated after backend restart.
+- The login page did not show the JSON.parse error.
+- Browser automation policy blocked localStorage session injection via javascript: URL, so full authenticated UI verification was not completed.
+- No commit has been made.
+
+Safety confirmation
+- No LAN launcher changes.
+- No escalation changes.
+- No dashboard changes.
+- No auth code changes.
+- No financial record mutation logic changes.
+- No financial records were modified by this patch.

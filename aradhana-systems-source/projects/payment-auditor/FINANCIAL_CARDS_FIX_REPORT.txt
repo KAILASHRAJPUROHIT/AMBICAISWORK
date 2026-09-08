@@ -1,0 +1,71 @@
+FINANCIAL COLLECTION CARDS FIX REPORT
+
+SCOPE
+- No auth, OTP, RBAC, reconciliation decision logic, or financial records were changed.
+- Fix is frontend display mapping only.
+
+/api/dashboard/live RAW FINANCIAL KEYS
+- STATUS=200
+- totalCollection=0
+- cashCollection=0
+- bankCollection=0
+- chequeCollection=0
+
+FULL LIVE RESPONSE SHAPE OBSERVED
+- totalBillsToday
+- importedToday
+- pendingPreviousDays
+- verified
+- pendingReview
+- partialPaid
+- unverifiedAdvancesCount
+- unverifiedAdvancesAmount
+- totalCollection
+- cashCollection
+- bankCollection
+- smsConfirmed
+- emailConfirmed
+- chequeCollection
+- pdfCountInShare
+- invoiceWatcherStatus
+- emailPollerStatus
+- smsRelayStatus
+- matchAccuracy
+- is_owner
+
+ROOT CAUSE
+- The running backend currently returns old collection field names:
+  totalCollection, cashCollection, bankCollection, chequeCollection.
+- DashboardPage was rendering only newer field names:
+  totalSaleToday, cashInHandToday, bankConfirmedToday, chequesPendingToday.
+- Those newer fields are absent from the live JSON until the backend process is restarted with the read-only aggregate additions.
+- DashboardPage also used financialDataAvailable to decide whether to show money or "Data unavailable".
+- The live JSON does not include financialDataAvailable, so legitimate backend values of 0 were rendered as "Data unavailable".
+
+FIX
+- Financial cards now use fallback mapping:
+  Total Sale -> totalSaleToday, fallback totalCollection
+  Cash In Hand (After Opening) -> cashInHandToday, fallback cashCollection
+  Bank Confirmed (Live) -> bankConfirmedToday, fallback bankCollection
+  Cheques Pending -> chequesPendingToday, fallback chequeCollection
+- The cards now show "Data unavailable" only when /api/dashboard/live itself is unavailable.
+- If the API succeeds and a value is legitimately 0 or absent, the card renders ₹0.
+
+FILES CHANGED
+- frontend/src/pages/DashboardPage.tsx
+
+VERIFICATION
+- /api/dashboard/live returned 200.
+- Frontend build passed: cd frontend && npm run build.
+- Browser dashboard verification passed.
+- Financial cards render:
+  Total Sale: ₹0
+  Cash In Hand (After opening): ₹0
+  Bank Confirmed (Live): ₹0
+  Cheques Pending: ₹0
+- Browser console warning/error logs for this reload: none.
+
+REMAINING NOTES
+- Current live backend financial collection values are legitimately zero in the observed response.
+- This change does not fake values; it displays the backend-provided zero values.
+- Backend restart may expose newer read-only aggregate aliases, but the frontend now supports both old and new field names.

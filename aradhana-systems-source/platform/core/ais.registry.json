@@ -1,0 +1,121 @@
+{
+  "$schema": "./ais.registry.schema.json",
+  "schema_version": 1,
+  "organization": "Aradhana Jewellers",
+  "platform": "AIS",
+  "release_policy": {
+    "channels": ["beta", "stable"],
+    "beta_devices": ["billing-pc2", "dell-server"],
+    "stable_requires": ["signed_artifact", "hash_verification", "health_check", "documented_rollback", "physical_acceptance"]
+  },
+  "projects": [
+    {
+      "id": "payment-notifier",
+      "path": "C:\\AradhanaSystems\\projects\\payment-auditor",
+      "display_name": "Aradhana Payment Notifier",
+      "role": "LAN payment and document console",
+      "owner_device": "home-laptop",
+      "services": ["payment-api", "payment-web"],
+      "ota_target": "payment-notifier-laptop"
+    },
+    {
+      "id": "qr-print-server",
+      "path": "C:\\AradhanaSystems\\projects\\qr-print-server",
+      "display_name": "Aradhana QR Print Server",
+      "role": "QR document intake and 355-only print queue",
+      "owner_device": "dell-server",
+      "contracts": ["document-bundle.v1"],
+      "ota_target": "qr-print-server"
+    },
+    {
+      "id": "print-router",
+      "path": "C:\\AradhanaSystems\\projects\\print-router",
+      "display_name": "Aradhana Ornate Print Router",
+      "role": "trusted Ornate print routing and P355 composition",
+      "owner_device": "billing-pc2",
+      "plugins": ["document-print-workflow"],
+      "ota_target": "print-router-pc2"
+    },
+    {
+      "id": "catalogue-capture",
+      "path": "C:\\AradhanaSystems\\projects\\catalogue-capture",
+      "display_name": "Aradhana Catalogue Capture",
+      "role": "on-device catalogue capture and OCR",
+      "owner_device": "home-laptop",
+      "ota_target": "catalogue-capture"
+    },
+    {
+      "id": "gold-rate-monitor",
+      "path": "C:\\AradhanaSystems\\projects\\gold-rate-monitor",
+      "display_name": "Aradhana Gold Rate Monitor",
+      "role": "rate monitoring and display",
+      "owner_device": "home-laptop",
+      "ota_target": "gold-rate-monitor"
+    },
+    {
+      "id": "aradhana-mobile-app",
+      "path": "C:\\AradhanaSystems\\projects\\aradhana-mobile-app",
+      "display_name": "Aradhana Jewellers App",
+      "role": "customer mobile application",
+      "owner_device": "home-laptop",
+      "ota_target": "aradhana-mobile-app"
+    },
+    {
+      "id": "ornate-buddy-workbench",
+      "path": "C:\\AradhanaSystems\\projects\\ornate-buddy-workbench",
+      "display_name": "Aradhana Ornate Buddy Workbench",
+      "role": "isolated integration research and tools",
+      "owner_device": "home-laptop",
+      "ota_target": "ornate-buddy-workbench"
+    }
+  ],
+  "plugins": [
+    {
+      "id": "document-print-workflow",
+      "path": "C:\\AradhanaSystems\\platform\\plugins\\document-print-workflow",
+      "contract": "document-bundle.v1",
+      "host": "billing-pc2",
+      "service": "AISDocumentWorkflowApi",
+      "port": 8310,
+      "health": "http://127.0.0.1:8310/health",
+      "ota_target": "document-workflow-pc2"
+    }
+  ],
+  "services": [
+    {
+      "id": "payment-api",
+      "host": "home-laptop",
+      "port": 8000,
+      "health": "http://127.0.0.1:8000/health",
+      "scope": "LAN"
+    },
+    {
+      "id": "payment-web",
+      "host": "home-laptop",
+      "port": 5173,
+      "health": "http://127.0.0.1:5173/",
+      "scope": "LAN"
+    },
+    {
+      "id": "ais-ota",
+      "host": "home-laptop",
+      "port": 8091,
+      "health": "http://192.168.0.12:8091/health",
+      "scope": "LAN"
+    },
+    {
+      "id": "ais-control-center",
+      "host": "home-laptop",
+      "port": 8120,
+      "health": "http://127.0.0.1:8120/health",
+      "scope": "loopback"
+    },
+    {
+      "id": "ais-cloud-gateway-dev",
+      "host": "home-laptop",
+      "port": 8180,
+      "health": "http://127.0.0.1:8180/health",
+      "scope": "loopback"
+    }
+  ]
+}

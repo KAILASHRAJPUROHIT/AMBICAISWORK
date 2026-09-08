@@ -1,0 +1,72 @@
+[
+  {
+    "id": "smartqr-print-server",
+    "name": "SmartQR Print Server",
+    "department": "Technology",
+    "phase": "production",
+    "localPath": "C:\\AradhanaSystems\\projects\\qr-print-server",
+    "endpoints": []
+  },
+  {
+    "id": "payment-auditor",
+    "name": "Aradhana Payment Auditor",
+    "department": "Finance & Rates",
+    "phase": "development",
+    "localPath": "C:\\AradhanaSystems\\projects\\payment-auditor",
+    "endpoints": []
+  },
+  {
+    "id": "aradhana-android-expo",
+    "name": "Aradhana Android App (Expo)",
+    "department": "Technology",
+    "phase": "development",
+    "localPath": "C:\\AradhanaSystems\\projects\\aradhana-mobile-app",
+    "endpoints": []
+  },
+  {
+    "id": "aradhana-android-native",
+    "name": "Aradhana Jewellers Android App",
+    "department": "Technology",
+    "phase": "development",
+    "localPath": "C:\\AradhanaSystems\\projects\\aradhana-mobile-app",
+    "endpoints": []
+  },
+  {
+    "id": "gold-rate-monitor",
+    "name": "Gold Rate Monitor",
+    "department": "Finance & Rates",
+    "phase": "production",
+    "localPath": "C:\\AradhanaSystems\\projects\\gold-rate-monitor",
+    "endpoints": [
+      { "name": "Laptop health", "url": "http://127.0.0.1:8080/api/health", "expected": [200] },
+      { "name": "Cloud health", "url": "https://aradhana-gold-monitor.onrender.com/api/health", "expected": [200] }
+    ]
+  },
+  {
+    "id": "catalogue-tool",
+    "name": "Jewellery Catalogue Tool",
+    "department": "Technology",
+    "phase": "development",
+    "localPath": "C:\\AradhanaSystems\\projects\\catalogue-capture",
+    "endpoints": []
+  },
+  {
+    "id": "capturecam-production-worktree",
+    "name": "CaptureCam Production Worktree",
+    "department": "Technology",
+    "phase": "testing",
+    "localPath": "C:\\Users\\kaila\\Desktop\\CaptureCam-master-checkout",
+    "endpoints": []
+  },
+  {
+    "id": "ais-dashboard",
+    "name": "Aradhana Intelligence System",
+    "department": "Management",
+    "phase": "development",
+    "localPath": "C:\\AradhanaSystems\\platform\\ais-owner-console",
+    "endpoints": [
+      { "name": "Dashboard", "url": "http://localhost:3000", "expected": [200] },
+      { "name": "Project scanner", "url": "http://127.0.0.1:8787/health", "expected": [200] }
+    ]
+  }
+]

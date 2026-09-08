@@ -1,0 +1,91 @@
+MASTER CONSOLE ENDPOINT FIX REPORT
+
+Root cause:
+- GET /api/admin/users, /api/admin/security/stats, and /api/admin/system/mode returned 422 because require_owner used Depends(lambda r, d: require_role(...)).
+- FastAPI treated r and d as required query parameters instead of injecting Request and db.
+- GET /api/admin/financial/health returned 404 because the route was declared after the SPA catch-all route /{full_path:path}.
+
+Fix:
+- Replaced require_owner with an explicit dependency signature:
+  - request: Request
+  - db: Session = Depends(get_db)
+  - delegates to require_role(["OWNER", "ADMIN"], request, db)
+- Moved /api/admin/financial/health before the SPA catch-all and removed the unreachable duplicate after the catch-all.
+- Added maintenance boolean to /api/admin/system/mode response.
+
+Files changed:
+- backend/review_api.py
+
+Endpoint contract after fix:
+
+URL=http://127.0.0.1:8000/api/admin/users
+METHOD=GET
+STATUS=200
+RESPONSE_SHAPE=array of users
+X-Session-Token present? yes
+
+URL=http://127.0.0.1:8000/api/admin/security/stats
+METHOD=GET
+STATUS=200
+RESPONSE_SHAPE={
+  failed_login_count: number,
+  active_session_count: number,
+  otp_total_count: number,
+  recent_events: array
+}
+X-Session-Token present? yes
+
+URL=http://127.0.0.1:8000/api/admin/system/mode
+METHOD=GET
+STATUS=200
+RESPONSE_SHAPE={ mode: string, maintenance: boolean }
+X-Session-Token present? yes
+
+URL=http://127.0.0.1:8000/api/admin/financial/health
+METHOD=GET
+STATUS=200
+RESPONSE_SHAPE={
+  pending_review_count: number,
+  cheques_pending_count: number,
+  bank_variance_amount: number,
+  reconciliation_accuracy: number
+}
+X-Session-Token present? yes
+
+RBAC confirmation:
+- OWNER session can access all four Master Console endpoints.
+- Non-owner test user receives 403 Access denied, not 422.
+- No auth, OTP, reconciliation logic, financial records, or dashboard code was modified.
+
+Backend verification:
+- In-process FastAPI TestClient contract check:
+  - /api/admin/users -> 200
+  - /api/admin/security/stats -> 200
+  - /api/admin/system/mode -> 200 with maintenance=false
+  - /api/admin/financial/health -> 200
+- Non-owner patched-token check:
+  - /api/admin/users -> 403
+- Existing targeted backend test:
+  - python -m pytest tests/test_api_routes.py::test_owner_report_endpoint
+  - Result: passed
+- Broader targeted RBAC/API run:
+  - python -m pytest tests/test_api_routes.py tests/test_rbac.py
+  - Result: 6 passed, 8 failed
+  - Failure is pre-existing/out-of-scope backend/rbac.py enum/string handling: UserRole enum has no lower().
+
+Frontend verification:
+- cd frontend
+- npm run build
+- Result: passed
+
+Browser verification:
+- Restarted local backend on port 8000 so browser used patched backend code.
+- Opened http://127.0.0.1:8000/master-console as OWNER.
+- Users tab rendered user table with no error card.
+- Security tab rendered stats and recent access logs with no error card.
+- Financial tab rendered owner-only financial health values with no error card.
+- Emergency tab rendered controls and System Status: PRODUCTION with no error card.
+- Browser console warnings/errors: none captured.
+
+Remaining issues:
+- The broad tests still expose a pre-existing RBAC enum/string bug in backend/rbac.py. That was not changed because this task was scoped to Master Console backend endpoint contracts.

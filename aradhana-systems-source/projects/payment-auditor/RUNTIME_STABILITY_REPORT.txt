@@ -1,0 +1,19 @@
+RUNTIME STABILITY REPORT
+
+1. Why backend startup creates duplicate processes:
+The `start_aradhana_auditor.bat` script explicitly launches `backend/pdf_ingestion.py` and `backend/sms_ingestion.py` as separate background processes. However, `backend/review_api.py` also programmatically launches these identical workers as background threads during its `@app.on_event("startup")` via `start_ingestion_thread()` and `start_sms_poller()`. This causes the system to run multiple concurrent instances of the same polling logic.
+
+2. Why port 8000 remains occupied:
+When the user closes the backend CMD window, the `uvicorn` server receives the termination signal and completes its main thread. However, the Python process becomes an orphaned background process instead of terminating because it is waiting for non-daemon threads to join. Because the process never fully exits, it never releases the TCP socket bound to port 8000.
+
+3. Why SMS_Poller crashes on received_at:
+In `backend/sms_poller.py`, the system attempts to parse the SMS date using `datetime.fromisoformat(sms["timestamp"])`. This method strictly requires a perfectly formatted ISO 8601 string. If the Android SMS gateway writes JSON files with UNIX timestamps (integers) or non-ISO date strings, it triggers an unhandled `TypeError` or `ValueError`. If the key is missing entirely, it raises a `KeyError`. Any of these unhandled exceptions will crash the entire polling loop.
+
+4. Why daemon threads survive shutdown:
+The assumption that the surviving threads are daemon threads is incorrect; they are actually non-daemon threads. While the wrappers (`watcher_thread` and `scan_thread`) in `pdf_ingestion.py` are explicitly set to `daemon=True`, the `watcher_thread` initializes a `watchdog` library `Observer` and calls `.start()`. The `watchdog` observer spawns its own internal worker threads which are not daemon threads. Because there is no shutdown hook calling `observer.stop()`, the Python interpreter indefinitely blocks on exit waiting for these non-daemon threads to finish.
+
+5. Why start_aradhana_auditor.bat can leave backend/frontend out of sync:
+The batch script launches all components as completely independent, unmonitored `cmd` windows (`start /min`). There is no shared lifecycle or health-checking.
+- If the backend crashes or fails to bind to port 8000 (due to issue #2), the frontend still launches normally.
+- If a user closes one window, the others remain running indefinitely.
+- If the script is executed twice, Vite (frontend) will auto-increment to port 5174, but the batch file hardcodes `start http://localhost:5173`. The browser will open the old, stale frontend while the new backend fails to bind, leaving the user completely desynchronized from the actual running state.

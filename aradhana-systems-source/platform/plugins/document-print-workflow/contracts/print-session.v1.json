@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "entity": "print_session",
+  "trigger": "ornate_print_dialog",
+  "decisions": ["attach", "standalone", "wait", "bill_only"],
+  "waitSeconds": 60,
+  "invariants": [
+    "No document bundle is attached without an explicit biller decision.",
+    "Timed-out wait resolves to bill_only.",
+    "Physical-print success is acknowledged only by the existing router after spool submission succeeds."
+  ]
+}

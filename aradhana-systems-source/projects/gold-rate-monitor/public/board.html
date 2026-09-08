@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rate Board — Aradhana Jewellers</title>
+<meta name="description" content="Gold 24/22/18 and Silver Pure/Ornament, corner to corner.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@700&family=Inter:wght@600;700;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden}
+  body{
+    --blue:#23519d; --blue-deep:#122c5c;
+    --gold:#cca137; --gold-lite:#f7ca5b;
+    --white:#ffffff; --ok:#28b06a; --warn:#fbbf24; --bad:#f87171;
+    font-family:Inter,system-ui,sans-serif;
+    background:linear-gradient(165deg,var(--blue) 0%,var(--blue-deep) 100%);
+    color:var(--white);
+  }
+  .num{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+  .label{font-family:Inter,sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:.09em}
+  .rs{color:#f7ca5b;vertical-align:.18em}
+
+  .status{
+    position:fixed;top:16px;right:20px;display:flex;align-items:center;gap:7px;z-index:6;
+    font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:rgba(255,255,255,.78);
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none}
+  .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
+  .brandmark{
+    position:fixed;bottom:14px;left:20px;z-index:6;
+    font-family:'Cormorant Garamond',serif;font-weight:700;font-size:13px;
+    letter-spacing:.16em;color:#f7ca5b;text-transform:uppercase;
+  }
+
+  #picker{
+    position:fixed;top:14px;left:18px;z-index:6;
+    font-size:11px;color:rgba(255,255,255,.55);background:rgba(0,0,0,.22);
+    border:1px solid rgba(247,202,91,.3);border-radius:8px;padding:3px 8px;
+    display:flex;align-items:center;gap:6px;
+  }
+  #picker select{
+    background:transparent;color:rgba(255,255,255,.85);border:none;font-size:11px;
+    font-family:Inter,sans-serif;letter-spacing:.04em;outline:none;
+  }
+  #picker select option{background:#173a75;color:#fff}
+
+  .board{position:absolute;inset:0;display:none;width:100%;height:100%}
+  body[data-layout="fullbleed"] #board-fullbleed{display:flex;flex-direction:column}
+  body[data-layout="diagonal"] #board-diagonal{display:block}
+  body[data-layout="medallion"] #board-medallion{display:flex}
+  body[data-layout="bands"] #board-bands{display:flex}
+  body[data-layout="waterfall"] #board-waterfall{display:block}
+
+  /* ---------------- Full-Bleed Stack ---------------- */
+  #board-fullbleed .row{flex:1;display:flex;align-items:center;justify-content:space-between;padding:0 60px;border-bottom:1px solid rgba(255,255,255,.16)}
+  #board-fullbleed .row:last-child{border-bottom:none}
+  #board-fullbleed .row.tint{background:rgba(247,202,91,.13);border-bottom:1px solid rgba(247,202,91,.3)}
+  #board-fullbleed .row.dim{background:rgba(255,255,255,.05)}
+  #board-fullbleed .label{font-size:30px;color:#f7ca5b}
+  #board-fullbleed .num{font-size:76px;color:#fff}
+  #board-fullbleed .row.hero .label{font-size:32px}
+  #board-fullbleed .row.hero .num{font-size:86px;color:#f7ca5b}
+
+  /* ---------------- Diagonal Cascade ---------------- */
+  #board-diagonal{position:relative;width:100%;height:100%}
+  #board-diagonal .split{position:absolute;inset:0;background:rgba(255,255,255,.055);clip-path:polygon(0 0,58% 0,34% 100%,0 100%)}
+  #board-diagonal .seam{position:absolute;top:0;bottom:0;left:33%;width:5px;background:linear-gradient(180deg,#f7ca5b,#cca137);transform:skewX(-13deg);z-index:2}
+  #board-diagonal .rows{position:relative;z-index:2;display:flex;flex-direction:column;justify-content:center;height:100%;gap:15px;padding:66px 0}
+  #board-diagonal .row{display:flex;align-items:baseline;gap:26px}
+  #board-diagonal .label{font-size:22px;width:200px;color:rgba(255,255,255,.82)}
+  #board-diagonal .num{font-size:54px;color:#fff}
+  #board-diagonal .row.hero .label{font-size:24px;color:#f7ca5b}
+  #board-diagonal .row.hero .num{font-size:62px;color:#f7ca5b}
+
+  /* ---------------- Medallion Cluster ---------------- */
+  #board-medallion{flex-direction:column;align-items:center;justify-content:center;gap:22px;padding-top:20px;width:100%;height:100%;background:linear-gradient(165deg,#23519d,#122c5c)}
+  #board-medallion .tier{display:flex;gap:24px}
+  #board-medallion .medallion{
+    border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    background:radial-gradient(circle at 38% 32%,#2c5fb0,#122c5c 78%);border:3px solid #cca137;
+    box-shadow:inset 0 0 0 1px rgba(247,202,91,.35),0 10px 24px rgba(0,0,0,.3);
+  }
+  #board-medallion .tier.gold .medallion{width:236px;height:236px}
+  #board-medallion .tier.silver .medallion{width:270px;height:270px}
+  #board-medallion .label{font-size:17px;color:#f7ca5b}
+  #board-medallion .tier.silver .label{font-size:18px;color:#dfe4ee}
+  #board-medallion .tier.gold .num{font-size:38px}
+  #board-medallion .tier.silver .num{font-size:42px}
+
+  /* ---------------- Metal Bands ---------------- */
+  #board-bands{width:100%;height:100%}
+  #board-bands .band{display:flex;flex-direction:column;padding:70px 0 40px}
+  #board-bands .band-gold{flex:1.5;background:linear-gradient(165deg,#cca137,#8a6c22)}
+  #board-bands .band-silver{flex:1;background:linear-gradient(165deg,#23519d,#122c5c)}
+  #board-bands .band-title{text-align:center;margin-bottom:18px;letter-spacing:.22em;font-size:20px}
+  #board-bands .band-gold .band-title{color:#3a2c0d}
+  #board-bands .band-silver .band-title{color:#f7ca5b}
+  #board-bands .rows-gold{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;padding:0 44px}
+  #board-bands .rows-gold .row{display:flex;align-items:baseline;justify-content:space-between}
+  #board-bands .rows-gold .label{font-size:20px;color:#3a2c0d}
+  #board-bands .rows-gold .num{font-size:56px;color:#241a06}
+  #board-bands .rows-gold .num .rs{color:#5c4413}
+  #board-bands .rows-silver{flex:1;display:flex;flex-direction:column;justify-content:space-evenly;padding:0 40px}
+  #board-bands .rows-silver .label{font-size:18px;color:#dfe4ee;margin-bottom:6px}
+  #board-bands .rows-silver .num{font-size:46px;color:#fff}
+
+  /* ---------------- Waterfall Cascade ---------------- */
+  #board-waterfall{position:relative;width:100%;height:100%;background:radial-gradient(1000px 500px at 100% 0%,rgba(247,202,91,.10),transparent 60%),linear-gradient(165deg,#1a3f7a,#0e2249)}
+  #board-waterfall .rows{height:100%;display:flex;flex-direction:column;justify-content:center;gap:16px;padding:56px 0 56px 54px}
+  #board-waterfall .row{display:flex;align-items:baseline;gap:20px;border-bottom:2px solid rgba(247,202,91,.4);padding-bottom:8px}
+  #board-waterfall .row:last-child{border-bottom:none}
+  #board-waterfall .label{color:#f7ca5b}
+  #board-waterfall .num{color:#fff;line-height:1}
+</style>
+</head>
+<body data-layout="fullbleed">
+
+  <div id="picker">
+    Layout
+    <select id="layoutSelect">
+      <option value="fullbleed">Full-Bleed Stack</option>
+      <option value="diagonal">Diagonal Cascade</option>
+      <option value="medallion">Medallion Cluster</option>
+      <option value="bands">Metal Bands</option>
+      <option value="waterfall">Waterfall Cascade</option>
+    </select>
+  </div>
+
+  <div class="status"><span class="dot" id="dot"></span><span id="livetext">Connecting…</span></div>
+  <div class="brandmark">Aradhana Jewellers</div>
+
+  <!-- ============================================================ Full-Bleed Stack -->
+  <div class="board" id="board-fullbleed">
+    <div class="row dim"><div class="label">Gold 24K</div><div class="num" id="fb-g24"><span class="rs">₹</span>—</div></div>
+    <div class="row tint hero"><div class="label">Gold 22K</div><div class="num" id="fb-g22"><span class="rs">₹</span>—</div></div>
+    <div class="row dim"><div class="label">Gold 18K</div><div class="num" id="fb-g18"><span class="rs">₹</span>—</div></div>
+    <div class="row"><div class="label" style="color:#dfe4ee">Silver Pure</div><div class="num" id="fb-sp"><span class="rs">₹</span>—</div></div>
+    <div class="row"><div class="label" style="color:#dfe4ee">Silver Ornament</div><div class="num" id="fb-so"><span class="rs">₹</span>—</div></div>
+  </div>
+
+  <!-- ============================================================ Diagonal Cascade -->
+  <div class="board" id="board-diagonal">
+    <div class="split"></div>
+    <div class="seam"></div>
+    <div class="rows">
+      <div class="row" style="padding-left:56px"><div class="label">Gold 24K</div><div class="num" id="dg-g24"><span class="rs">₹</span>—</div></div>
+      <div class="row hero" style="padding-left:120px"><div class="label">Gold 22K</div><div class="num" id="dg-g22"><span class="rs">₹</span>—</div></div>
+      <div class="row" style="padding-left:184px"><div class="label">Gold 18K</div><div class="num" id="dg-g18"><span class="rs">₹</span>—</div></div>
+      <div class="row" style="padding-left:248px"><div class="label">Silver Pure</div><div class="num" id="dg-sp"><span class="rs">₹</span>—</div></div>
+      <div class="row" style="padding-left:300px"><div class="label" style="width:210px">Silver Ornament</div><div class="num" id="dg-so"><span class="rs">₹</span>—</div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ Medallion Cluster -->
+  <div class="board" id="board-medallion">
+    <div class="tier gold">
+      <div class="medallion"><div class="label">Gold 24K</div><div class="num" id="md-g24"><span class="rs">₹</span>—</div></div>
+      <div class="medallion"><div class="label">Gold 22K</div><div class="num" id="md-g22"><span class="rs">₹</span>—</div></div>
+      <div class="medallion"><div class="label">Gold 18K</div><div class="num" id="md-g18"><span class="rs">₹</span>—</div></div>
+    </div>
+    <div class="tier silver">
+      <div class="medallion"><div class="label">Silver Pure</div><div class="num" id="md-sp"><span class="rs">₹</span>—</div></div>
+      <div class="medallion"><div class="label">Silver Ornament</div><div class="num" id="md-so"><span class="rs">₹</span>—</div></div>
+    </div>
+  </div>
+
+  <!-- ============================================================ Metal Bands -->
+  <div class="board" id="board-bands">
+    <div class="band band-gold">
+      <div class="band-title">Gold</div>
+      <div class="rows-gold">
+        <div class="row"><div class="label">24K</div><div class="num" id="bd-g24"><span class="rs">₹</span>—</div></div>
+        <div class="row"><div class="label">22K</div><div class="num" id="bd-g22"><span class="rs">₹</span>—</div></div>
+        <div class="row"><div class="label">18K</div><div class="num" id="bd-g18"><span class="rs">₹</span>—</div></div>
+      </div>
+    </div>
+    <div class="band band-silver">
+      <div class="band-title">Silver</div>
+      <div class="rows-silver">
+        <div><div class="label">Pure</div><div class="num" id="bd-sp"><span class="rs">₹</span>—</div></div>
+        <div><div class="label">Ornament</div><div class="num" id="bd-so"><span class="rs">₹</span>—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ Waterfall Cascade -->
+  <div class="board" id="board-waterfall">
+    <div class="rows">
+      <div class="row" style="width:940px"><div class="label" style="font-size:24px;width:210px">Gold 24K</div><div class="num" id="wf-g24" style="font-size:74px"><span class="rs">₹</span>—</div></div>
+      <div class="row" style="width:876px;margin-left:24px"><div class="label" style="font-size:22px;width:195px">Gold 22K</div><div class="num" id="wf-g22" style="font-size:66px"><span class="rs">₹</span>—</div></div>
+      <div class="row" style="width:812px;margin-left:48px"><div class="label" style="font-size:20px;width:180px">Gold 18K</div><div class="num" id="wf-g18" style="font-size:58px"><span class="rs">₹</span>—</div></div>
+      <div class="row" style="width:748px;margin-left:72px"><div class="label" style="font-size:19px;width:180px;color:#dfe4ee">Silver Pure</div><div class="num" id="wf-sp" style="font-size:52px"><span class="rs">₹</span>—</div></div>
+      <div class="row" style="width:684px;margin-left:96px"><div class="label" style="font-size:18px;width:200px;color:#dfe4ee">Silver Ornament</div><div class="num" id="wf-so" style="font-size:48px"><span class="rs">₹</span>—</div></div>
+    </div>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const inr = (n) => {
+  if (n == null) return '—';
+  return Math.round(Number(n)).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+};
+const setRs = (el, value) => { el.innerHTML = '<span class="rs">₹</span>' + inr(value); };
+
+const VALID_LAYOUTS = ['fullbleed', 'diagonal', 'medallion', 'bands', 'waterfall'];
+const LAYOUT_KEY = 'aradhana-board-layout';
+const select = $('layoutSelect');
+const saved = localStorage.getItem(LAYOUT_KEY);
+if (saved && VALID_LAYOUTS.includes(saved)) {
+  document.body.setAttribute('data-layout', saved);
+  select.value = saved;
+}
+function applyLayout(layout) {
+  if (!VALID_LAYOUTS.includes(layout)) return;
+  document.body.setAttribute('data-layout', layout);
+  select.value = layout;
+  localStorage.setItem(LAYOUT_KEY, layout);
+}
+select.addEventListener('change', () => {
+  applyLayout(select.value);
+  fetch('/api/board-control', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ layout: select.value }),
+  }).catch(() => {});
+});
+
+let lastRefreshToken = null;
+function applyServerControl(boardControl) {
+  if (!boardControl) return;
+  if (boardControl.layout && boardControl.layout !== select.value) applyLayout(boardControl.layout);
+  if (lastRefreshToken === null) {
+    lastRefreshToken = boardControl.refreshToken;
+  } else if (boardControl.refreshToken !== lastRefreshToken) {
+    location.reload();
+  }
+}
+
+function render(s) {
+  const live = s.live;
+  const status = live ? live.status : 'STARTING';
+  const dot = $('dot');
+  dot.className = 'dot' + (status === 'BLOCKED' ? ' bad' : status === 'VERIFIED_WITH_WARNINGS' ? ' warn' : '');
+  $('livetext').textContent =
+    status === 'BLOCKED' ? 'Held' : status === 'VERIFIED' ? 'Live' : status === 'VERIFIED_WITH_WARNINGS' ? 'Live' : 'Connecting…';
+
+  const p = s.published;
+  if (p) {
+    const g18 = (p.variants || []).find((v) => v.key === '18kt');
+    const g18Rate = g18 ? g18.rate : null;
+    const PREFIXES = ['fb', 'dg', 'md', 'bd', 'wf'];
+    for (const pre of PREFIXES) {
+      setRs($(pre + '-g24'), p.rate24kt);
+      setRs($(pre + '-g22'), p.rate22kt);
+      setRs($(pre + '-g18'), g18Rate);
+    }
+  }
+
+  const sil = s.silver && s.silver.published;
+  if (sil) {
+    const PREFIXES = ['fb', 'dg', 'md', 'bd', 'wf'];
+    for (const pre of PREFIXES) {
+      setRs($(pre + '-sp'), sil.pure);
+      setRs($(pre + '-so'), sil.ornament);
+    }
+  }
+
+  applyServerControl(s.boardControl);
+}
+
+// Plain 1-second polling instead of SSE. The iPad Mini 2 is stuck on iOS 12,
+// whose old Safari does not push EventSource updates reliably (observed
+// refreshing every 5-7s instead of every 1s even though the server and
+// network both deliver on time) - a fetch loop is far more broadly
+// compatible and matches the "fetch every second" requirement directly.
+// A stale rate frozen on screen is indistinguishable from a live one to
+// anyone glancing at the board - worse than showing nothing. The instant
+// this device's own poll fails, every figure goes to 0 rather than holding
+// the last good value, so staff/customers can never mistake an offline
+// board for a live one (2026-09-04).
+function zeroOut() {
+  const PREFIXES = ['fb', 'dg', 'md', 'bd', 'wf'];
+  for (const pre of PREFIXES) {
+    for (const suf of ['g24', 'g22', 'g18', 'sp', 'so']) {
+      const el = $(pre + '-' + suf);
+      if (el) setRs(el, 0);
+    }
+  }
+}
+
+let consecutiveFailures = 0;
+function poll() {
+  fetch('/api/rate', { cache: 'no-store' })
+    .then((r) => r.json())
+    .then((s) => {
+      consecutiveFailures = 0;
+      render(s);
+    })
+    .catch(() => {
+      consecutiveFailures++;
+      zeroOut();
+      $('dot').className = 'dot bad';
+      $('livetext').textContent = consecutiveFailures >= 3 ? 'Reconnecting…' : 'Offline';
+    });
+}
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>

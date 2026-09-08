@@ -1,0 +1,133 @@
+{
+    "year": 2030,
+    "status": "ACTIVE",
+    "generated_at": "2026-09-04",
+    "holidays": {
+        "2030-01-26": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-02-19": {
+            "name": "Chhatrapati Shivaji Maharaj Jayanti",
+            "type": "FIXED"
+        },
+        "2030-04-14": {
+            "name": "Dr. Babasaheb Ambedkar Jayanti",
+            "type": "FIXED"
+        },
+        "2030-05-01": {
+            "name": "Maharashtra Day",
+            "type": "FIXED"
+        },
+        "2030-08-15": {
+            "name": "Independence Day",
+            "type": "FIXED"
+        },
+        "2030-10-02": {
+            "name": "Gandhi Jayanti",
+            "type": "FIXED"
+        },
+        "2030-12-25": {
+            "name": "Christmas",
+            "type": "FIXED"
+        },
+        "2030-01-12": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-02-09": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-02-23": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-03-09": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-03-23": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-04-13": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-04-27": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-05-11": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-05-25": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-06-08": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-06-22": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-07-13": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-07-27": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-08-10": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-08-24": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-09-14": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-09-28": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-10-12": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-10-26": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-11-09": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-11-23": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-12-14": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        },
+        "2030-12-28": {
+            "name": "Bank Holiday (Saturday)",
+            "type": "BANK_OPERATIONAL"
+        }
+    },
+    "validation_warnings": [
+        "Layer 3 (Movable Festivals) missing. Please update manually.",
+        "Verify Holi, Diwali, Eid, and other movable dates."
+    ],
+    "approved_by": "Kuldeep",
+    "approved_at": "2026-09-04"
+}

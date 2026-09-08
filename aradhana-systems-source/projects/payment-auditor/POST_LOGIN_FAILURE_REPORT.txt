@@ -1,0 +1,136 @@
+P0 POST-LOGIN LIVE DATA FAILURE REPORT
+
+SCOPE
+- Code was not modified.
+- Backend files were not touched.
+- Current in-app browser tab was at http://127.0.0.1:8000/login during inspection, so live post-login browser Network entries were not available from the selected tab.
+- Failing requests were reproduced with direct HTTP probes against the running backend and compared with frontend request code.
+
+WORKING LOGIN REQUEST
+URL=http://127.0.0.1:8000/api/auth/login
+METHOD=POST
+AUTH_HEADER_REQUIRED=no; /api/auth/* is public in backend middleware.
+PAYLOAD_SHAPE={"employee_id": string, "password": string}
+RESULT=Login and OTP now work.
+
+FAILED REQUESTS WITHOUT SESSION HEADER
+URL=http://127.0.0.1:8000/api/dashboard/live
+STATUS=401
+RESPONSE={"detail":"Authentication required. Please login."}
+
+URL=http://127.0.0.1:8000/api/invoices/live-feed
+STATUS=401
+RESPONSE={"detail":"Authentication required. Please login."}
+
+URL=http://127.0.0.1:8000/api/admin/ingestion-status
+STATUS=401
+RESPONSE={"detail":"Authentication required. Please login."}
+
+URL=http://127.0.0.1:8000/api/reconciliations
+STATUS=401
+RESPONSE={"detail":"Authentication required. Please login."}
+
+URL=http://127.0.0.1:8000/api/reports/owner
+STATUS=401
+RESPONSE={"detail":"Authentication required. Please login."}
+
+URL=http://127.0.0.1:8000/api/reports/payment-bifurcation
+STATUS=200
+RESPONSE=Public endpoint returns JSON payment bifurcation data.
+
+REQUESTS WITH VALID EXISTING OWNER SESSION TOKEN
+URL=http://127.0.0.1:8000/api/dashboard/live
+STATUS=200
+RESPONSE={"totalBillsToday":0,"importedToday":0,"pendingPreviousDays":42,"verified":0,"pendingReview":47,...,"invoiceWatcherStatus":"OFFLINE","emailPollerStatus":"IDLE","smsRelayStatus":"IDLE","is_owner":true}
+
+URL=http://127.0.0.1:8000/api/invoices/live-feed
+STATUS=200
+RESPONSE=JSON invoice array returned.
+
+URL=http://127.0.0.1:8000/api/admin/ingestion-status
+STATUS=200
+RESPONSE={"watcher_running":false,"watch_path":"\\\\PC2\\AradhanaInvoicePDFs","path_exists":false,...}
+
+URL=http://127.0.0.1:8000/api/reconciliations
+STATUS=404
+RESPONSE={"detail":"Not Found"}
+
+URL=http://127.0.0.1:8000/api/reports/owner
+STATUS=404
+RESPONSE={"detail":"Not Found"}
+
+URL=http://127.0.0.1:8000/api/reports/payment-bifurcation
+STATUS=200
+RESPONSE=JSON payment bifurcation data returned.
+
+FRONTEND REQUEST INSPECTION
+/api/dashboard/live
+- frontend/src/pages/DashboardPage.tsx requests this URL.
+- It sends an X-Session-Token header.
+- Header value is read from localStorage key aradhana_session_token.
+- Login stores token under localStorage key session_token.
+- Result: header is present by name but empty after normal login.
+- Failure class: missing/empty auth header caused by stale token key mapping.
+
+/api/invoices/live-feed
+- Same DashboardPage request batch.
+- Same X-Session-Token behavior.
+- Result: empty token after normal login.
+- Failure class: missing/empty auth header caused by stale token key mapping.
+
+/api/admin/ingestion-status
+- Same DashboardPage request batch.
+- Same X-Session-Token behavior.
+- Result: empty token after normal login.
+- Failure class: missing/empty auth header caused by stale token key mapping.
+
+/api/reconciliation/*
+- frontend/src/pages/ReconciliationQueuePage.tsx calls hardcoded http://127.0.0.1:8000/api/reconciliations.
+- It does not send X-Session-Token.
+- Without token: backend middleware returns 401.
+- With valid token: backend returns 404.
+- No matching /api/reconciliations route was found in inspected backend route definitions.
+- Failure class: missing auth header plus stale/unmapped backend route.
+
+/api/reports/*
+- frontend/src/api/client.ts getOwnerReport() calls /api/reports/owner with getHeaders(), which uses localStorage key session_token.
+- Therefore X-Session-Token should be present for /api/reports/owner after login.
+- With valid token: /api/reports/owner still returns 404.
+- backend/api_routes.py defines router.get("/reports/owner"), and backend/review_api.py includes the router without an /api prefix.
+- Effective route appears to be /reports/owner, not /api/reports/owner.
+- frontend/src/pages/ReportsPage.tsx also calls /api/reports/payment-bifurcation directly without auth header; that route is public and returns 200.
+- Failure class for owner report: wrong API URL / stale route mapping, not missing auth.
+
+X-SESSION-TOKEN VERIFICATION
+- Login stores localStorage key: session_token.
+- ProtectedRoute checks localStorage key: session_token.
+- getHeaders() sends X-Session-Token from localStorage key: session_token.
+- DashboardPage fetchData() sends X-Session-Token from localStorage key: aradhana_session_token.
+- ReconciliationQueuePage sends no X-Session-Token at all.
+- Reports owner request sends X-Session-Token via getHeaders(), but its URL is unmapped as /api/reports/owner.
+
+WORKING LOGIN VS FAILING REQUESTS
+- Login works because /api/auth/login is public and does not require X-Session-Token.
+- Dashboard live/admin endpoints are protected and require X-Session-Token.
+- The dashboard request header name exists, but the value is empty because it reads a stale localStorage key.
+- Reconciliation is protected but sends no token and also targets a missing /api/reconciliations route.
+- Owner report sends the correct token header path through getHeaders(), but targets /api/reports/owner while backend router defines /reports/owner.
+
+FAILURE CLASSIFICATION
+- missing auth header: yes, for DashboardPage live/admin requests due empty token value from aradhana_session_token.
+- missing auth header: yes, for ReconciliationQueuePage because no X-Session-Token is sent.
+- wrong API URL: yes, for /api/reports/owner; backend route is mounted without /api prefix.
+- proxy issue: no evidence. Current browser origin is http://127.0.0.1:8000 and backend responds directly.
+- backend exception: no evidence in captured responses. Captured failures are 401 or 404 JSON responses.
+- stale response mapping: yes, DashboardPage uses stale token key; ReportsPage/client uses stale route expectation for owner report; ReconciliationQueuePage uses stale/unmapped route.
+
+ROOT CAUSE
+Post-login failures are not caused by login/OTP, Vite proxy, or backend availability. They are caused by inconsistent post-login frontend request wiring:
+1. DashboardPage reads aradhana_session_token while login writes session_token, causing protected dashboard live endpoints to receive an empty X-Session-Token.
+2. ReconciliationQueuePage calls /api/reconciliations without any X-Session-Token and the route is not present even with a valid token.
+3. getOwnerReport calls /api/reports/owner, but backend api_routes.py defines /reports/owner and review_api.py includes that router without an /api prefix.
+
+MINIMAL FIX AREAS TO REVIEW NEXT
+- DashboardPage token key should align with login/App/getHeaders session_token.
+- ReconciliationQueuePage should use shared API base/header handling and target an existing backend route.
+- Owner report route should be aligned either by frontend URL or backend router prefix.

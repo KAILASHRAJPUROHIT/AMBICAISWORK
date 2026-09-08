@@ -1,0 +1,56 @@
+# LAN Single Instance & Autostart Enforcement Rules
+
+## 1. Objective
+To configure the Aradhana Auditor application as a robust, auto-starting production server on a dedicated machine. The system must enforce a strict single-instance policy for both production and development environments to prevent resource conflicts and data corruption.
+
+## 2. Network & Port Allocation
+The following port allocation is strictly enforced. The system will not use fallback or alternative ports.
+
+### Production Environment
+- **Backend:** `8000`
+- **Frontend:** `5173`
+- **Access:** LAN clients access the system via `http://<SERVER_LAN_IP>:5173`.
+
+### Development Environment
+- **Backend:** `8010`
+- **Frontend:** `5183`
+- **Access:** Local-only at `http://localhost:5183`.
+
+## 3. Single-Instance Enforcement
+The core logic for preventing duplicate processes is implemented in `scripts/aradhana_service_control.ps1`.
+
+### 3.1. Process Health-Checking & Adoption
+When a `start` command is issued, the script first checks if the required ports are in use.
+
+- **If a port is occupied by an unmanaged process, the script performs a health check:**
+  - **Backend (8000/8010):** A `GET` request is sent to the `/health` and `/api/version` endpoints. The process is deemed healthy only if both endpoints return a `200 OK` status and valid, expected content.
+  - **Frontend (5173/5183):** A `GET` request is sent to the root `/`. The process is deemed healthy if it returns a `200 OK` status and the HTML content includes the marker `<title>Aradhana Payment Auditor</title>`.
+
+- **If the health check passes,** the existing process is "adopted." The launcher script writes the process ID (PID) to the appropriate `.pid` file and exits gracefully, preventing a duplicate launch.
+
+- **If the health check fails,** the script assumes the port is occupied by an unknown or unhealthy process. It will abort with an error message.
+
+### 3.2. Managed Processes
+If a port is occupied by a process whose PID matches the one in the corresponding `.pid` file (a "managed" process), the script will also exit gracefully.
+
+## 4. Production Autostart on Windows Login
+The production environment is configured to launch automatically when a user logs into the server machine.
+
+- **Implementation:** This is achieved via a Windows Scheduled Task.
+- **Task Name:** `AradhanaAuditorProductionAutostart`
+- **Trigger:** "At log on" for any user.
+- **Action:** The task executes the main launcher script (`scripts/aradhana_service_control.ps1`) with the `start-prod` argument.
+- **Visibility:** The task is configured to run `powershell.exe` with the `-WindowStyle Hidden` flag, ensuring no command or PowerShell windows are visible on startup.
+
+### 4.1. Management Scripts
+Two batch scripts are provided for easy management of the autostart task:
+- **`install_production_autostart.bat`:** Creates or updates the scheduled task. Requires administrator privileges.
+- **`uninstall_production_autostart.bat`:** Deletes the scheduled task. Requires administrator privileges.
+
+## 5. Development Environment Isolation
+The development environment is fully isolated from production:
+- It uses separate ports (8010/5183).
+- It uses a separate, isolated database (`aradhana_dev_isolated.db`).
+- It writes logs to a separate `logs/dev` directory.
+- It uses a separate `data/dev/InvoicePDFs` folder for invoice processing.
+- The launcher logic explicitly prevents the development server from accessing the production database.

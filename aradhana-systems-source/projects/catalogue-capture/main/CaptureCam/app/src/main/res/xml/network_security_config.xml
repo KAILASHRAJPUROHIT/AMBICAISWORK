@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  This app only ever talks to the Aradhana capture server on the local LAN
+  (a self-signed HTTPS cert, same one the browser capture tool already asks
+  the operator to click through). cleartextTrafficPermitted is enabled here
+  too as a fallback path; see UploadClient.kt for how the self-signed cert
+  is actually trusted.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

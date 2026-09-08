@@ -1,0 +1,27 @@
+{
+  "$schema": "./ais.devices.schema.json",
+  "schema_version": 1,
+  "devices": [
+    {
+      "id": "home-laptop",
+      "display_name": "Home Laptop",
+      "roles": ["development", "AIS control plane", "payment console", "local OCR"],
+      "lan_addresses": ["192.168.0.12"],
+      "approved_components": ["payment-notifier", "ais-ota", "catalogue-capture", "gold-rate-monitor"]
+    },
+    {
+      "id": "billing-pc2",
+      "display_name": "Billing PC 2",
+      "roles": ["Ornate billing", "print routing", "document workflow"],
+      "lan_addresses": ["192.168.0.13"],
+      "approved_components": ["print-router", "document-print-workflow"]
+    },
+    {
+      "id": "dell-server",
+      "display_name": "Dell Server",
+      "roles": ["QR print queue", "document retention", "LAN relay"],
+      "lan_addresses": [],
+      "approved_components": ["qr-print-server"]
+    }
+  ]
+}

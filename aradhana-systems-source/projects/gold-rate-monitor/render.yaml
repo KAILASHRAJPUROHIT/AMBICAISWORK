@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: aradhana-gold-monitor
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run monitor
+    envVars:
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: "true"
+    autoDeploy: true

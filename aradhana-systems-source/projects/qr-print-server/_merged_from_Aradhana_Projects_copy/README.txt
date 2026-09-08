@@ -1,0 +1,1 @@
+This is the leftover uncommitted diff from the C:\Aradhana Projects\aradhana_qr_print_server_v3 duplicate, kept in case it's needed. The duplicate folder itself was removed on 2026-08-28 after confirming its commit history was already contained in this copy (66 vs 63 commits).

@@ -1,0 +1,18 @@
+services:
+  ais-gateway:
+    build:
+      context: ..
+      dockerfile: ais-cloud/gateway/Dockerfile
+    environment:
+      AIS_ENVIRONMENT: development
+      AIS_DATABASE_URL: sqlite:////var/lib/ais/ais-cloud.db
+      AIS_AGENT_TOKEN: change-before-use
+      AIS_OWNER_TOKEN: change-before-use
+    ports:
+      - "127.0.0.1:8180:8080"
+    volumes:
+      - ais_gateway_data:/var/lib/ais
+    restart: unless-stopped
+
+volumes:
+  ais_gateway_data:

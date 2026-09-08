@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIS Platform Registry",
+  "type": "object",
+  "required": ["schema_version", "organization", "platform", "projects", "plugins", "services"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "organization": {"const": "Aradhana Jewellers"},
+    "platform": {"const": "AIS"},
+    "projects": {"type": "array", "items": {"$ref": "#/$defs/project"}},
+    "plugins": {"type": "array", "items": {"$ref": "#/$defs/plugin"}},
+    "services": {"type": "array", "items": {"$ref": "#/$defs/service"}}
+  },
+  "$defs": {
+    "project": {
+      "type": "object",
+      "required": ["id", "path", "display_name", "role", "owner_device", "ota_target"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"},
+        "path": {"type": "string", "pattern": "^C:\\\\AradhanaSystems\\\\projects\\\\"},
+        "display_name": {"type": "string"},
+        "role": {"type": "string"},
+        "owner_device": {"type": "string"},
+        "ota_target": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$"}
+      }
+    },
+    "plugin": {
+      "type": "object",
+      "required": ["id", "path", "contract", "host", "ota_target"],
+      "properties": {
+        "id": {"type": "string"},
+        "path": {"type": "string", "pattern": "^C:\\\\AradhanaSystems\\\\platform\\\\plugins\\\\"},
+        "contract": {"type": "string"},
+        "host": {"type": "string"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "health": {"type": "string", "format": "uri"},
+        "ota_target": {"type": "string"}
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": ["id", "host", "port", "health", "scope"],
+      "properties": {
+        "id": {"type": "string"},
+        "host": {"type": "string"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "health": {"type": "string", "format": "uri"},
+        "scope": {"enum": ["loopback", "LAN"]}
+      }
+    }
+  }
+}

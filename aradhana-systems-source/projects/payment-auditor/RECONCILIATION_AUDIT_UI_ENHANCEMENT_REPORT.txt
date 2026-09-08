@@ -1,0 +1,172 @@
+RECONCILIATION AUDIT UI ENHANCEMENT REPORT
+
+Branch:
+- feature/reconciliation-audit-ui
+
+Scope:
+- Read-only reconciliation display enhancement.
+- No auth, dashboard, LAN, escalation, or financial record mutation changes.
+- No auto-confirm or auto-approve logic added.
+
+Files changed:
+- backend/review_api.py
+- frontend/src/api/client.ts
+- frontend/src/pages/ReconciliationQueuePage.tsx
+- frontend/src/components/ReconciliationTable.tsx
+- frontend/src/components/InvoiceDetailDrawer.tsx
+- frontend/src/types.ts
+- tests/test_reconciliation_real_endpoint.py
+
+Backend endpoint:
+- GET /api/reconciliation/open remains the only reconciliation data endpoint used by the frontend.
+- Response remains an authenticated JSON array.
+- Query now includes all operational bills by default, including verified/Green fully matched rows.
+- Excludes only TEST-*, ARCH-*, HARDENING-*, and is_test_data=true rows.
+- Added response diagnostics headers:
+  - X-Reconciliation-Total-Considered
+  - X-Reconciliation-Rows-Returned
+  - X-Reconciliation-Excluded-Test-Prefix
+  - X-Reconciliation-Excluded-Archive-Prefix
+  - X-Reconciliation-Excluded-Hardening-Prefix
+  - X-Reconciliation-Excluded-Test-Data
+- Added read-only fields:
+  - bill_id
+  - invoice_pdf_url
+  - invoice_pdf_available
+  - invoice_timestamp
+  - invoice_timestamp_source
+  - invoice_time_recorded
+  - pdf_mtime
+  - has_special_payment_flag
+  - payment_breakdown[]
+- Payment segments now include existing evidence metadata from SMS/email/bank records when matched by UTR.
+- Payment proof matching is deterministic:
+  - UTR/reference exact match first
+  - exact amount plus 24-hour timestamp proximity fallback
+  - source stays Manual only for genuinely manual/special modes
+  - otherwise source is Not Recorded when no evidence exists
+- No proof links are fabricated. proof_url is populated only for existing SMSAlert or BankAlert rows.
+- Added read-only preview endpoint:
+  - GET /api/reconciliation/proof/sms/{id}
+  - GET /api/reconciliation/proof/bank/{id}
+  - Requires X-Session-Token
+  - Returns a plain-text preview of stored raw SMS/bank/email evidence.
+
+Frontend filters added:
+- Bill no
+- Customer
+- Date range
+- Invoice amount min/max
+- Bank amount min/max
+- Difference type: clear, partial, overpaid, pending
+- Payment mode
+- Confidence
+- Status
+- Advance / old gold / customer purchase flag
+
+Sorting added:
+- Bill No
+- Customer
+- Invoice Date
+- Invoice Amount
+- Bank Amount
+- Difference
+- Mode
+- Confidence
+- Status
+
+View Invoice:
+- Reconciliation rows now include a compact Invoice action column.
+- If invoice_pdf_url and bill_id are present, the row shows "View PDF".
+- The drawer Invoice Record section shows "View Invoice PDF".
+- Invoice PDFs are opened with the same authenticated blob flow used by Dashboard:
+  - GET /api/invoices/pdf/{bill_id}
+  - X-Session-Token header included
+- If invoice proof is unavailable, the UI shows "Invoice proof not recorded."
+
+Payment proof timeline:
+- Drawer now shows each payment segment separately when backend evidence exists.
+- Per segment fields:
+  - amount
+  - payment type
+  - timestamp
+  - UTR/reference
+  - evidence source
+  - proof link if available
+- Evidence source is shown as SMS, Email, Bank, or Manual.
+- Existing SMS evidence shows "View SMS Proof".
+- Existing email evidence shows "View Email Proof".
+- Existing bank alert evidence shows "View Bank Alert".
+- Payment proof links now open an in-page modal instead of a new browser tab.
+- The modal shows:
+  - source type
+  - timestamp
+  - UTR/reference
+  - amount
+  - linked bill
+  - linked customer
+  - raw SMS/email/bank alert text
+- Modal actions:
+  - Close
+  - Copy
+- No edit or delete actions are present.
+- If no proof URL exists, drawer shows "Payment proof not recorded."
+- If no segment-level data exists, drawer shows "Payment proof not recorded."
+
+Loading timeout:
+- Reconciliation fetch now uses AbortController with a 15 second timeout.
+- Timeout message is "Reconciliation request timed out. Please retry."
+- Loading is always cleared in finally.
+- Error state includes a Retry button.
+- No fallback to /reviews/open was added.
+
+Timestamps:
+- Drawer now shows invoice date and invoice timestamp separately.
+- Payment timeline shows each segment timestamp.
+- Invoice timestamp uses the best available timestamp in this order:
+  - invoice_generated_at
+  - pdf_mtime
+  - created_at
+  - invoice_date
+- If the timestamp source is only invoice_date, UI shows date with "Time Not Recorded" instead of displaying a fake 12:00 AM.
+- Missing timestamps show "Not Recorded."
+- Fixed drawer spacing for the "Invoice Timestamp" label/value.
+
+Multi-payment handling:
+- Backend returns each Payment row as a separate payment_breakdown entry.
+- If no Payment rows exist but bill-level received amounts exist, backend returns read-only fallback segments for cash, bank, and card.
+- No stored payment, invoice, reconciliation, or status fields are modified.
+
+Safety rule:
+- If payment mode contains ADVANCE, OLD_GOLD_EXCHANGE, OLD GOLD, CUSTOMER PURCHASE, or BUYBACK:
+  - confidence displays as Medium
+  - status displays as ACCOUNTANT APPROVAL REQUIRED
+  - has_special_payment_flag is true
+  - CLEAR/Verified display is overridden
+- Normal exact UPI match can still display High confidence and Verified.
+
+Contract guard:
+- Frontend guard remains active and rejects placeholder/mock values:
+  - ---
+  - Review Item
+  - REVIEW
+  - mock_review_1
+  - pay_001
+  - bill_002
+
+Tests run:
+- python -m pytest tests/test_reconciliation_contract.py
+  - Result: 4 passed
+- python -m pytest tests/test_reconciliation_real_endpoint.py
+  - Result: 3 passed
+- cd frontend && npm run build
+  - Result: passed
+
+Browser verification:
+- Attempted to open http://127.0.0.1:8000/reconciliation in the in-app browser after the prior UI enhancement.
+- Browser redirected to http://127.0.0.1:8000/login.
+- Authenticated UI verification is still pending because no OWNER/accountant login + OTP session was available in the browser.
+
+Remaining issue:
+- Browser verification must be completed after logging in with an authorized OWNER/accountant account.
+- No commit has been made.

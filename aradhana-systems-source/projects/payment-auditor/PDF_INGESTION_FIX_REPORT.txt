@@ -1,0 +1,20 @@
+PDF Ingestion Fix Report
+
+Status: Fixed
+Date: 2026-06-04
+
+1. Root Cause:
+   The `backend/pdf_ingestion.py` module was attempting to import a missing function `send_red_alert_email` from `backend.email_notifier`.
+
+2. Fix Applied:
+   - Added `send_red_alert_email(subject: str, body: str)` wrapper function to `backend/email_notifier.py`.
+   - The wrapper maps the legacy call to the existing `send_security_alert(event_type: str, details: str)` function, passing `subject` as `event_type` and `body` as `details`.
+   - This restores backward compatibility without changing the reconciliation or notification logic.
+
+3. Secondary Fix Applied:
+   - Fixed `KeyError: parsed_confidence` in `backend/sms_poller.py` by using `.get("parsed_confidence", 0.0)` for safer key access.
+
+4. Verification:
+   - The `ImportError` is resolved.
+   - The `KeyError` in the SMS poller is resolved.
+   - Invoices should now ingest correctly without the previous blocker.

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AIS Device Inventory",
+  "type": "object",
+  "required": ["schema_version", "devices"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "devices": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "display_name", "roles", "lan_addresses", "approved_components"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{2,63}$"},
+          "display_name": {"type": "string"},
+          "roles": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "lan_addresses": {"type": "array", "items": {"type": "string"}},
+          "approved_components": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

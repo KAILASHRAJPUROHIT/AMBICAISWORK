@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aradhana Jewellers | Smart Scan & Print</title>
+    <!-- Cropper.js CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <style>
+        :root {
+            --navy: #06142E;
+            --navy-light: #112244;
+            --gold: #D4AF37;
+            --gold-light: #F3E5AB;
+            --bg-color: #F7F5F0;
+            --text-light: #FFFFFF;
+            --error: #E74C3C;
+            --success: #27AE60;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        /* UI Containers */
+        .container {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .header {
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        .header h1 {
+            color: var(--navy);
+            font-family: Georgia, serif;
+            font-size: 24px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .card {
+            background: var(--navy);
+            border: 2px solid var(--gold);
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(6, 20, 46, 0.2);
+            color: white;
+            position: relative;
+        }
+
+        .hidden { display: none !important; }
+
+        /* Debug UI */
+        .debug-info {
+            background: rgba(0,0,0,0.7);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+
+        /* Views */
+        #view-main, #view-camera, #view-crop, #view-loading { width: 100%; }
+
+        /* Main View Components */
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .btn-action {
+            background: var(--navy-light);
+            border: 1px solid var(--gold);
+            border-radius: 12px;
+            padding: 15px 10px;
+            color: var(--gold-light);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-action:active { background: rgba(212, 175, 55, 0.1); }
+        .btn-action i { font-size: 24px; }
+
+        /* Queue UI */
+        .queue-container {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 20px;
+            min-height: 100px;
+        }
+
+        .queue-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 14px;
+            color: var(--gold);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .queue-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 10px;
+        }
+
+        .queue-item {
+            position: relative;
+            aspect-ratio: 3/4;
+            background: #fff;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 1px solid var(--gold);
+        }
+
+        .queue-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .queue-item .pdf-icon {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: var(--navy);
+            background: #f0f0f0;
+        }
+
+        .btn-remove {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: var(--error);
+            color: white;
+            border: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        /* Camera View & Overlays */
+        .camera-wrapper {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: black;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .camera-container {
+            position: relative;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        #camera-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #detection-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+        }
+
+        .camera-guide {
+            position: absolute;
+            top: 20px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 10;
+            white-space: nowrap;
+        }
+
+        .camera-controls {
+            height: 120px;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 10;
+        }
+
+        .btn-shutter {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 5px solid white;
+            background: transparent;
+            position: relative;
+        }
+
+        .btn-shutter::after {
+            content: '';
+            position: absolute;
+            top: 5px; left: 5px; right: 5px; bottom: 5px;
+            background: white;
+            border-radius: 50%;
+        }
+
+        .btn-camera-cancel {
+            color: white;
+            background: transparent;
+            border: none;
+            font-size: 16px;
+        }
+
+        /* Crop View */
+        .crop-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .crop-container {
+            width: 100%;
+            aspect-ratio: 3/4;
+            background: #222;
+            overflow: hidden;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        #crop-image { max-width: 100%; }
+
+        /* Print Options */
+        .section-label {
+            font-size: 12px;
+            color: var(--gold);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: block;
+        }
+
+        .print-types {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .type-card input { display: none; }
+        .type-content {
+            background: var(--navy-light);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center;
+            transition: 0.2s;
+            cursor: pointer;
+        }
+        .type-card input:checked + .type-content {
+            border-color: var(--gold);
+            background: rgba(212, 175, 55, 0.15);
+        }
+
+        .btn-master {
+            background: linear-gradient(135deg, #D4AF37 0%, #C5A059 100%);
+            color: var(--navy);
+            border: 0;
+            border-radius: 12px;
+            padding: 18px;
+            font-size: 18px;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 5px 15px rgba(212,175,55,0.4);
+        }
+
+        .btn-master:disabled {
+            background: #444;
+            color: #777;
+            box-shadow: none;
+        }
+
+        /* Loading Overlay */
+        .loader-overlay {
+            text-align: center;
+            padding: 40px 0;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(212, 175, 55, 0.1);
+            border-top-color: var(--gold);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* OpenCV Loading */
+        #cv-loading-bar {
+            position: fixed;
+            bottom: 0; left: 0; width: 100%;
+            background: var(--gold);
+            height: 3px;
+            z-index: 2000;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+<div id="cv-loading-bar" style="width: 0%"></div>
+
+<div class="header">
+    <h1>Aradhana</h1>
+</div>
+
+<div class="container">
+    
+    <!-- MAIN VIEW -->
+    <div id="view-main" class="card">
+        <div id="camera-debug" class="debug-info hidden"></div>
+
+        <div class="action-buttons">
+            <div class="btn-action" onclick="startCamera()">
+                <span>📷</span>
+                <strong>Scan Document</strong>
+            </div>
+            <div class="btn-action" onclick="triggerFileInput()">
+                <span>📁</span>
+                <strong>Upload Files</strong>
+            </div>
+            <input type="file" id="file-input" multiple accept=".jpg,.jpeg,.png,.pdf" class="hidden" onchange="handleFileSelect(event)">
+        </div>
+
+        <div class="queue-container">
+            <div class="queue-header">
+                <span>Print Queue</span>
+                <span id="queue-count">0 Items</span>
+            </div>
+            <div id="queue-grid" class="queue-grid">
+                <!-- Items added here -->
+            </div>
+            <div id="queue-empty" style="text-align: center; color: #888; padding: 20px;">
+                No documents added yet.
+            </div>
+        </div>
+
+        <div class="options">
+            <span class="section-label">Print Mode</span>
+            <div class="print-types">
+                <label class="type-card">
+                    <input type="radio" name="print-mode" value="pdf" checked>
+                    <div class="type-content">
+                        <strong>Full Page</strong>
+                    </div>
+                </label>
+                <label class="type-card">
+                    <input type="radio" name="print-mode" value="id_card">
+                    <div class="type-content">
+                        <strong>ID Cards</strong>
+                    </div>
+                </label>
+            </div>
+
+            <span class="section-label">Copies</span>
+            <select id="copies-select" style="width:100%; padding: 12px; border-radius: 8px; margin-bottom: 20px; background: var(--navy-light); color: white; border: 1px solid var(--gold);">
+                <option value="1">1 Copy</option>
+                <option value="2">2 Copies</option>
+                <option value="3">3 Copies</option>
+                <option value="4">4 Copies</option>
+                <option value="5">5 Copies</option>
+            </select>
+        </div>
+
+        <button id="btn-submit-all" class="btn-master" onclick="submitAll()" disabled>
+            Send All For Printing
+        </button>
+    </div>
+
+    <!-- CAMERA VIEW -->
+    <div id="view-camera" class="camera-wrapper hidden">
+        <div class="camera-container">
+            <video id="camera-video" autoplay playsinline muted></video>
+            <canvas id="detection-overlay"></canvas>
+            <div id="camera-guide" class="camera-guide">Align document within frame</div>
+        </div>
+        <div class="camera-controls">
+            <button class="btn-camera-cancel" onclick="stopCamera()">Cancel</button>
+            <button id="shutter-btn" class="btn-shutter" onclick="captureManual()"></button>
+            <div style="width: 50px"></div> <!-- Spacer -->
+        </div>
+    </div>
+
+    <!-- CROP VIEW -->
+    <div id="view-crop" class="card hidden">
+        <div class="crop-wrapper">
+            <span class="section-label" id="crop-label">Final Adjustment</span>
+            <div class="crop-container">
+                <img id="crop-image" src="">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-master" style="background: #444; color: white;" onclick="retakePhoto()">Retake</button>
+                <button class="btn-master" onclick="confirmCrop()">Add to Queue</button>
+            </div>
+            <button id="btn-manual-crop" class="btn-master" style="background: transparent; border: 1px solid var(--gold); color: var(--gold-light); margin-top: 5px;" onclick="enableManualCrop()">Manual Crop</button>
+        </div>
+    </div>
+
+    <!-- LOADING / PROGRESS VIEW -->
+    <div id="view-progress" class="card hidden">
+        <div class="loader-overlay">
+            <div class="spinner"></div>
+            <h3 id="progress-title">Processing...</h3>
+            <p id="progress-desc" style="color: #aaa; font-size: 14px; margin-top: 10px;">Please wait.</p>
+        </div>
+    </div>
+
+    <!-- SUCCESS VIEW -->
+    <div id="view-success" class="card hidden" style="text-align: center;">
+        <div style="font-size: 50px; color: var(--gold); margin-bottom: 15px;">✓</div>
+        <h2 style="color: var(--gold-light); margin-bottom: 10px;">Sent to Queue!</h2>
+        <div style="background: rgba(255,255,255,0.05); border: 1px solid var(--gold); border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <div style="font-size: 12px; color: #aaa; text-transform: uppercase;">Queue ID</div>
+            <div id="display-queue-id" style="font-size: 24px; font-weight: bold; letter-spacing: 2px;">AR-XXXX</div>
+        </div>
+        <button class="btn-master" onclick="location.reload()">Done</button>
+    </div>
+
+</div>
+
+<!-- Scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
+<script>
+    // Global State
+    let queue = [];
+    let cropper = null;
+    let cameraStream = null;
+    let cvLoaded = false;
+    let isDetecting = false;
+    let detectionFrameCount = 0;
+    let lastDetectionTime = 0;
+    let stableFrameCount = 0;
+    let bestPoints = null;
+    let autoCaptureActive = true;
+
+    const views = {
+        main: document.getElementById('view-main'),
+        camera: document.getElementById('view-camera'),
+        crop: document.getElementById('view-crop'),
+        progress: document.getElementById('view-progress'),
+        success: document.getElementById('view-success')
+    };
+
+    function showView(viewName) {
+        Object.keys(views).forEach(k => views[k].classList.add('hidden'));
+        views[viewName].classList.remove('hidden');
+    }
+
+    // OpenCV.js Loading
+    function onOpenCvReady() {
+        console.log('OpenCV.js is ready.');
+        cvLoaded = true;
+        document.getElementById('cv-loading-bar').style.width = '100%';
+        setTimeout(() => document.getElementById('cv-loading-bar').style.display = 'none', 500);
+    }
+
+    // Load OpenCV.js asynchronously
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
+    script.onload = onOpenCvReady;
+    document.body.appendChild(script);
+
+    // Queue Management
+    function addToQueue(blob, name, type) {
+        const id = Date.now();
+        const url = URL.createObjectURL(blob);
+        queue.push({ id, blob, name, type, url });
+        updateQueueUI();
+    }
+
+    function removeFromQueue(id) {
+        const idx = queue.findIndex(item => item.id === id);
+        if (idx !== -1) {
+            URL.revokeObjectURL(queue[idx].url);
+            queue.splice(idx, 1);
+        }
+        updateQueueUI();
+    }
+
+    function updateQueueUI() {
+        const grid = document.getElementById('queue-grid');
+        const emptyHint = document.getElementById('queue-empty');
+        const countLabel = document.getElementById('queue-count');
+        const submitBtn = document.getElementById('btn-submit-all');
+
+        grid.innerHTML = '';
+        if (queue.length === 0) {
+            emptyHint.classList.remove('hidden');
+            submitBtn.disabled = true;
+        } else {
+            emptyHint.classList.add('hidden');
+            submitBtn.disabled = false;
+            queue.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'queue-item';
+                
+                if (item.type === 'application/pdf') {
+                    div.innerHTML = `<div class="pdf-icon">PDF</div>`;
+                } else {
+                    div.innerHTML = `<img src="${item.url}">`;
+                }
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'btn-remove';
+                removeBtn.innerHTML = '×';
+                removeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    removeFromQueue(item.id);
+                };
+                
+                div.appendChild(removeBtn);
+                grid.appendChild(div);
+            });
+        }
+        countLabel.textContent = `${queue.length} Item${queue.length === 1 ? '' : 's'}`;
+    }
+
+    // Camera Logic
+    async function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert("Camera not supported on this browser.");
+            return;
+        }
+
+        try {
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+                audio: false
+            });
+            const video = document.getElementById('camera-video');
+            video.srcObject = cameraStream;
+            video.onloadedmetadata = () => {
+                showView('camera');
+                startDetectionLoop();
+            };
+        } catch (err) {
+            alert("Unable to access camera: " + err.message);
+        }
+    }
+
+    function stopCamera() {
+        isDetecting = false;
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+        showView('main');
+    }
+
+    function startDetectionLoop() {
+        isDetecting = true;
+        stableFrameCount = 0;
+        bestPoints = null;
+        autoCaptureActive = true;
+        requestAnimationFrame(detectionLoop);
+    }
+
+    function detectionLoop(timestamp) {
+        if (!isDetecting) return;
+
+        const video = document.getElementById('camera-video');
+        const canvas = document.getElementById('detection-overlay');
+        const guide = document.getElementById('camera-guide');
+
+        if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+            requestAnimationFrame(detectionLoop);
+            return;
+        }
+
+        // Limit to ~8 FPS for performance
+        if (timestamp - lastDetectionTime < 125) {
+            requestAnimationFrame(detectionLoop);
+            return;
+        }
+        lastDetectionTime = timestamp;
+
+        // Sync overlay size
+        canvas.width = video.clientWidth;
+        canvas.height = video.clientHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (!cvLoaded) {
+            guide.textContent = "Loading Smart Engine...";
+            requestAnimationFrame(detectionLoop);
+            return;
+        }
+
+        const points = detectDocument(video);
+        
+        if (points) {
+            const isStable = checkStability(points);
+            const outlineColor = isStable ? '#27AE60' : '#D4AF37';
+            
+            drawOutline(ctx, points, outlineColor);
+            
+            if (isStable) {
+                stableFrameCount++;
+                guide.textContent = "Hold steady... " + ".".repeat(stableFrameCount);
+                if (stableFrameCount > 10 && autoCaptureActive) { // ~1.25s of stability
+                    triggerCapture(points);
+                    return;
+                }
+            } else {
+                stableFrameCount = 0;
+                guide.textContent = "Document detected";
+            }
+        } else {
+            stableFrameCount = 0;
+            guide.textContent = "Align document within frame";
+        }
+
+        requestAnimationFrame(detectionLoop);
+    }
+
+    function detectDocument(video) {
+        try {
+            // Create a small temp canvas for OpenCV to avoid processing full resolution
+            const scale = 0.3;
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = video.videoWidth * scale;
+            tempCanvas.height = video.videoHeight * scale;
+            const tCtx = tempCanvas.getContext('2d');
+            tCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+            let src = cv.imread(tempCanvas);
+            let gray = new cv.Mat();
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+            cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0);
+            cv.Canny(gray, gray, 75, 200);
+
+            let contours = new cv.MatVector();
+            let hierarchy = new cv.Mat();
+            cv.findContours(gray, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+            let maxArea = 0;
+            let bestQuad = null;
+
+            for (let i = 0; i < contours.size(); ++i) {
+                let cnt = contours.get(i);
+                let area = cv.contourArea(cnt);
+                let peri = cv.arcLength(cnt, true);
+                let approx = new cv.Mat();
+                cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+
+                if (approx.rows === 4 && area > maxArea) {
+                    maxArea = area;
+                    bestQuad = approx;
+                }
+            }
+
+            // Must cover at least 25% of the frame
+            if (bestQuad && maxArea > (tempCanvas.width * tempCanvas.height * 0.20)) {
+                const results = [];
+                for (let i = 0; i < 4; i++) {
+                    results.push({
+                        x: (bestQuad.data32S[i * 2] / scale) * (video.clientWidth / video.videoWidth),
+                        y: (bestQuad.data32S[i * 2 + 1] / scale) * (video.clientHeight / video.videoHeight),
+                        rawX: bestQuad.data32S[i * 2] / scale,
+                        rawY: bestQuad.data32S[i * 2 + 1] / scale
+                    });
+                }
+                
+                src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+                return orderPoints(results);
+            }
+
+            src.delete(); gray.delete(); contours.delete(); hierarchy.delete();
+        } catch (e) {
+            console.error(e);
+        }
+        return null;
+    }
+
+    function orderPoints(pts) {
+        // pts: [{x, y, rawX, rawY}, ...]
+        // 0: top-left, 1: top-right, 2: bottom-right, 3: bottom-left
+        const sorted = pts.sort((a, b) => a.y - b.y);
+        const top = sorted.slice(0, 2).sort((a, b) => a.x - b.x);
+        const bottom = sorted.slice(2, 4).sort((a, b) => a.x - b.x);
+        return [top[0], top[1], bottom[1], bottom[0]];
+    }
+
+    function checkStability(newPoints) {
+        if (!bestPoints) {
+            bestPoints = newPoints;
+            return false;
+        }
+        const threshold = 15;
+        let diff = 0;
+        for (let i = 0; i < 4; i++) {
+            diff += Math.abs(newPoints[i].x - bestPoints[i].x);
+            diff += Math.abs(newPoints[i].y - bestPoints[i].y);
+        }
+        bestPoints = newPoints;
+        return diff < threshold;
+    }
+
+    function drawOutline(ctx, pts, color) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.lineTo(pts[1].x, pts[1].y);
+        ctx.lineTo(pts[2].x, pts[2].y);
+        ctx.lineTo(pts[3].x, pts[3].y);
+        ctx.closePath();
+        ctx.stroke();
+
+        // Draw corners
+        ctx.fillStyle = color;
+        pts.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    function triggerCapture(pts) {
+        isDetecting = false;
+        if (navigator.vibrate) navigator.vibrate(100);
+        
+        const video = document.getElementById('camera-video');
+        const guide = document.getElementById('camera-guide');
+        guide.textContent = "CAPTURING...";
+
+        setTimeout(() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            // Re-detect on full res for final warp
+            const fullPoints = detectDocument(video); // Note: detectDocument will use clientWidth, need raw
+            // Since detectDocument returns scaled for UI, we use the rawX/rawY we stored
+            const rawPts = pts.map(p => ({ x: p.rawX, y: p.rawY }));
+            
+            const warped = warpDocument(canvas, rawPts);
+            showPreview(warped);
+        }, 100);
+    }
+
+    function captureManual() {
+        if (!isDetecting) return;
+        isDetecting = false;
+        if (navigator.vibrate) navigator.vibrate(50);
+        
+        const video = document.getElementById('camera-video');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        // Try to find points for manual warp, if not, show manual cropper
+        const pts = detectDocument(video);
+        if (pts) {
+            const rawPts = pts.map(p => ({ x: p.rawX, y: p.rawY }));
+            const warped = warpDocument(canvas, rawPts);
+            showPreview(warped);
+        } else {
+            showPreview(canvas);
+        }
+    }
+
+    function warpDocument(sourceCanvas, pts) {
+        try {
+            let src = cv.imread(sourceCanvas);
+            
+            // Target dimensions
+            const w1 = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+            const w2 = Math.hypot(pts[2].x - pts[3].x, pts[2].y - pts[3].y);
+            const maxWidth = Math.max(w1, w2);
+
+            const h1 = Math.hypot(pts[3].x - pts[0].x, pts[3].y - pts[0].y);
+            const h2 = Math.hypot(pts[2].x - pts[1].x, pts[2].y - pts[1].y);
+            const maxHeight = Math.max(h1, h2);
+
+            let dst = new cv.Mat();
+            let srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                pts[0].x, pts[0].y, pts[1].x, pts[1].y,
+                pts[2].x, pts[2].y, pts[3].x, pts[3].y
+            ]);
+            let dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                0, 0, maxWidth, 0,
+                maxWidth, maxHeight, 0, maxHeight
+            ]);
+
+            let M = cv.getPerspectiveTransform(srcPts, dstPts);
+            let dsize = new cv.Size(maxWidth, maxHeight);
+            cv.warpPerspective(src, dst, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar());
+
+            const outCanvas = document.createElement('canvas');
+            cv.imshow(outCanvas, dst);
+
+            src.delete(); dst.delete(); M.delete(); srcPts.delete(); dstPts.delete();
+            return outCanvas;
+        } catch (e) {
+            console.error("Warp failed:", e);
+            return sourceCanvas;
+        }
+    }
+
+    function showPreview(canvas) {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        }
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        const cropImg = document.getElementById('crop-image');
+        cropImg.src = dataUrl;
+        
+        document.getElementById('crop-label').textContent = "Quality Check";
+        document.getElementById('btn-manual-crop').classList.remove('hidden');
+
+        showView('crop');
+        
+        if (cropper) cropper.destroy();
+        cropper = null; // No cropper until "Manual Crop" is clicked
+    }
+
+    function enableManualCrop() {
+        const cropImg = document.getElementById('crop-image');
+        document.getElementById('crop-label').textContent = "Adjust Corners";
+        document.getElementById('btn-manual-crop').classList.add('hidden');
+
+        cropper = new Cropper(cropImg, {
+            viewMode: 1,
+            dragMode: 'move',
+            autoCropArea: 0.98,
+            restore: false,
+            guides: true,
+            center: true,
+            highlight: false,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false
+        });
+    }
+
+    function retakePhoto() {
+        if (cropper) cropper.destroy();
+        cropper = null;
+        startCamera();
+    }
+
+    function confirmCrop() {
+        let finalCanvas;
+        if (cropper) {
+            finalCanvas = cropper.getCroppedCanvas({
+                maxWidth: 2048, maxHeight: 2048, fillColor: '#fff'
+            });
+        } else {
+            // Use current image as is
+            finalCanvas = document.createElement('canvas');
+            const img = document.getElementById('crop-image');
+            finalCanvas.width = img.naturalWidth;
+            finalCanvas.height = img.naturalHeight;
+            finalCanvas.getContext('2d').drawImage(img, 0, 0);
+        }
+
+        finalCanvas.toBlob(blob => {
+            addToQueue(blob, `scan_${Date.now()}.jpg`, 'image/jpeg');
+            showView('main');
+        }, 'image/jpeg', 0.9);
+    }
+
+    // File Upload Fallback
+    function triggerFileInput() {
+        document.getElementById('file-input').click();
+    }
+
+    function handleFileSelect(event) {
+        const files = Array.from(event.target.files);
+        if (!files.length) return;
+        
+        processFiles(files);
+        event.target.value = '';
+    }
+
+    async function processFiles(files) {
+        for (const file of files) {
+            if (file.type === 'application/pdf') {
+                addToQueue(file, file.name, file.type);
+            } else {
+                const bitmap = await createImageBitmap(file);
+                const canvas = document.createElement('canvas');
+                canvas.width = bitmap.width;
+                canvas.height = bitmap.height;
+                canvas.getContext('2d').drawImage(bitmap, 0, 0);
+                showPreview(canvas);
+                return; // One at a time for cropping flow
+            }
+        }
+    }
+
+    function submitAll() {
+        if (queue.length === 0) return;
+
+        showView('progress');
+        const formData = new FormData();
+        queue.forEach((item, index) => {
+            formData.append('files[]', item.blob, item.name || `file_${index}.jpg`);
+        });
+
+        formData.append('print_mode', document.querySelector('input[name="print-mode"]:checked').value);
+        formData.append('copies', document.getElementById('copies-select').value);
+
+        fetch('/upload', { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('display-queue-id').textContent = data.queue_id;
+            showView('success');
+        })
+        .catch(err => {
+            alert("Error: " + err.message);
+            showView('main');
+        });
+    }
+
+</script>
+
+</body>
+</html>

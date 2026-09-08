@@ -1,0 +1,83 @@
+MASTER CONSOLE FIX REPORT
+
+Root cause:
+- Master Console previously fetched all owner/admin data in one Promise.all path and rendered without per-section failure handling.
+- The live admin endpoints did not return usable data:
+  - /api/admin/users returned 422.
+  - /api/admin/security/stats returned 422.
+  - /api/admin/system/mode returned 422.
+  - /api/admin/financial/health returned 404.
+- The 422 responses are backend dependency failures: the response asks for missing query parameters r and d even though X-Session-Token is present.
+- The financial health route exists in source, but the live route is effectively not reachable and returns 404.
+- A possible render crash existed at securityStats?.recent_events.map(...) because recent_events was not guarded as an array.
+
+Failed endpoints captured:
+
+URL=http://127.0.0.1:8000/api/admin/users
+METHOD=GET
+STATUS=422
+RESPONSE={"detail":[{"type":"missing","loc":["query","r"],"msg":"Field required","input":null},{"type":"missing","loc":["query","d"],"msg":"Field required","input":null}]}
+X-Session-Token present? yes
+
+URL=http://127.0.0.1:8000/api/admin/security/stats
+METHOD=GET
+STATUS=422
+RESPONSE={"detail":[{"type":"missing","loc":["query","r"],"msg":"Field required","input":null},{"type":"missing","loc":["query","d"],"msg":"Field required","input":null}]}
+X-Session-Token present? yes
+
+URL=http://127.0.0.1:8000/api/admin/system/mode
+METHOD=GET
+STATUS=422
+RESPONSE={"detail":[{"type":"missing","loc":["query","r"],"msg":"Field required","input":null},{"type":"missing","loc":["query","d"],"msg":"Field required","input":null}]}
+X-Session-Token present? yes
+
+URL=http://127.0.0.1:8000/api/admin/financial/health
+METHOD=GET
+STATUS=404
+RESPONSE={"detail":"Not Found"}
+X-Session-Token present? yes
+
+Emergency endpoint:
+- /api/admin/emergency/sync exists in the route dump as POST.
+- It was not invoked during verification to avoid triggering operational side effects.
+
+Files changed:
+- frontend/src/pages/MasterConsolePage.tsx
+
+What changed:
+- Replaced all-or-nothing Promise.all JSON parsing with independent fetch handling per section.
+- Added section-level errors:
+  - Unable to load user administration
+  - Unable to load security stats
+  - Unable to load financial health
+  - Unable to load emergency controls
+- Normalized users to an array before rendering.
+- Normalized security stats and guarded recent_events as an array.
+- Added safe fallback fields for security access logs.
+- Disabled maintenance mode toggle when system mode cannot be loaded.
+- Preserved existing frontend RBAC route guard for owner/admin only.
+
+RBAC confirmation:
+- No backend auth, OTP, or RBAC logic was modified.
+- App route remains protected by roles ['admin', 'owner'].
+- Sidebar still exposes Master Console only for admin/owner.
+- Owner session can render the Master Console shell and tabs.
+
+Browser verification:
+- Opened http://127.0.0.1:8000/master-console as OWNER.
+- Master Console shell rendered.
+- Users tab rendered with section-level error instead of blank page.
+- Security tab rendered stats cards and access-log empty state with section-level error.
+- Financial tab rendered cards with section-level error.
+- Emergency tab rendered controls, showed section-level error, and disabled the mode toggle because system mode was unavailable.
+- Browser console warnings/errors: none captured after final reload.
+
+Tests run:
+- cd frontend
+- npm run build
+- Result: passed.
+
+Remaining issues:
+- Backend admin dependency currently returns 422 for owner-authenticated GET requests despite X-Session-Token being present.
+- /api/admin/financial/health returns 404 in the live app even though the route exists in source, likely because it is registered after the SPA catch-all.
+- Those backend issues were not fixed in this pass because the request prohibited touching auth/RBAC and asked to preserve financial records and decision logic.
