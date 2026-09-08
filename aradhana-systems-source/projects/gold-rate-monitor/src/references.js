@@ -82,6 +82,8 @@ export class ReferenceSource {
  * config block; `name` distinguishes the two instances in logs/ReferenceSource.
  */
 function makeKakaSourceFrom(name, c, timeoutMs, log) {
+  let lastFormatCheckAt = 0;
+  let lastFormatFingerprint = null;
   return new ReferenceSource(name, c.refreshMs, async () => {
     const feed = await fetchFeed(c.url, timeoutMs);
 
@@ -89,9 +91,10 @@ function makeKakaSourceFrom(name, c, timeoutMs, log) {
     // row's rotating date) - Kaka has flipped their 999 line between "BIS
     // APPROVED" and "IMPORTED" scrip codes more than once in the same week.
     // Try every known shape in priority order rather than hardcoding one.
-    const primary = selectRowAny(feed.rows, c.targetCandidates);
+    const primary = selectRowAny(feed.rows, c.targetCandidates, c.autoFormat);
     if (!primary.row) throw new Error(primary.note || `${c.label} target row not found`);
-    const primaryField = c.targetCandidates[primary.usedCandidate].field;
+    const primaryField = primary.field || c.targetCandidates[primary.usedCandidate]?.field;
+    if (!primaryField) throw new Error(`${c.label} selected row has no configured price field`);
     const value = primary.row[primaryField];
     if (typeof value !== 'number' || !(value > 0)) {
       throw new Error(`${c.label} ${primaryField} not numeric (raw "${primary.row.rawSell}")`);
@@ -103,12 +106,22 @@ function makeKakaSourceFrom(name, c, timeoutMs, log) {
       ? selectRowAny(feed.rows, c.refRows.gst999Candidates)
       : { row: null };
 
+    const now = Date.now();
+    const fingerprint = `${primary.matchedBy}:${primary.row.code}:${primary.row.name}`;
+    const checkEveryMs = Number(c.autoFormat?.checkEveryMs) || 3600000;
+    if (fingerprint !== lastFormatFingerprint || now - lastFormatCheckAt >= checkEveryMs) {
+      log(`[ref:${name}] format check: ${fingerprint}${primary.note ? ` — ${primary.note}` : ''}`);
+      lastFormatFingerprint = fingerprint;
+      lastFormatCheckAt = now;
+    }
+
     return {
       value,
       rowName: primary.row.name,
       rowCode: primary.row.code,
       matchedBy: primary.matchedBy,
       confident: primary.confident,
+      formatNote: primary.note || null,
       buy: primary.row.buy,
       high: primary.row.high,
       low: primary.row.low,

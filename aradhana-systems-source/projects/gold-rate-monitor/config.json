@@ -101,8 +101,8 @@
       "gstFactor": 1.03,
       "targetCandidates": [
         {
-          "code": "4620",
-          "namePattern": "^GOLD\\s+999\\s+BIS\\s+APPROVED\\b",
+          "code": "4734",
+          "namePattern": "^GOLD\\s+999\\s+BIS\\s+APPROVED\\b(?!.*\\bGST\\b)",
           "field": "sell"
         },
         {
@@ -116,6 +116,14 @@
           "field": "sell"
         }
       ],
+      "autoFormat": {
+        "enabled": true,
+        "checkEveryMs": 3600000,
+        "namePattern": "^GOLD\\s+999\\b",
+        "excludeNamePattern": "\\bGST\\b",
+        "field": "sell",
+        "_comment": "Safe fallback for Kaka scrip renumbering. It accepts exactly one non-GST Gold 999 row; any ambiguity remains BLOCKED."
+      },
       "secondaryCandidates": [
         {
           "code": "4616",
