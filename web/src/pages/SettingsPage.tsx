@@ -7,6 +7,7 @@ import { listConfigurations, type ConfigurationSummary } from '../api/configurat
 import { API_BASE } from '../api/client';
 import { fetchAuthOptions } from '../api/auth';
 import { getUpdateStatus, setAutoUpdate, checkForUpdates, applyUpdate, type UpdateStatus } from '../api/updates';
+import { getFleetSettings, setAdminPasscode } from '../api/settings';
 import { RolloutPanel } from '../components/RolloutPanel';
 import { orDash, fmtRelative } from '../ui/format';
 
@@ -27,6 +28,10 @@ export function SettingsPage() {
   const [checking, setChecking] = useState(false);
   const [applying, setApplying] = useState(false);
   const [updMsg, setUpdMsg] = useState<string | null>(null);
+  const [adminPasscodeSet, setAdminPasscodeSet] = useState<boolean | null>(null);
+  const [passcodeInput, setPasscodeInput] = useState('');
+  const [passcodeSaving, setPasscodeSaving] = useState(false);
+  const [passcodeMsg, setPasscodeMsg] = useState<string | null>(null);
   const [defaultConfig, setDefaultConfig] = useState<string>(() => {
     try {
       return localStorage.getItem(DEFAULT_CONFIG_KEY) ?? '';
@@ -49,10 +54,45 @@ export function SettingsPage() {
     getUpdateStatus()
       .then((x) => !cancelled && setUpd(x))
       .catch(() => undefined);
+    getFleetSettings()
+      .then((s) => !cancelled && setAdminPasscodeSet(s.adminPasscodeSet))
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const savePasscode = async () => {
+    setPasscodeSaving(true);
+    setPasscodeMsg(null);
+    try {
+      await setAdminPasscode(passcodeInput.trim());
+      setAdminPasscodeSet(passcodeInput.trim().length > 0);
+      setPasscodeInput('');
+      setPasscodeMsg('Saved. Devices pick it up on their next check-in.');
+    } catch (e) {
+      setPasscodeMsg((e as Error)?.message || 'Could not save the passcode.');
+    } finally {
+      setPasscodeSaving(false);
+    }
+  };
+
+  const clearPasscode = async () => {
+    if (!window.confirm('Clear the fleet-wide admin passcode? Only per-session kiosk passwords (if any) will still work.'))
+      return;
+    setPasscodeSaving(true);
+    setPasscodeMsg(null);
+    try {
+      await setAdminPasscode('');
+      setAdminPasscodeSet(false);
+      setPasscodeInput('');
+      setPasscodeMsg('Cleared.');
+    } catch (e) {
+      setPasscodeMsg((e as Error)?.message || 'Could not clear the passcode.');
+    } finally {
+      setPasscodeSaving(false);
+    }
+  };
 
   const checkNow = async () => {
     setChecking(true);
@@ -163,7 +203,50 @@ export function SettingsPage() {
           </div>
           <div className="set-row">
             <span className="k">Console version</span>
-            <span className="v mono">MDMesh {APP_VERSION}</span>
+            <span className="v mono">AMBIC Digital MDM {APP_VERSION}</span>
+          </div>
+        </section>
+
+        {/* Security */}
+        <section className="panel">
+          <div className="panel-head">
+            <h2 className="panel-title">Security</h2>
+          </div>
+          <div className="set-row">
+            <span className="k">
+              Admin passcode
+              <small>
+                Fleet-wide — gates local kiosk exit on every enrolled device (in addition to any
+                per-session kiosk password). Delivered to devices on their next check-in.
+              </small>
+            </span>
+            <span className="v">
+              <div className="upd-actions">
+                <input
+                  type="password"
+                  placeholder={adminPasscodeSet ? 'Set — enter a new passcode to replace it' : 'Enter a passcode'}
+                  value={passcodeInput}
+                  onChange={(e) => setPasscodeInput(e.target.value)}
+                  disabled={passcodeSaving}
+                />
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={() => void savePasscode()}
+                  disabled={passcodeSaving || !passcodeInput.trim()}
+                >
+                  {passcodeSaving ? 'Saving…' : 'Save'}
+                </button>
+                {adminPasscodeSet && (
+                  <button className="btn btn-sm" onClick={() => void clearPasscode()} disabled={passcodeSaving}>
+                    Clear
+                  </button>
+                )}
+              </div>
+              <p className="au-note">
+                {adminPasscodeSet === null ? '' : adminPasscodeSet ? 'Currently set.' : 'Not set.'}
+              </p>
+              {passcodeMsg && <p className="au-note">{passcodeMsg}</p>}
+            </span>
           </div>
         </section>
 

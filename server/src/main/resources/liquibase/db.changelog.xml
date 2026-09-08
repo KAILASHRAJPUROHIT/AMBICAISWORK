@@ -2837,4 +2837,10 @@
         <rollback>ALTER TABLE applicationVersions DROP COLUMN parts;</rollback>
     </changeSet>
 
+    <changeSet id="26.09.08-settings-admin-passcode" author="ambic" context="common">
+        <comment>Column,new: settings#adminPasscodeHash — fleet-wide admin passcode (hash only, same scheme as user login) that gates local kiosk exit on every device, delivered on each agent check-in.</comment>
+        <sql>ALTER TABLE settings ADD COLUMN adminPasscodeHash TEXT;</sql>
+        <rollback>ALTER TABLE settings DROP COLUMN adminPasscodeHash;</rollback>
+    </changeSet>
+
 </databaseChangeLog>

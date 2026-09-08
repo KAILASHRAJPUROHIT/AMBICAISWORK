@@ -74,10 +74,21 @@ class KioskEnterHandler(
         }
     }
 
+    /**
+     * Go to HOME via the real [Intent.ACTION_MAIN]/[Intent.CATEGORY_HOME] intent rather than
+     * launching [homeComponent] directly. A direct component launch skips the system's normal
+     * home-transition path, which is also what re-evaluates OEM System UI state (e.g. HyperOS's
+     * floating-window "…" affordance can linger, visible-but-inert, until an actual Home
+     * transition happens) — resolving through the real HOME intent triggers the same path a
+     * manual Home-button press does, since [homeComponent] is already the persistent-preferred
+     * HOME handler (set above) and so is what this intent resolves to anyway.
+     */
     private fun foregroundLauncher() {
         runCatching {
             context.startActivity(
-                Intent().setComponent(homeComponent).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_HOME)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         }
     }

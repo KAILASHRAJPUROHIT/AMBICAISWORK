@@ -238,6 +238,38 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     description: 'Release kiosk mode and restore the normal home screen.',
     request: { type: 'kiosk.exit' },
   },
+  {
+    key: 'anti-tamper-on', label: 'Lock down: on', group: 'safe',
+    description: 'Block Settings-menu factory reset, Safe Mode boot, and USB debugging/ADB — closes the local escape hatches around kiosk.',
+    request: {
+      type: 'policy.apply', requiresCapability: 'policy.antiTamper',
+      payload: JSON.stringify({ policy: 'antiTamper', value: true }),
+    },
+  },
+  {
+    key: 'anti-tamper-off', label: 'Lock down: off', group: 'safe',
+    description: 'Restore Settings-menu factory reset, Safe Mode boot, and USB debugging access.',
+    request: {
+      type: 'policy.apply', requiresCapability: 'policy.antiTamper',
+      payload: JSON.stringify({ policy: 'antiTamper', value: false }),
+    },
+  },
+  {
+    key: 'frp-on', label: 'Factory reset protection: on', group: 'safe',
+    description: 'A hardware-level (Recovery-mode) wipe will require the fleet recovery account to unlock afterward.',
+    request: {
+      type: 'policy.apply', requiresCapability: 'policy.factoryResetProtection',
+      payload: JSON.stringify({ policy: 'factoryResetProtection', value: true }),
+    },
+  },
+  {
+    key: 'frp-off', label: 'Factory reset protection: off', group: 'safe',
+    description: 'Clear FRP — use before a legitimate resale/repurpose wipe, otherwise the account lock will block setup.',
+    request: {
+      type: 'policy.apply', requiresCapability: 'policy.factoryResetProtection',
+      payload: JSON.stringify({ policy: 'factoryResetProtection', value: false }),
+    },
+  },
 ];
 
 export interface DeviceState {

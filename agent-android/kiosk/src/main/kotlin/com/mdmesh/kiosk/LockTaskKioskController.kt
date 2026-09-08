@@ -47,6 +47,27 @@ class LockTaskKioskController(
                 addCategory(android.content.Intent.CATEGORY_DEFAULT)
             }
             dpm.addPersistentPreferredActivity(admin, homeFilter, homeComponent)
+
+            disableFreeformMultiWindow()
+        }
+    }
+
+    /**
+     * Best-effort: OEM multi-window affordances (Xiaomi HyperOS/MIUI floating-window and
+     * split-screen "…" menu, notably) are NOT gated by standard lock-task features or
+     * DISALLOW_CREATE_WINDOWS — they're first-party System UI, not an app-created overlay window,
+     * so they can bypass an app-allowlisted kiosk entirely regardless of exitMode. There is no
+     * documented, OEM-neutral DevicePolicyManager API for this; `enable_freeform_support=0` is the
+     * one AOSP-level Settings.Global key known to gate Android's own freeform/multi-window support,
+     * which Device Owner can write via setSystemSetting even though it's normally restricted. Not
+     * confirmed to suppress HyperOS's own floating-window UI specifically — best-effort and
+     * intentionally swallowed (via the outer runGuarded) so a failure here never blocks kiosk entry.
+     */
+    private fun disableFreeformMultiWindow() {
+        // DevicePolicyManager.setSystemSetting was added in API 24 (N).
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        runCatching {
+            dpm.setSystemSetting(admin, "enable_freeform_support", "0")
         }
     }
 

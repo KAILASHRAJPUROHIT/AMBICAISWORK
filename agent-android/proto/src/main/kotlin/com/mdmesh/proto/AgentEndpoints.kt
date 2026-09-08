@@ -75,4 +75,9 @@ data class AgentDeviceStateDto(
 data class AgentCheckInResponse(
     val protocolVersion: String = ProtocolJson.PROTOCOL_VERSION,
     val commands: List<CommandEnvelope> = emptyList(),
+    /** Fleet-wide admin passcode hash (SHA1(MD5(raw)+salt), same scheme as the console login),
+     *  set once in the web Settings page and applying to every device. Null/blank means no
+     *  fleet-wide passcode is configured. Gates local kiosk exit as an override alongside the
+     *  per-session [KioskApplyPayload.password] — see `promptExit` in KioskLauncherActivity. */
+    val adminPasscodeHash: String? = null,
 )

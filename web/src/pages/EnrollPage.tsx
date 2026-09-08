@@ -15,7 +15,7 @@ const SECURITY_VALUES: WifiSecurity[] = ['WPA', 'WEP', 'NONE', 'EAP'];
 const STEPS = [
   { title: 'Start from a factory-reset device', sub: 'On the first "Hi there" welcome screen, don\'t sign in yet.' },
   { title: 'Tap the screen 6 times', sub: 'This opens the QR provisioning scanner. Connect to Wi-Fi if asked.' },
-  { title: 'Scan this code', sub: 'Android downloads the MDMesh agent and sets it as device owner.' },
+  { title: 'Scan this code', sub: 'Android downloads the AMBIC Digital MDM agent and sets it as device owner.' },
   { title: 'Wait for enrollment', sub: 'The device appears in Devices after its first check-in.' },
 ];
 

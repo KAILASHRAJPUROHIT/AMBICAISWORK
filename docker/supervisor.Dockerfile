@@ -11,4 +11,4 @@ COPY supervisor/ /app/
 COPY release/minisign.pub /app/minisign.pub
 RUN chmod +x /app/apply.sh /app/rollback.sh
 EXPOSE 9000
-CMD ["node", "server.js"]
+CMD ["node", "/app/server.js"]

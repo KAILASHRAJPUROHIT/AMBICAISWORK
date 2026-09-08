@@ -99,6 +99,13 @@ public class Settings implements CustomerData, Serializable {
     @ApiModelProperty("Timeout in seconds for logging out while idle (0 - no logout)")
     private Integer idleLogout;
 
+    // Fleet-wide admin passcode: gates local kiosk exit on every enrolled device (in addition to
+    // any per-kiosk-session password), set once here and delivered on each device's check-in.
+    // Only the hash (same SHA1(MD5+salt) scheme as the console admin login) is ever stored or
+    // sent to a device — the raw passcode is never persisted and never leaves this save call.
+    @ApiModelProperty(hidden = true)
+    private String adminPasscodeHash;
+
     // This property is not stored in the database, it is a transient field used by the Settings resource
     @ApiModelProperty(hidden = true)
     private boolean singleCustomer;
@@ -348,6 +355,22 @@ public class Settings implements CustomerData, Serializable {
 
     public void setIdleLogout(Integer idleLogout) {
         this.idleLogout = idleLogout;
+    }
+
+    // Never serialized to the client (see field javadoc) — read internally only, e.g. by
+    // AgentResource when building the check-in response.
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public String getAdminPasscodeHash() {
+        return adminPasscodeHash;
+    }
+
+    public void setAdminPasscodeHash(String adminPasscodeHash) {
+        this.adminPasscodeHash = adminPasscodeHash;
+    }
+
+    @ApiModelProperty("Whether a fleet-wide admin passcode is currently configured")
+    public boolean isAdminPasscodeSet() {
+        return adminPasscodeHash != null && !adminPasscodeHash.trim().isEmpty();
     }
 
     public boolean isSingleCustomer() {

@@ -31,6 +31,13 @@ interface KioskStateStore {
      * immediately (enter shows the grid/pinned app; exit drops to idle and unpins).
      */
     fun flow(): Flow<KioskApplyPayload?>
+
+    /**
+     * The most recently applied non-null payload, kept even after [save]`(null)` clears the active
+     * state on exit. Lets the on-device status screen (MainActivity) offer a "Re-enter kiosk" button
+     * that re-locks the device to its last configuration without a round-trip to the server.
+     */
+    suspend fun loadLastKnown(): KioskApplyPayload?
 }
 
 class DataStoreKioskStateStore(private val context: Context) : KioskStateStore {
@@ -40,7 +47,9 @@ class DataStoreKioskStateStore(private val context: Context) : KioskStateStore {
             if (payload == null) {
                 it.remove(KEY)
             } else {
-                it[KEY] = ProtocolJson.json.encodeToString(KioskApplyPayload.serializer(), payload)
+                val encoded = ProtocolJson.json.encodeToString(KioskApplyPayload.serializer(), payload)
+                it[KEY] = encoded
+                it[LAST_KEY] = encoded
             }
         }
     }
@@ -53,24 +62,34 @@ class DataStoreKioskStateStore(private val context: Context) : KioskStateStore {
     override fun flow(): Flow<KioskApplyPayload?> =
         context.kioskDataStore.data.map { prefs -> prefs[KEY]?.let(::decode) }
 
+    override suspend fun loadLastKnown(): KioskApplyPayload? {
+        val raw = context.kioskDataStore.data.map { it[LAST_KEY] }.first() ?: return null
+        return decode(raw)
+    }
+
     private fun decode(raw: String): KioskApplyPayload? = runCatching {
         ProtocolJson.json.decodeFromString(KioskApplyPayload.serializer(), raw)
     }.getOrNull()
 
     private companion object {
         val KEY = stringPreferencesKey("kiosk_payload")
+        val LAST_KEY = stringPreferencesKey("kiosk_payload_last_known")
     }
 }
 
 /** In-memory [KioskStateStore] for unit tests. */
 class InMemoryKioskStateStore(initial: KioskApplyPayload? = null) : KioskStateStore {
     private val state = MutableStateFlow(initial)
+    private var lastKnown = initial
 
     override suspend fun save(payload: KioskApplyPayload?) {
         state.value = payload
+        if (payload != null) lastKnown = payload
     }
 
     override suspend fun load(): KioskApplyPayload? = state.value
 
     override fun flow(): Flow<KioskApplyPayload?> = state
+
+    override suspend fun loadLastKnown(): KioskApplyPayload? = lastKnown
 }

@@ -25,11 +25,13 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.mdmesh.agent.service.CheckInService
+import com.mdmesh.core.store.AdminPasscodeStore
 import com.mdmesh.core.store.KioskStateStore
 import com.mdmesh.core.telemetry.EventSink
 import com.mdmesh.kiosk.CrashLoopGuard
 import com.mdmesh.kiosk.KioskController
 import com.mdmesh.proto.KioskApplyPayload
+import com.mdmesh.proto.PasscodeHash
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -57,9 +59,14 @@ class KioskLauncherActivity : ComponentActivity() {
     @Inject lateinit var controller: KioskController
     @Inject lateinit var events: EventSink
     @Inject lateinit var crashGuard: CrashLoopGuard
+    @Inject lateinit var adminPasscodeStore: AdminPasscodeStore
 
     /** Last applied non-null kiosk state, so [onResume] can recover a bounced single-app pin. */
     private var active: KioskApplyPayload? = null
+
+    /** Cached mirror of [AdminPasscodeStore], kept current so [promptExit] can check it
+     *  synchronously without blocking on a DataStore read from a dialog callback. */
+    private var fleetPasscodeHash: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,6 +80,11 @@ class KioskLauncherActivity : ComponentActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 store.flow().distinctUntilChanged().collect(::applyState)
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                adminPasscodeStore.flow().distinctUntilChanged().collect { fleetPasscodeHash = it }
             }
         }
     }
@@ -146,7 +158,8 @@ class KioskLauncherActivity : ComponentActivity() {
 
     private fun promptExit(p: KioskApplyPayload) {
         val pw = p.password
-        if (pw.isNullOrBlank()) {
+        val fleetHash = fleetPasscodeHash
+        if (pw.isNullOrBlank() && fleetHash.isNullOrBlank()) {
             doExit()
             return
         }
@@ -159,7 +172,12 @@ class KioskLauncherActivity : ComponentActivity() {
             .setTitle("Exit kiosk")
             .setView(input)
             .setPositiveButton("Exit") { _, _ ->
-                if (input.text.toString() == pw) doExit()
+                val entered = input.text.toString()
+                // Either the per-session password or the fleet-wide admin passcode (set from the
+                // web console's Settings page, delivered on check-in) unlocks the exit.
+                val sessionMatch = pw != null && entered == pw
+                val fleetMatch = !fleetHash.isNullOrBlank() && PasscodeHash.matches(entered, fleetHash)
+                if (sessionMatch || fleetMatch) doExit()
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -229,7 +247,7 @@ class KioskLauncherActivity : ComponentActivity() {
             setPadding(dp(24), dp(28), dp(24), dp(12))
             layoutParams = ViewGroup.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
-        column.addView(text("MDMesh Kiosk", 20f, fg, bold = true))
+        column.addView(text("AMBIC MDM Kiosk", 20f, fg, bold = true))
         if (rendered == 0) {
             column.addView(
                 text(
@@ -289,7 +307,7 @@ class KioskLauncherActivity : ComponentActivity() {
             gravity = Gravity.CENTER
             layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
         }
-        col.addView(centeredText("MDMesh", 28f, SIGNAL, bold = true))
+        col.addView(centeredText("AMBIC MDM", 28f, SIGNAL, bold = true))
         col.addView(centeredText("Managed device", 14f, MUTED))
         addView(col)
     }

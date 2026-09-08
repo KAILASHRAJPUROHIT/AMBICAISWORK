@@ -357,5 +357,20 @@ http.createServer(async (req, res) => {
   }
 }).listen(PORT, BIND, () => console.log('supervisor on', BIND + ':' + PORT));
 
+// Local-APK override: when there's no GitHub release to poll (self-built/self-signed deployments,
+// no publishing pipeline), seed `lastApk` directly from env so /files/agent.apk can serve a file
+// already placed in APK_DIR by the operator (e.g. `docker cp` into /backups/apk/agent-<code>.apk).
+// ensureApk() checks fs.existsSync(dest) before ever touching the network, so this never triggers
+// a GitHub fetch. poll() only overwrites lastApk when REPO is set, so this survives every poll.
+if (!REPO && process.env.LOCAL_APK_VERSION_CODE) {
+  lastApk = {
+    version: process.env.LOCAL_APK_VERSION_NAME || 'local',
+    versionCode: +process.env.LOCAL_APK_VERSION_CODE,
+    sha256: process.env.LOCAL_APK_SHA256 || '',
+    url: '',
+  };
+  console.log('[apk] local override active:', lastApk.version, '(code', lastApk.versionCode + ')');
+}
+
 poll();
 setInterval(poll, (+(process.env.POLL_INTERVAL_HOURS || 6)) * 3600 * 1000);

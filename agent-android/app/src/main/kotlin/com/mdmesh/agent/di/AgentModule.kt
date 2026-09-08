@@ -38,6 +38,8 @@ import com.mdmesh.core.sync.HardwareIdSource
 import com.mdmesh.core.install.InstallManager
 import com.mdmesh.core.state.DeviceStateCollector
 import com.mdmesh.core.state.DeviceStateSource
+import com.mdmesh.core.store.AdminPasscodeStore
+import com.mdmesh.core.store.DataStoreAdminPasscodeStore
 import com.mdmesh.core.store.DataStoreKioskStateStore
 import com.mdmesh.core.store.KioskStateStore
 import com.mdmesh.core.telemetry.EventLog
@@ -201,6 +203,11 @@ object AgentModule {
     @Singleton
     fun provideKioskStateStore(@ApplicationContext context: Context): KioskStateStore =
         DataStoreKioskStateStore(context)
+
+    @Provides
+    @Singleton
+    fun provideAdminPasscodeStore(@ApplicationContext context: Context): AdminPasscodeStore =
+        DataStoreAdminPasscodeStore(context)
 
     @Provides
     @Singleton

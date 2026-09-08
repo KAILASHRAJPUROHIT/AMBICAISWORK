@@ -164,6 +164,17 @@ public interface CommonMapper {
     })
     void setTwoFactor(Settings settings);
 
+    @Insert({
+            "INSERT INTO settings (adminPasscodeHash, customerId" +
+                    ") VALUES (" +
+                    "#{adminPasscodeHash}, #{customerId} " +
+                    ") " +
+                    "ON CONFLICT ON CONSTRAINT settings_customer_unique DO " +
+                    "UPDATE SET " +
+                    "adminPasscodeHash = EXCLUDED.adminPasscodeHash "
+    })
+    void saveAdminPasscodeHash(Settings settings);
+
     @Select({"SELECT COUNT(*) FROM settings"})
     int getSettingsCount();
 

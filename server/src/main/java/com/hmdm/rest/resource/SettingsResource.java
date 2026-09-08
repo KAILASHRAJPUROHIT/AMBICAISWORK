@@ -42,6 +42,7 @@ import io.swagger.annotations.Authorization;
 import com.hmdm.persistence.CommonDAO;
 import com.hmdm.persistence.domain.Settings;
 import com.hmdm.rest.json.Response;
+import com.hmdm.util.PasswordUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -222,6 +223,50 @@ public class SettingsResource {
         } catch (Exception e) {
             log.error("Unexpected error when saving misc settings", e);
             return Response.INTERNAL_ERROR();
+        }
+    }
+
+    // =================================================================================================================
+    @ApiOperation(
+            value = "Set the fleet-wide admin passcode",
+            notes = "Sets (or clears, when passcode is blank) the admin passcode that gates local kiosk exit " +
+                    "on every enrolled device. Only its hash is ever stored — the raw value never leaves this call.",
+            response = Response.class
+    )
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("/adminPasscode")
+    public Response updateAdminPasscode(AdminPasscodeRequest request) {
+        if (!SecurityContext.get().hasPermission("settings")) {
+            log.error("Unauthorized attempt to update the admin passcode by user " +
+                    SecurityContext.get().getCurrentUserName());
+            return Response.PERMISSION_DENIED();
+        }
+        try {
+            String raw = request == null ? null : request.getPasscode();
+            Settings settings = new Settings();
+            settings.setAdminPasscodeHash(
+                    (raw == null || raw.trim().isEmpty()) ? null : PasswordUtil.getHashFromRaw(raw.trim())
+            );
+            this.commonDAO.saveAdminPasscodeHash(settings);
+            return Response.OK();
+        } catch (Exception e) {
+            log.error("Unexpected error when saving the admin passcode", e);
+            return Response.INTERNAL_ERROR();
+        }
+    }
+
+    /** Body of {@link #updateAdminPasscode}: the raw passcode (or blank/null to clear it). */
+    public static class AdminPasscodeRequest {
+        private String passcode;
+
+        public String getPasscode() {
+            return passcode;
+        }
+
+        public void setPasscode(String passcode) {
+            this.passcode = passcode;
         }
     }
 }

@@ -51,7 +51,6 @@ android {
 
     buildTypes {
         getByName("debug") {
-            applicationIdSuffix = ".debug"
             isDebuggable = true
             signingConfig = signingConfigs.getByName("debug")
             buildConfigField("String", "MDM_BASE_URL", "\"https://mdm.local/\"")

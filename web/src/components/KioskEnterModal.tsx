@@ -20,10 +20,10 @@ export function buildKioskPayload(c: KioskChoice): object {
   return c.mode === 'single'
     ? { mode: 'single', pinPackage: c.packages[0], allowedPackages: c.packages,
         exitMode: c.exitMode, password: c.password || undefined,
-        features: { home: true, notifications: true } }
+        features: { home: true, notifications: false, lockButtons: true } }
     : { mode: 'launcher', allowedPackages: c.packages,
         exitMode: c.exitMode, password: c.password || undefined,
-        features: { home: true, notifications: true } };
+        features: { home: true, notifications: false, lockButtons: true } };
 }
 
 /** A row in either source, normalised so the list renders the same way. */
@@ -224,7 +224,15 @@ export function KioskEnterModal({
         </div>
 
         <div className="kiosk-toolbar">
-          <input className="kiosk-search" placeholder="Search apps…" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input
+            className="kiosk-search"
+            placeholder="Search apps…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            autoComplete="off"
+            name="kiosk-app-search"
+            type="search"
+          />
           {source === 'device' && (
             <label className="kiosk-toggle">
               <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show all (incl. system)
@@ -295,7 +303,14 @@ export function KioskEnterModal({
           </label>
           <label className="field">
             <span>Exit password</span>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="optional" />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="optional"
+              autoComplete="new-password"
+              name="kiosk-exit-password"
+            />
           </label>
         </div>
 

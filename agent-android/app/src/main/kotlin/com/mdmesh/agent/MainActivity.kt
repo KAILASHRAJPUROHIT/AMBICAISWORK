@@ -3,6 +3,8 @@ package com.mdmesh.agent
 import android.Manifest
 import android.app.ActivityManager
 import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Build
@@ -10,6 +12,7 @@ import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -20,7 +23,12 @@ import androidx.lifecycle.lifecycleScope
 import com.mdmesh.agent.service.CheckInService
 import com.mdmesh.core.config.ServerConfigStore
 import com.mdmesh.core.store.DeviceIdStore
+import com.mdmesh.core.store.KioskStateStore
 import com.mdmesh.core.sync.SyncStatus
+import com.mdmesh.kiosk.KioskController
+import com.mdmesh.kiosk.KioskResult
+import com.mdmesh.kiosk.KioskToggles
+import com.mdmesh.kiosk.lockTaskFeatures
 import com.mdmesh.policy.wifi.DpmHandle
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -43,9 +51,16 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var dpmHandle: DpmHandle
     @Inject lateinit var serverConfig: ServerConfigStore
     @Inject lateinit var syncStatus: SyncStatus
+    @Inject lateinit var kioskController: KioskController
+    @Inject lateinit var kioskStateStore: KioskStateStore
 
     private lateinit var deviceIdValue: TextView
     private lateinit var kioskValue: TextView
+    private lateinit var reenterKioskButton: Button
+
+    /** Same alias KioskEnterHandler pins as HOME while in kiosk — see AgentModule.kioskHomeAlias. */
+    private val kioskHomeAlias: ComponentName
+        get() = ComponentName(packageName, "com.mdmesh.agent.KioskHomeAlias")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -86,10 +101,66 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refresh() {
-        kioskValue.text = if (isLocked()) "Locked (kiosk active)" else "Not locked"
+        val locked = isLocked()
+        kioskValue.text = if (locked) "Locked (kiosk active)" else "Not locked"
         lifecycleScope.launch {
             val id = deviceIdStore.current()
             deviceIdValue.text = if (id.isNullOrBlank()) enrollingLabel() else id
+        }
+        lifecycleScope.launch {
+            val hasLastKnown = kioskStateStore.loadLastKnown() != null
+            reenterKioskButton.visibility =
+                if (!locked && hasLastKnown) android.view.View.VISIBLE else android.view.View.GONE
+        }
+    }
+
+    /**
+     * Re-locks the device to its last-applied kiosk configuration, entirely on-device — no server
+     * round-trip needed. Mirrors [com.mdmesh.core.command.handlers.KioskEnterHandler] minus the
+     * command-envelope plumbing, since this is a local action, not a remote command.
+     */
+    private fun reenterKiosk() {
+        lifecycleScope.launch {
+            val p = kioskStateStore.loadLastKnown() ?: return@launch
+            val features = lockTaskFeatures(
+                KioskToggles(
+                    home = p.features.home,
+                    recents = p.features.recents,
+                    notifications = p.features.notifications,
+                    systemInfo = p.features.systemInfo,
+                    keyguard = p.features.keyguard,
+                    lockButtons = p.features.lockButtons,
+                ),
+            )
+            val allowed = (p.allowedPackages + listOfNotNull(p.pinPackage)).distinct()
+            setHomeAlias(enabled = true)
+            when (kioskController.enter(kioskHomeAlias, allowed, features)) {
+                is KioskResult.Ok -> {
+                    kioskStateStore.save(p)
+                    // Real HOME intent, not a direct component launch — see KioskEnterHandler's
+                    // foregroundLauncher() for why this matters (OEM System UI state refresh).
+                    runCatching {
+                        startActivity(
+                            Intent(Intent.ACTION_MAIN)
+                                .addCategory(Intent.CATEGORY_HOME)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                }
+                else -> setHomeAlias(enabled = false)
+            }
+            refresh()
+        }
+    }
+
+    private fun setHomeAlias(enabled: Boolean) {
+        runCatching {
+            val state = if (enabled) {
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            } else {
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            }
+            packageManager.setComponentEnabledSetting(kioskHomeAlias, state, PackageManager.DONT_KILL_APP)
         }
     }
 
@@ -115,7 +186,7 @@ class MainActivity : ComponentActivity() {
             setPadding(dp(28), dp(40), dp(28), dp(40))
             layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
         }
-        root.addView(text("MDMesh", 30f, SIGNAL, bold = true))
+        root.addView(text("AMBIC MDM", 30f, SIGNAL, bold = true))
         root.addView(text("Device agent", 14f, MUTED).apply { setPadding(0, dp(2), 0, dp(20)) })
 
         root.addView(label("MANAGEMENT"))
@@ -136,6 +207,12 @@ class MainActivity : ComponentActivity() {
         root.addView(label("KIOSK"))
         kioskValue = text("…", 16f, TEXT)
         root.addView(kioskValue)
+        reenterKioskButton = Button(this).apply {
+            text = "Re-enter kiosk"
+            visibility = android.view.View.GONE
+            setOnClickListener { reenterKiosk() }
+        }
+        root.addView(reenterKioskButton.apply { setPadding(0, dp(8), 0, 0) })
         root.addView(spacer())
 
         root.addView(label("AGENT VERSION"))
@@ -154,7 +231,7 @@ class MainActivity : ComponentActivity() {
         root.addView(spacer())
 
         root.addView(
-            text("Managed by MDMesh", 12f, MUTED).apply {
+            text("Managed by AMBIC DIGITAL", 12f, MUTED).apply {
                 gravity = Gravity.CENTER
                 setPadding(0, dp(24), 0, 0)
             },

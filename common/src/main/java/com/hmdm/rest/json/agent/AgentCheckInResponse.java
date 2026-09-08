@@ -42,6 +42,10 @@ public class AgentCheckInResponse {
 
     private List<AgentCommand> commands;
 
+    /** Fleet-wide admin passcode hash (see Settings#adminPasscodeHash) — null when unset. Mirrors
+     *  proto's {@code AgentCheckInResponse.adminPasscodeHash} on the Kotlin side. */
+    private String adminPasscodeHash;
+
     public AgentCheckInResponse() {
     }
 

@@ -339,7 +339,18 @@ public class AgentResource {
             }
         }
 
-        return Response.OK(new AgentCheckInResponse(commands));
+        // Fleet-wide admin passcode (Settings#adminPasscodeHash), independent of the per-device
+        // command queue above so it's always current even for a device that was offline when it
+        // was set — see SettingsResource#updateAdminPasscode.
+        String adminPasscodeHash = null;
+        com.hmdm.persistence.domain.Settings settings = unsecureDAO.getSettings(device.getCustomerId());
+        if (settings != null) {
+            adminPasscodeHash = settings.getAdminPasscodeHash();
+        }
+
+        AgentCheckInResponse checkInResponse = new AgentCheckInResponse(commands);
+        checkInResponse.setAdminPasscodeHash(adminPasscodeHash);
+        return Response.OK(checkInResponse);
     }
 
     /**

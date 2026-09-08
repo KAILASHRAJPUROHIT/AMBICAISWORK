@@ -4,6 +4,7 @@ import com.mdmesh.core.capability.CapabilitySource
 import com.mdmesh.core.command.CommandDispatcher
 import com.mdmesh.core.net.MdmApi
 import com.mdmesh.core.state.DeviceStateSource
+import com.mdmesh.core.store.AdminPasscodeStore
 import com.mdmesh.core.store.DeviceIdentity
 import com.mdmesh.core.telemetry.EventSink
 import com.mdmesh.core.telemetry.TelemetrySource
@@ -44,6 +45,7 @@ class CheckInCoordinator @Inject constructor(
     private val eventSink: EventSink,
     private val hardwareIdSource: HardwareIdSource = HardwareIdSource { null },
     private val syncStatus: SyncStatus = SyncStatus(),
+    private val adminPasscodeStore: AdminPasscodeStore? = null,
 ) {
 
     private val mutex = Mutex()
@@ -90,6 +92,10 @@ class CheckInCoordinator @Inject constructor(
             eventSink.restore(bufferedEvents)
             throw CheckInException(response.message ?: "check-in rejected")
         }
+
+        // Fleet-wide admin passcode, delivered on every check-in (independent of the per-device
+        // command queue so it's current even for devices that were offline when it was set).
+        adminPasscodeStore?.save(data.adminPasscodeHash)
 
         val results = data.commands.map { dispatcher.dispatch(it) }
         pending.add(results)

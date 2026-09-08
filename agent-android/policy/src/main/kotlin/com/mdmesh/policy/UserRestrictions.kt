@@ -20,6 +20,9 @@ object UserRestrictions {
     const val DISALLOW_BLUETOOTH = "no_bluetooth"
     const val DISALLOW_USB_FILE_TRANSFER = "no_usb_file_transfer"
     const val DISALLOW_MOUNT_PHYSICAL_MEDIA = "no_physical_media"
+    const val DISALLOW_FACTORY_RESET = "no_factory_reset"
+    const val DISALLOW_SAFE_BOOT = "no_safe_boot"
+    const val DISALLOW_DEBUGGING_FEATURES = "no_debugging_features"
 
     /**
      * The set of `DISALLOW_*` restriction keys backing a capability, or `null` if
@@ -28,6 +31,10 @@ object UserRestrictions {
     fun forKey(capabilityKey: String): Set<String>? = when (capabilityKey) {
         "bluetooth" -> setOf(DISALLOW_BLUETOOTH)
         "usbStorage" -> setOf(DISALLOW_USB_FILE_TRANSFER, DISALLOW_MOUNT_PHYSICAL_MEDIA)
+        // Closes the local escape hatches around kiosk: Settings-menu factory reset, Safe Mode
+        // (which drops third-party apps — including this one — so a kiosk-pinned device would
+        // boot unmanaged), and USB-debugging/ADB access.
+        "antiTamper" -> setOf(DISALLOW_FACTORY_RESET, DISALLOW_SAFE_BOOT, DISALLOW_DEBUGGING_FEATURES)
         else -> null
     }
 
@@ -46,6 +53,9 @@ object UserRestrictions {
     fun minSdkForKey(capabilityKey: String): Int? = when (capabilityKey) {
         "bluetooth" -> 26
         "usbStorage" -> 21
+        // DISALLOW_FACTORY_RESET/DISALLOW_DEBUGGING_FEATURES: API 21. DISALLOW_SAFE_BOOT: API 24
+        // (the higher of the three governs when the bundle is honoured).
+        "antiTamper" -> 24
         else -> null
     }
 }
