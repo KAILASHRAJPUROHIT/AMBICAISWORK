@@ -24,6 +24,20 @@ data class AgentEnrollRequest(
     val hardwareId: String? = null,
 )
 
+/** POST /enrollByCredentials body — the "Lite" tier (Device Admin only, no factory reset):
+ *  authenticates with the same email/master-password as the admin console instead of a
+ *  pre-minted token. Same response shape as token-based enroll ([AgentEnrollResponse]). */
+@Serializable
+data class AgentEnrollByCredentialsRequest(
+    val protocolVersion: String = ProtocolJson.PROTOCOL_VERSION,
+    val email: String,
+    val password: String,
+    val agent: AgentInfo,
+    val device: DeviceInfo,
+    val capabilities: Capabilities,
+    val hardwareId: String? = null,
+)
+
 /**
  * `data` payload of the enroll response: the server-issued opaque device id and the
  * per-device secret. The secret is presented as `Authorization: Bearer <secret>` on every

@@ -16,6 +16,9 @@ import com.mdmesh.proto.DeviceAction
  * On API 34+ a Device Owner must use [android.app.admin.DevicePolicyManager.wipeDevice] for a
  * full factory reset; the legacy [android.app.admin.DevicePolicyManager.wipeData] is treated as
  * "remove the calling user", which fails on the system user ("User 0 ... cannot be removed").
+ * That failure is specific to Device Owner on 34+ — a plain Device Admin (the "Lite" tier) has
+ * no `wipeDevice` privilege at all and must always go through the legacy `wipeData` path, on
+ * every API level, which *does* work for Device Admin (it's a documented plain-Admin API).
  */
 class DeviceWipeHandler(
     private val handle: DpmHandle,
@@ -24,7 +27,8 @@ class DeviceWipeHandler(
     override val type: String = DeviceAction.WIPE
 
     override suspend fun handle(command: CommandEnvelope): CommandResult = runCatching {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        val isDeviceOwner = handle.dpm.isDeviceOwnerApp(handle.admin.packageName)
+        if (isDeviceOwner && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             handle.dpm.wipeDevice(0)
         } else {
             @Suppress("DEPRECATION")

@@ -37,11 +37,15 @@ import com.hmdm.rest.json.agent.AgentCapabilities;
 import com.hmdm.rest.json.agent.AgentCheckInRequest;
 import com.hmdm.rest.json.agent.AgentCheckInResponse;
 import com.hmdm.rest.json.agent.AgentCommandResult;
+import com.hmdm.rest.json.agent.AgentEnrollByCredentialsRequest;
 import com.hmdm.rest.json.agent.AgentEnrollRequest;
 import com.hmdm.rest.json.agent.AgentEnrollResponse;
 import com.hmdm.rest.json.agent.AgentProtocol;
+import com.hmdm.auth.LocalAuth;
+import com.hmdm.persistence.domain.User;
 import com.hmdm.util.AgentCapabilityTokens;
 import com.hmdm.util.CryptoUtil;
+import com.hmdm.util.RateLimiter;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.slf4j.Logger;
@@ -92,6 +96,13 @@ public class AgentResource {
     private AgentCommandDAO commandDAO;
     private com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller;
     private com.hmdm.service.AlertDispatcher alertDispatcher;
+    private LocalAuth localAuth;
+
+    /** Guards {@link #enrollByCredentials}: this is a public, unauthenticated, credential-bearing
+     *  endpoint (device endpoints are deliberately Cloudflare-Access-bypassed), and there is no
+     *  brute-force protection anywhere else in this app to reuse — this is real enforcement, not
+     *  just an audit log. 5 attempts / 15 minutes per client IP. */
+    private final RateLimiter enrollByCredentialsLimiter = new RateLimiter(5, 15L * 60L * 1000L);
 
     /**
      * <p>A constructor required by Swagger.</p>
@@ -104,12 +115,14 @@ public class AgentResource {
                          AgentEnrollmentTokenDAO tokenDAO,
                          AgentCommandDAO commandDAO,
                          com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller,
-                         com.hmdm.service.AlertDispatcher alertDispatcher) {
+                         com.hmdm.service.AlertDispatcher alertDispatcher,
+                         LocalAuth localAuth) {
         this.unsecureDAO = unsecureDAO;
         this.tokenDAO = tokenDAO;
         this.commandDAO = commandDAO;
         this.configAppInstaller = configAppInstaller;
         this.alertDispatcher = alertDispatcher;
+        this.localAuth = localAuth;
     }
 
     // =================================================================================================================
@@ -162,6 +175,7 @@ public class AgentResource {
                     + UUID.randomUUID().toString().replace("-", "");
             commandDAO.updateDeviceSecretHash(deviceId, CryptoUtil.getSHA256String(deviceSecret));
             commandDAO.updateDeviceCapabilities(deviceId, capabilitiesJson(request.getCapabilities()));
+            commandDAO.updateEnrollmentMode(deviceId, "deviceOwner");
             // Record the agent's stable hardware id so duplicate enrollments of the same physical
             // device can be detected/flagged in the admin UI (we still create a fresh row per enroll).
             if (request.getHardwareId() != null && !request.getHardwareId().trim().isEmpty()) {
@@ -191,6 +205,63 @@ public class AgentResource {
                 tokenDAO.release(token.getId());
             }
         }
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "Enroll an agent by credentials (\"Lite\" tier)",
+            notes = "Links a device using the same email + master password as the admin console, instead of a " +
+                    "pre-minted token. No factory reset / Device Owner — the resulting device is Device-Admin-only.")
+    @POST
+    @Path("/enrollByCredentials")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response enrollByCredentials(AgentEnrollByCredentialsRequest request,
+                                         @javax.ws.rs.core.Context javax.servlet.http.HttpServletRequest httpRequest) {
+        if (!enrollByCredentialsLimiter.tryAcquire(clientIp(httpRequest))) {
+            return Response.ERROR("error.agent.enrollByCredentials.rateLimited");
+        }
+        if (request == null || request.getEmail() == null || request.getEmail().trim().isEmpty()
+                || request.getPassword() == null || request.getPassword().isEmpty()) {
+            return Response.ERROR("error.agent.enrollByCredentials.invalid");
+        }
+
+        User user = localAuth.findUser(request.getEmail().trim());
+        // Same generic failure for "no such user" and "wrong password" — do not let this endpoint
+        // be used to enumerate valid emails.
+        if (user == null || !localAuth.authenticate(user, request.getPassword())) {
+            return Response.ERROR("error.agent.enrollByCredentials.invalid");
+        }
+
+        String deviceId = UUID.randomUUID().toString();
+        Device device = unsecureDAO.createNewDeviceForToken(deviceId, user.getCustomerId(), null);
+        if (device == null) {
+            logger.warn("Agent enrollByCredentials: on-demand device creation is disabled by settings (customer {})",
+                    user.getCustomerId());
+            return Response.ERROR("error.agent.enrollment.disabled");
+        }
+
+        String deviceSecret = UUID.randomUUID().toString().replace("-", "")
+                + UUID.randomUUID().toString().replace("-", "");
+        commandDAO.updateDeviceSecretHash(deviceId, CryptoUtil.getSHA256String(deviceSecret));
+        commandDAO.updateDeviceCapabilities(deviceId, capabilitiesJson(request.getCapabilities()));
+        commandDAO.updateEnrollmentMode(deviceId, "deviceAdmin");
+        if (request.getHardwareId() != null && !request.getHardwareId().trim().isEmpty()) {
+            commandDAO.updateHardwareId(deviceId, request.getHardwareId().trim());
+        }
+        commandDAO.touchLastUpdate(deviceId);
+
+        String configurationName = null;
+        if (device.getConfigurationId() != null) {
+            Configuration configuration = unsecureDAO.getConfigurationById(device.getConfigurationId());
+            if (configuration != null) {
+                configurationName = configuration.getName();
+            }
+        }
+
+        int queuedApps = configAppInstaller.enqueueConfigApps(device);
+        logger.info("Agent enrolled by credentials: device {} (customer {}, {} config apps queued)",
+                deviceId, user.getCustomerId(), queuedApps);
+        return Response.OK(new AgentEnrollResponse(deviceId, configurationName, deviceSecret));
     }
 
     // =================================================================================================================

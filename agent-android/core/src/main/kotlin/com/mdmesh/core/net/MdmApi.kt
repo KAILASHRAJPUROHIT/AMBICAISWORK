@@ -2,6 +2,7 @@ package com.mdmesh.core.net
 
 import com.mdmesh.proto.AgentCheckInRequest
 import com.mdmesh.proto.AgentCheckInResponse
+import com.mdmesh.proto.AgentEnrollByCredentialsRequest
 import com.mdmesh.proto.AgentEnrollRequest
 import com.mdmesh.proto.AgentEnrollResponse
 import retrofit2.http.Body
@@ -21,6 +22,13 @@ interface MdmApi {
     /** Token-gated enrollment. Returns the server-issued opaque device id. */
     @POST("rest/public/agent/v1/enroll")
     suspend fun enroll(@Body request: AgentEnrollRequest): ResponseEnvelope<AgentEnrollResponse>
+
+    /** "Lite" tier enrollment: email + master password instead of a pre-minted token. Same
+     *  response shape as [enroll]. */
+    @POST("rest/public/agent/v1/enrollByCredentials")
+    suspend fun enrollByCredentials(
+        @Body request: AgentEnrollByCredentialsRequest,
+    ): ResponseEnvelope<AgentEnrollResponse>
 
     /**
      * Advertise capabilities + ack prior commands; receive the next gated batch.

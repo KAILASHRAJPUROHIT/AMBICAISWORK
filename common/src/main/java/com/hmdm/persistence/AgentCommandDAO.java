@@ -151,6 +151,11 @@ public class AgentCommandDAO {
         deviceMapper.updateAndroidVersion(deviceNumber, androidVersion);
     }
 
+    /** 'deviceOwner' or 'deviceAdmin', set once at enrollment time. */
+    public void updateEnrollmentMode(String deviceNumber, String mode) {
+        deviceMapper.updateEnrollmentMode(deviceNumber, mode);
+    }
+
     /**
      * Append a location fix to the device's trail, skipping it if it isn't newer than the last
      * stored fix — passive last-known reporting returns the same fix until the OS refreshes it, so

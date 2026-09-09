@@ -5,6 +5,7 @@ import com.mdmesh.core.net.MdmApi
 import com.mdmesh.core.store.DeviceIdentity
 import com.mdmesh.core.store.EnrollTokenProvider
 import com.mdmesh.core.telemetry.EventSink
+import com.mdmesh.proto.AgentEnrollByCredentialsRequest
 import com.mdmesh.proto.AgentEnrollRequest
 import com.mdmesh.proto.EventType
 import kotlinx.coroutines.NonCancellable
@@ -72,6 +73,42 @@ class EnrollmentManager @Inject constructor(
             runCatching { eventSink.record(EventType.ENROLLED) }
         }
         return data.deviceId
+    }
+
+    /**
+     * "Lite" tier: link this device using the admin console's own email + master password,
+     * instead of a pre-minted single-use token. Called directly from [LinkDeviceActivity]-style
+     * UI (not from the periodic check-in cycle), but shares the same mutex/idempotency guard as
+     * [ensureEnrolled] — a device already enrolled (by either path) short-circuits immediately.
+     * Throws [EnrollmentException] on a bad email/password or a rejected/rate-limited server
+     * response; the caller (a UI screen) is expected to show that message and let the user retry.
+     */
+    suspend fun enrollWithCredentials(email: String, password: String): String {
+        identity.current()?.takeIf { it.isNotBlank() }?.let { return it }
+        return mutex.withLock {
+            identity.current()?.takeIf { it.isNotBlank() } ?: run {
+                val matrix = capabilitySource.matrix(deviceId = "")
+                val response = api.enrollByCredentials(
+                    AgentEnrollByCredentialsRequest(
+                        email = email,
+                        password = password,
+                        agent = matrix.agent,
+                        device = matrix.device,
+                        capabilities = matrix.capabilities,
+                        hardwareId = runCatching { hardwareIdSource.get() }.getOrNull(),
+                    ),
+                )
+                val data = response.data
+                if (!response.isOk || data == null) {
+                    throw EnrollmentException(response.message ?: "enrollment rejected")
+                }
+                withContext(NonCancellable) {
+                    identity.saveCredentials(data.deviceId, data.deviceSecret)
+                    runCatching { eventSink.record(EventType.ENROLLED) }
+                }
+                data.deviceId
+            }
+        }
     }
 }
 

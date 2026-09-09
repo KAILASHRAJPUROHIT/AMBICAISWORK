@@ -68,6 +68,14 @@
             </intent-filter>
         </activity>
 
+        <!-- "Lite" tier linking screen (email + master password). Not a LAUNCHER entry —
+             MainActivity redirects here on its own when the device is sideloaded (no factory
+             reset), not yet enrolled, and not Device Owner. -->
+        <activity
+            android:name=".LinkDeviceActivity"
+            android:exported="false"
+            android:launchMode="singleTask" />
+
         <!-- Custom kiosk launcher. NOT a permanent HOME — the HOME claim lives on the alias below,
              which is toggled on only while in kiosk, so the device uses its normal OEM launcher the
              rest of the time. -->

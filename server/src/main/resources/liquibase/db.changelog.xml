@@ -2897,4 +2897,13 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.09.10-devices-enrollment-mode" author="ambic" context="common">
+        <comment>Column,new: devices#enrollmentMode — 'deviceOwner' (factory-reset/QR path) or
+            'deviceAdmin' (Lite, no-factory-reset path), set at enrollment time. Gives the console
+            a real, queryable field instead of inferring management level after the fact from
+            telemetry/JSONB infojson.</comment>
+        <sql>ALTER TABLE devices ADD COLUMN enrollmentMode VARCHAR(16);</sql>
+        <rollback>ALTER TABLE devices DROP COLUMN enrollmentMode;</rollback>
+    </changeSet>
+
 </databaseChangeLog>

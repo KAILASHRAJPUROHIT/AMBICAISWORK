@@ -59,6 +59,7 @@ import com.mdmesh.kiosk.CrashLoopGuard
 import com.mdmesh.kiosk.FaultStore
 import com.mdmesh.kiosk.KioskController
 import com.mdmesh.kiosk.LockTaskKioskController
+import com.mdmesh.kiosk.SoftPinKioskController
 import com.mdmesh.kiosk.SharedPrefsFaultStore
 import com.mdmesh.oem.GenericOemAdapter
 import com.mdmesh.oem.KnoxAdapter
@@ -200,7 +201,13 @@ object AgentModule {
     @Provides
     @Singleton
     fun provideKioskController(handle: DpmHandle): KioskController =
-        LockTaskKioskController(handle.dpm, handle.admin)
+        if (handle.dpm.isDeviceOwnerApp(handle.admin.packageName)) {
+            LockTaskKioskController(handle.dpm, handle.admin)
+        } else {
+            // "Lite" tier (Device Admin only, no factory reset) — see SoftPinKioskController's
+            // doc comment for exactly what this trades away vs. the Device-Owner path.
+            SoftPinKioskController()
+        }
 
     @Provides
     @Singleton

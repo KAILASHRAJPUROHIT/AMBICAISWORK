@@ -64,6 +64,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Sideloaded (no factory-reset/QR provisioning ran), not Device Owner, and never
+        // enrolled: this is a fresh "Lite" tier install. Send it straight to the linking screen
+        // rather than showing a status screen for a device with nothing to show yet.
+        if (!isDeviceOwner()) {
+            lifecycleScope.launch {
+                if (deviceIdStore.current().isNullOrBlank()) {
+                    startActivity(Intent(this@MainActivity, LinkDeviceActivity::class.java))
+                    finish()
+                }
+            }
+        }
         setContentView(buildUi())
         // Grant our own POST_NOTIFICATIONS as Device Owner BEFORE starting the foreground
         // service, so the "MDMesh active" notification is visible on Android 13+.

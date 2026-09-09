@@ -67,6 +67,11 @@ public interface AgentDeviceMapper {
     void updateAndroidVersion(@Param("deviceNumber") String deviceNumber,
                               @Param("androidVersion") String androidVersion);
 
+    /** 'deviceOwner' or 'deviceAdmin' — set once at enrollment time (see AgentResource#enroll /
+     *  #enrollByCredentials), not inferred later from telemetry. */
+    @Update({"UPDATE devices SET enrollmentMode = #{mode} WHERE number = #{deviceNumber}"})
+    void updateEnrollmentMode(@Param("deviceNumber") String deviceNumber, @Param("mode") String mode);
+
     // --- Location breadcrumb trail (device_location) ---
 
     /**
