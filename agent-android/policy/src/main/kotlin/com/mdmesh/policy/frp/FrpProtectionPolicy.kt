@@ -22,6 +22,11 @@ internal class FrpProtectionPolicy(
             handle.dpm.isDeviceOwnerApp(handle.admin.packageName)
 
     override fun setEnabled(enabled: Boolean): PolicyOutcome = runCatching {
+        // Redundant with isSupported()'s gate at runtime (CapabilityRegistry never calls
+        // setEnabled on an unsupported device), but Lint's NewApi check can't see across that
+        // method boundary — this local guard is what actually silences the API-30 warning on
+        // FactoryResetProtectionPolicy.Builder() below.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return PolicyOutcome.Unsupported
         val policy = if (enabled) {
             FactoryResetProtectionPolicy.Builder()
                 .setFactoryResetProtectionAccounts(listOf(RECOVERY_ACCOUNT))
