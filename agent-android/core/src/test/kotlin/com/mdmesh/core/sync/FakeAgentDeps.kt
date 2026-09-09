@@ -7,6 +7,7 @@ import com.mdmesh.core.store.DeviceIdentity
 import com.mdmesh.core.store.EnrollTokenProvider
 import com.mdmesh.proto.AgentCheckInRequest
 import com.mdmesh.proto.AgentCheckInResponse
+import com.mdmesh.proto.AgentEnrollByCredentialsRequest
 import com.mdmesh.proto.AgentEnrollRequest
 import com.mdmesh.proto.AgentEnrollResponse
 import com.mdmesh.proto.AgentInfo
@@ -69,11 +70,20 @@ class FakeMdmApi : MdmApi {
     var checkInGate: CompletableDeferred<Unit>? = null
 
     val enrollRequests = mutableListOf<AgentEnrollRequest>()
+    val enrollByCredentialsRequests = mutableListOf<AgentEnrollByCredentialsRequest>()
     val checkInRequests = mutableListOf<AgentCheckInRequest>()
     val checkInAuth = mutableListOf<String>()
 
     override suspend fun enroll(request: AgentEnrollRequest): ResponseEnvelope<AgentEnrollResponse> {
         enrollRequests += request
+        enrollGate?.await()
+        return enrollResponse
+    }
+
+    override suspend fun enrollByCredentials(
+        request: AgentEnrollByCredentialsRequest,
+    ): ResponseEnvelope<AgentEnrollResponse> {
+        enrollByCredentialsRequests += request
         enrollGate?.await()
         return enrollResponse
     }
