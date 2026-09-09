@@ -166,4 +166,14 @@ public class AgentCommandDAO {
             String deviceNumber, long since, int limit) {
         return deviceMapper.listLocations(deviceNumber, since, limit);
     }
+
+    public void recordDataUsage(com.hmdm.persistence.domain.DeviceDataUsage usage) {
+        usage.setRecordedAt(System.currentTimeMillis());
+        deviceMapper.insertDataUsage(usage);
+    }
+
+    public java.util.List<com.hmdm.persistence.domain.DeviceDataUsage> listDataUsage(
+            String deviceNumber, long since, int limit) {
+        return deviceMapper.listDataUsage(deviceNumber, since, limit);
+    }
 }

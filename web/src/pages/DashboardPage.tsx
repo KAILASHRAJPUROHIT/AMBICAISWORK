@@ -9,7 +9,7 @@ import type { DeviceView, ConfigurationLookup } from '../api/devices';
 
 type Bucket = 'online' | 'attention' | 'offline';
 
-const EVENT_VERBS: Record<string, string> = {
+export const EVENT_VERBS: Record<string, string> = {
   boot: 'booted',
   appInstalled: 'installed an app',
   appUninstalled: 'removed an app',

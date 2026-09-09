@@ -24,6 +24,7 @@ import javax.inject.Singleton
 class DynamicStateCollector @Inject constructor(
     @ApplicationContext private val context: Context,
     private val locationCollector: LocationCollector,
+    private val networkUsageCollector: NetworkUsageCollector,
 ) {
     @Suppress("DEPRECATION")
     fun collect(): DynamicState {
@@ -66,6 +67,7 @@ class DynamicStateCollector @Inject constructor(
             uptimeMs = SystemClock.elapsedRealtime(),
             lastBootAt = System.currentTimeMillis() - SystemClock.elapsedRealtime(),
             location = runCatching { locationCollector.collect() }.getOrNull(),
+            dataUsage = runCatching { networkUsageCollector.collect() }.getOrNull(),
         )
     }
 

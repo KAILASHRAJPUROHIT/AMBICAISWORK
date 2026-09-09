@@ -42,7 +42,6 @@
         <module>devicelog</module>
         <module>audit</module>
         <module>deviceinfo</module>
-        <module>messaging</module>
         <module>push</module>
         <module>xtra</module>
     </modules>

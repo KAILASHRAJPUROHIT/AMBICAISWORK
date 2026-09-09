@@ -2843,4 +2843,58 @@
         <rollback>ALTER TABLE settings DROP COLUMN adminPasscodeHash;</rollback>
     </changeSet>
 
+    <changeSet id="26.09.09-users-password-widen" author="ambic" context="common">
+        <comment>Column,widen: users#password varchar(40) to varchar(255) — the PBKDF2-HMAC-SHA256
+            hash format (`pbkdf2-sha256$&lt;iterations&gt;$&lt;salt&gt;$&lt;hash&gt;`) written by the
+            legacy-password auto-upgrade in LocalAuth is ~88 chars and did not fit the old
+            SHA1+salt-era column width, causing every login to fail mid-upgrade with a
+            "value too long" SQL error.</comment>
+        <sql>ALTER TABLE users ALTER COLUMN password TYPE varchar(255);</sql>
+        <rollback>ALTER TABLE users ALTER COLUMN password TYPE varchar(40);</rollback>
+    </changeSet>
+
+    <changeSet id="26.09.09-device-data-usage" author="ambic" context="common">
+        <comment>Table,new: device_data_usage (agent-reported cellular/Wi-Fi byte-count history,
+            same shape as device_location).</comment>
+        <sql>
+            CREATE TABLE device_data_usage (
+                id             BIGSERIAL PRIMARY KEY,
+                deviceNumber   VARCHAR(255) NOT NULL,
+                mobileRxBytes  BIGINT NOT NULL,
+                mobileTxBytes  BIGINT NOT NULL,
+                wifiRxBytes    BIGINT NOT NULL,
+                wifiTxBytes    BIGINT NOT NULL,
+                windowStart    BIGINT NOT NULL,
+                capturedAt     BIGINT NOT NULL,
+                recordedAt     BIGINT NOT NULL
+            );
+            CREATE INDEX device_data_usage_dev_cap_idx ON device_data_usage (deviceNumber, capturedAt);
+        </sql>
+        <rollback>
+            DROP INDEX device_data_usage_dev_cap_idx;
+            DROP TABLE device_data_usage;
+        </rollback>
+    </changeSet>
+
+    <changeSet id="26.09.09-alert-rule" author="ambic" context="common">
+        <comment>Table,new: alert_rule (customer-scoped webhook/email notification rules,
+            matched against device_event.type on each check-in).</comment>
+        <sql>
+            CREATE TABLE alert_rule (
+                id         SERIAL PRIMARY KEY,
+                customerId INT NOT NULL,
+                eventType  VARCHAR(64),
+                webhookUrl VARCHAR(1024),
+                email      VARCHAR(255),
+                enabled    BOOLEAN NOT NULL DEFAULT TRUE,
+                createdAt  BIGINT NOT NULL
+            );
+            CREATE INDEX alert_rule_customer_idx ON alert_rule (customerId);
+        </sql>
+        <rollback>
+            DROP INDEX alert_rule_customer_idx;
+            DROP TABLE alert_rule;
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

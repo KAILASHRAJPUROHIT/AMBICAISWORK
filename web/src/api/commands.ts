@@ -116,7 +116,7 @@ export async function bulkQueueCommand(
 export interface ActionParam {
   key: string;
   label: string;
-  kind: 'text' | 'password' | 'number';
+  kind: 'text' | 'password' | 'number' | 'file';
   required?: boolean;
   placeholder?: string;
 }
@@ -268,6 +268,59 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     request: {
       type: 'policy.apply', requiresCapability: 'policy.factoryResetProtection',
       payload: JSON.stringify({ policy: 'factoryResetProtection', value: false }),
+    },
+  },
+  {
+    key: 'password-quality', label: 'Set passcode policy', group: 'safe',
+    description: 'Enforce a minimum lock-screen passcode quality and length ("none" clears the requirement).',
+    params: [
+      { key: 'quality', label: 'Quality', kind: 'text', placeholder: 'none | numeric | alphabetic | alphanumeric | complex', required: true },
+      { key: 'minLength', label: 'Minimum length', kind: 'number', placeholder: '4' },
+    ],
+    request: { type: 'device.passwordQuality', requiresCapability: 'device.passwordQuality' },
+    build: (v) => ({
+      type: 'device.passwordQuality', requiresCapability: 'device.passwordQuality',
+      payload: JSON.stringify({ quality: v.quality || 'none', minLength: Number(v.minLength) || 0 }),
+    }),
+  },
+  {
+    key: 'wifi-profile', label: 'Push Wi-Fi network', group: 'safe',
+    description: 'Add a saved Wi-Fi network the device will join automatically.',
+    params: [
+      { key: 'ssid', label: 'Network name (SSID)', kind: 'text', required: true },
+      { key: 'password', label: 'Password', kind: 'password' },
+      { key: 'securityType', label: 'Security', kind: 'text', placeholder: 'wpa2 | wpa3 | open' },
+    ],
+    request: { type: 'device.wifiProfile', requiresCapability: 'device.wifiProfile' },
+    build: (v) => ({
+      type: 'device.wifiProfile', requiresCapability: 'device.wifiProfile',
+      payload: JSON.stringify({ ssid: v.ssid ?? '', password: v.password || undefined, securityType: v.securityType || 'wpa2' }),
+    }),
+  },
+  {
+    key: 'certificate', label: 'Install CA certificate', group: 'safe',
+    description: 'Push a CA certificate file (.crt/.der/.pem) to the device’s trusted credentials.',
+    params: [{ key: 'certBase64', label: 'Certificate file', kind: 'file', required: true }],
+    request: { type: 'device.certificate', requiresCapability: 'device.certificate' },
+    build: (v) => ({
+      type: 'device.certificate', requiresCapability: 'device.certificate',
+      payload: JSON.stringify({ certBase64: v.certBase64 ?? '' }),
+    }),
+  },
+  {
+    key: 'encryption-on', label: 'Storage encryption: require', group: 'safe',
+    description: 'Assert full-disk encryption is active. Fails if the device reports it cannot honour the requirement, rather than silently accepting an unencrypted device.',
+    request: {
+      type: 'policy.apply', requiresCapability: 'policy.storageEncryption',
+      payload: JSON.stringify({ policy: 'storageEncryption', value: true }),
+    },
+  },
+  {
+    key: 'encryption-off', label: 'Storage encryption: clear requirement', group: 'safe',
+    description: 'Clear the compliance requirement. Does not decrypt the device — there is no API for that.',
+    request: {
+      type: 'policy.apply', requiresCapability: 'policy.storageEncryption',
+      payload: JSON.stringify({ policy: 'storageEncryption', value: false }),
     },
   },
 ];

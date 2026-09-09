@@ -9,6 +9,7 @@ import { fetchAuthOptions } from '../api/auth';
 import { getUpdateStatus, setAutoUpdate, checkForUpdates, applyUpdate, type UpdateStatus } from '../api/updates';
 import { getFleetSettings, setAdminPasscode } from '../api/settings';
 import { RolloutPanel } from '../components/RolloutPanel';
+import { AlertRulesPanel } from '../components/AlertRulesPanel';
 import { orDash, fmtRelative } from '../ui/format';
 
 const APP_VERSION = '0.1.0';
@@ -376,6 +377,8 @@ export function SettingsPage() {
         <div id="rollout-anchor">
           <RolloutPanel />
         </div>
+
+        <AlertRulesPanel />
 
         {/* Enrollment defaults */}
         <section className="panel">

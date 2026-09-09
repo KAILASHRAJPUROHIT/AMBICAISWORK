@@ -1139,6 +1139,30 @@ a {
   font-size: 13.5px;
   color: var(--text-2);
 }
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 13px;
+}
+.data-table th {
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.data-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+}
+.data-table tr:last-child td {
+  border-bottom: none;
+}
+
 .timeline {
   margin-top: 24px;
 }

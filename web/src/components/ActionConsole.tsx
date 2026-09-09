@@ -8,6 +8,19 @@ import { KioskEnterModal } from './KioskEnterModal';
 
 type Device = { number: string };
 
+/** Reads a File as base64 (no data-URL prefix), for params like `certBase64`. */
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.slice(result.indexOf(',') + 1));
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
 const GROUPS: Array<{ id: 'safe' | 'disruptive' | 'destructive'; title: string }> = [
   { id: 'safe', title: 'Actions' },
   { id: 'disruptive', title: 'Disruptive' },
@@ -142,12 +155,25 @@ export function ActionConsole({ device }: { device: Device }) {
             {active.params?.map((p) => (
               <label key={p.key} className="field">
                 <span>{p.label}</span>
-                <input
-                  type={p.kind === 'password' ? 'password' : p.kind === 'number' ? 'number' : 'text'}
-                  placeholder={p.placeholder}
-                  value={values[p.key] ?? ''}
-                  onChange={(e) => setValues((v) => ({ ...v, [p.key]: e.target.value }))}
-                />
+                {p.kind === 'file' ? (
+                  <input
+                    type="file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      void readFileAsBase64(file).then((b64) => {
+                        setValues((v) => ({ ...v, [p.key]: b64 }));
+                      });
+                    }}
+                  />
+                ) : (
+                  <input
+                    type={p.kind === 'password' ? 'password' : p.kind === 'number' ? 'number' : 'text'}
+                    placeholder={p.placeholder}
+                    value={values[p.key] ?? ''}
+                    onChange={(e) => setValues((v) => ({ ...v, [p.key]: e.target.value }))}
+                  />
+                )}
               </label>
             ))}
             {active.confirm === 'type-to-confirm' && (

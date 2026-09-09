@@ -9,6 +9,7 @@ import { ActionConsole } from '../components/ActionConsole';
 import { TelemetryCard } from '../components/TelemetryCard';
 import { EventTimeline } from '../components/EventTimeline';
 import { LocationPanel } from '../components/LocationPanel';
+import { DataUsagePanel } from '../components/DataUsagePanel';
 import { getTelemetry, type TelemetrySnapshot } from '../api/telemetry';
 import {
   getDeviceState, forceSync, queueCommand, syncConfigApps, type DeviceState,
@@ -18,7 +19,7 @@ import { isOnline as isOnlineByRecency } from '../ui/status';
 import { useToast } from '../ui/toast';
 import { fmtDateTime, fmtRelative, orDash } from '../ui/format';
 
-type Tab = 'control' | 'telemetry' | 'events' | 'location';
+type Tab = 'control' | 'telemetry' | 'events' | 'location' | 'dataUsage';
 
 interface Row {
   k: string;
@@ -380,6 +381,9 @@ export function DeviceDetailPage() {
             <button className={tab === 'location' ? 'on' : ''} onClick={() => setTab('location')}>
               Location
             </button>
+            <button className={tab === 'dataUsage' ? 'on' : ''} onClick={() => setTab('dataUsage')}>
+              Data usage
+            </button>
           </div>
 
           <div className="tabbody">
@@ -387,6 +391,7 @@ export function DeviceDetailPage() {
             {tab === 'telemetry' && <TelemetryCard device={device} />}
             {tab === 'events' && <EventTimeline device={device} />}
             {tab === 'location' && <LocationPanel device={device} />}
+            {tab === 'dataUsage' && <DataUsagePanel device={device} />}
           </div>
         </section>
       </div>

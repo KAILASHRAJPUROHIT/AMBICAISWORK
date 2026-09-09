@@ -39,8 +39,10 @@ import org.slf4j.LoggerFactory;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import javax.ws.rs.Consumes;
+import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
+import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
@@ -72,6 +74,7 @@ public class AgentAdminResource {
     private UnsecureDAO unsecureDAO;
     private AgentWakeHub wakeHub;
     private com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller;
+    private com.hmdm.persistence.mapper.AlertRuleMapper alertRuleMapper;
 
     /**
      * <p>A constructor required by Swagger.</p>
@@ -84,12 +87,14 @@ public class AgentAdminResource {
                               AgentCommandDAO commandDAO,
                               UnsecureDAO unsecureDAO,
                               AgentWakeHub wakeHub,
-                              com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller) {
+                              com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller,
+                              com.hmdm.persistence.mapper.AlertRuleMapper alertRuleMapper) {
         this.tokenDAO = tokenDAO;
         this.commandDAO = commandDAO;
         this.unsecureDAO = unsecureDAO;
         this.wakeHub = wakeHub;
         this.configAppInstaller = configAppInstaller;
+        this.alertRuleMapper = alertRuleMapper;
     }
 
     // =================================================================================================================
@@ -368,6 +373,28 @@ public class AgentAdminResource {
     }
 
     // =================================================================================================================
+    @ApiOperation(value = "Data usage history", notes = "Recent cellular/Wi-Fi data-usage snapshots for a device, newest first.")
+    @GET
+    @Path("/devices/{deviceId}/dataUsage")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response listDataUsage(@PathParam("deviceId") String deviceId,
+                                  @QueryParam("since") Long since) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) {
+            return Response.PERMISSION_DENIED();
+        }
+        Device device = unsecureDAO.getDeviceByNumber(deviceId);
+        if (device == null) {
+            return Response.ERROR("error.agent.device.unknown");
+        }
+        if (device.getCustomerId() != customerId.get()) {
+            return Response.PERMISSION_DENIED();
+        }
+        long sinceMillis = since == null ? 0L : since;
+        return Response.OK(commandDAO.listDataUsage(deviceId, sinceMillis, 500));
+    }
+
+    // =================================================================================================================
     @ApiOperation(value = "Force sync", notes = "Wake the device now so it pulls pending commands + reports state.")
     @POST
     @Path("/devices/{deviceId}/sync")
@@ -385,6 +412,75 @@ public class AgentAdminResource {
             return Response.PERMISSION_DENIED();
         }
         wakeHub.wake(deviceId, "commands");
+        return Response.OK();
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "List alert rules", notes = "Customer-scoped webhook/email admin-alert rules.")
+    @GET
+    @Path("/alertRules")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response listAlertRules() {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) {
+            return Response.PERMISSION_DENIED();
+        }
+        return Response.OK(alertRuleMapper.listByCustomer(customerId.get()));
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "Create alert rule", notes = "Notify a webhook and/or email when a matching device event fires.")
+    @POST
+    @Path("/alertRules")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response createAlertRule(com.hmdm.persistence.domain.AlertRule rule) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) {
+            return Response.PERMISSION_DENIED();
+        }
+        if (rule == null || ((rule.getWebhookUrl() == null || rule.getWebhookUrl().trim().isEmpty())
+                && (rule.getEmail() == null || rule.getEmail().trim().isEmpty()))) {
+            return Response.ERROR("error.alertRule.invalid");
+        }
+        rule.setId(null);
+        rule.setCustomerId(customerId.get());
+        rule.setCreatedAt(System.currentTimeMillis());
+        alertRuleMapper.insert(rule);
+        return Response.OK(rule);
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "Update alert rule")
+    @PUT
+    @Path("/alertRules/{id}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response updateAlertRule(@PathParam("id") int id, com.hmdm.persistence.domain.AlertRule rule) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) {
+            return Response.PERMISSION_DENIED();
+        }
+        if (rule == null) {
+            return Response.ERROR("error.alertRule.invalid");
+        }
+        rule.setId(id);
+        rule.setCustomerId(customerId.get());
+        alertRuleMapper.update(rule);
+        return Response.OK();
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "Delete alert rule")
+    @DELETE
+    @Path("/alertRules/{id}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response deleteAlertRule(@PathParam("id") int id) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) {
+            return Response.PERMISSION_DENIED();
+        }
+        alertRuleMapper.delete(id, customerId.get());
         return Response.OK();
     }
 }

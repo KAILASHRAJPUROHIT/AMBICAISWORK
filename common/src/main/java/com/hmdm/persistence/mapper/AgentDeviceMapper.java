@@ -21,6 +21,7 @@
 
 package com.hmdm.persistence.mapper;
 
+import com.hmdm.persistence.domain.DeviceDataUsage;
 import com.hmdm.persistence.domain.DeviceLocation;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
@@ -83,4 +84,21 @@ public interface AgentDeviceMapper {
             "ORDER BY capturedAt DESC LIMIT #{limit}"})
     List<DeviceLocation> listLocations(@Param("deviceNumber") String deviceNumber,
                                        @Param("since") long since, @Param("limit") int limit);
+
+    // --- Data-usage history (device_data_usage) ---
+
+    /** Same out-of-order/duplicate guard as {@link #insertLocation}: only append a snapshot
+     *  newer than everything already stored for this device. */
+    @Insert({"INSERT INTO device_data_usage " +
+            "(deviceNumber, mobileRxBytes, mobileTxBytes, wifiRxBytes, wifiTxBytes, windowStart, capturedAt, recordedAt) " +
+            "SELECT #{deviceNumber}, #{mobileRxBytes}, #{mobileTxBytes}, #{wifiRxBytes}, #{wifiTxBytes}, " +
+            "#{windowStart}, #{capturedAt}, #{recordedAt} " +
+            "WHERE NOT EXISTS (SELECT 1 FROM device_data_usage " +
+            "WHERE deviceNumber = #{deviceNumber} AND capturedAt >= #{capturedAt})"})
+    void insertDataUsage(DeviceDataUsage usage);
+
+    @Select({"SELECT * FROM device_data_usage WHERE deviceNumber = #{deviceNumber} AND capturedAt >= #{since} " +
+            "ORDER BY capturedAt DESC LIMIT #{limit}"})
+    List<DeviceDataUsage> listDataUsage(@Param("deviceNumber") String deviceNumber,
+                                        @Param("since") long since, @Param("limit") int limit);
 }

@@ -91,6 +91,7 @@ public class AgentResource {
     private AgentEnrollmentTokenDAO tokenDAO;
     private AgentCommandDAO commandDAO;
     private com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller;
+    private com.hmdm.service.AlertDispatcher alertDispatcher;
 
     /**
      * <p>A constructor required by Swagger.</p>
@@ -102,11 +103,13 @@ public class AgentResource {
     public AgentResource(UnsecureDAO unsecureDAO,
                          AgentEnrollmentTokenDAO tokenDAO,
                          AgentCommandDAO commandDAO,
-                         com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller) {
+                         com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller,
+                         com.hmdm.service.AlertDispatcher alertDispatcher) {
         this.unsecureDAO = unsecureDAO;
         this.tokenDAO = tokenDAO;
         this.commandDAO = commandDAO;
         this.configAppInstaller = configAppInstaller;
+        this.alertDispatcher = alertDispatcher;
     }
 
     // =================================================================================================================
@@ -270,6 +273,8 @@ public class AgentResource {
             }
             // Append the reported location (dynamic.location) to the device's breadcrumb trail.
             recordLocation(deviceNumber, tel);
+            // Append the reported data-usage snapshot (dynamic.dataUsage) to its history.
+            recordDataUsage(deviceNumber, tel);
         }
 
         // Ingest buffered lifecycle events into the timeline — capped, so one check-in can't
@@ -291,6 +296,9 @@ public class AgentResource {
                     detail = detail.substring(0, MAX_EVENT_DETAIL_CHARS);
                 }
                 commandDAO.insertEvent(deviceNumber, e.getType(), ts, detail);
+                if (device != null) {
+                    alertDispatcher.dispatch(device.getCustomerId(), e.getType(), deviceNumber, detail);
+                }
             }
         }
 
@@ -437,6 +445,29 @@ public class AgentResource {
             commandDAO.recordLocation(row);
         } catch (Exception e) {
             logger.warn("Failed to record location for {}: {}", deviceNumber, e.getMessage());
+        }
+    }
+
+    private void recordDataUsage(String deviceNumber, JsonNode tel) {
+        if (tel == null) {
+            return;
+        }
+        JsonNode usage = tel.path("dynamic").path("dataUsage");
+        if (usage.isMissingNode() || usage.isNull()) {
+            return;
+        }
+        try {
+            com.hmdm.persistence.domain.DeviceDataUsage row = new com.hmdm.persistence.domain.DeviceDataUsage();
+            row.setDeviceNumber(deviceNumber);
+            row.setMobileRxBytes(usage.path("mobileRxBytes").asLong(0));
+            row.setMobileTxBytes(usage.path("mobileTxBytes").asLong(0));
+            row.setWifiRxBytes(usage.path("wifiRxBytes").asLong(0));
+            row.setWifiTxBytes(usage.path("wifiTxBytes").asLong(0));
+            row.setWindowStart(usage.path("windowStart").asLong(0));
+            row.setCapturedAt(System.currentTimeMillis());
+            commandDAO.recordDataUsage(row);
+        } catch (Exception e) {
+            logger.warn("Failed to record data usage for {}: {}", deviceNumber, e.getMessage());
         }
     }
 

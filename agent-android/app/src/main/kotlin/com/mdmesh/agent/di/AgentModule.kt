@@ -18,10 +18,13 @@ import com.mdmesh.core.command.handlers.AppScanHandler
 import com.mdmesh.core.command.handlers.AppUninstallHandler
 import com.mdmesh.core.command.handlers.ConfigSyncHandler
 import com.mdmesh.core.command.handlers.DeviceAlertHandler
+import com.mdmesh.core.command.handlers.DeviceCertificateHandler
 import com.mdmesh.core.command.handlers.DeviceLockHandler
 import com.mdmesh.core.command.handlers.DeviceLockscreenMessageHandler
 import com.mdmesh.core.command.handlers.DevicePasscodeResetHandler
+import com.mdmesh.core.command.handlers.DevicePasswordQualityHandler
 import com.mdmesh.core.command.handlers.DeviceRebootHandler
+import com.mdmesh.core.command.handlers.DeviceWifiProfileHandler
 import com.mdmesh.core.command.handlers.DeviceRingHandler
 import com.mdmesh.core.command.handlers.DeviceLocationModeHandler
 import com.mdmesh.core.command.handlers.DevicePowerModeHandler
@@ -317,4 +320,19 @@ object AgentModule {
     @IntoSet
     fun provideLocationModeHandler(store: LocationModeStore): CommandHandler =
         DeviceLocationModeHandler(store)
+
+    @Provides
+    @IntoSet
+    fun providePasswordQualityHandler(handle: DpmHandle): CommandHandler =
+        DevicePasswordQualityHandler(handle)
+
+    @Provides
+    @IntoSet
+    fun provideWifiProfileHandler(@ApplicationContext context: Context): CommandHandler =
+        DeviceWifiProfileHandler(context)
+
+    @Provides
+    @IntoSet
+    fun provideCertificateHandler(handle: DpmHandle): CommandHandler =
+        DeviceCertificateHandler(handle)
 }

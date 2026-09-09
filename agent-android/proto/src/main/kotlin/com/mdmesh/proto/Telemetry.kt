@@ -66,6 +66,20 @@ data class DynamicState(
     val lastBootAt: Long,
     /** Last-known (or freshly-fixed, in active mode) device location; null without permission/fix. */
     val location: LocationDto? = null,
+    /** Cumulative data usage for the current local day; null without the Usage-Access grant. */
+    val dataUsage: DataUsageDto? = null,
+)
+
+/** Cumulative cellular/Wi-Fi bytes for the window starting at [windowStart] (local midnight)
+ *  through the moment of collection. Each check-in reports a fresh running total for the
+ *  current day, not a since-boot counter. */
+@Serializable
+data class DataUsageDto(
+    val mobileRxBytes: Long,
+    val mobileTxBytes: Long,
+    val wifiRxBytes: Long,
+    val wifiTxBytes: Long,
+    val windowStart: Long,
 )
 
 /** A device location fix. [capturedAt] is the fix's own timestamp (epoch millis), not report time. */
@@ -87,4 +101,8 @@ data class SecurityPosture(
     val unknownSourcesAllowed: Boolean,
     val patchAgeDays: Int?,
     val isDeviceOwner: Boolean,
+    /** On-device root/tamper heuristic signals found (test-keys build tag, su binaries,
+     *  known root-manager packages, ...). Empty means none of the checked signals fired —
+     *  not a cryptographic attestation like Play Integrity, just local indicators. */
+    val rootIndicators: List<String> = emptyList(),
 )

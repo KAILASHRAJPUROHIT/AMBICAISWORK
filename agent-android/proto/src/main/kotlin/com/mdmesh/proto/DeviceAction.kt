@@ -32,9 +32,24 @@ object DeviceAction {
     const val LOCATION_PASSIVE = "passive"
     const val LOCATION_ACTIVE = "active"
 
+    /** Enforce a minimum passcode quality/length. Payload: `{ "quality": "numeric" | "alphabetic" |
+     *  "alphanumeric" | "complex" | "none", "minLength": 4 }`. */
+    const val PASSWORD_QUALITY = "device.passwordQuality"
+
+    /** Push a Wi-Fi network profile (distinct from the `wifi` toggle policy, which only does
+     *  radio enable/disable). Payload: `{ "ssid": "...", "password": "...", "securityType": "wpa2" |
+     *  "wpa3" | "open" }`. */
+    const val WIFI_PROFILE = "device.wifiProfile"
+
+    /** Install a CA certificate. Payload: `{ "certBase64": "..." }` — DER-encoded certificate
+     *  bytes, base64-encoded. [android.app.admin.DevicePolicyManager.installCaCert] identifies
+     *  the cert by its own bytes (no separate alias), so uninstall must resend the same bytes. */
+    const val CERTIFICATE = "device.certificate"
+
     /** Keys (after the `device.` prefix) advertised in `capabilities.device`. */
     val ADVERTISED_KEYS: List<String> = listOf(
         "lock", "reboot", "lockscreenMessage", "alert", "ring", "ringStop",
         "passcodeReset", "wipe", "powerMode", "locationMode",
+        "passwordQuality", "wifiProfile", "certificate",
     )
 }
