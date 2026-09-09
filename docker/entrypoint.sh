@@ -13,6 +13,7 @@ set -e
 : "${HASH_SECRET:?HASH_SECRET is required}"
 : "${DB_PASSWORD:?DB_PASSWORD is required}"
 : "${SECURE_ENROLLMENT:=0}"
+: "${TRANSMIT_PASSWORD:=1}"
 : "${SMTP_HOST:=}"
 : "${SMTP_PORT:=25}"
 : "${SMTP_FROM:=mdm@localhost}"
@@ -34,6 +35,9 @@ cat > "$CONF_DIR/ROOT.xml" <<EOF
 
     <Parameter name="usage.scenario"    value="private"/>
     <Parameter name="secure.enrollment" value="${SECURE_ENROLLMENT}"/>
+    <!-- Browser login is RSA-OAEP encrypted; do not fall back to an MD5
+         password-equivalent over the wire. -->
+    <Parameter name="transmit.password" value="${TRANSMIT_PASSWORD}"/>
     <Parameter name="hash.secret"       value="${HASH_SECRET}"/>
 
     <Parameter name="plugins.files.directory" value="/opt/mdmesh/plugins"/>

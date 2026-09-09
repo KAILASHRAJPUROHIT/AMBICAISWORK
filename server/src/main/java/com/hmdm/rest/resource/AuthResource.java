@@ -129,7 +129,10 @@ public class AuthResource {
         String password = null;
         if (transmitPassword) {
             byte[] passEnc = Base64.getDecoder().decode(credentials.getPassword());
-            password = rsaKeyService.decrypt(passEnc);
+            password = rsaKeyService.decryptOaepSha256(passEnc);
+            if (password == null) {
+                return Response.ERROR();
+            }
         } else {
             password = credentials.getPassword();
         }
