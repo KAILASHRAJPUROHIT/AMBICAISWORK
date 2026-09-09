@@ -64,8 +64,10 @@ class LockTaskKioskController(
      * intentionally swallowed (via the outer runGuarded) so a failure here never blocks kiosk entry.
      */
     private fun disableFreeformMultiWindow() {
-        // DevicePolicyManager.setSystemSetting was added in API 24 (N).
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        // DevicePolicyManager.setSystemSetting requires API 28 (P) — despite the method itself
+        // existing since API 24, lint's API database ties this particular overload/behavior to
+        // 28, and this project's minSdk is 24, so it must stay explicitly guarded.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         runCatching {
             dpm.setSystemSetting(admin, "enable_freeform_support", "0")
         }
