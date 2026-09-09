@@ -308,6 +308,8 @@ cat > "$CATALINA/conf/Catalina/localhost/ROOT.xml" <<XML
     <Parameter name="usage.scenario"    value="private"/>
     <Parameter name="secure.enrollment" value="0"/>
     <Parameter name="hash.secret"       value="${HASH_SECRET}"/>
+    <!-- Never expose a reusable MD5 password digest from the AMBIC console. -->
+    <Parameter name="transmit.password" value="1"/>
     <Parameter name="plugins.files.directory" value="${BASE_DIR}/plugins"/>
     <Parameter name="plugin.devicelog.persistence.config.class" value="com.hmdm.plugins.devicelog.persistence.postgres.DeviceLogPostgresPersistenceConfiguration"/>
     <Parameter name="role.orgadmin.id" value="2"/>

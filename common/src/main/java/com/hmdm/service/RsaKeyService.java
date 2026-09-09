@@ -8,7 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.crypto.Cipher;
-import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.OAEPParameterSpec;
+import javax.crypto.spec.PSource;
 import javax.inject.Named;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -17,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.security.spec.MGF1ParameterSpec;
 
 /**
  * <p>A service to use for asymmetric encryption to get sensitive data from the front-end.</p>
@@ -30,6 +32,9 @@ public class RsaKeyService {
     // Relative to base directory
     private static String pvtKeyFileName = "private.key";
     private static String pubKeyFileName = "public.key";
+    private static final int KEY_SIZE_BITS = 2048;
+    private static final OAEPParameterSpec OAEP_SHA256 = new OAEPParameterSpec(
+            "SHA-256", "MGF1", MGF1ParameterSpec.SHA256, PSource.PSpecified.DEFAULT);
 
     private String baseDirectory;
 
@@ -41,7 +46,9 @@ public class RsaKeyService {
     public boolean generateKeys() {
         try {
             KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-            kpg.initialize(1024);
+            // 1024-bit RSA and PKCS#1 v1.5 encryption are obsolete.  The web
+            // console imports this SPKI key with WebCrypto RSA-OAEP/SHA-256.
+            kpg.initialize(KEY_SIZE_BITS);
             KeyPair kp = kpg.generateKeyPair();
             Key pub = kp.getPublic();
             logger.info("Public key format: " + pub.getFormat());
@@ -112,10 +119,10 @@ public class RsaKeyService {
         }
     }
 
-    public String decrypt(byte[] encrypted) {
+    public String decryptOaepSha256(byte[] encrypted) {
         try {
-            Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
-            cipher.init(Cipher.DECRYPT_MODE, getPrivateKey());
+            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding");
+            cipher.init(Cipher.DECRYPT_MODE, getPrivateKey(), OAEP_SHA256);
             cipher.update(encrypted);
             byte[] result = cipher.doFinal();
             return new String(result, StandardCharsets.UTF_8);

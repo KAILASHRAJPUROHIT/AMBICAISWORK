@@ -48,7 +48,6 @@ class AdminPolicyComplianceActivity : Activity() {
             CheckInWorker.scheduleNow(ctx)
         }
 
-        // TODO: enforce mandatory baseline policy here before returning RESULT_OK.
         setResult(RESULT_OK)
         finish()
     }

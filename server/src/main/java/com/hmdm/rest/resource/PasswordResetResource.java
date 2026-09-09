@@ -31,6 +31,7 @@ import com.hmdm.persistence.domain.UserRole;
 import com.hmdm.rest.json.Response;
 import com.hmdm.security.SecurityContext;
 import com.hmdm.service.EmailService;
+import com.hmdm.service.RsaKeyService;
 import com.hmdm.util.PasswordUtil;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -65,6 +66,8 @@ public class PasswordResetResource {
     private CommonDAO commonDAO;
     private UnsecureDAO unsecureDAO;
     private EmailService emailService;
+    private RsaKeyService rsaKeyService;
+    private boolean transmitPassword;
 
     /**
      * <p>A constructor required by Swagger.</p>
@@ -77,11 +80,15 @@ public class PasswordResetResource {
      */
     @Inject
     public PasswordResetResource(CommonDAO commonDAO, UnsecureDAO unsecureDAO, EmailService emailService,
-                                 @Named("base.url") String baseUrl) {
+                                 RsaKeyService rsaKeyService,
+                                 @Named("base.url") String baseUrl,
+                                 @Named("transmit.password") boolean transmitPassword) {
         this.commonDAO = commonDAO;
         this.unsecureDAO = unsecureDAO;
         this.emailService = emailService;
+        this.rsaKeyService = rsaKeyService;
         this.baseUrl = baseUrl;
+        this.transmitPassword = transmitPassword;
     }
 
     // =================================================================================================================
@@ -131,7 +138,15 @@ public class PasswordResetResource {
                 return Response.ERROR("error.user.not.found");
             }
 
-            user.setNewPassword(PasswordUtil.getHashFromMd5(newData.getNewPassword()));
+            String passwordDigest = newData.getNewPassword();
+            if (transmitPassword) {
+                passwordDigest = rsaKeyService.decryptOaepSha256(
+                        java.util.Base64.getDecoder().decode(passwordDigest));
+                if (passwordDigest == null) {
+                    return Response.ERROR();
+                }
+            }
+            user.setNewPassword(PasswordUtil.getHashFromMd5(passwordDigest));
             user.setPasswordReset(false);
             user.setPasswordResetToken(null);
             unsecureDAO.setUserNewPasswordUnsecure(user);

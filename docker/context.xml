@@ -14,6 +14,7 @@
     <Parameter name="usage.scenario"   value="private"/>
     <Parameter name="secure.enrollment" value="0"/>
     <Parameter name="hash.secret"      value="dev-only-change-me"/>
+    <Parameter name="transmit.password" value="1"/>
 
     <Parameter name="plugins.files.directory" value="/opt/mdmesh/plugins"/>
     <Parameter name="plugin.devicelog.persistence.config.class"
