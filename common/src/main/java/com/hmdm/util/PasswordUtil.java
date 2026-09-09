@@ -1,6 +1,12 @@
 package com.hmdm.util;
 
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.security.spec.KeySpec;
+import java.util.Base64;
 import java.util.Random;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
 public class PasswordUtil {
     public static final int PASS_STRENGTH_NONE = 0;
@@ -20,8 +26,22 @@ public class PasswordUtil {
     private static int ALPHA_CHAR_END = 76;
 
     private static final String PASS_SALT = "5YdSYHyg2U";
+    private static final String PBKDF2_PREFIX = "pbkdf2-sha256$";
+    private static final int PBKDF2_ITERATIONS = 310000;
+    private static final int PBKDF2_SALT_BYTES = 16;
+    private static final int PBKDF2_KEY_BITS = 256;
+    private static final SecureRandom secureRandom = new SecureRandom();
 
     public static String getHashFromRaw(String password) {
+        byte[] salt = new byte[PBKDF2_SALT_BYTES];
+        secureRandom.nextBytes(salt);
+        byte[] hash = pbkdf2(password.toCharArray(), salt, PBKDF2_ITERATIONS);
+        return PBKDF2_PREFIX + PBKDF2_ITERATIONS + "$" + Base64.getEncoder().encodeToString(salt)
+                + "$" + Base64.getEncoder().encodeToString(hash);
+    }
+
+    /** Legacy SHA1(MD5(password)+staticSalt) generator. Retained only for old API clients during migration. */
+    public static String getLegacyHashFromRaw(String password) {
         String md5 = CryptoUtil.getMD5String(password);
         return getHashFromMd5(md5);
     }
@@ -31,7 +51,53 @@ public class PasswordUtil {
     }
 
     public static boolean passwordMatch(String enteredPass, String dbPass) {
-        return getHashFromMd5(enteredPass).equalsIgnoreCase(dbPass);
+        return isPbkdf2Hash(dbPass)
+                ? passwordMatchRaw(enteredPass, dbPass)
+                : passwordMatchLegacyDigest(enteredPass, dbPass);
+    }
+
+    public static boolean passwordMatchRaw(String rawPassword, String dbPass) {
+        if (!isPbkdf2Hash(dbPass) || rawPassword == null) {
+            return false;
+        }
+        try {
+            String[] parts = dbPass.split("\\$", -1);
+            if (parts.length != 4) {
+                return false;
+            }
+            int iterations = Integer.parseInt(parts[1]);
+            if (iterations < 100000) {
+                return false;
+            }
+            byte[] salt = Base64.getDecoder().decode(parts[2]);
+            byte[] expected = Base64.getDecoder().decode(parts[3]);
+            byte[] actual = pbkdf2(rawPassword.toCharArray(), salt, iterations);
+            return MessageDigest.isEqual(actual, expected);
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    public static boolean passwordMatchLegacyDigest(String enteredMd5, String dbPass) {
+        return enteredMd5 != null && dbPass != null
+                && getHashFromMd5(enteredMd5).equalsIgnoreCase(dbPass);
+    }
+
+    public static boolean isPbkdf2Hash(String hash) {
+        return hash != null && hash.startsWith(PBKDF2_PREFIX);
+    }
+
+    public static boolean looksLikeMd5Digest(String value) {
+        return value != null && value.matches("(?i)^[0-9a-f]{32}$");
+    }
+
+    private static byte[] pbkdf2(char[] password, byte[] salt, int iterations) {
+        try {
+            KeySpec spec = new PBEKeySpec(password, salt, iterations, PBKDF2_KEY_BITS);
+            return SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded();
+        } catch (Exception e) {
+            throw new IllegalStateException("PBKDF2 password hashing is unavailable", e);
+        }
     }
 
     public static boolean checkPassword(String password, int length, int strength) {

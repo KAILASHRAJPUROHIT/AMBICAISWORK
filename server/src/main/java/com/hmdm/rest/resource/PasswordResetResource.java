@@ -138,15 +138,17 @@ public class PasswordResetResource {
                 return Response.ERROR("error.user.not.found");
             }
 
-            String passwordDigest = newData.getNewPassword();
+            String password = newData.getNewPassword();
             if (transmitPassword) {
-                passwordDigest = rsaKeyService.decryptOaepSha256(
-                        java.util.Base64.getDecoder().decode(passwordDigest));
-                if (passwordDigest == null) {
+                password = rsaKeyService.decryptOaepSha256(
+                        java.util.Base64.getDecoder().decode(password));
+                if (password == null) {
                     return Response.ERROR();
                 }
             }
-            user.setNewPassword(PasswordUtil.getHashFromMd5(passwordDigest));
+            user.setNewPassword(transmitPassword
+                    ? PasswordUtil.getHashFromRaw(password)
+                    : PasswordUtil.getHashFromMd5(password));
             user.setPasswordReset(false);
             user.setPasswordResetToken(null);
             unsecureDAO.setUserNewPasswordUnsecure(user);

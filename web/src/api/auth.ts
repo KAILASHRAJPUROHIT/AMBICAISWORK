@@ -1,4 +1,3 @@
-import SparkMD5 from 'spark-md5';
 import { apiClient } from './client';
 
 // Endpoints (see server: com.hmdm.rest.resource.AuthResource):
@@ -6,11 +5,9 @@ import { apiClient } from './client';
 //   POST /rest/public/auth/logout
 //   GET  /rest/public/auth/options
 //
-// The legacy server stores a SHA1(MD5(password)) derivative, so the wire value
-// must remain the upper-case MD5 digest for compatibility. It is always wrapped
-// in RSA-OAEP/SHA-256 before leaving the browser. A missing public key is a
-// server misconfiguration and fails closed rather than sending a reusable MD5
-// password-equivalent over the network.
+// The browser encrypts the raw password with RSA-OAEP/SHA-256. The server
+// verifies PBKDF2 hashes and transparently migrates legacy hashes after a
+// successful plaintext login. A missing public key fails closed.
 
 /** Subset of the user object returned on successful login (UserView). */
 export interface AuthUser {
@@ -37,11 +34,6 @@ export interface AuthOptions {
   publicKey?: string;
 }
 
-function hashPassword(plain: string): string {
-  // Matches login.controller.js: md5(password).toUpperCase()
-  return SparkMD5.hash(plain).toUpperCase();
-}
-
 function base64ToArrayBuffer(value: string): ArrayBuffer {
   const binary = atob(value);
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
@@ -55,7 +47,7 @@ function bytesToBase64(value: ArrayBuffer): string {
   return btoa(binary);
 }
 
-async function encryptPasswordDigest(digest: string, publicKey: string): Promise<string> {
+async function encryptPassword(password: string, publicKey: string): Promise<string> {
   if (!globalThis.crypto?.subtle) {
     throw new Error('Secure browser cryptography is unavailable. Use a supported modern browser.');
   }
@@ -69,7 +61,7 @@ async function encryptPasswordDigest(digest: string, publicKey: string): Promise
   const encrypted = await crypto.subtle.encrypt(
     { name: 'RSA-OAEP' },
     key,
-    new TextEncoder().encode(digest).buffer as ArrayBuffer,
+    new TextEncoder().encode(password).buffer as ArrayBuffer,
   );
   return bytesToBase64(encrypted);
 }
@@ -79,7 +71,7 @@ async function securedPasswordPayload(password: string): Promise<string> {
   if (!options.publicKey) {
     throw new Error('Secure login is not enabled on this AMBIC MDM server.');
   }
-  return encryptPasswordDigest(hashPassword(password), options.publicKey);
+  return encryptPassword(password, options.publicKey);
 }
 
 export async function fetchAuthOptions(): Promise<AuthOptions> {
@@ -106,8 +98,8 @@ export async function logout(): Promise<void> {
 }
 
 /**
- * Complete a forced password reset. The server accepts the same encrypted MD5
- * digest used by login and clears the reset flag.
+ * Complete a forced password reset using the same encrypted plaintext channel
+ * as login, then store the new PBKDF2 hash server-side.
  */
 export async function submitForcedPasswordReset(
   passwordResetToken: string,
