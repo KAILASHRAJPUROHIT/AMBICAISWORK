@@ -121,6 +121,19 @@ services:
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
 
+  # Second, independent tunnel connector — routes mdm.ambicdigital.in (a separate Cloudflare
+  # account/zone from the primary TUNNEL_TOKEN's) to the same origin. Both connectors proxy to
+  # the same caddy:80, which doesn't care which hostname/account a request arrived through.
+  cloudflared-ambic:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: ["cloudflare"]
+    depends_on:
+      - caddy
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${AMBIC_TUNNEL_TOKEN:-}
+
 volumes:
   pgdata:
   mdmeshdata:
