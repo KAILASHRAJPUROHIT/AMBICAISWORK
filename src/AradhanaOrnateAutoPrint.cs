@@ -816,6 +816,7 @@ namespace AradhanaOrnateAutoPrint
 
             try
             {
+                ExpireVoucherBillSessionIfIdle();
                 var validPids = GetValidOrnatePids();
                 if (validPids.Count == 0)
                     return;
@@ -913,18 +914,17 @@ namespace AradhanaOrnateAutoPrint
             {
                 Log(string.Format("APPROVED: ONX Print dialog (copy {0}). Selected printer '{1}'. Clicking Print.",
                     copyNumber, targetPrinter));
+                SendMessage(printButton, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
             }
             else
             {
                 Log(string.Format(
-                    "WARNING: ONX Print dialog (copy {0}). Could NOT select printer '{1}' (not found in any combo box). " +
-                    "Leaving whatever printer was already selected. Clicking Print.",
+                    "BLOCKED: ONX Print dialog (copy {0}). Could NOT select required printer '{1}'. " +
+                    "Leaving the dialog open; it will not click an unknown printer.",
                     copyNumber, targetPrinter));
                 foreach (var d in diagnostics) Log("  DIAG: " + d);
                 if (diagnostics.Count == 0) Log("  DIAG: no populated ComboBox controls found in this dialog at all.");
             }
-
-            SendMessage(printButton, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
         }
 
         // This never clicks, closes, or disables Ornate's Voucher Print window.
@@ -1252,6 +1252,9 @@ namespace AradhanaOrnateAutoPrint
                     officeCopyHandledForVoucherBill = true;
                     return 1;
                 }
+                voucherBillSessionActive = false;
+                officeCopyHandledForVoucherBill = false;
+                Log("ROUTE: office voucher session consumed; all later print dialogs require a fresh Alt+P and otherwise stay P355.");
                 return 2;
             }
             Log("ROUTE SAFETY: print dialog without confirmed Alt+P session; P1007 blocked, routing P355.");
@@ -1369,6 +1372,19 @@ namespace AradhanaOrnateAutoPrint
             if (foreground == IntPtr.Zero) return;
             if (!GetValidOrnatePids().Contains(GetWindowPid(foreground))) return;
 
+            // A fresh Alt+P explicitly starts a new office-voucher attempt.
+            // Resetting the old state here prevents a completed prior bill
+            // from causing this new bill to be classified as a later/URD copy.
+            if (voucherBillSessionActive || officeCopyHandledForVoucherBill ||
+                lastHandledUtc != DateTime.MinValue)
+            {
+                voucherBillSessionActive = false;
+                officeCopyHandledForVoucherBill = false;
+                lastHandledUtc = DateTime.MinValue;
+                voucherDecisionPendingForCurrentBill = false;
+                voucherDecisionFileForCurrentBill = null;
+                Log("ROUTE: fresh Alt+P reset stale voucher session state before arming the new office copy.");
+            }
             billStartArmedUntilUtc = DateTime.UtcNow.AddSeconds(30);
             Log("ROUTE: Alt+P observed in Ornate; awaiting approved Voucher Format for P1007 office copy.");
         }
@@ -1378,6 +1394,17 @@ namespace AradhanaOrnateAutoPrint
             if (billStartArmedUntilUtc < DateTime.UtcNow) return false;
             billStartArmedUntilUtc = DateTime.MinValue;
             return true;
+        }
+
+        private void ExpireVoucherBillSessionIfIdle()
+        {
+            if (!voucherBillSessionActive || lastHandledUtc == DateTime.MinValue) return;
+            if ((DateTime.UtcNow - lastHandledUtc).TotalSeconds < config.SessionGapSeconds) return;
+
+            voucherBillSessionActive = false;
+            officeCopyHandledForVoucherBill = false;
+            lastHandledUtc = DateTime.MinValue;
+            Log("ROUTE: voucher session expired after " + config.SessionGapSeconds + " seconds of inactivity; P1007 requires a fresh Alt+P.");
         }
 
 
