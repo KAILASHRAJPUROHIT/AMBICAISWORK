@@ -1111,8 +1111,9 @@ namespace AradhanaOrnateAutoPrint
                 string bridge = Path.Combine(root, "bridge", "biller_popup.py");
                 string sync = Path.Combine(root, "bridge", "qr_bundle_sync.py");
                 string cache = Path.Combine(root, "bridge", "cache_bundle.py");
+                string claim = Path.Combine(root, "bridge", "claim_bundle_for_bill.py");
                 string standalone = Path.Combine(root, "bridge", "queue_standalone.py");
-                if (!File.Exists(bridge) || !File.Exists(sync) || !File.Exists(cache) || !File.Exists(standalone))
+                if (!File.Exists(bridge) || !File.Exists(sync) || !File.Exists(cache) || !File.Exists(claim) || !File.Exists(standalone))
                 {
                     Log("DOCUMENT: workflow files missing; normal bill route retained.");
                     return;
@@ -1121,6 +1122,11 @@ namespace AradhanaOrnateAutoPrint
                 Log("DOCUMENT: syncing held QR bundles.");
                 bool syncOk = RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --scanner-api \"{1}\" --workflow-api \"{2}\"", sync, config.DocumentScannerApi, config.DocumentWorkflowApi), out ignoredExit, out ignored);
                 Log("DOCUMENT: sync exit=" + ignoredExit + " ok=" + syncOk + " output=" + ignored);
+                if (!syncOk || ignoredExit != 0 || ignored.IndexOf("\"eligible\": 0", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    Log("DOCUMENT: no recent QR bundles; panel suppressed.");
+                    return;
+                }
                 string decisions = Path.Combine(@"C:\PrintBridge\document_decisions", Guid.NewGuid().ToString("N") + ".json");
                 Log("DOCUMENT: opening persistent document toast before printer submission.");
                 bool popupOk = RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --api \"{1}\" --decision-file \"{2}\"", bridge, config.DocumentWorkflowApi, decisions), out ignoredExit, out ignored, true);
@@ -1159,8 +1165,13 @@ namespace AradhanaOrnateAutoPrint
                     string manifest = output.Trim();
                     if (File.Exists(manifest))
                     {
-                        documentWorkflowManifestForNextCustomerCopy = manifest;
-                        Log("DOCUMENT: selected bundle cached for the customer P355 copy.");
+                        bool claimed = RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --scanner-api \"{1}\" --bundle-id \"{2}\"", claim, config.DocumentScannerApi, bundleId), out exit, out output);
+                        if (claimed && exit == 0)
+                        {
+                            documentWorkflowManifestForNextCustomerCopy = manifest;
+                            Log("DOCUMENT: selected bundle claimed and cached for the customer P355 copy.");
+                        }
+                        else Log("DOCUMENT: selected bundle was not claimed; attachment withheld to prevent duplicate use: " + output);
                     }
                     else Log("DOCUMENT: cache did not return a local manifest.");
                 }
@@ -1204,13 +1215,24 @@ namespace AradhanaOrnateAutoPrint
                 return;
             }
             string cache = Path.Combine(root, "bridge", "cache_bundle.py");
+            string claim = Path.Combine(root, "bridge", "claim_bundle_for_bill.py");
+            if (!File.Exists(claim))
+            {
+                Log("DOCUMENT: claim bridge missing; attachment withheld.");
+                return;
+            }
             if (RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --scanner-api \"{1}\" --bundle-id \"{2}\"", cache, config.DocumentScannerApi, bundleId), out exit, out output) && exit == 0)
             {
                 string manifest = output.Trim();
                 if (File.Exists(manifest))
                 {
-                    documentWorkflowManifestForNextCustomerCopy = manifest;
-                    Log("DOCUMENT: Alt+P selection cached for the customer P355 copy.");
+                    bool claimed = RunChildProcess(ResolvePythonExe(), string.Format("\"{0}\" --scanner-api \"{1}\" --bundle-id \"{2}\"", claim, config.DocumentScannerApi, bundleId), out exit, out output);
+                    if (claimed && exit == 0)
+                    {
+                        documentWorkflowManifestForNextCustomerCopy = manifest;
+                        Log("DOCUMENT: Alt+P selection claimed and cached for the customer P355 copy.");
+                    }
+                    else Log("DOCUMENT: Alt+P selection was not claimed; attachment withheld to prevent duplicate use: " + output);
                 }
                 else Log("DOCUMENT: Alt+P cache did not return a local manifest.");
             }
