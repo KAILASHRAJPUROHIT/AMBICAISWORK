@@ -3,10 +3,7 @@ package com.mdmesh.agent
 import android.app.admin.DevicePolicyManager
 import android.content.Intent
 import android.graphics.Color
-import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
-import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
 import android.view.ViewGroup
@@ -17,10 +14,8 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.mdmesh.agent.admin.AdminReceiver
-import com.mdmesh.agent.service.CheckInService
 import com.mdmesh.core.sync.EnrollmentException
 import com.mdmesh.core.sync.EnrollmentManager
 import dagger.hilt.android.AndroidEntryPoint
@@ -35,9 +30,8 @@ import javax.inject.Inject
  *
  * Flow: activate Device Admin (system consent dialog) -> enter email + master password (the same
  * credentials as the admin console) -> [EnrollmentManager.enrollWithCredentials] -> on success,
- * offer the battery-optimization exemption prompt (declared in the manifest, no silent
- * Device-Admin-level grant exists for it) -> start the normal check-in service and finish into
- * [MainActivity].
+ * hand off to [PermissionsChecklistActivity], which owns starting the check-in service and
+ * finishing into [MainActivity] once its checklist is done.
  */
 @AndroidEntryPoint
 class LinkDeviceActivity : ComponentActivity() {
@@ -62,10 +56,6 @@ class LinkDeviceActivity : ComponentActivity() {
             linkButton.isEnabled = true
         }
     }
-
-    private val batteryOptLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { finishToMain() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -106,8 +96,8 @@ class LinkDeviceActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 enrollmentManager.enrollWithCredentials(email, password)
-                setStatus("Linked. Requesting battery-optimization exemption…")
-                offerBatteryExemption()
+                setStatus("Linked.")
+                finishToPermissions()
             } catch (e: EnrollmentException) {
                 setStatus("Failed: ${e.message}")
                 linkButton.isEnabled = true
@@ -118,26 +108,11 @@ class LinkDeviceActivity : ComponentActivity() {
         }
     }
 
-    /** No Device-Admin-level silent grant exists for this — it needs a user-facing system
-     *  prompt either way, so ask right after a successful link while the user is still present. */
-    private fun offerBatteryExemption() {
-        val pm = getSystemService(POWER_SERVICE) as PowerManager
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || pm.isIgnoringBatteryOptimizations(packageName)) {
-            finishToMain()
-            return
-        }
-        runCatching {
-            val intent = Intent(
-                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                android.net.Uri.parse("package:$packageName"),
-            )
-            batteryOptLauncher.launch(intent)
-        }.onFailure { finishToMain() }
-    }
-
-    private fun finishToMain() {
-        ContextCompat.startForegroundService(this, Intent(this, CheckInService::class.java))
-        startActivity(Intent(this, MainActivity::class.java))
+    private fun finishToPermissions() {
+        startActivity(
+            Intent(this, PermissionsChecklistActivity::class.java)
+                .putExtra(PermissionsChecklistActivity.EXTRA_FROM_ENROLLMENT, true),
+        )
         finish()
     }
 

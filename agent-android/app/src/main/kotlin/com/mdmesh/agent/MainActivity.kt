@@ -226,6 +226,17 @@ class MainActivity : ComponentActivity() {
         root.addView(reenterKioskButton.apply { setPadding(0, dp(8), 0, 0) })
         root.addView(spacer())
 
+        root.addView(label("PERMISSIONS"))
+        root.addView(
+            Button(this).apply {
+                text = "Review permissions"
+                setOnClickListener {
+                    startActivity(Intent(this@MainActivity, PermissionsChecklistActivity::class.java))
+                }
+            }.apply { setPadding(0, dp(4), 0, 0) },
+        )
+        root.addView(spacer())
+
         root.addView(label("AGENT VERSION"))
         root.addView(
             text(
