@@ -61,6 +61,7 @@
         <result property="oldNumber" column="oldNumber"/>
         <result property="fastSearch" column="fastSearch"/>
         <result property="hardwareId" column="hardwareid"/>
+        <result property="enrollmentMode" column="enrollmentMode"/>
 
         <collection property="groups" ofType="com.hmdm.rest.json.LookupItem">
             <result property="id" column="groupId"/>
@@ -253,7 +254,7 @@
                devices.infojson ->> 'androidVersion' AS androidVersion,
                devices.infojson ->> 'serial' AS serial,
                devices.custom1, devices.custom2, devices.custom3, devices.oldNumber, devices.fastSearch,
-               devices.hardwareid,
+               devices.hardwareid, devices.enrollmentMode,
                groups.id AS groupId, groups.name AS groupName,
                configurations.name as configName,
                applications.pkg AS launcherPkg,

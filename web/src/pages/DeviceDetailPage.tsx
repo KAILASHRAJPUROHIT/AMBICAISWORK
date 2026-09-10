@@ -335,7 +335,18 @@ export function DeviceDetailPage() {
             <span className="ago">· {fmtRelative(device.lastUpdate)}</span>
             <DeviceGlyph className="ico" name={device.description || device.number} size={20} />
           </div>
-          <h1>{device.number}</h1>
+          <h1>
+            {device.number}
+            {device.enrollmentMode === 'deviceAdmin' && (
+              <span
+                className="lite-badge"
+                style={{ marginLeft: 8, verticalAlign: 'middle' }}
+                title="Linked without a factory reset (Device Admin only) — Device-Owner-only actions are disabled for this device"
+              >
+                Lite
+              </span>
+            )}
+          </h1>
           <NameField
             device={device}
             onSaved={(desc) => setDevice((d) => (d ? { ...d, description: desc } : d))}

@@ -2,8 +2,11 @@
 <!--
     Base app manifest. PERMISSION MINIMIZATION (Play Protect):
       * NO READ_SMS, NO QUERY_ALL_PACKAGES.
-      * NO accessibility (that lives ONLY in :remote and merges in for builds
-        that include it).
+      * NO accessibility here — the base manifest declares none. Two SEPARATE, unrelated
+        accessibility services merge in from library modules, each isolated to its own concern:
+        :remote's InputInjectionService (remote-control gesture injection) and :kiosk's
+        KioskWatchdogService (Lite-tier soft-pin relaunch-on-escape watchdog). Both are
+        android:enabled="false" by default and toggled at runtime only when actually needed.
       * Package visibility is scoped via <queries>, not a blanket query-all.
     Identity is the server-issued device id; we never request phone-state / IMEI.
 -->

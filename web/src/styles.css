@@ -702,6 +702,18 @@ a {
   flex: none;
 }
 
+.lite-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--ink) 25%, var(--border));
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+  white-space: nowrap;
+  flex: none;
+}
+
 /* list */
 .dev-list {
   display: flex;

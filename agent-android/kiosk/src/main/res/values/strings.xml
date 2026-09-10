@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="kiosk_watchdog_service_description">Keeps the managed kiosk app in the foreground on devices linked without a factory reset. Watches only for lock-task mode being exited; injects nothing and reads no screen content.</string>
+</resources>

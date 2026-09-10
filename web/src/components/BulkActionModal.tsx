@@ -40,8 +40,8 @@ function specForApp(app: Application): AppInstallSpec | null {
 }
 
 export function BulkActionModal({
-  deviceIds, onClose, onDone,
-}: { deviceIds: number[]; onClose: () => void; onDone: () => void }) {
+  deviceIds, liteCount = 0, onClose, onDone,
+}: { deviceIds: number[]; liteCount?: number; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
   const n = deviceIds.length;
   const [active, setActive] = useState<CommandTemplateExt | null>(null);
@@ -129,21 +129,30 @@ export function BulkActionModal({
 
         {showCatalog && (
           <>
+            {liteCount > 0 && (
+              <p className="muted" style={{ marginBottom: 12 }}>
+                {liteCount} of {n} selected device{liteCount === 1 ? ' is' : 's are'} Lite (linked without a factory
+                reset) — actions that need Device Owner are disabled below.
+              </p>
+            )}
             {BULK_GROUPS.map((g) => (
               <section key={g.id} className="action-group">
                 <h4 className="action-group-title">{g.title}</h4>
                 <div className="action-grid">
-                  {ACTION_TEMPLATES.filter(bulkable).filter((t) => (t.group ?? 'safe') === g.id).map((t) => (
-                    <button
-                      key={t.key}
-                      className={`btn ${t.danger ? 'btn-danger' : ''}`}
-                      disabled={busy}
-                      title={t.description}
-                      onClick={() => onPick(t)}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
+                  {ACTION_TEMPLATES.filter(bulkable).filter((t) => (t.group ?? 'safe') === g.id).map((t) => {
+                    const locked = t.requiresDeviceOwner && liteCount > 0;
+                    return (
+                      <button
+                        key={t.key}
+                        className={`btn ${t.danger ? 'btn-danger' : ''}`}
+                        disabled={busy || locked}
+                        title={locked ? `${t.description} (needs Device Owner — ${liteCount} selected device${liteCount === 1 ? ' is' : 's are'} Lite)` : t.description}
+                        onClick={() => onPick(t)}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </section>
             ))}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AccessibilityService config for the Lite-tier soft-pin watchdog. No gesture/window-content
+    capability requested — this service only observes TYPE_WINDOW_STATE_CHANGED (via
+    android:accessibilityEventTypes below) and relaunches on an actual lock-task exit; it injects
+    nothing and reads no window content.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:canPerformGestures="false"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/kiosk_watchdog_service_description"
+    android:notificationTimeout="100" />

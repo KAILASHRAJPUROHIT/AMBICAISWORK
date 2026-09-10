@@ -128,6 +128,12 @@ export interface CommandTemplateExt extends CommandTemplate {
   confirm?: 'simple' | 'type-to-confirm';
   /** Bucket for grouping in the UI. */
   group?: 'safe' | 'disruptive' | 'destructive';
+  /** True for actions that call a DevicePolicyManager API confirmed to need real Device Owner
+   *  privilege (not just Device Admin) — disabled in the console for a Lite-tier device
+   *  (enrollmentMode === 'deviceAdmin'), which would otherwise silently never receive them
+   *  (the server gates delivery on advertised capability, so nothing breaks without this flag —
+   *  it just currently lets an admin click something that queues and never lands). */
+  requiresDeviceOwner?: boolean;
   /** Builds the request from gathered params (overrides static `request` when present). */
   build?: (values: Record<string, string>) => QueueCommandRequest;
 }
@@ -239,7 +245,7 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     request: { type: 'kiosk.exit' },
   },
   {
-    key: 'anti-tamper-on', label: 'Lock down: on', group: 'safe',
+    key: 'anti-tamper-on', label: 'Lock down: on', group: 'safe', requiresDeviceOwner: true,
     description: 'Block Settings-menu factory reset, Safe Mode boot, and USB debugging/ADB — closes the local escape hatches around kiosk.',
     request: {
       type: 'policy.apply', requiresCapability: 'policy.antiTamper',
@@ -247,7 +253,7 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     },
   },
   {
-    key: 'anti-tamper-off', label: 'Lock down: off', group: 'safe',
+    key: 'anti-tamper-off', label: 'Lock down: off', group: 'safe', requiresDeviceOwner: true,
     description: 'Restore Settings-menu factory reset, Safe Mode boot, and USB debugging access.',
     request: {
       type: 'policy.apply', requiresCapability: 'policy.antiTamper',
@@ -255,7 +261,7 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     },
   },
   {
-    key: 'frp-on', label: 'Factory reset protection: on', group: 'safe',
+    key: 'frp-on', label: 'Factory reset protection: on', group: 'safe', requiresDeviceOwner: true,
     description: 'A hardware-level (Recovery-mode) wipe will require the fleet recovery account to unlock afterward.',
     request: {
       type: 'policy.apply', requiresCapability: 'policy.factoryResetProtection',
@@ -263,7 +269,7 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     },
   },
   {
-    key: 'frp-off', label: 'Factory reset protection: off', group: 'safe',
+    key: 'frp-off', label: 'Factory reset protection: off', group: 'safe', requiresDeviceOwner: true,
     description: 'Clear FRP — use before a legitimate resale/repurpose wipe, otherwise the account lock will block setup.',
     request: {
       type: 'policy.apply', requiresCapability: 'policy.factoryResetProtection',
@@ -271,7 +277,7 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     },
   },
   {
-    key: 'password-quality', label: 'Set passcode policy', group: 'safe',
+    key: 'password-quality', label: 'Set passcode policy', group: 'safe', requiresDeviceOwner: true,
     description: 'Enforce a minimum lock-screen passcode quality and length ("none" clears the requirement).',
     params: [
       { key: 'quality', label: 'Quality', kind: 'text', placeholder: 'none | numeric | alphabetic | alphanumeric | complex', required: true },
@@ -284,7 +290,7 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     }),
   },
   {
-    key: 'wifi-profile', label: 'Push Wi-Fi network', group: 'safe',
+    key: 'wifi-profile', label: 'Push Wi-Fi network', group: 'safe', requiresDeviceOwner: true,
     description: 'Add a saved Wi-Fi network the device will join automatically.',
     params: [
       { key: 'ssid', label: 'Network name (SSID)', kind: 'text', required: true },
@@ -298,7 +304,7 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     }),
   },
   {
-    key: 'certificate', label: 'Install CA certificate', group: 'safe',
+    key: 'certificate', label: 'Install CA certificate', group: 'safe', requiresDeviceOwner: true,
     description: 'Push a CA certificate file (.crt/.der/.pem) to the device’s trusted credentials.',
     params: [{ key: 'certBase64', label: 'Certificate file', kind: 'file', required: true }],
     request: { type: 'device.certificate', requiresCapability: 'device.certificate' },
@@ -308,7 +314,7 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     }),
   },
   {
-    key: 'encryption-on', label: 'Storage encryption: require', group: 'safe',
+    key: 'encryption-on', label: 'Storage encryption: require', group: 'safe', requiresDeviceOwner: true,
     description: 'Assert full-disk encryption is active. Fails if the device reports it cannot honour the requirement, rather than silently accepting an unencrypted device.',
     request: {
       type: 'policy.apply', requiresCapability: 'policy.storageEncryption',
@@ -316,7 +322,7 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     },
   },
   {
-    key: 'encryption-off', label: 'Storage encryption: clear requirement', group: 'safe',
+    key: 'encryption-off', label: 'Storage encryption: clear requirement', group: 'safe', requiresDeviceOwner: true,
     description: 'Clear the compliance requirement. Does not decrypt the device — there is no API for that.',
     request: {
       type: 'policy.apply', requiresCapability: 'policy.storageEncryption',

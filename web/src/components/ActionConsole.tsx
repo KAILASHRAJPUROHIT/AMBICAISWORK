@@ -6,7 +6,7 @@ import {
 import { useToast } from '../ui/toast';
 import { KioskEnterModal } from './KioskEnterModal';
 
-type Device = { number: string };
+type Device = { number: string; enrollmentMode?: string };
 
 /** Reads a File as base64 (no data-URL prefix), for params like `certBase64`. */
 function readFileAsBase64(file: File): Promise<string> {
@@ -117,22 +117,30 @@ export function ActionConsole({ device }: { device: Device }) {
       </div>
 
       <DeviceStatePanel state={state} />
+      {device.enrollmentMode === 'deviceAdmin' && (
+        <p className="muted" style={{ marginBottom: 12 }}>
+          Lite device (linked without a factory reset) — actions that need Device Owner are disabled below.
+        </p>
+      )}
 
       {GROUPS.map((g) => (
         <section key={g.id} className="action-group">
           <h3 className="action-group-title">{g.title}</h3>
           <div className="action-grid">
-            {ACTION_TEMPLATES.filter((t) => (t.group ?? 'safe') === g.id).map((t) => (
-              <button
-                key={t.key}
-                className={`btn ${t.danger ? 'btn-danger' : ''}`}
-                disabled={busy}
-                title={t.description}
-                onClick={() => { void onClick(t); }}
-              >
-                {t.label}
-              </button>
-            ))}
+            {ACTION_TEMPLATES.filter((t) => (t.group ?? 'safe') === g.id).map((t) => {
+              const locked = t.requiresDeviceOwner && device.enrollmentMode === 'deviceAdmin';
+              return (
+                <button
+                  key={t.key}
+                  className={`btn ${t.danger ? 'btn-danger' : ''}`}
+                  disabled={busy || locked}
+                  title={locked ? `${t.description} (needs Device Owner — this is a Lite device)` : t.description}
+                  onClick={() => { void onClick(t); }}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
         </section>
       ))}

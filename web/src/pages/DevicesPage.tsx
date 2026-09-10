@@ -357,6 +357,7 @@ export function DevicesPage() {
       {actionsOpen && (
         <BulkActionModal
           deviceIds={[...selected]}
+          liteCount={filtered.filter((d) => selected.has(d.id) && d.enrollmentMode === 'deviceAdmin').length}
           onClose={() => setActionsOpen(false)}
           onDone={() => clearSel()}
         />
@@ -433,6 +434,17 @@ function DupBadge({ n }: { n: number }) {
   );
 }
 
+function LiteBadge() {
+  return (
+    <span
+      className="lite-badge"
+      title="Linked without a factory reset (Device Admin only) — Device-Owner-only actions are disabled for this device"
+    >
+      Lite
+    </span>
+  );
+}
+
 function DeviceCard({
   d,
   now,
@@ -468,6 +480,7 @@ function DeviceCard({
         <span className={`dot ${online ? 'on' : 'off'}`} />
         <span className="nm">{orDash(d.number)}</span>
         {dup > 1 && <DupBadge n={dup} />}
+        {d.enrollmentMode === 'deviceAdmin' && <LiteBadge />}
         <DeviceGlyph className="ico" name={d.description || d.number} size={16} />
       </div>
       {d.description && <div className="sub">{d.description}</div>}
@@ -527,6 +540,7 @@ function DeviceRow({
           {d.description && <div className="sub">{d.description}</div>}
         </div>
         {dup > 1 && <DupBadge n={dup} />}
+        {d.enrollmentMode === 'deviceAdmin' && <LiteBadge />}
       </div>
       <div className="lc">
         <span className="lk">Android</span>

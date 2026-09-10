@@ -43,6 +43,8 @@ export interface DeviceView {
   /** Stable per-device hardware id (enrollment-specific id / ANDROID_ID). Shared
    *  values across rows indicate the same physical device enrolled more than once. */
   hardwareId?: string;
+  /** 'deviceOwner' (factory-reset/QR) or 'deviceAdmin' (Lite, no factory reset). */
+  enrollmentMode?: string;
   custom1?: string;
   custom2?: string;
   custom3?: string;

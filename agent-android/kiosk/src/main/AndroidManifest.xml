@@ -1,2 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" />
+<!--
+    PERMISSION ISOLATION (Play Protect):
+    This is the second (and only other) place accessibility is declared in this app — the base
+    :app manifest has none, and :remote's InputInjectionService is a separate, unrelated concern
+    (see KioskWatchdogService's doc comment for why they are not folded together). A build that
+    excludes :kiosk ships with no kiosk feature at all, factory-reset or Lite; a build that
+    includes :kiosk but never enters Lite mode never enables this service (android:enabled="false"
+    below, toggled at runtime only by SoftPinKioskController's caller).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+
+        <!--
+            Lite-tier soft-pin watchdog. Disabled by default; enabled only while a
+            Device-Admin-only (non-Device-Owner) device is actively in kiosk mode, disabled again
+            on kiosk exit — see KioskLauncherActivity.
+        -->
+        <service
+            android:name="com.mdmesh.kiosk.KioskWatchdogService"
+            android:enabled="false"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/kiosk_watchdog_service" />
+        </service>
+
+    </application>
+
+</manifest>

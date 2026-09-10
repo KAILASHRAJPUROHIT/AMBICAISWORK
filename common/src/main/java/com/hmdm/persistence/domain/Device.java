@@ -105,6 +105,8 @@ public class Device implements CustomerData, Serializable {
     private String serial;
     @ApiModelProperty("Stable per-device hardware id (enrollment-specific id / ANDROID_ID)")
     private String hardwareId;
+    @ApiModelProperty("How this device was enrolled: 'deviceOwner' (factory-reset/QR) or 'deviceAdmin' (Lite, no factory reset)")
+    private String enrollmentMode;
 
     public Device() {
     }
@@ -115,6 +117,14 @@ public class Device implements CustomerData, Serializable {
 
     public void setHardwareId(String hardwareId) {
         this.hardwareId = hardwareId;
+    }
+
+    public String getEnrollmentMode() {
+        return this.enrollmentMode;
+    }
+
+    public void setEnrollmentMode(String enrollmentMode) {
+        this.enrollmentMode = enrollmentMode;
     }
 
     public Integer getId() {

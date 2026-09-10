@@ -30,6 +30,7 @@ import com.mdmesh.core.store.KioskStateStore
 import com.mdmesh.core.telemetry.EventSink
 import com.mdmesh.kiosk.CrashLoopGuard
 import com.mdmesh.kiosk.KioskController
+import com.mdmesh.policy.wifi.DpmHandle
 import com.mdmesh.proto.KioskApplyPayload
 import com.mdmesh.proto.PasscodeHash
 import dagger.hilt.android.AndroidEntryPoint
@@ -60,6 +61,7 @@ class KioskLauncherActivity : ComponentActivity() {
     @Inject lateinit var events: EventSink
     @Inject lateinit var crashGuard: CrashLoopGuard
     @Inject lateinit var adminPasscodeStore: AdminPasscodeStore
+    @Inject lateinit var dpmHandle: DpmHandle
 
     /** Last applied non-null kiosk state, so [onResume] can recover a bounced single-app pin. */
     private var active: KioskApplyPayload? = null
@@ -104,6 +106,7 @@ class KioskLauncherActivity : ComponentActivity() {
 
     private fun applyState(p: KioskApplyPayload?) {
         active = p
+        setWatchdogArmed(p != null)
         if (p == null) {
             stopLockTaskSafely()
             setContentView(idleView())
@@ -133,11 +136,36 @@ class KioskLauncherActivity : ComponentActivity() {
     private fun bailOnCrashLoop(): Boolean {
         if (!crashGuard.isCrashLoopDetected()) return false
         events.record("kioskCrashLoop", "dropped kiosk after repeated crashes")
+        // Disarm BEFORE stopLockTaskSafely()/controller.exit() below — the watchdog reacts to
+        // lockTaskModeState going to NONE, and without this it would misread our own
+        // intentional crash-loop exit as an escape and immediately relaunch us right back in.
+        setWatchdogArmed(false)
+        stopLockTaskSafely()
         controller.exit()
         active = null
         lifecycleScope.launch { store.save(null) }
         setContentView(recoveryView())
         return true
+    }
+
+    /** Enables/disables [com.mdmesh.kiosk.KioskWatchdogService] — a no-op on a Device-Owner
+     *  device (the real lock-task path has no escape gesture to watch for; arming it there would
+     *  just be an unused accessibility surface enabled for nothing). Only meaningful for the
+     *  Lite (Device Admin only) tier's [com.mdmesh.kiosk.SoftPinKioskController]. */
+    private fun setWatchdogArmed(armed: Boolean) {
+        if (dpmHandle.dpm.isDeviceOwnerApp(packageName)) return
+        runCatching {
+            val state = if (armed) {
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            } else {
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            }
+            packageManager.setComponentEnabledSetting(
+                ComponentName(this, "com.mdmesh.kiosk.KioskWatchdogService"),
+                state,
+                android.content.pm.PackageManager.DONT_KILL_APP,
+            )
+        }
     }
 
     private fun startLockTaskSafely() {
@@ -184,6 +212,8 @@ class KioskLauncherActivity : ComponentActivity() {
     }
 
     private fun doExit() {
+        // Disarm BEFORE stopLockTask() — see the identical note in bailOnCrashLoop().
+        setWatchdogArmed(false)
         runCatching { if (isFinishing.not()) stopLockTask() }
         controller.exit()
         events.record("kioskExit", "exited on-device")

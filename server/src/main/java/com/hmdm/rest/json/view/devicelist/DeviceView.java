@@ -195,6 +195,11 @@ public class DeviceView {
         return device.getHardwareId();
     }
 
+    @ApiModelProperty("How this device was enrolled: 'deviceOwner' (factory-reset/QR) or 'deviceAdmin' (Lite, no factory reset)")
+    public String getEnrollmentMode() {
+        return device.getEnrollmentMode();
+    }
+
     @ApiModelProperty("An info on device state submitted by device to MDM server")
     public DeviceInfoView getInfo() {
         return deviceInfo;
