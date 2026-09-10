@@ -118,6 +118,21 @@ don't do it silently, since it changes what's already live on real bills.
    so there's always a real rollback artifact, not just source you'd have
    to hope recompiles identically.
 
+## PC2 readiness gate
+
+Before any physical acceptance test, run this from an elevated PowerShell on
+PC2. It performs no printing and exposes no secrets. It fails closed if the
+router, required printer queues, encrypted bridge credential, workflow API,
+or approved office Voucher Format reference is missing.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "C:\PrintBridge\deploy\print-router\tools\Test-PC2PrintRouterReadiness.ps1"
+```
+
+Expected result: `Status = ready-for-physical-acceptance-test`. This is a
+readiness gate only; the real-bill scenarios still require the physical
+acceptance sequence in the deployment handover.
+
 ## Source of truth verification (2026-09-04)
 
 Everything in `src/`, `overlay/overlay_merge.py`,

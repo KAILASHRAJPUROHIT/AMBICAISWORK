@@ -34,6 +34,13 @@ if errorlevel 1 (
   exit /b 1
 )
 
+powershell -NoProfile -Command "$s=Get-AuthenticodeSignature -FilePath '%SOURCE%'; if($s.Status -ne 'Valid'){Write-Error ('Signature status: ' + $s.Status); exit 1}"
+if errorlevel 1 (
+  echo ERROR: %APPNAME% is not signed by a trusted certificate. Installation stopped.
+  pause
+  exit /b 1
+)
+
 if not exist "%REFERENCE_SOURCE%" (
   echo ERROR: %REFERENCE% was not found next to this installer.
   pause
