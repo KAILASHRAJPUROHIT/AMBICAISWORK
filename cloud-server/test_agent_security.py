@@ -2,6 +2,12 @@
 import app as a
 
 
+def test_health_is_available_without_agent_credentials():
+    response = a.app.test_client().get("/health")
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "healthy"}
+
+
 def test_agent_queue_requires_bearer_token(monkeypatch):
     monkeypatch.setenv("AGENT_TOKEN", "unit-agent-token")
     client = a.app.test_client()

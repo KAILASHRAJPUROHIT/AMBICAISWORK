@@ -1,0 +1,24 @@
+services:
+  qr-print-server:
+    build:
+      context: ../../cloud-server
+      dockerfile: Dockerfile
+    image: aradhana/qr-print-server:${AIS_RELEASE_TAG:-staging}
+    env_file:
+      - .env
+    environment:
+      PORT: "8000"
+      QR_DATA_DIR: /var/lib/aradhana-print
+      DATABASE_URL: sqlite:////var/lib/aradhana-print/jobs.db
+    volumes:
+      - ${AIS_DATA_DIR:-/srv/aradhana-print/data}:/var/lib/aradhana-print
+    ports:
+      - "127.0.0.1:${AIS_BIND_PORT:-8000}:8000"
+    user: "10001:10001"
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m

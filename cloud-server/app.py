@@ -15,12 +15,17 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = BASE_DIR / "uploads"
+# Runtime data must live outside the deployed code tree. On AWS this points to
+# the mounted EBS-backed directory, so a container replacement cannot lose
+# queued files, document bundles, check-ins, or SQLite state.
+DATA_DIR = Path(os.environ.get("QR_DATA_DIR", str(BASE_DIR))).expanduser().resolve()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR = DATA_DIR / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-CHECKIN_DIR = BASE_DIR / "checkins"
+CHECKIN_DIR = DATA_DIR / "checkins"
 CHECKIN_DIR.mkdir(parents=True, exist_ok=True)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'jobs.db'}")
+app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get("DATABASE_URL", f"sqlite:///{DATA_DIR / 'jobs.db'}")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_UPLOAD_MB", "50")) * 1024 * 1024
 
@@ -646,6 +651,17 @@ def generate_queue_id():
         if not PrintJob.query.get(job_id):
             return job_id
     raise RuntimeError("Unable to generate queue ID. Try again.")
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    """Unauthenticated liveness/readiness probe; never exposes queue data."""
+    try:
+        db.session.execute(db.text("SELECT 1"))
+        return jsonify({"status": "healthy"}), 200
+    except Exception:
+        app.logger.exception("health database check failed")
+        return jsonify({"status": "unhealthy"}), 503
 
 
 @app.route("/", methods=["GET"])
