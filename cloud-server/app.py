@@ -231,6 +231,40 @@ def _enqueue_ocr_copy(source: Path, bundle_id: str | None = None) -> str | None:
     return doc_id
 
 
+def _create_pending_document_bundle(source_files: list[Path], display_name: str,
+                                    print_mode: str) -> DocumentBundle:
+    """Archive an attachable 30-minute bundle from already-validated files.
+
+    Both QR actions use this: Direct to Printer remains an immediate P355 job,
+    while the same scan is also eligible for a bill attachment until claimed
+    or expired.  The archive copy isolates the attachment path from print-job
+    cleanup and gives OCR one linked, durable source of truth.
+    """
+    bundle_id = _generate_document_bundle_id()
+    bundle_dir = UPLOAD_DIR / "document-bundles" / bundle_id
+    bundle_dir.mkdir(parents=True, exist_ok=False)
+    saved_files: list[str] = []
+    bundle = DocumentBundle(id=bundle_id, display_name=display_name[:160],
+                            status="pending", print_mode=print_mode, file_paths="[]")
+    db.session.add(bundle)
+    try:
+        for source in source_files:
+            filename = secure_filename(source.name) or f"document_{len(saved_files) + 1}.jpg"
+            destination = bundle_dir / filename
+            if destination.exists():
+                destination = bundle_dir / f"{destination.stem}_{len(saved_files) + 1}{destination.suffix}"
+            shutil.copy2(source, destination)
+            saved_files.append(destination.name)
+            _enqueue_ocr_copy(destination, bundle_id)
+        if not saved_files:
+            raise ValueError("No valid files were available for the document bundle.")
+        bundle.file_paths = json.dumps(saved_files)
+        return bundle
+    except Exception:
+        shutil.rmtree(bundle_dir, ignore_errors=True)
+        raise
+
+
 @app.route("/api/document-bundles/upload", methods=["POST"])
 def upload_document_bundle():
     """QR Scanner attachment mode. Creates a pending bundle and OCR items;
@@ -330,6 +364,29 @@ def print_document_bundle_standalone(bundle_id):
     if bundle.status != "pending":
         return jsonify({"error": "This document bundle is no longer pending.", "status": bundle.status}), 409
     return _queue_document_bundle(bundle, consume_pending=True)
+
+
+@app.route("/api/document-bundles/<bundle_id>/claim-for-bill", methods=["POST"])
+def claim_document_bundle_for_bill(bundle_id):
+    """Atomically remove one confirmed bundle from all biller lists.
+
+    The local router calls this only after it cached the selected documents.
+    This makes the cloud queue authoritative across PC2 and Dell while never
+    auto-attaching a document to a bill.
+    """
+    denied = _require_document_bridge()
+    if denied:
+        return denied
+    expire_document_bundles()
+    bundle = DocumentBundle.query.get_or_404(bundle_id)
+    if bundle.status == "attached":
+        return jsonify({"success": True, "bundle_id": bundle.id, "status": bundle.status, "existing": True})
+    if bundle.status != "pending":
+        return jsonify({"error": "This document bundle is no longer available for attachment.",
+                        "status": bundle.status}), 409
+    bundle.status = "attached"
+    db.session.commit()
+    return jsonify({"success": True, "bundle_id": bundle.id, "status": bundle.status})
 
 
 def _queue_document_bundle(bundle: DocumentBundle, consume_pending: bool):
@@ -652,6 +709,7 @@ def upload():
     job_dir = UPLOAD_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
     saved_files = []
+    saved_paths: list[Path] = []
 
     for uploaded in files:
         if not uploaded or not uploaded.filename:
@@ -664,17 +722,27 @@ def upload():
             destination = job_dir / f"{destination.stem}_{len(saved_files)+1}{destination.suffix}"
         uploaded.save(destination)
         saved_files.append(destination.name)
-        # QR Print Now and Attach to Bill must have identical OCR visibility.
-        # This is a copy-only side path: print queue behavior stays unchanged.
-        _enqueue_ocr_copy(destination)
+        saved_paths.append(destination)
 
     if not saved_files:
         return jsonify({"error": "No valid files uploaded."}), 400
 
+    # Direct printing and billing now share one document-record contract. The
+    # PrintJob remains immediate and 355-only; this separate bundle merely
+    # lets a biller attach the same recent scan within the 30-minute window.
+    display_name = (request.form.get("display_name") or "Pending ID documents").strip()
+    try:
+        bundle = _create_pending_document_bundle(saved_paths, display_name, print_mode)
+    except Exception as error:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        db.session.rollback()
+        return jsonify({"error": f"Could not retain this document for billing: {error}"}), 409
+
     job = PrintJob(id=job_id, status="pending", print_mode=print_mode, copies=copies, file_paths=json.dumps(saved_files))
     db.session.add(job)
     db.session.commit()
-    return jsonify({"success": True, "queue_id": job_id, "status": job.status, "file_count": len(saved_files)})
+    return jsonify({"success": True, "queue_id": job_id, "attachment_bundle_id": bundle.id,
+                    "status": job.status, "file_count": len(saved_files)})
 
 
 @app.route("/api/job/<job_id>", methods=["GET"])
