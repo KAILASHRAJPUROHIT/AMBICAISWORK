@@ -27,6 +27,61 @@ namespace AradhanaOrnateAutoPrint
         }
     }
 
+    // A route is matched only by its saved Voucher Print visual template and
+    // its exact requested copy count. The label is for the administrator; it
+    // is never trusted as OCR or as a routing signal.
+    internal sealed class VoucherRouteRule
+    {
+        public string Name = "";
+        public int RequiredCopies = 2;
+        public string ReferenceFile = "";
+        public string Copy1Printer = "";
+        public string LaterPrinter = "";
+        public bool Enabled = true;
+
+        public static VoucherRouteRule DefaultRule()
+        {
+            return new VoucherRouteRule
+            {
+                Name = "GST Sales Voucher (A4) Shree Aradhana",
+                RequiredCopies = 2,
+                ReferenceFile = "office-sales-voucher-format-reference.png"
+            };
+        }
+
+        public static bool TryParse(string value, out VoucherRouteRule rule)
+        {
+            rule = null;
+            string[] fields = value.Split('|');
+            if (fields.Length != 6) return false;
+            int copies;
+            if (string.IsNullOrWhiteSpace(fields[0]) ||
+                string.IsNullOrWhiteSpace(fields[2]) ||
+                !int.TryParse(fields[1], out copies) || copies < 1 || copies > 9)
+                return false;
+            bool enabled;
+            if (!bool.TryParse(fields[5], out enabled)) return false;
+            rule = new VoucherRouteRule
+            {
+                Name = fields[0].Trim(),
+                RequiredCopies = copies,
+                ReferenceFile = Path.GetFileName(fields[2].Trim()),
+                Copy1Printer = fields[3].Trim(),
+                LaterPrinter = fields[4].Trim(),
+                Enabled = enabled
+            };
+            return true;
+        }
+
+        public string Serialize()
+        {
+            // Pipe is intentionally rejected by the Settings form for all
+            // editable fields, keeping this plain key=value config robust.
+            return Name + "|" + RequiredCopies + "|" + ReferenceFile + "|" +
+                   Copy1Printer + "|" + LaterPrinter + "|" + Enabled;
+        }
+    }
+
     // Plain key=value config file. No JSON library is available to the
     // in-box .NET Framework csc.exe build used by Build_Aradhana_Ornate_AutoPrint.bat,
     // so this stays deliberately simple.
@@ -57,6 +112,7 @@ namespace AradhanaOrnateAutoPrint
         public string DocumentWorkflowRoot = @"C:\AradhanaSystems\platform\plugins\document-print-workflow";
         public string DocumentWorkflowApi = "http://127.0.0.1:8310";
         public string DocumentScannerApi = "";
+        public readonly List<VoucherRouteRule> VoucherRoutes = new List<VoucherRouteRule>();
 
         public bool IsHub
         {
@@ -66,9 +122,14 @@ namespace AradhanaOrnateAutoPrint
         public static AppConfig Load(string path)
         {
             var cfg = new AppConfig();
+            bool foundRouteRule = false;
             try
             {
-                if (!File.Exists(path)) return cfg;
+                if (!File.Exists(path))
+                {
+                    cfg.VoucherRoutes.Add(VoucherRouteRule.DefaultRule());
+                    return cfg;
+                }
 
                 foreach (var rawLine in File.ReadAllLines(path))
                 {
@@ -100,10 +161,21 @@ namespace AradhanaOrnateAutoPrint
                         case "DocumentWorkflowRoot": cfg.DocumentWorkflowRoot = val; break;
                         case "DocumentWorkflowApi": cfg.DocumentWorkflowApi = val; break;
                         case "DocumentScannerApi": cfg.DocumentScannerApi = val; break;
+                        case "VoucherRoute":
+                            VoucherRouteRule route;
+                            if (VoucherRouteRule.TryParse(val, out route))
+                            {
+                                if (!foundRouteRule) cfg.VoucherRoutes.Clear();
+                                cfg.VoucherRoutes.Add(route);
+                                foundRouteRule = true;
+                            }
+                            break;
                     }
                 }
             }
             catch { }
+            if (cfg.VoucherRoutes.Count == 0)
+                cfg.VoucherRoutes.Add(VoucherRouteRule.DefaultRule());
             return cfg;
         }
 
@@ -128,6 +200,8 @@ namespace AradhanaOrnateAutoPrint
                 sb.AppendLine("DocumentWorkflowRoot=" + DocumentWorkflowRoot);
                 sb.AppendLine("DocumentWorkflowApi=" + DocumentWorkflowApi);
                 sb.AppendLine("DocumentScannerApi=" + DocumentScannerApi);
+                foreach (VoucherRouteRule route in VoucherRoutes)
+                    sb.AppendLine("VoucherRoute=" + route.Serialize());
                 File.WriteAllText(path, sb.ToString());
             }
             catch { }
@@ -263,6 +337,8 @@ namespace AradhanaOrnateAutoPrint
         // biller changes it. Keep observing it until it qualifies, then lock
         // that specific window's route so its second print cannot re-arm P1007.
         private readonly HashSet<IntPtr> voucherRoutesFinalized = new HashSet<IntPtr>();
+        private string activeVoucherCopy1Printer = "";
+        private string activeVoucherLaterPrinter = "";
         private string voucherDecisionFileForCurrentBill = null;
         private bool voucherDecisionPendingForCurrentBill = false;
         private static string cachedPythonExe;
@@ -909,7 +985,7 @@ namespace AradhanaOrnateAutoPrint
             int copyNumber = ResolveCopyNumber();
             if (copyNumber == 1)
                 PrepareDocumentWorkflowForNextCustomerCopy();
-            string targetPrinter = config.ResolvePrinter(copyNumber);
+            string targetPrinter = ResolveActiveVoucherPrinter(copyNumber);
 
             var diagnostics = new List<string>();
             bool selected = TrySelectPrinter(hWnd, targetPrinter, diagnostics);
@@ -948,6 +1024,8 @@ namespace AradhanaOrnateAutoPrint
                 voucherBillSessionActive = false;
                 officeCopyHandledForVoucherBill = false;
                 lastHandledUtc = DateTime.MinValue;
+                activeVoucherCopy1Printer = "";
+                activeVoucherLaterPrinter = "";
             }
 
             // Once this window has qualified, do not inspect it again. This
@@ -956,19 +1034,19 @@ namespace AradhanaOrnateAutoPrint
             if (voucherRoutesFinalized.Contains(hWnd)) return;
 
             // The business rule is deliberately read from Ornate's Voucher
-            // Print window, not inferred from timing or a hotkey: only the
-            // approved GST format with exactly two copies has an office copy.
-            // Every other voucher/count remains entirely on P355.
+            // Print window, not inferred from timing or a hotkey. Every route
+            // requires a saved visual template plus an exact copy count.
             double fingerprintDifference;
-            bool approvedFormat = IsApprovedOfficeVoucherFormat(hWnd, out fingerprintDifference);
+            VoucherRouteRule matchedRoute;
+            bool approvedFormat = TryMatchVoucherRoute(hWnd, out matchedRoute, out fingerprintDifference);
             int requestedCopies;
             bool copiesRead = TryReadVoucherCopyCount(hWnd, out requestedCopies);
-            if (!approvedFormat || !copiesRead || requestedCopies != 2)
+            if (!approvedFormat || !copiesRead || requestedCopies != matchedRoute.RequiredCopies)
             {
                 if (firstSeen)
                     Log("ROUTE SAFETY: Voucher Print is awaiting a qualifying format/copy count (format difference=" +
                         fingerprintDifference.ToString("0.00") + ", copies=" +
-                        (copiesRead ? requestedCopies.ToString() : "unreadable") + "). P1007 remains blocked unless this window becomes approved GST Sales Voucher with copies=2.");
+                        (copiesRead ? requestedCopies.ToString() : "unreadable") + "). P1007 remains blocked unless an enabled visual route has its exact configured count.");
                 return;
             }
 
@@ -979,8 +1057,13 @@ namespace AradhanaOrnateAutoPrint
             voucherBillSessionActive = true;
             officeCopyHandledForVoucherBill = false;
             voucherRoutesFinalized.Add(hWnd);
-            Log("ROUTE: approved GST Sales Voucher with copies=2 (format difference=" +
-                fingerprintDifference.ToString("0.00") + "); first copy=P1007, second/URD/later copies=P355.");
+            activeVoucherCopy1Printer = string.IsNullOrWhiteSpace(matchedRoute.Copy1Printer)
+                ? config.Copy1Printer : matchedRoute.Copy1Printer;
+            activeVoucherLaterPrinter = string.IsNullOrWhiteSpace(matchedRoute.LaterPrinter)
+                ? config.Copy2Printer : matchedRoute.LaterPrinter;
+            Log("ROUTE: matched voucher rule '" + matchedRoute.Name + "' with copies=" + requestedCopies +
+                " (format difference=" + fingerprintDifference.ToString("0.00") + "); first='" +
+                activeVoucherCopy1Printer + "', second/later='" + activeVoucherLaterPrinter + "'.");
 
             if (!config.DocumentWorkflowEnabled || string.IsNullOrEmpty(config.DocumentScannerApi)) return;
 
@@ -1278,16 +1361,22 @@ namespace AradhanaOrnateAutoPrint
             return 2;
         }
 
-        private bool IsApprovedOfficeVoucherFormat(IntPtr dialog, out double difference)
+        private string ResolveActiveVoucherPrinter(int copyNumber)
         {
-            difference = double.PositiveInfinity;
-            string referencePath = Path.Combine(baseFolder, OfficeVoucherReferenceFileName);
-            if (!File.Exists(referencePath))
-            {
-                Log("ROUTE SAFETY: office Voucher Format reference missing; P1007 blocked.");
-                return false;
-            }
+            // Unknown/unqualified windows are deliberately not subject to the
+            // legacy force-printer controls: their only safe destination is
+            // the configured P355 queue.
+            if (copyNumber == 1 && !string.IsNullOrWhiteSpace(activeVoucherCopy1Printer))
+                return activeVoucherCopy1Printer;
+            if (copyNumber > 1 && !string.IsNullOrWhiteSpace(activeVoucherLaterPrinter))
+                return activeVoucherLaterPrinter;
+            return config.Copy2Printer;
+        }
 
+        private bool TryMatchVoucherRoute(IntPtr dialog, out VoucherRouteRule matchedRoute, out double difference)
+        {
+            matchedRoute = null;
+            difference = double.PositiveInfinity;
             RECT rect;
             if (!GetWindowRect(dialog, out rect))
             {
@@ -1317,12 +1406,31 @@ namespace AradhanaOrnateAutoPrint
                         return false;
                     }
 
-                    using (var reference = new Bitmap(referencePath))
                     using (var actualFormat = CreateVoucherFormatFingerprint(captured))
-                    using (var referenceFormat = CreateVoucherFormatFingerprint(reference))
                     {
-                        difference = MeanPixelDifference(actualFormat, referenceFormat);
-                        return difference <= OfficeVoucherFingerprintMaxDifference;
+                        VoucherRouteRule closestRoute = null;
+                        double closestDifference = double.PositiveInfinity;
+                        foreach (VoucherRouteRule route in config.VoucherRoutes)
+                        {
+                            if (!route.Enabled || string.IsNullOrWhiteSpace(route.ReferenceFile)) continue;
+                            string referencePath = Path.Combine(baseFolder, Path.GetFileName(route.ReferenceFile));
+                            if (!File.Exists(referencePath)) continue;
+                            using (var reference = new Bitmap(referencePath))
+                            using (var referenceFormat = CreateVoucherFormatFingerprint(reference))
+                            {
+                                double candidate = MeanPixelDifference(actualFormat, referenceFormat);
+                                if (candidate < closestDifference)
+                                {
+                                    closestDifference = candidate;
+                                    closestRoute = route;
+                                }
+                            }
+                        }
+                        difference = closestDifference;
+                        if (closestRoute == null || closestDifference > OfficeVoucherFingerprintMaxDifference)
+                            return false;
+                        matchedRoute = closestRoute;
+                        return true;
                     }
                 }
             }
@@ -1892,6 +2000,13 @@ namespace AradhanaOrnateAutoPrint
             var btnClose = new Button { Text = "Close", Left = 320, Top = 348, Width = 100 };
             btnClose.Click += (s, e) => Close();
 
+            var btnRoutes = new Button { Text = "Voucher routing rules...", Left = 12, Top = 348, Width = 185 };
+            btnRoutes.Click += (s, e) =>
+            {
+                using (var editor = new VoucherRouteRulesForm(config, configPath))
+                    editor.ShowDialog(this);
+            };
+
             var lblLog = new Label { Text = "Live log (auto-refreshing):", Left = 12, Top = 388, Width = 300 };
             txtLog = new TextBox
             {
@@ -1914,7 +2029,7 @@ namespace AradhanaOrnateAutoPrint
                 lblOverrideHeader,
                 lblForce1, txtForceCopy1,
                 lblForce2, txtForceCopy2,
-                btnSave, btnClose,
+                btnRoutes, btnSave, btnClose,
                 lblLog, txtLog
             });
         }
@@ -2026,6 +2141,198 @@ namespace AradhanaOrnateAutoPrint
                 }
             }
             catch { }
+        }
+    }
+
+    // Administrator-facing routing editor. A row is not active merely because
+    // it has a friendly name: Reference Template must exist beside the router
+    // EXE and must visually match Ornate's Voucher Print window at runtime.
+    internal sealed class VoucherRouteRulesForm : Form
+    {
+        private const string UseConfiguredPrinter = "(use configured default)";
+        private readonly AppConfig config;
+        private readonly string configPath;
+        private readonly DataGridView grid;
+        private readonly List<string> templateFiles;
+        private readonly List<string> printerChoices;
+
+        public VoucherRouteRulesForm(AppConfig config, string configPath)
+        {
+            this.config = config;
+            this.configPath = configPath;
+            templateFiles = LoadTemplateFiles();
+            printerChoices = LoadPrinterChoices();
+
+            Text = "Voucher routing rules";
+            Width = 1120;
+            Height = 460;
+            StartPosition = FormStartPosition.CenterParent;
+            MinimizeBox = false;
+
+            var note = new Label
+            {
+                Left = 12, Top = 12, Width = 1080, Height = 40,
+                Text = "A rule matches only a saved visual template and the exact copy count. " +
+                       "No match, missing template, or unreadable count means P355 only. " +
+                       "Template files must be deployed with the signed release."
+            };
+            grid = new DataGridView
+            {
+                Left = 12, Top = 58, Width = 1080, Height = 280,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                MultiSelect = false
+            };
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "Voucher rule label", Width = 235 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Copies", HeaderText = "Exact copies", Width = 75 });
+            var templates = new DataGridViewComboBoxColumn { Name = "Template", HeaderText = "Reference template", Width = 220, FlatStyle = FlatStyle.Flat };
+            foreach (string template in templateFiles) templates.Items.Add(template);
+            grid.Columns.Add(templates);
+            var copy1 = new DataGridViewComboBoxColumn { Name = "Copy1", HeaderText = "Copy 1 printer", Width = 205, FlatStyle = FlatStyle.Flat };
+            var later = new DataGridViewComboBoxColumn { Name = "Later", HeaderText = "Copies 2+ printer", Width = 205, FlatStyle = FlatStyle.Flat };
+            foreach (string printer in printerChoices) { copy1.Items.Add(printer); later.Items.Add(printer); }
+            grid.Columns.Add(copy1);
+            grid.Columns.Add(later);
+            grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Enabled", HeaderText = "Enabled", Width = 70 });
+
+            var add = new Button { Text = "Add rule", Left = 12, Top = 350, Width = 100 };
+            add.Click += (s, e) => AddDefaultRow();
+            var remove = new Button { Text = "Remove selected", Left = 122, Top = 350, Width = 130 };
+            remove.Click += (s, e) => { if (grid.CurrentRow != null) grid.Rows.Remove(grid.CurrentRow); };
+            var save = new Button { Text = "Save rules", Left = 862, Top = 350, Width = 110 };
+            save.Click += (s, e) => SaveRules();
+            var close = new Button { Text = "Close", Left = 982, Top = 350, Width = 110 };
+            close.Click += (s, e) => Close();
+            Controls.AddRange(new Control[] { note, grid, add, remove, save, close });
+            LoadRules();
+        }
+
+        private List<string> LoadTemplateFiles()
+        {
+            var values = new List<string>();
+            string folder = Path.GetDirectoryName(configPath);
+            try
+            {
+                foreach (string file in Directory.GetFiles(folder, "*.png"))
+                    values.Add(Path.GetFileName(file));
+            }
+            catch { }
+            if (!values.Contains("office-sales-voucher-format-reference.png"))
+                values.Add("office-sales-voucher-format-reference.png");
+            values.Sort(StringComparer.OrdinalIgnoreCase);
+            return values;
+        }
+
+        private List<string> LoadPrinterChoices()
+        {
+            var values = new List<string> { UseConfiguredPrinter };
+            try
+            {
+                foreach (string printer in System.Drawing.Printing.PrinterSettings.InstalledPrinters)
+                    if (!values.Contains(printer)) values.Add(printer);
+            }
+            catch { }
+            AddPrinterChoice(values, config.Copy1Printer);
+            AddPrinterChoice(values, config.Copy2Printer);
+            foreach (VoucherRouteRule rule in config.VoucherRoutes)
+            {
+                AddPrinterChoice(values, rule.Copy1Printer);
+                AddPrinterChoice(values, rule.LaterPrinter);
+            }
+            return values;
+        }
+
+        private static void AddPrinterChoice(List<string> values, string printer)
+        {
+            if (!string.IsNullOrWhiteSpace(printer) && !values.Contains(printer)) values.Add(printer);
+        }
+
+        private void LoadRules()
+        {
+            foreach (VoucherRouteRule rule in config.VoucherRoutes)
+                AddRow(rule);
+            if (grid.Rows.Count == 0) AddRow(VoucherRouteRule.DefaultRule());
+        }
+
+        private void AddDefaultRow()
+        {
+            AddRow(VoucherRouteRule.DefaultRule());
+        }
+
+        private void AddRow(VoucherRouteRule rule)
+        {
+            string template = string.IsNullOrWhiteSpace(rule.ReferenceFile)
+                ? "office-sales-voucher-format-reference.png" : rule.ReferenceFile;
+            if (!templateFiles.Contains(template))
+            {
+                templateFiles.Add(template);
+                ((DataGridViewComboBoxColumn)grid.Columns["Template"]).Items.Add(template);
+            }
+            int row = grid.Rows.Add(rule.Name, rule.RequiredCopies, template,
+                string.IsNullOrWhiteSpace(rule.Copy1Printer) ? UseConfiguredPrinter : rule.Copy1Printer,
+                string.IsNullOrWhiteSpace(rule.LaterPrinter) ? UseConfiguredPrinter : rule.LaterPrinter,
+                rule.Enabled);
+            grid.Rows[row].Cells["Enabled"].Value = rule.Enabled;
+        }
+
+        private void SaveRules()
+        {
+            var rules = new List<VoucherRouteRule>();
+            foreach (DataGridViewRow row in grid.Rows)
+            {
+                string name = Cell(row, "Name");
+                string copiesText = Cell(row, "Copies");
+                string template = Cell(row, "Template");
+                int copies;
+                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(template) ||
+                    !int.TryParse(copiesText, out copies) || copies < 1 || copies > 9 ||
+                    ContainsPipe(name) || ContainsPipe(template))
+                {
+                    MessageBox.Show(this, "Each rule needs a label, a template file, and a copy count from 1 to 9. Pipe characters are not allowed.",
+                        "Invalid voucher rule", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                string copy1 = ToPrinterValue(Cell(row, "Copy1"));
+                string later = ToPrinterValue(Cell(row, "Later"));
+                if (ContainsPipe(copy1) || ContainsPipe(later))
+                {
+                    MessageBox.Show(this, "Printer names cannot contain pipe characters.", "Invalid voucher rule", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                bool enabled = row.Cells["Enabled"].Value != null && Convert.ToBoolean(row.Cells["Enabled"].Value);
+                rules.Add(new VoucherRouteRule
+                {
+                    Name = name.Trim(), RequiredCopies = copies,
+                    ReferenceFile = Path.GetFileName(template.Trim()),
+                    Copy1Printer = copy1, LaterPrinter = later, Enabled = enabled
+                });
+            }
+            if (rules.Count == 0)
+            {
+                MessageBox.Show(this, "Keep at least one route. Disable it if it should not be used.", "Voucher routing rules", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            config.VoucherRoutes.Clear();
+            config.VoucherRoutes.AddRange(rules);
+            config.Save(configPath);
+            MessageBox.Show(this, "Voucher routing rules saved. Restarting the tray app is not required.", "Voucher routing rules", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private static string Cell(DataGridViewRow row, string name)
+        {
+            return row.Cells[name].Value == null ? "" : row.Cells[name].Value.ToString().Trim();
+        }
+
+        private static string ToPrinterValue(string value)
+        {
+            return value == UseConfiguredPrinter ? "" : value;
+        }
+
+        private static bool ContainsPipe(string value)
+        {
+            return value != null && value.IndexOf('|') >= 0;
         }
     }
 }
