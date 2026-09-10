@@ -166,6 +166,20 @@ def _require_document_bridge():
     return jsonify({"error": "Unauthorized document bridge."}), 401
 
 
+def _require_print_agent():
+    """Restrict queue data and printable files to the enrolled local agent."""
+    expected = os.environ.get("AGENT_TOKEN", "").strip()
+    if not expected:
+        if os.environ.get("PRODUCTION_MODE", "false").lower() == "true":
+            return jsonify({"error": "Print agent is not configured."}), 503
+        return None
+    supplied = request.headers.get("Authorization", "")
+    prefix = "Bearer "
+    if not supplied.startswith(prefix) or not hmac.compare_digest(supplied[len(prefix):], expected):
+        return jsonify({"error": "Unauthorized print agent."}), 401
+    return None
+
+
 @app.route("/api/document-scan-sessions", methods=["POST"])
 def create_document_scan_session():
     secret = request.headers.get("X-Admin-Secret", "")
@@ -678,6 +692,9 @@ def get_job_status(job_id):
 
 @app.route("/api/agent/jobs/pending", methods=["GET"])
 def get_pending_jobs():
+    denied = _require_print_agent()
+    if denied:
+        return denied
     jobs = PrintJob.query.filter_by(status="pending").order_by(PrintJob.created_at.asc()).limit(5).all()
     response = []
     for job in jobs:
@@ -699,6 +716,9 @@ def report_agent_printers():
     picks from real, currently-installed printers instead of typing a name
     that might not match (the exact mismatch — "HP Laser MFP 330" vs
     "HP Laser MFP 355sdnw" — that caused real duplicate printing here)."""
+    denied = _require_print_agent()
+    if denied:
+        return denied
     data = request.get_json(silent=True) or {}
     printers = data.get("printers")
     if not isinstance(printers, list) or not all(isinstance(p, str) for p in printers):
@@ -713,6 +733,9 @@ def report_agent_printers():
 
 @app.route("/api/agent/jobs/<job_id>/status", methods=["POST", "PATCH"])
 def update_job_status(job_id):
+    denied = _require_print_agent()
+    if denied:
+        return denied
     job = PrintJob.query.get_or_404(job_id)
     data = request.get_json(silent=True) or request.form
     status = data.get("status")
@@ -729,6 +752,9 @@ def update_job_status(job_id):
 
 @app.route("/media/<job_id>/<path:filename>", methods=["GET"])
 def media(job_id, filename):
+    denied = _require_print_agent()
+    if denied:
+        return denied
     return send_from_directory(UPLOAD_DIR / secure_filename(job_id), filename, as_attachment=True)
 
 

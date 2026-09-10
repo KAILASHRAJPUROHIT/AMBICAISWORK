@@ -20,6 +20,8 @@ load_dotenv(SCRIPT_DIR / ".env")
 CLOUD_SERVER_URL = os.getenv("CLOUD_SERVER_URL")
 PRINTER_NAME = os.getenv("PRINTER_NAME")
 SUMATRA_PATH = os.getenv("SUMATRA_PATH")
+AGENT_TOKEN = os.getenv("AGENT_TOKEN", "").strip()
+AGENT_HEADERS = {"Authorization": f"Bearer {AGENT_TOKEN}"} if AGENT_TOKEN else {}
 
 # Self-healing: a job that fails (e.g. a transient network blip while
 # downloading files, or a momentary spooler hiccup) is retried automatically
@@ -133,6 +135,7 @@ def report_printers():
         requests.post(
             f"{CLOUD_SERVER_URL}/api/agent/printers",
             json={"printers": printers},
+            headers=AGENT_HEADERS,
             timeout=10,
         ).raise_for_status()
         logging.info(f"Reported {len(printers)} local printer(s) to server: {', '.join(printers)}")
@@ -145,7 +148,7 @@ def download_file(url, target_path):
     for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
         try:
             logging.info(f"Downloading file from {url} to {target_path} (attempt {attempt}/{DOWNLOAD_ATTEMPTS})")
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, headers=AGENT_HEADERS, timeout=30)
             response.raise_for_status()
             with open(target_path, 'wb') as f:
                 f.write(response.content)
@@ -180,6 +183,7 @@ def _attempt_job(job, job_id, printer_name):
     requests.patch(
         f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
         json={"status": "printing"},
+        headers=AGENT_HEADERS,
         timeout=10
     ).raise_for_status()
 
@@ -234,6 +238,7 @@ def _attempt_job(job, job_id, printer_name):
     resp = requests.patch(
         f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
         json={"status": "completed"},
+        headers=AGENT_HEADERS,
         timeout=10
     )
     resp.raise_for_status()
@@ -263,6 +268,7 @@ def process_job(job, printer_name):
             requests.patch(
                 f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
                 json={"status": "failed", "error": message},
+                headers=AGENT_HEADERS,
                 timeout=10,
             ).raise_for_status()
         except Exception as api_err:
@@ -286,6 +292,7 @@ def process_job(job, printer_name):
             requests.patch(
                 f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
                 json={"status": "failed", "error": message},
+                headers=AGENT_HEADERS,
                 timeout=10,
             ).raise_for_status()
         except Exception as api_err:
@@ -313,6 +320,7 @@ def process_job(job, printer_name):
         resp = requests.patch(
             f"{CLOUD_SERVER_URL}/api/agent/jobs/{job_id}/status",
             json={"status": "failed", "error": last_error_msg[:2000]},
+            headers=AGENT_HEADERS,
             timeout=10
         )
         resp.raise_for_status()
@@ -335,6 +343,7 @@ def main_loop():
             logging.info("Polling for pending jobs...")
             resp = requests.get(
                 f"{CLOUD_SERVER_URL}/api/agent/jobs/pending",
+                headers=AGENT_HEADERS,
                 timeout=10
             )
             resp.raise_for_status()
