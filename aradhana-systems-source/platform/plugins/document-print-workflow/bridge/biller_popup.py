@@ -103,7 +103,12 @@ class BillerToast:
                 self.summary.config(text=(f"Customer / OCR name: {names}\n"
                                           "Select only documents confirmed for this bill. Nothing attaches automatically."))
             else:
-                self.summary.config(text="No pending documents. Bill will continue normally.")
+                # The router suppresses this panel when sync reports zero.
+                # This closes the small race where another biller claimed the
+                # final bundle between sync and the panel's first refresh.
+                self.finished = True
+                self.root.destroy()
+                return
         except (URLError, ValueError, KeyError) as error:
             self.summary.config(text="Document service unavailable. Bill will continue normally.")
             self.notice.config(text=str(error))

@@ -56,3 +56,42 @@ def test_current_ui_does_not_offer_a_bill_print_action(tmp_path, monkeypatch):
     workflow.init_db()
     response = workflow.app.test_client().post("/api/v1/print-sessions", json={})
     assert response.get_json()["options"] == ["attach", "standalone", "bill_only"]
+
+
+def test_reconcile_removes_claimed_cloud_bundle_and_keeps_current_choices(tmp_path, monkeypatch):
+    monkeypatch.setattr(workflow, "DB_PATH", tmp_path / "workflow.db")
+    workflow.init_db()
+    client = workflow.app.test_client()
+    first = client.post("/api/v1/document-bundles", json={
+        "bundle_id": "DOC-DIRECT", "display_name": "Direct print ID"
+    }).get_json()["id"]
+    second = client.post("/api/v1/document-bundles", json={
+        "bundle_id": "DOC-BILLER", "display_name": "Biller queue ID"
+    }).get_json()["id"]
+
+    result = client.post("/api/v1/document-bundles/reconcile", json={"bundle_ids": [second]})
+    assert result.status_code == 200
+    assert result.get_json()["removed"] == 1
+    listed = client.get("/api/v1/document-bundles").get_json()["bundles"]
+    assert [bundle["id"] for bundle in listed] == [second]
+    assert first != second
+
+
+def test_sync_reoffers_unclaimed_provisional_selection(tmp_path, monkeypatch):
+    monkeypatch.setattr(workflow, "DB_PATH", tmp_path / "workflow.db")
+    workflow.init_db()
+    client = workflow.app.test_client()
+    bundle = client.post("/api/v1/document-bundles", json={
+        "bundle_id": "DOC-RETRY", "display_name": "Retry document"
+    }).get_json()["id"]
+    session = client.post("/api/v1/print-sessions", json={}).get_json()["id"]
+    assert client.post(f"/api/v1/print-sessions/{session}/decision", json={
+        "decision": "attach", "bundle_id": bundle
+    }).status_code == 200
+    # The cloud still presenting this ID means the earlier claim failed;
+    # syncing must return it to the next biller instead of hiding it.
+    response = client.post("/api/v1/document-bundles", json={
+        "bundle_id": bundle, "display_name": "Retry document"
+    })
+    assert response.get_json()["status"] == "pending"
+    assert client.get("/api/v1/document-bundles").get_json()["bundles"][0]["id"] == bundle

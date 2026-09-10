@@ -38,6 +38,9 @@ def sync(scanner_api: str, workflow_api: str, bridge_token: str = "") -> int:
             "bundle_id": bundle["bundle_id"], "display_name": bundle["display_name"],
             "created_at": bundle.get("created_at"),
         })
+    request_json(workflow_api.rstrip("/") + "/api/v1/document-bundles/reconcile", "POST", {
+        "bundle_ids": [bundle["bundle_id"] for bundle in eligible],
+    })
     return len(eligible)
 
 

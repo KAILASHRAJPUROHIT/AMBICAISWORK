@@ -107,10 +107,16 @@ def create_bundle():
         if existing:
             # Cloud OCR may refine a generic queue label after the initial sync.
             # This is display metadata only; it never arms, attaches, or prints.
-            if existing["display_name"] != display_name[:120]:
+            # A previous local selection is only provisional until the cloud
+            # bundle is claimed. If the cloud still lists it, make it visible
+            # again so a transient network failure cannot hide it for 30 min.
+            if existing["status"] == "armed":
+                db.execute("UPDATE document_bundles SET status='pending', armed_session_id=NULL WHERE id=?", (bundle_id,))
+            if existing["status"] == "pending" and existing["display_name"] != display_name[:120]:
                 db.execute("UPDATE document_bundles SET display_name=? WHERE id=?", (display_name[:120], bundle_id))
                 audit(db, "document_bundle", bundle_id, "display_name_updated", {"display_name": display_name[:120]})
-            return jsonify(id=bundle_id, status="pending", existing=True), 200
+            current = db.execute("SELECT status FROM document_bundles WHERE id=?", (bundle_id,)).fetchone()["status"]
+            return jsonify(id=bundle_id, status=current, existing=True), 200
         source_created_at = str(data.get("created_at") or stamp())
         # Source timestamp controls the 30-minute biller window. Invalid values
         # fall back to receipt time rather than breaking document visibility.
@@ -130,6 +136,24 @@ def list_bundles():
         expire_stale_bundles(db)
         rows = db.execute("SELECT * FROM document_bundles WHERE status='pending' ORDER BY created_at DESC").fetchall()
     return jsonify(bundles=[dict(row) for row in rows])
+
+
+@app.post("/api/v1/document-bundles/reconcile")
+def reconcile_bundles():
+    """Hide local choices that the authoritative QR queue no longer offers."""
+    data = request.get_json(silent=True) or {}
+    supplied = data.get("bundle_ids", [])
+    if not isinstance(supplied, list) or not all(isinstance(value, str) for value in supplied):
+        return jsonify(error="bundle_ids must be a list of strings"), 400
+    active = {value.strip().upper() for value in supplied if value.strip()}
+    with database() as db:
+        expire_stale_bundles(db)
+        rows = db.execute("SELECT id FROM document_bundles WHERE status IN ('pending', 'armed')").fetchall()
+        removed = [row["id"] for row in rows if row["id"] not in active]
+        for bundle_id in removed:
+            db.execute("UPDATE document_bundles SET status='removed', armed_session_id=NULL WHERE id=?", (bundle_id,))
+            audit(db, "document_bundle", bundle_id, "reconciled_removed", {})
+    return jsonify(removed=len(removed), active=len(active))
 
 
 @app.post("/api/v1/print-sessions")

@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 $pluginRoot = Split-Path -Parent $PSScriptRoot
 $required = @(
     'ais.plugin.json', 'service\app.py', 'bridge\biller_popup.py',
-    'bridge\qr_bundle_sync.py', 'bridge\cache_bundle.py',
+    'bridge\qr_bundle_sync.py', 'bridge\cache_bundle.py', 'bridge\claim_bundle_for_bill.py',
     'bridge\queue_standalone.py', 'bridge\document_alert_notifier.py',
     'renderer\p355_document_renderer.py', 'scripts\run_document_workflow_service.ps1',
     'scripts\Start-DocumentAlerts.ps1'
