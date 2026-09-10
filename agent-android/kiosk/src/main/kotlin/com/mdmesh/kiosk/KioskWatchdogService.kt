@@ -10,8 +10,8 @@ import android.view.accessibility.AccessibilityEvent
  * escape gesture; a plain `Activity.startLockTask()` pin does — holding Back+Recents together
  * always exits it, unconditionally, as a hardcoded Android framework behavior with no override
  * available to a non-Device-Owner caller. This service cannot prevent that exit (nothing can),
- * only detect it and relaunch immediately, closing the window as fast as an accessibility event
- * dispatch allows.
+ * only detect it, cover the gap with [KioskEscapeOverlay] (if granted), and relaunch immediately —
+ * closing the window as fast as an accessibility event dispatch allows.
  *
  * Deliberately separate from [com.mdmesh.remote] `InputInjectionService` — that service injects
  * gestures and is architected to never observe events (its own doc comment: "it injects, it does
@@ -33,18 +33,28 @@ class KioskWatchdogService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val am = getSystemService(ACTIVITY_SERVICE) as? ActivityManager ?: return
-        if (am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE) return
-        // Lock task was exited (the Back+Recents escape) while this watchdog was armed —
-        // relaunch immediately via the real HOME intent, same pattern used everywhere else in
-        // this codebase (KioskEnterHandler.foregroundLauncher, MainActivity.reenterKiosk):
-        // resolving through ACTION_MAIN/CATEGORY_HOME re-triggers the OEM System UI's normal
-        // home-transition path, not just a direct component launch.
-        runCatching {
-            startActivity(
-                Intent(Intent.ACTION_MAIN)
-                    .addCategory(Intent.CATEGORY_HOME)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
+        if (am.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) {
+            // Lock task was exited (the Back+Recents escape) while this watchdog was armed.
+            // Cover the home screen instantly with KioskEscapeOverlay (a silent no-op if the
+            // Overlay permission wasn't granted) so a casual escape can't tap another app during
+            // the relaunch window, then relaunch immediately via the real HOME intent, same
+            // pattern used everywhere else in this codebase (KioskEnterHandler
+            // .foregroundLauncher, MainActivity.reenterKiosk): resolving through
+            // ACTION_MAIN/CATEGORY_HOME re-triggers the OEM System UI's normal home-transition
+            // path, not just a direct component launch.
+            KioskEscapeOverlay.show(this)
+            runCatching {
+                startActivity(
+                    Intent(Intent.ACTION_MAIN)
+                        .addCategory(Intent.CATEGORY_HOME)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
+        } else {
+            // Locked (either never escaped, or the relaunch above already succeeded) — clear
+            // any overlay left over from a prior escape now that the pinned app is legitimately
+            // back in the foreground.
+            KioskEscapeOverlay.hide()
         }
     }
 

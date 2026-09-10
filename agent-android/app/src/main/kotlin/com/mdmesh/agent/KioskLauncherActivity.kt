@@ -30,6 +30,7 @@ import com.mdmesh.core.store.KioskStateStore
 import com.mdmesh.core.telemetry.EventSink
 import com.mdmesh.kiosk.CrashLoopGuard
 import com.mdmesh.kiosk.KioskController
+import com.mdmesh.kiosk.KioskEscapeOverlay
 import com.mdmesh.policy.wifi.DpmHandle
 import com.mdmesh.proto.KioskApplyPayload
 import com.mdmesh.proto.PasscodeHash
@@ -140,6 +141,9 @@ class KioskLauncherActivity : ComponentActivity() {
         // lockTaskModeState going to NONE, and without this it would misread our own
         // intentional crash-loop exit as an escape and immediately relaunch us right back in.
         setWatchdogArmed(false)
+        // Safety net: clear a stale KioskEscapeOverlay in case this bail fires mid-escape,
+        // right as the watchdog happened to have one showing.
+        KioskEscapeOverlay.hide()
         stopLockTaskSafely()
         controller.exit()
         active = null
@@ -214,6 +218,9 @@ class KioskLauncherActivity : ComponentActivity() {
     private fun doExit() {
         // Disarm BEFORE stopLockTask() — see the identical note in bailOnCrashLoop().
         setWatchdogArmed(false)
+        // Safety net: clear a stale KioskEscapeOverlay in case exit fires mid-escape — see the
+        // identical note in bailOnCrashLoop().
+        KioskEscapeOverlay.hide()
         runCatching { if (isFinishing.not()) stopLockTask() }
         controller.exit()
         events.record("kioskExit", "exited on-device")
