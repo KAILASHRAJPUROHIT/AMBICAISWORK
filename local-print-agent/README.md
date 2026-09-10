@@ -36,6 +36,25 @@ We use native Windows Task Scheduler to ensure the print agent starts silently w
 3. **Restart Agent**: Right-click `restart_agent.bat` -> **Run as Administrator** (Use this if you edited the `.env` file and need the agent to pick up the changes).
 4. **Uninstall**: Right-click `uninstall_autostart.bat` -> **Run as Administrator**.
 
+## Production gateway installer
+
+Use `Install-AISQrPrintAgent.ps1` for a controlled production gateway. It
+creates the distinct `AISQrPrintAgent` task in the signed-in printer user's
+session; it does not kill or reuse arbitrary `pythonw.exe` processes. This is
+important because Windows WSD and network printer connections are often
+per-user.
+
+The installer requires `.env` to contain `CLOUD_SERVER_URL`, `AGENT_TOKEN`,
+and `SUMATRA_PATH`. It never prints the token. Validate a staged gateway with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Test-AISQrPrintAgentReadiness.ps1
+```
+
+Expected result: `Status = ready-for-controlled-cutover`. Do not install this
+beside the legacy live agent until the cutover window; two agents polling the
+same production queue can race to consume the same job.
+
 ## Troubleshooting
 
 If prints are not firing automatically, consult this list:
