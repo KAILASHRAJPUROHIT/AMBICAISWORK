@@ -259,6 +259,10 @@ namespace AradhanaOrnateAutoPrint
         private bool overlay355Busy = false;
         private string documentWorkflowManifestForNextCustomerCopy = null;
         private readonly HashSet<IntPtr> voucherWindows = new HashSet<IntPtr>();
+        // A voucher can initially open with the default copy count, before the
+        // biller changes it. Keep observing it until it qualifies, then lock
+        // that specific window's route so its second print cannot re-arm P1007.
+        private readonly HashSet<IntPtr> voucherRoutesFinalized = new HashSet<IntPtr>();
         private string voucherDecisionFileForCurrentBill = null;
         private bool voucherDecisionPendingForCurrentBill = false;
         private static string cachedPythonExe;
@@ -364,12 +368,11 @@ namespace AradhanaOrnateAutoPrint
         private readonly HashSet<IntPtr> handled = new HashSet<IntPtr>();
         private bool enabled = true;
 
-        // Print-session state. Both a real Alt+P and a local visual Voucher
-        // Format match are required before a P1007 office copy.
+        // Print-session state. Only the visible Voucher Format and No. Of
+        // Copies field can qualify a P1007 office copy.
         private DateTime lastHandledUtc = DateTime.MinValue;
         private bool voucherBillSessionActive = false;
         private bool officeCopyHandledForVoucherBill = false;
-        private DateTime billStartArmedUntilUtc = DateTime.MinValue;
         private bool pKeyWasDown = false;
 
         private const string OfficeVoucherReferenceFileName = "office-sales-voucher-format-reference.png";
@@ -816,7 +819,6 @@ namespace AradhanaOrnateAutoPrint
 
             try
             {
-                ExpireVoucherBillSessionIfIdle();
                 var validPids = GetValidOrnatePids();
                 if (validPids.Count == 0)
                     return;
@@ -830,6 +832,7 @@ namespace AradhanaOrnateAutoPrint
 
                 handled.RemoveWhere(h => !IsWindow(h));
                 voucherWindows.RemoveWhere(h => !IsWindow(h));
+                voucherRoutesFinalized.RemoveWhere(h => !IsWindow(h));
             }
             catch (Exception ex)
             {
@@ -935,35 +938,48 @@ namespace AradhanaOrnateAutoPrint
             if (!string.Equals(GetWindowTextValue(hWnd), VoucherDialogTitle,
                                StringComparison.OrdinalIgnoreCase)) return;
             if (!BelongsToOrnate(hWnd, ornatePids)) return;
-            if (voucherWindows.Contains(hWnd)) return;
+            bool firstSeen = voucherWindows.Add(hWnd);
+            if (firstSeen)
+            {
+                // A newly opened voucher window is a new bill context. Never
+                // let an unanswered document choice from an earlier bill attach here.
+                voucherDecisionPendingForCurrentBill = false;
+                voucherDecisionFileForCurrentBill = null;
+                voucherBillSessionActive = false;
+                officeCopyHandledForVoucherBill = false;
+                lastHandledUtc = DateTime.MinValue;
+            }
 
-            voucherWindows.Add(hWnd);
+            // Once this window has qualified, do not inspect it again. This
+            // prevents the already-qualified first copy from being re-armed
+            // while Ornate opens its printer dialogs.
+            if (voucherRoutesFinalized.Contains(hWnd)) return;
 
-            // A P1007 office copy needs both signals: a foreground Alt+P and
-            // the approved Sales Voucher visual reference. Uncertainty=P355.
+            // The business rule is deliberately read from Ornate's Voucher
+            // Print window, not inferred from timing or a hotkey: only the
+            // approved GST format with exactly two copies has an office copy.
+            // Every other voucher/count remains entirely on P355.
             double fingerprintDifference;
             bool approvedFormat = IsApprovedOfficeVoucherFormat(hWnd, out fingerprintDifference);
-            if (!approvedFormat || !ConsumeBillStartArm())
+            int requestedCopies;
+            bool copiesRead = TryReadVoucherCopyCount(hWnd, out requestedCopies);
+            if (!approvedFormat || !copiesRead || requestedCopies != 2)
             {
-                if (!voucherBillSessionActive)
-                {
-                    voucherBillSessionActive = true;
-                    officeCopyHandledForVoucherBill = true;
-                    Log("ROUTE SAFETY: Voucher Print is not a confirmed new office session (format difference=" +
-                        fingerprintDifference.ToString("0.00") + "); P1007 blocked and this/any later copy stays P355.");
-                }
-                else
-                {
-                    Log("ROUTE: not a confirmed new office session; later copy remains P355.");
-                }
+                if (firstSeen)
+                    Log("ROUTE SAFETY: Voucher Print is awaiting a qualifying format/copy count (format difference=" +
+                        fingerprintDifference.ToString("0.00") + ", copies=" +
+                        (copiesRead ? requestedCopies.ToString() : "unreadable") + "). P1007 remains blocked unless this window becomes approved GST Sales Voucher with copies=2.");
                 return;
             }
 
-            // Both signals confirmed: only this path resets a P1007 session.
+            // This exact visible format/count is the only route that resets a
+            // P1007 session. The first print becomes office copy; all later
+            // print dialogs are customer/URD copies on P355.
             lastHandledUtc = DateTime.MinValue;
             voucherBillSessionActive = true;
             officeCopyHandledForVoucherBill = false;
-            Log("ROUTE: confirmed Alt+P + approved office Voucher Format (difference=" +
+            voucherRoutesFinalized.Add(hWnd);
+            Log("ROUTE: approved GST Sales Voucher with copies=2 (format difference=" +
                 fingerprintDifference.ToString("0.00") + "); first copy=P1007, second/URD/later copies=P355.");
 
             if (!config.DocumentWorkflowEnabled || string.IsNullOrEmpty(config.DocumentScannerApi)) return;
@@ -1254,10 +1270,11 @@ namespace AradhanaOrnateAutoPrint
                 }
                 voucherBillSessionActive = false;
                 officeCopyHandledForVoucherBill = false;
-                Log("ROUTE: office voucher session consumed; all later print dialogs require a fresh Alt+P and otherwise stay P355.");
+                lastHandledUtc = DateTime.MinValue;
+                Log("ROUTE: P1007 office copy consumed; second and every later print dialog stay P355 until a new qualifying Voucher Print window opens.");
                 return 2;
             }
-            Log("ROUTE SAFETY: print dialog without confirmed Alt+P session; P1007 blocked, routing P355.");
+            Log("ROUTE SAFETY: print dialog without a qualifying Voucher Print window; P1007 blocked, routing P355.");
             return 2;
         }
 
@@ -1316,6 +1333,34 @@ namespace AradhanaOrnateAutoPrint
             }
         }
 
+        private bool TryReadVoucherCopyCount(IntPtr dialog, out int copies)
+        {
+            copies = 0;
+            int detectedCopies = 0;
+            var inspected = new List<string>();
+            EnumChildWindows(dialog, (child, lParam) =>
+            {
+                string cls = GetWindowClassValue(child);
+                if (cls.IndexOf("EDIT", StringComparison.OrdinalIgnoreCase) < 0) return true;
+                string value = GetWindowTextValue(child).Trim();
+                if (value.Length == 0) return true;
+                inspected.Add(value);
+                int parsed;
+                if (int.TryParse(value, out parsed) && parsed >= 1 && parsed <= 9)
+                {
+                    detectedCopies = parsed;
+                    return false;
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            copies = detectedCopies;
+            if (copies == 0)
+                Log("ROUTE SAFETY: Voucher Print copy count is unreadable; inspected edit values: " +
+                    (inspected.Count == 0 ? "none" : string.Join(" | ", inspected)) + ". P1007 blocked.");
+            return copies != 0;
+        }
+
         private static Bitmap CreateVoucherFormatFingerprint(Image source)
         {
             // The format combo's text area, expressed as stable proportions of
@@ -1372,41 +1417,11 @@ namespace AradhanaOrnateAutoPrint
             if (foreground == IntPtr.Zero) return;
             if (!GetValidOrnatePids().Contains(GetWindowPid(foreground))) return;
 
-            // A fresh Alt+P explicitly starts a new office-voucher attempt.
-            // Resetting the old state here prevents a completed prior bill
-            // from causing this new bill to be classified as a later/URD copy.
-            if (voucherBillSessionActive || officeCopyHandledForVoucherBill ||
-                lastHandledUtc != DateTime.MinValue)
-            {
-                voucherBillSessionActive = false;
-                officeCopyHandledForVoucherBill = false;
-                lastHandledUtc = DateTime.MinValue;
-                voucherDecisionPendingForCurrentBill = false;
-                voucherDecisionFileForCurrentBill = null;
-                Log("ROUTE: fresh Alt+P reset stale voucher session state before arming the new office copy.");
-            }
-            billStartArmedUntilUtc = DateTime.UtcNow.AddSeconds(30);
-            Log("ROUTE: Alt+P observed in Ornate; awaiting approved Voucher Format for P1007 office copy.");
+            // Diagnostic only. Printer routing is based solely on the visible
+            // Voucher Format plus No. Of Copies field, never on a transient
+            // keyboard-state sample.
+            Log("ROUTE: Alt+P observed in Ornate; Voucher Print fields will determine routing.");
         }
-
-        private bool ConsumeBillStartArm()
-        {
-            if (billStartArmedUntilUtc < DateTime.UtcNow) return false;
-            billStartArmedUntilUtc = DateTime.MinValue;
-            return true;
-        }
-
-        private void ExpireVoucherBillSessionIfIdle()
-        {
-            if (!voucherBillSessionActive || lastHandledUtc == DateTime.MinValue) return;
-            if ((DateTime.UtcNow - lastHandledUtc).TotalSeconds < config.SessionGapSeconds) return;
-
-            voucherBillSessionActive = false;
-            officeCopyHandledForVoucherBill = false;
-            lastHandledUtc = DateTime.MinValue;
-            Log("ROUTE: voucher session expired after " + config.SessionGapSeconds + " seconds of inactivity; P1007 requires a fresh Alt+P.");
-        }
-
 
         // Selects printerName in the dialog's printer picker and notifies the
         // dialog so its internal selection actually updates before Print is
