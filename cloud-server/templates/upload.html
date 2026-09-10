@@ -387,6 +387,21 @@
         .toast.error { border-left-color: var(--error); }
         .toast.success { border-left-color: var(--success); }
 
+        .ambic-brand {
+            width: 100%;
+            padding: 0 20px 22px;
+            color: rgba(255, 255, 255, 0.52);
+            font-size: 10px;
+            letter-spacing: 2px;
+            text-align: center;
+            text-transform: uppercase;
+        }
+
+        .ambic-brand strong {
+            color: var(--gold-light);
+            font-weight: 700;
+        }
+
         @keyframes toastIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
     </style>
@@ -539,6 +554,10 @@
         <button onclick="location.reload()" style="width:100%;padding:12px;background:none;border:1px solid #444;border-radius:8px;color:#888;cursor:pointer;font-size:14px">Start Over</button>
     </div>
 </div>
+
+<footer class="ambic-brand" aria-label="Product branding">
+    Powered by <strong>AMBIC DIGITAL</strong>
+</footer>
 
 <!-- SOCIAL HANDLE MODAL -->
 <div id="social-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px">
