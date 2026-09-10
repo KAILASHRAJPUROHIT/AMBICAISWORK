@@ -2906,4 +2906,36 @@
         <rollback>ALTER TABLE devices DROP COLUMN enrollmentMode;</rollback>
     </changeSet>
 
+    <changeSet id="26.09.10-geofence" author="ambic" context="common">
+        <comment>Tables,new: geofence (customer-scoped circular geofences) and
+            geofence_device_state (last-known inside/outside per device, for enter/exit
+            transition detection at check-in).</comment>
+        <sql>
+            CREATE TABLE geofence (
+                id           SERIAL PRIMARY KEY,
+                customerId   INT NOT NULL,
+                name         VARCHAR(255) NOT NULL,
+                centerLat    DOUBLE PRECISION NOT NULL,
+                centerLon    DOUBLE PRECISION NOT NULL,
+                radiusMeters DOUBLE PRECISION NOT NULL,
+                enabled      BOOLEAN NOT NULL DEFAULT TRUE,
+                createdAt    BIGINT NOT NULL
+            );
+            CREATE INDEX geofence_customer_idx ON geofence (customerId);
+
+            CREATE TABLE geofence_device_state (
+                geofenceId   INT NOT NULL REFERENCES geofence(id) ON DELETE CASCADE,
+                deviceNumber VARCHAR(255) NOT NULL,
+                inside       BOOLEAN NOT NULL,
+                updatedAt    BIGINT NOT NULL,
+                PRIMARY KEY (geofenceId, deviceNumber)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE geofence_device_state;
+            DROP INDEX geofence_customer_idx;
+            DROP TABLE geofence;
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

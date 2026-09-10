@@ -96,6 +96,7 @@ public class AgentResource {
     private AgentCommandDAO commandDAO;
     private com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller;
     private com.hmdm.service.AlertDispatcher alertDispatcher;
+    private com.hmdm.service.GeofenceEvaluator geofenceEvaluator;
     private LocalAuth localAuth;
 
     /** Guards {@link #enrollByCredentials}: this is a public, unauthenticated, credential-bearing
@@ -116,12 +117,14 @@ public class AgentResource {
                          AgentCommandDAO commandDAO,
                          com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller,
                          com.hmdm.service.AlertDispatcher alertDispatcher,
+                         com.hmdm.service.GeofenceEvaluator geofenceEvaluator,
                          LocalAuth localAuth) {
         this.unsecureDAO = unsecureDAO;
         this.tokenDAO = tokenDAO;
         this.commandDAO = commandDAO;
         this.configAppInstaller = configAppInstaller;
         this.alertDispatcher = alertDispatcher;
+        this.geofenceEvaluator = geofenceEvaluator;
         this.localAuth = localAuth;
     }
 
@@ -342,8 +345,12 @@ public class AgentResource {
             if (androidRelease != null && !androidRelease.trim().isEmpty()) {
                 commandDAO.updateAndroidVersion(deviceNumber, androidRelease.trim());
             }
-            // Append the reported location (dynamic.location) to the device's breadcrumb trail.
-            recordLocation(deviceNumber, tel);
+            // Append the reported location (dynamic.location) to the device's breadcrumb trail,
+            // then check it against the customer's geofences for an enter/exit transition.
+            com.hmdm.persistence.domain.DeviceLocation loc = recordLocation(deviceNumber, tel);
+            if (loc != null && device != null) {
+                geofenceEvaluator.evaluate(device.getCustomerId(), deviceNumber, loc.getLat(), loc.getLon());
+            }
             // Append the reported data-usage snapshot (dynamic.dataUsage) to its history.
             recordDataUsage(deviceNumber, tel);
         }
@@ -492,14 +499,16 @@ public class AgentResource {
         return capabilities.getTree().toString();
     }
 
-    /** Pull dynamic.location out of the telemetry JSON and append it to the device's trail. */
-    private void recordLocation(String deviceNumber, JsonNode tel) {
+    /** Pull dynamic.location out of the telemetry JSON, append it to the device's trail, and
+     *  return the persisted row (or null if there was nothing to record) so the caller can feed
+     *  it straight into geofence evaluation without re-parsing the same telemetry node. */
+    private com.hmdm.persistence.domain.DeviceLocation recordLocation(String deviceNumber, JsonNode tel) {
         if (tel == null) {
-            return;
+            return null;
         }
         JsonNode loc = tel.path("dynamic").path("location");
         if (loc.isMissingNode() || loc.isNull() || !loc.hasNonNull("lat") || !loc.hasNonNull("lon")) {
-            return;
+            return null;
         }
         try {
             com.hmdm.persistence.domain.DeviceLocation row = new com.hmdm.persistence.domain.DeviceLocation();
@@ -514,8 +523,10 @@ public class AgentResource {
             }
             row.setCapturedAt(loc.hasNonNull("capturedAt") ? loc.get("capturedAt").asLong() : System.currentTimeMillis());
             commandDAO.recordLocation(row);
+            return row;
         } catch (Exception e) {
             logger.warn("Failed to record location for {}: {}", deviceNumber, e.getMessage());
+            return null;
         }
     }
 

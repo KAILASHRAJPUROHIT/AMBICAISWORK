@@ -10,6 +10,7 @@ import { getUpdateStatus, setAutoUpdate, checkForUpdates, applyUpdate, type Upda
 import { getFleetSettings, setAdminPasscode } from '../api/settings';
 import { RolloutPanel } from '../components/RolloutPanel';
 import { AlertRulesPanel } from '../components/AlertRulesPanel';
+import { GeofencePanel } from '../components/GeofencePanel';
 import { orDash, fmtRelative } from '../ui/format';
 
 const APP_VERSION = '0.1.0';
@@ -379,6 +380,8 @@ export function SettingsPage() {
         </div>
 
         <AlertRulesPanel />
+
+        <GeofencePanel />
 
         {/* Enrollment defaults */}
         <section className="panel">

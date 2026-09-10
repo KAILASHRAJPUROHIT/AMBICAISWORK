@@ -75,6 +75,7 @@ public class AgentAdminResource {
     private AgentWakeHub wakeHub;
     private com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller;
     private com.hmdm.persistence.mapper.AlertRuleMapper alertRuleMapper;
+    private com.hmdm.persistence.mapper.GeofenceMapper geofenceMapper;
 
     /**
      * <p>A constructor required by Swagger.</p>
@@ -88,13 +89,15 @@ public class AgentAdminResource {
                               UnsecureDAO unsecureDAO,
                               AgentWakeHub wakeHub,
                               com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller,
-                              com.hmdm.persistence.mapper.AlertRuleMapper alertRuleMapper) {
+                              com.hmdm.persistence.mapper.AlertRuleMapper alertRuleMapper,
+                              com.hmdm.persistence.mapper.GeofenceMapper geofenceMapper) {
         this.tokenDAO = tokenDAO;
         this.commandDAO = commandDAO;
         this.unsecureDAO = unsecureDAO;
         this.wakeHub = wakeHub;
         this.configAppInstaller = configAppInstaller;
         this.alertRuleMapper = alertRuleMapper;
+        this.geofenceMapper = geofenceMapper;
     }
 
     // =================================================================================================================
@@ -481,6 +484,75 @@ public class AgentAdminResource {
             return Response.PERMISSION_DENIED();
         }
         alertRuleMapper.delete(id, customerId.get());
+        return Response.OK();
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "List geofences", notes = "Customer-scoped circular geofences.")
+    @GET
+    @Path("/geofences")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response listGeofences() {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) {
+            return Response.PERMISSION_DENIED();
+        }
+        return Response.OK(geofenceMapper.listByCustomer(customerId.get()));
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "Create geofence", notes = "Enter/exit is checked against every check-in that carries a fresh location fix.")
+    @POST
+    @Path("/geofences")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response createGeofence(com.hmdm.persistence.domain.Geofence geofence) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) {
+            return Response.PERMISSION_DENIED();
+        }
+        if (geofence == null || geofence.getName() == null || geofence.getName().trim().isEmpty()
+                || geofence.getRadiusMeters() <= 0) {
+            return Response.ERROR("error.geofence.invalid");
+        }
+        geofence.setId(null);
+        geofence.setCustomerId(customerId.get());
+        geofence.setCreatedAt(System.currentTimeMillis());
+        geofenceMapper.insert(geofence);
+        return Response.OK(geofence);
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "Update geofence")
+    @PUT
+    @Path("/geofences/{id}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response updateGeofence(@PathParam("id") int id, com.hmdm.persistence.domain.Geofence geofence) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) {
+            return Response.PERMISSION_DENIED();
+        }
+        if (geofence == null) {
+            return Response.ERROR("error.geofence.invalid");
+        }
+        geofence.setId(id);
+        geofence.setCustomerId(customerId.get());
+        geofenceMapper.update(geofence);
+        return Response.OK();
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "Delete geofence")
+    @DELETE
+    @Path("/geofences/{id}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response deleteGeofence(@PathParam("id") int id) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) {
+            return Response.PERMISSION_DENIED();
+        }
+        geofenceMapper.delete(id, customerId.get());
         return Response.OK();
     }
 }
