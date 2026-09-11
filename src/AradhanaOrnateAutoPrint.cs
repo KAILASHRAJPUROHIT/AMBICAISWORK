@@ -29,6 +29,17 @@ namespace AradhanaOrnateAutoPrint
         }
     }
 
+    // Result of TrayContext.CaptureLiveVoucherTemplate() - a small pass-back
+    // type so VoucherRouteRulesForm (a separate Form, no access to
+    // TrayContext's private window-capture P/Invoke) can show its own
+    // success/error UI without TrayContext needing a dialog owner of its own.
+    internal sealed class VoucherTemplateCaptureResult
+    {
+        public bool Success;
+        public string FileName;
+        public string Error;
+    }
+
     // A route is matched only by its saved Voucher Print visual template and
     // its exact requested copy count. The label is for the administrator; it
     // is never trusted as OCR or as a routing signal.
@@ -628,7 +639,7 @@ namespace AradhanaOrnateAutoPrint
                 // Config may have changed (including MasterEnabled) - resync tray state.
                 enabled = config.MasterEnabled;
                 Log("Settings saved via UI.");
-            });
+            }, CaptureLiveVoucherTemplate);
             settingsForm.Show();
         }
 
@@ -1577,6 +1588,67 @@ namespace AradhanaOrnateAutoPrint
             }
         }
 
+        // Called from the Voucher routing rules editor's "Capture current
+        // voucher as new template" button. Finds whatever Voucher Print
+        // window is currently open in Ornate and saves a full-window capture
+        // as a new reference PNG - the exact same capture this process
+        // already performs on every real print dialog (TryMatchVoucherRoute
+        // above), just saved to disk instead of compared. Read-only towards
+        // Ornate: no click, no focus change, no field edit.
+        private VoucherTemplateCaptureResult CaptureLiveVoucherTemplate()
+        {
+            IntPtr found = IntPtr.Zero;
+            var ornatePids = GetValidOrnatePids();
+            if (ornatePids.Count == 0)
+                return new VoucherTemplateCaptureResult { Success = false, Error = "Ornate (ONX.exe) is not running." };
+
+            EnumWindows((hWnd, lParam) =>
+            {
+                if (found != IntPtr.Zero) return true;
+                if (!string.Equals(GetWindowTextValue(hWnd), VoucherDialogTitle, StringComparison.OrdinalIgnoreCase)) return true;
+                if (!BelongsToOrnate(hWnd, ornatePids)) return true;
+                found = hWnd;
+                return true;
+            }, IntPtr.Zero);
+
+            if (found == IntPtr.Zero)
+                return new VoucherTemplateCaptureResult { Success = false, Error = "Open Ornate's Voucher Print window first, then try again." };
+
+            RECT rect;
+            if (!GetWindowRect(found, out rect))
+                return new VoucherTemplateCaptureResult { Success = false, Error = "Could not read the Voucher Print window's bounds." };
+            int width = rect.Right - rect.Left;
+            int height = rect.Bottom - rect.Top;
+            if (width < 200 || height < 100)
+                return new VoucherTemplateCaptureResult { Success = false, Error = "Voucher Print window bounds look invalid; try again." };
+
+            try
+            {
+                using (var captured = new Bitmap(width, height))
+                {
+                    using (var graphics = Graphics.FromImage(captured))
+                    {
+                        IntPtr hdc = graphics.GetHdc();
+                        bool capturedWindow;
+                        try { capturedWindow = PrintWindow(found, hdc, 2); }
+                        finally { graphics.ReleaseHdc(hdc); }
+                        if (!capturedWindow)
+                            return new VoucherTemplateCaptureResult { Success = false, Error = "Window capture failed (PrintWindow returned false)." };
+                    }
+
+                    string fileName = "voucher-template-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + ".png";
+                    string fullPath = Path.Combine(baseFolder, fileName);
+                    captured.Save(fullPath, System.Drawing.Imaging.ImageFormat.Png);
+                    Log("ROUTING RULES: captured new voucher template '" + fileName + "' from the live Voucher Print window.");
+                    return new VoucherTemplateCaptureResult { Success = true, FileName = fileName };
+                }
+            }
+            catch (Exception ex)
+            {
+                return new VoucherTemplateCaptureResult { Success = false, Error = "Capture failed: " + ex.Message };
+            }
+        }
+
         // Ornate's "No. Of Copies" spinner is a custom-drawn control, not a real Win32 EDIT:
         // Win32 GetWindowText finds an unrelated EDIT field (confirmed by field trace to read
         // "1" regardless of the spinner's actual value) while UI Automation correctly exposes
@@ -2101,6 +2173,7 @@ namespace AradhanaOrnateAutoPrint
         private readonly string configPath;
         private readonly string logPath;
         private readonly Action onSaved;
+        private readonly Func<VoucherTemplateCaptureResult> captureLiveVoucherTemplate;
 
         private CheckBox chkEnabled;
         private ComboBox cmbRole;
@@ -2112,12 +2185,14 @@ namespace AradhanaOrnateAutoPrint
         private Timer logTimer;
         private long lastLogLength = -1;
 
-        public SettingsForm(AppConfig config, string configPath, string logPath, Action onSaved)
+        public SettingsForm(AppConfig config, string configPath, string logPath, Action onSaved,
+            Func<VoucherTemplateCaptureResult> captureLiveVoucherTemplate)
         {
             this.config = config;
             this.configPath = configPath;
             this.logPath = logPath;
             this.onSaved = onSaved;
+            this.captureLiveVoucherTemplate = captureLiveVoucherTemplate;
 
             BuildUi();
             LoadFromConfig();
@@ -2200,7 +2275,7 @@ namespace AradhanaOrnateAutoPrint
             var btnRoutes = new Button { Text = "Voucher routing rules...", Left = 12, Top = 348, Width = 185 };
             btnRoutes.Click += (s, e) =>
             {
-                using (var editor = new VoucherRouteRulesForm(config, configPath))
+                using (var editor = new VoucherRouteRulesForm(config, configPath, captureLiveVoucherTemplate))
                     editor.ShowDialog(this);
             };
 
@@ -2352,11 +2427,14 @@ namespace AradhanaOrnateAutoPrint
         private readonly DataGridView grid;
         private readonly List<string> templateFiles;
         private readonly List<string> printerChoices;
+        private readonly Func<VoucherTemplateCaptureResult> captureLiveVoucherTemplate;
 
-        public VoucherRouteRulesForm(AppConfig config, string configPath)
+        public VoucherRouteRulesForm(AppConfig config, string configPath,
+            Func<VoucherTemplateCaptureResult> captureLiveVoucherTemplate)
         {
             this.config = config;
             this.configPath = configPath;
+            this.captureLiveVoucherTemplate = captureLiveVoucherTemplate;
             templateFiles = LoadTemplateFiles();
             printerChoices = LoadPrinterChoices();
 
@@ -2369,9 +2447,9 @@ namespace AradhanaOrnateAutoPrint
             var note = new Label
             {
                 Left = 12, Top = 12, Width = 1080, Height = 40,
-                Text = "A rule matches only a saved visual template and the exact copy count. " +
-                       "No match, missing template, or unreadable count means P355 only. " +
-                       "Template files must be deployed with the signed release."
+                Text = "A rule matches only a saved visual template and the exact copy count - the " +
+                       "\"Voucher rule label\" is just your own note, it is never matched against anything. " +
+                       "No match, missing template, or unreadable count means P355 only."
             };
             grid = new DataGridView
             {
@@ -2398,11 +2476,13 @@ namespace AradhanaOrnateAutoPrint
             add.Click += (s, e) => AddDefaultRow();
             var remove = new Button { Text = "Remove selected", Left = 122, Top = 350, Width = 130 };
             remove.Click += (s, e) => { if (grid.CurrentRow != null) grid.Rows.Remove(grid.CurrentRow); };
+            var captureTemplate = new Button { Text = "Capture current voucher as new template...", Left = 262, Top = 350, Width = 290 };
+            captureTemplate.Click += (s, e) => CaptureNewTemplate();
             var save = new Button { Text = "Save rules", Left = 862, Top = 350, Width = 110 };
             save.Click += (s, e) => SaveRules();
             var close = new Button { Text = "Close", Left = 982, Top = 350, Width = 110 };
             close.Click += (s, e) => Close();
-            Controls.AddRange(new Control[] { note, grid, add, remove, save, close });
+            Controls.AddRange(new Control[] { note, grid, add, remove, captureTemplate, save, close });
             LoadRules();
         }
 
@@ -2456,6 +2536,49 @@ namespace AradhanaOrnateAutoPrint
         private void AddDefaultRow()
         {
             AddRow(VoucherRouteRule.DefaultRule());
+        }
+
+        // Captures whatever Voucher Print window is currently open in Ornate
+        // as a new reference template and drops in a ready-to-fill row for
+        // it - the point being that the one part of setting up a rule that
+        // actually has to be exactly right (the visual template) never
+        // requires touching a file path or a separate tool. Read-only
+        // towards Ornate; does not click, focus, or print anything.
+        private void CaptureNewTemplate()
+        {
+            if (captureLiveVoucherTemplate == null) return;
+
+            VoucherTemplateCaptureResult result = captureLiveVoucherTemplate();
+            if (!result.Success)
+            {
+                MessageBox.Show(this, result.Error, "Capture voucher template",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (!templateFiles.Contains(result.FileName))
+            {
+                templateFiles.Add(result.FileName);
+                ((DataGridViewComboBoxColumn)grid.Columns["Template"]).Items.Add(result.FileName);
+            }
+
+            AddRow(new VoucherRouteRule
+            {
+                Name = "",
+                RequiredCopies = 2,
+                ReferenceFile = result.FileName,
+                Enabled = true
+            });
+
+            int newRow = grid.Rows.Count - 1;
+            grid.CurrentCell = grid.Rows[newRow].Cells["Name"];
+            grid.BeginEdit(true);
+
+            MessageBox.Show(this,
+                "Captured '" + result.FileName + "' from the currently open Voucher Print window.\n\n" +
+                "A new row was added with this template and 2 copies. Type a label, set the exact " +
+                "copy count this voucher actually uses, choose printers, then Save rules.",
+                "Capture voucher template", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void AddRow(VoucherRouteRule rule)
