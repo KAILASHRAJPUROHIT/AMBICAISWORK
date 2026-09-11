@@ -370,6 +370,24 @@ namespace AradhanaOrnateAutoPrint
                 @"C:\Program Files\Python311\python.exe",
                 @"C:\Program Files\Python310\python.exe",
             };
+            // Per-user installs (the default for the plain installer, no admin
+            // prompt) land under LOCALAPPDATA - this is where PC2's actual
+            // interpreter lives. Without these, resolution silently fell
+            // through to the "py" launcher stub below: py.exe spawns the real
+            // python.exe as a child and exits once the handoff completes,
+            // orphaning that child from whatever Process object launched py -
+            // fatal for EnsureDocumentWorkflowServiceRunning's supervision,
+            // which tracks that Process object's HasExited to decide whether
+            // to restart. A direct interpreter path keeps the child under the
+            // Process object that actually started it.
+            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            fullPathCandidates.AddRange(new[]
+            {
+                Path.Combine(localAppData, @"Programs\Python\Python313\python.exe"),
+                Path.Combine(localAppData, @"Programs\Python\Python312\python.exe"),
+                Path.Combine(localAppData, @"Programs\Python\Python311\python.exe"),
+                Path.Combine(localAppData, @"Programs\Python\Python310\python.exe"),
+            });
 
             foreach (var candidate in fullPathCandidates)
             {
