@@ -1,0 +1,24 @@
+services:
+  gold-rate-monitor:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: aradhana/gold-rate-monitor:${AGM_RELEASE_TAG:-prod}
+    container_name: gold-rate-monitor
+    env_file:
+      - .env
+    environment:
+      PORT: "8080"
+    volumes:
+      - ${AGM_DATA_DIR:-/srv/aradhana-gold-monitor/data}:/app/data
+      - ${AGM_LOG_DIR:-/srv/aradhana-gold-monitor/logs}:/app/logs
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - ambic-shared
+
+networks:
+  ambic-shared:
+    external: true

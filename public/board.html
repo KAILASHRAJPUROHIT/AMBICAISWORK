@@ -276,6 +276,21 @@ function render(s) {
 // refreshing every 5-7s instead of every 1s even though the server and
 // network both deliver on time) - a fetch loop is far more broadly
 // compatible and matches the "fetch every second" requirement directly.
+// A stale rate frozen on screen is indistinguishable from a live one to
+// anyone glancing at the board - worse than showing nothing. The instant
+// this device's own poll fails, every figure goes to 0 rather than holding
+// the last good value, so staff/customers can never mistake an offline
+// board for a live one (2026-09-04).
+function zeroOut() {
+  const PREFIXES = ['fb', 'dg', 'md', 'bd', 'wf'];
+  for (const pre of PREFIXES) {
+    for (const suf of ['g24', 'g22', 'g18', 'sp', 'so']) {
+      const el = $(pre + '-' + suf);
+      if (el) setRs(el, 0);
+    }
+  }
+}
+
 let consecutiveFailures = 0;
 function poll() {
   fetch('/api/rate', { cache: 'no-store' })
@@ -286,10 +301,9 @@ function poll() {
     })
     .catch(() => {
       consecutiveFailures++;
-      if (consecutiveFailures >= 3) {
-        $('dot').className = 'dot bad';
-        $('livetext').textContent = 'Reconnecting…';
-      }
+      zeroOut();
+      $('dot').className = 'dot bad';
+      $('livetext').textContent = consecutiveFailures >= 3 ? 'Reconnecting…' : 'Offline';
     });
 }
 poll();
