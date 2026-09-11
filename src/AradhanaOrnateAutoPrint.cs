@@ -2642,6 +2642,39 @@ namespace AradhanaOrnateAutoPrint
                 MessageBox.Show(this, "Keep at least one route. Disable it if it should not be used.", "Voucher routing rules", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+
+            // The most common way to set up a rule wrong: pointing "Copies 2+
+            // printer" at the real physical printer instead of the letterhead-
+            // capture virtual printer. Ornate then prints straight to the real
+            // printer, silently skipping the overlay pipeline entirely - no
+            // error anywhere, just a plain voucher with no Aradhana letterhead.
+            // Confirmed live on 2026-09-11 (the URD rule). config.Copy2Printer
+            // is the known-good capture printer, since "(use configured
+            // default)" resolving to it is what the working GST rule already
+            // relies on.
+            var suspectRules = new List<string>();
+            foreach (VoucherRouteRule rule in rules)
+            {
+                if (!string.IsNullOrWhiteSpace(rule.LaterPrinter) &&
+                    !string.Equals(rule.LaterPrinter, config.Copy2Printer, StringComparison.OrdinalIgnoreCase))
+                {
+                    suspectRules.Add(rule.Name + "  (Copies 2+ printer = '" + rule.LaterPrinter + "')");
+                }
+            }
+            if (suspectRules.Count > 0)
+            {
+                DialogResult choice = MessageBox.Show(this,
+                    "These rules' \"Copies 2+ printer\" is not the configured letterhead-capture printer " +
+                    "('" + config.Copy2Printer + "'):\n\n" + string.Join("\n", suspectRules) +
+                    "\n\nThose copies will print WITHOUT the Aradhana letterhead overlay - straight to " +
+                    "that printer with no chance for the overlay step to run. If that is not intentional, " +
+                    "click No and change it to '" + config.Copy2Printer + "' (or \"(use configured default)\").\n\n" +
+                    "Save anyway?",
+                    "Copies 2+ printer skips the letterhead overlay",
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+                if (choice != DialogResult.Yes) return;
+            }
+
             config.VoucherRoutes.Clear();
             config.VoucherRoutes.AddRange(rules);
             config.Save(configPath);
