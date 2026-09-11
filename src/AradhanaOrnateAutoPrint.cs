@@ -453,6 +453,24 @@ namespace AradhanaOrnateAutoPrint
         private readonly HashSet<IntPtr> handled = new HashSet<IntPtr>();
         private bool enabled = true;
 
+        // Document-workflow API (service\app.py) supervision. Previously
+        // auto-started via a SYSTEM scheduled task (install_document_workflow_
+        // service.ps1) that NPAV silently deleted within seconds of
+        // registration on PC2 — a SYSTEM task spawning powershell.exe ->
+        // python.exe at boot is a textbook dropper/persistence signature,
+        // the same heuristic class that previously flagged a separate
+        // standalone watcher binary. That earlier problem's actual fix
+        // wasn't a better AV exclusion, it was folding the watcher into this
+        // already-trusted, signed tray EXE — which has been confirmed to
+        // survive a full reboot with every NPAV feature enabled, hash-
+        // identical and untouched. This does the same: the already-running,
+        // already-trusted process launches and supervises the Python
+        // service itself, so no new auto-start mechanism ever exists for AV
+        // to flag.
+        private Process documentWorkflowProcess;
+        private DateTime documentWorkflowLastStartAttemptUtc = DateTime.MinValue;
+        private static readonly TimeSpan DocumentWorkflowRestartCooldown = TimeSpan.FromSeconds(15);
+
         // Print-session state. Only the visible Voucher Format and No. Of
         // Copies field can qualify a P1007 office copy.
         private DateTime lastHandledUtc = DateTime.MinValue;
@@ -534,6 +552,12 @@ namespace AradhanaOrnateAutoPrint
                 tray.Visible = false;
                 timer.Stop();
                 hotkeyTimer.Stop();
+                try
+                {
+                    if (documentWorkflowProcess != null && !documentWorkflowProcess.HasExited)
+                        documentWorkflowProcess.Kill();
+                }
+                catch { }
                 Application.Exit();
             };
 
@@ -564,11 +588,13 @@ namespace AradhanaOrnateAutoPrint
             overlay355Timer.Start();
 
             relay1007Timer = new Timer { Interval = 3000 };
-            relay1007Timer.Tick += (s, e) => { ScanRelay1007Send(); ScanHub1007Receive(); };
+            relay1007Timer.Tick += (s, e) => { ScanRelay1007Send(); ScanHub1007Receive(); EnsureDocumentWorkflowServiceRunning(); };
             relay1007Timer.Start();
 
             Log("START. Hard-wall path=" + EffectiveOrnateExecutablePath + " PcRole=" + config.PcRole +
                 " Relay1007=" + config.Relay1007Enabled);
+
+            EnsureDocumentWorkflowServiceRunning();
         }
 
         private void ShowSettings()
@@ -1142,6 +1168,75 @@ namespace AradhanaOrnateAutoPrint
                 Log("DOCUMENT: could not start interactive panel: " + ex.Message);
                 return false;
             }
+        }
+
+        // Starts (and, on every ~3s supervision tick, restarts if it has died)
+        // the local document-workflow Flask API as a child of this already-
+        // trusted, signed tray process. See the field comment above
+        // documentWorkflowProcess for why this replaced a SYSTEM scheduled
+        // task. Mirrors run_document_workflow_service.ps1's env vars and port
+        // exactly; that script remains available for manual/diagnostic use
+        // but is no longer this app's own startup path.
+        private void EnsureDocumentWorkflowServiceRunning()
+        {
+            if (!config.DocumentWorkflowEnabled || string.IsNullOrWhiteSpace(config.DocumentWorkflowRoot)) return;
+            if (documentWorkflowProcess != null && !documentWorkflowProcess.HasExited) return;
+
+            if (DateTime.UtcNow - documentWorkflowLastStartAttemptUtc < DocumentWorkflowRestartCooldown) return;
+            documentWorkflowLastStartAttemptUtc = DateTime.UtcNow;
+
+            string appPath = Path.Combine(config.DocumentWorkflowRoot, "service", "app.py");
+            if (!File.Exists(appPath))
+            {
+                Log("DOCUMENT: workflow service app.py missing; supervised start skipped: " + appPath);
+                return;
+            }
+
+            try
+            {
+                string logRoot = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    "AradhanaSystems", "logs", "document-workflow");
+                Directory.CreateDirectory(logRoot);
+                string logPath = Path.Combine(logRoot, "workflow-api.log");
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = ResolvePythonExe(),
+                    Arguments = "\"" + appPath + "\"",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                    WorkingDirectory = config.DocumentWorkflowRoot,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                };
+                psi.EnvironmentVariables["AIS_DOCUMENT_WORKFLOW_DB"] = Path.Combine(config.DocumentWorkflowRoot, "service", "document_workflow.db");
+                psi.EnvironmentVariables["AIS_DOCUMENT_WORKFLOW_PORT"] = "8310";
+
+                var process = new Process { StartInfo = psi };
+                process.OutputDataReceived += (s, e) => { if (e.Data != null) TryAppendWorkflowLog(logPath, e.Data); };
+                process.ErrorDataReceived += (s, e) => { if (e.Data != null) TryAppendWorkflowLog(logPath, e.Data); };
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+                if (documentWorkflowProcess != null) { try { documentWorkflowProcess.Dispose(); } catch { } }
+                documentWorkflowProcess = process;
+                Log("DOCUMENT: workflow API started (pid=" + process.Id + "), supervised by this process.");
+            }
+            catch (Exception ex)
+            {
+                Log("DOCUMENT: could not start workflow API: " + ex.Message);
+            }
+        }
+
+        private static void TryAppendWorkflowLog(string logPath, string line)
+        {
+            try
+            {
+                File.AppendAllText(logPath, "[" + DateTime.UtcNow.ToString("o") + "] " + line + Environment.NewLine);
+            }
+            catch { }
         }
 
         // The bridge secret is intentionally not stored in config.txt or in a
