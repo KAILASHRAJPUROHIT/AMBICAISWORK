@@ -2391,13 +2391,21 @@ namespace AradhanaOrnateAutoPrint
                 if (info.Length == lastLogLength) return; // no change, skip re-reading
                 lastLogLength = info.Length;
 
-                string[] lines;
+                // Only ever read the last chunk of the file, not the whole thing - a
+                // full ReadToEnd() here used to cost O(file size) on every tick this
+                // form is open, which gets slower and slower as the log grows over a
+                // normal day (or over months of production use, since nothing rotates
+                // it). 128KB is comfortably more than the ~200 lines actually shown.
+                const int MaxTailBytes = 131072;
+                string all;
                 using (var fs = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                using (var sr = new StreamReader(fs, Encoding.UTF8))
                 {
-                    var all = sr.ReadToEnd();
-                    lines = all.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                    long seekTo = Math.Max(0, fs.Length - MaxTailBytes);
+                    fs.Seek(seekTo, SeekOrigin.Begin);
+                    using (var sr = new StreamReader(fs, Encoding.UTF8))
+                        all = sr.ReadToEnd();
                 }
+                string[] lines = all.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
 
                 int start = Math.Max(0, lines.Length - 200); // last ~200 lines
                 var tail = new StringBuilder();
