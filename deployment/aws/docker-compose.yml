@@ -22,3 +22,23 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=128m
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - qr-print-server
+    env_file:
+      - .env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

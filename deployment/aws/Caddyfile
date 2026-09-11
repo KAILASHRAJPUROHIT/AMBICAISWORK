@@ -1,0 +1,15 @@
+# TLS front door for the QR print server, entirely separate from MDM's own
+# Caddy/Cloudflare-Tunnel setup on this same box - MDM publishes no host
+# ports at all (tunnel-based), so 80/443 were free for this to take
+# directly. Automatic Let's Encrypt cert issuance will simply retry
+# harmlessly in the background until DNS for this domain actually points at
+# this host; no action needed here at cutover time beyond the DNS change
+# itself.
+{
+	email {$QR_ACME_EMAIL}
+}
+
+{$QR_SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy qr-print-server:8000
+}
