@@ -124,11 +124,22 @@ foreach ($dialog in $dialogs) {
     if ($element.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$pattern)) {
       try { $value = ([System.Windows.Automation.ValuePattern]$pattern).Current.Value } catch { }
     }
+    $bounds = $current.BoundingRectangle
+    $relLeft = ''
+    $relTop = ''
+    if ($rect -and -not $bounds.IsEmpty) {
+      $relLeft = [int]($bounds.Left - $rect.Left)
+      $relTop = [int]($bounds.Top - $rect.Top)
+    }
     [pscustomobject]@{
       Control = $current.ControlType.ProgrammaticName
       Name = $current.Name
       AutomationId = $current.AutomationId
       Value = $value
+      RelLeft = $relLeft
+      RelTop = $relTop
+      W = if (-not $bounds.IsEmpty) { [int]$bounds.Width } else { '' }
+      H = if (-not $bounds.IsEmpty) { [int]$bounds.Height } else { '' }
     }
   }
   $uiaRows | Where-Object { $_.Name -or $_.AutomationId -or $_.Value } | Format-Table -AutoSize

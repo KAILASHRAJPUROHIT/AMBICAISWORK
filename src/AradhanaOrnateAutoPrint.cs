@@ -6,6 +6,8 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Forms;
 
 namespace AradhanaOrnateAutoPrint
@@ -333,6 +335,13 @@ namespace AradhanaOrnateAutoPrint
         private bool overlay355Busy = false;
         private string documentWorkflowManifestForNextCustomerCopy = null;
         private readonly HashSet<IntPtr> voucherWindows = new HashSet<IntPtr>();
+        // Last (difference, copies) safety-state logged per unqualified voucher window, so a
+        // full trace survives to the moment Print is actually clicked instead of only the first
+        // read. Without this, an incident where the biller's LAST edit before printing (e.g.
+        // setting copies to 2, or a format that had settled to a near-zero difference) never gets
+        // logged is undiagnosable after the fact — exactly what happened investigating the
+        // 2026-09-10 19:54:58 case, where only the very first (possibly stale) read was on record.
+        private readonly Dictionary<IntPtr, string> voucherWindowLastLoggedState = new Dictionary<IntPtr, string>();
         // A voucher can initially open with the default copy count, before the
         // biller changes it. Keep observing it until it qualifies, then lock
         // that specific window's route so its second print cannot re-arm P1007.
@@ -909,6 +918,11 @@ namespace AradhanaOrnateAutoPrint
                 handled.RemoveWhere(h => !IsWindow(h));
                 voucherWindows.RemoveWhere(h => !IsWindow(h));
                 voucherRoutesFinalized.RemoveWhere(h => !IsWindow(h));
+                var deadLoggedStates = new List<IntPtr>();
+                foreach (IntPtr h in voucherWindowLastLoggedState.Keys)
+                    if (!IsWindow(h)) deadLoggedStates.Add(h);
+                foreach (IntPtr dead in deadLoggedStates)
+                    voucherWindowLastLoggedState.Remove(dead);
             }
             catch (Exception ex)
             {
@@ -1043,10 +1057,19 @@ namespace AradhanaOrnateAutoPrint
             bool copiesRead = TryReadVoucherCopyCount(hWnd, out requestedCopies);
             if (!approvedFormat || !copiesRead || requestedCopies != matchedRoute.RequiredCopies)
             {
-                if (firstSeen)
+                // Log every DISTINCT read (not just the first), so the trace covers the biller's
+                // last edit before Print is clicked, not only whatever the window looked like the
+                // instant it first appeared. Change-gated (not every 250ms poll) to avoid spamming
+                // the log while a voucher window sits open and unedited.
+                string state = fingerprintDifference.ToString("0.00") + "|" + (copiesRead ? requestedCopies.ToString() : "unreadable");
+                string lastState;
+                if (!voucherWindowLastLoggedState.TryGetValue(hWnd, out lastState) || lastState != state)
+                {
+                    voucherWindowLastLoggedState[hWnd] = state;
                     Log("ROUTE SAFETY: Voucher Print is awaiting a qualifying format/copy count (format difference=" +
                         fingerprintDifference.ToString("0.00") + ", copies=" +
                         (copiesRead ? requestedCopies.ToString() : "unreadable") + "). P1007 remains blocked unless an enabled visual route has its exact configured count.");
+                }
                 return;
             }
 
@@ -1441,31 +1464,92 @@ namespace AradhanaOrnateAutoPrint
             }
         }
 
+        // Ornate's "No. Of Copies" spinner is a custom-drawn control, not a real Win32 EDIT:
+        // Win32 GetWindowText finds an unrelated EDIT field (confirmed by field trace to read
+        // "1" regardless of the spinner's actual value) while UI Automation correctly exposes
+        // the spinner's live value as the control's Name. This mirrors the same Win32-vs-UI
+        // Automation gap already documented for the Voucher Format field below. The spinner's
+        // own AutomationId ("TxtNoOfCopy") is stable and confirmed live on 2026-09-10 — prefer
+        // it directly. Nested sub-elements (the spinner's internal text rendering) mirror the
+        // same value under different/empty AutomationIds and would otherwise read as ambiguous.
+        private const string CopySpinnerAutomationId = "TxtNoOfCopy";
+        private const int CopySpinnerMaxWidth = 110;
+        private const int CopySpinnerMaxHeight = 30;
+
         private bool TryReadVoucherCopyCount(IntPtr dialog, out int copies)
         {
             copies = 0;
+            var candidates = new List<string>();
             int detectedCopies = 0;
-            var inspected = new List<string>();
-            EnumChildWindows(dialog, (child, lParam) =>
+            int matchCount = 0;
+            int? byAutomationId = null;
+
+            try
             {
-                string cls = GetWindowClassValue(child);
-                if (cls.IndexOf("EDIT", StringComparison.OrdinalIgnoreCase) < 0) return true;
-                string value = GetWindowTextValue(child).Trim();
-                if (value.Length == 0) return true;
-                inspected.Add(value);
-                int parsed;
-                if (int.TryParse(value, out parsed) && parsed >= 1 && parsed <= 9)
+                AutomationElement root = AutomationElement.FromHandle(dialog);
+                if (root == null)
                 {
-                    detectedCopies = parsed;
+                    Log("ROUTE SAFETY: Voucher Print UI Automation root unavailable. P1007 blocked.");
                     return false;
                 }
+
+                Condition condition = new PropertyCondition(AutomationElement.IsControlElementProperty, true);
+                AutomationElementCollection elements = root.FindAll(TreeScope.Descendants, condition);
+
+                foreach (AutomationElement element in elements)
+                {
+                    string name = element.Current.Name;
+                    if (string.IsNullOrEmpty(name)) continue;
+                    int parsed;
+                    if (!int.TryParse(name.Trim(), out parsed) || parsed < 1 || parsed > 9) continue;
+
+                    Rect bounds = element.Current.BoundingRectangle;
+                    if (bounds.IsEmpty || bounds.Width <= 0 || bounds.Width > CopySpinnerMaxWidth ||
+                        bounds.Height <= 0 || bounds.Height > CopySpinnerMaxHeight)
+                    {
+                        continue;
+                    }
+
+                    matchCount++;
+                    candidates.Add("value=" + parsed + " w=" + (int)bounds.Width + " h=" + (int)bounds.Height +
+                        " automationId=" + element.Current.AutomationId);
+                    if (matchCount == 1)
+                    {
+                        detectedCopies = parsed;
+                    }
+                    if (string.Equals(element.Current.AutomationId, CopySpinnerAutomationId, StringComparison.Ordinal))
+                    {
+                        byAutomationId = parsed;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("ROUTE SAFETY: Voucher Print copy count UI Automation error; P1007 blocked: " + ex.Message);
+                return false;
+            }
+
+            if (byAutomationId.HasValue)
+            {
+                copies = byAutomationId.Value;
+                Log("Voucher Print copy count read via UI Automation (AutomationId=" + CopySpinnerAutomationId + "): " +
+                    copies + (matchCount > 1 ? " (" + matchCount + " total candidates, disambiguated by AutomationId)" : ""));
                 return true;
-            }, IntPtr.Zero);
+            }
+
+            if (matchCount > 1)
+            {
+                Log("ROUTE SAFETY: " + matchCount + " ambiguous copy-count candidates found via UI Automation (none matched AutomationId=" +
+                    CopySpinnerAutomationId + "): " + string.Join(" || ", candidates) + ". P1007 blocked.");
+                copies = 0;
+                return false;
+            }
 
             copies = detectedCopies;
             if (copies == 0)
-                Log("ROUTE SAFETY: Voucher Print copy count is unreadable; inspected edit values: " +
-                    (inspected.Count == 0 ? "none" : string.Join(" | ", inspected)) + ". P1007 blocked.");
+                Log("ROUTE SAFETY: Voucher Print copy count is unreadable via UI Automation (no matching spinner control). P1007 blocked.");
+            else
+                Log("Voucher Print copy count read via UI Automation: " + candidates[0]);
             return copies != 0;
         }
 

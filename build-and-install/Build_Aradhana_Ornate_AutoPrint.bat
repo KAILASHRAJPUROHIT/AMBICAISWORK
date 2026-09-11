@@ -10,6 +10,8 @@ set "REFERENCE_TARGET=%HERE%office-sales-voucher-format-reference.png"
 
 set "CSC=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 if not exist "%CSC%" set "CSC=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\csc.exe"
+set "UIA_DIR=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\WPF"
+if not exist "%UIA_DIR%\UIAutomationClient.dll" set "UIA_DIR=%WINDIR%\Microsoft.NET\Framework\v4.0.30319\WPF"
 set "SIGNTOOL=%ProgramFiles(x86)%\Windows Kits\10\App Certification Kit\signtool.exe"
 if not exist "%SIGNTOOL%" set "SIGNTOOL=%ProgramFiles(x86)%\Windows Kits\10\bin\10.0.19041.0\x64\signtool.exe"
 set "CERT_THUMBPRINT=E3880C0CAAE350308C78CB0646260C13A35438E2"
@@ -27,6 +29,9 @@ echo Building...
  /reference:System.Drawing.dll ^
  /reference:System.Security.dll ^
  /reference:System.Windows.Forms.dll ^
+ /reference:"%UIA_DIR%\UIAutomationClient.dll" ^
+ /reference:"%UIA_DIR%\UIAutomationTypes.dll" ^
+ /reference:"%UIA_DIR%\WindowsBase.dll" ^
  /out:"%EXE%" "%SRC%"
 
 if errorlevel 1 (
