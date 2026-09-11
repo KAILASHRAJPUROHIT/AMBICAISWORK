@@ -13,3 +13,11 @@
 	encode gzip
 	reverse_proxy qr-print-server:8000
 }
+
+# Gold rate monitor - deliberately unlisted (not linked from the public site),
+# same posture as its previous Render URL. Reachable only if you know the
+# exact hostname. See gold-rate-monitor/README.md for the full design notes.
+{$AGM_SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy gold-rate-monitor:8080
+}

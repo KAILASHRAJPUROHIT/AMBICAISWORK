@@ -38,7 +38,15 @@ services:
       - "443:443"
       - "443:443/udp"
     restart: unless-stopped
+    networks:
+      - default
+      - ambic-shared
 
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  default: {}
+  ambic-shared:
+    external: true
