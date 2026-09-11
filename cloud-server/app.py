@@ -10,6 +10,7 @@ from pathlib import Path
 
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.exc import IntegrityError
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -632,13 +633,28 @@ def init_db():
                 conn.execute(db.text("ALTER TABLE document_bundles ADD COLUMN print_mode TEXT NOT NULL DEFAULT 'pdf'"))
                 conn.commit()
 
+        # Every gunicorn worker runs init_db() independently at boot, so
+        # "check then insert" here is a real race, not a hypothetical one:
+        # confirmed live on 2026-09-11 (staging deploy) as a worker crash on
+        # a UNIQUE constraint violation when two workers both saw no row 1
+        # and both tried to seed it. gunicorn's own worker-restart recovered
+        # it, but that's a startup crash on every deploy, not something to
+        # rely on masking. Losing the seed race is the expected, harmless
+        # outcome here (the row exists either way) - only a real DB error
+        # should propagate.
         if not PrinterConfig.query.get(1):
-            db.session.add(PrinterConfig(id=1, printer_name="", available_printers="[]"))
-            db.session.commit()
+            try:
+                db.session.add(PrinterConfig(id=1, printer_name="", available_printers="[]"))
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
 
         if not WarmupSignal.query.get(1):
-            db.session.add(WarmupSignal(id=1, requested_at=None))
-            db.session.commit()
+            try:
+                db.session.add(WarmupSignal(id=1, requested_at=None))
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
 
 def allowed_file(filename):
     return Path(filename).suffix.lower() in ALLOWED_EXTENSIONS
