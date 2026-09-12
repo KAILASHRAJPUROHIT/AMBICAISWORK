@@ -28,6 +28,7 @@ from sms_parser import (
     parse_sms_body,
 )
 from email_poller import email_status, start_email_poller
+from documents_api import router as documents_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("payment-notifier")
@@ -44,6 +45,8 @@ app.add_middleware(
 
 NOTIFIER_TOKEN = os.environ.get("NOTIFIER_TOKEN", "")
 RELAY_TOKEN = os.environ.get("RELAY_TOKEN", "")
+
+app.include_router(documents_router)
 
 
 # --- Auth -------------------------------------------------------------
