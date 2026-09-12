@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -72,6 +73,38 @@ def on_startup():
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/", response_class=HTMLResponse)
+def status_page():
+    """Unauthenticated at-a-glance status - no bank data, just service health."""
+    poller_state = "running" if email_status.get("is_running") is not None else "unknown"
+    last_sync = email_status.get("last_sync") or "never yet"
+    last_error = email_status.get("last_error")
+    error_html = f'<p class="err">Last email-poll error: {last_error}</p>' if last_error else ""
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>Aradhana Payment Notifier</title>
+<style>
+  body {{ font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 48px auto; padding: 0 16px; color: #10254A; }}
+  h1 {{ color: #23519D; }}
+  .ok {{ color: #146C43; font-weight: bold; }}
+  .err {{ color: #B42332; }}
+  code {{ background: #f3f3f3; padding: 2px 6px; border-radius: 4px; }}
+  ul {{ line-height: 1.9; }}
+</style></head>
+<body>
+<h1>Aradhana Payment Notifier</h1>
+<p class="ok">&#9679; Service is up</p>
+<p>Email poller: {poller_state} &mdash; last sync: {last_sync}</p>
+{error_html}
+<p>This backend feeds the bank-activity desktop popup and the Android SMS relay.
+No transaction data is shown here &mdash; that requires the notifier token.</p>
+<ul>
+  <li><code>GET /api/health</code> &mdash; plain health check, no auth</li>
+  <li><code>GET /api/bank-activity</code> &mdash; requires <code>X-Notifier-Token</code></li>
+  <li><code>POST /api/sms-relay/ingest</code> &mdash; requires <code>X-Relay-Token</code></li>
+</ul>
+</body></html>"""
 
 
 # --- Shared helpers (ported from review_api.py, unchanged behavior) ---
