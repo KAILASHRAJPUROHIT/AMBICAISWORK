@@ -14,6 +14,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -47,6 +48,10 @@ NOTIFIER_TOKEN = os.environ.get("NOTIFIER_TOKEN", "")
 RELAY_TOKEN = os.environ.get("RELAY_TOKEN", "")
 
 app.include_router(documents_router)
+
+_dashboard_dist = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "dist")
+if os.path.isdir(_dashboard_dist):
+    app.mount("/dashboard", StaticFiles(directory=_dashboard_dist, html=True), name="dashboard")
 
 
 # --- Auth -------------------------------------------------------------
@@ -102,6 +107,7 @@ def status_page():
 {error_html}
 <p>This backend feeds the bank-activity desktop popup and the Android SMS relay.
 No transaction data is shown here &mdash; that requires the notifier token.</p>
+<p><a href="/dashboard/" style="color:#23519D;font-weight:bold;">&rarr; Open the Bank Activity dashboard</a></p>
 <ul>
   <li><code>GET /api/health</code> &mdash; plain health check, no auth</li>
   <li><code>GET /api/bank-activity</code> &mdash; requires <code>X-Notifier-Token</code></li>

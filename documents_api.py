@@ -82,7 +82,12 @@ async def get_document_dashboard(_auth=Depends(require_notifier_token)):
 
 
 @router.get("/api/documents/{bundle_id}/files/{filename}")
-async def download_document_file(bundle_id: str, filename: str, _auth=Depends(require_notifier_token)):
+async def download_document_file(bundle_id: str, filename: str, request: Request, x_notifier_token: str = Header(default="")):
+    # <a download> links can't attach custom headers, so this one route also
+    # accepts the token as a query param. Every other route stays header-only.
+    token = x_notifier_token or request.query_params.get("token", "")
+    if not NOTIFIER_TOKEN or token != NOTIFIER_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid or missing notifier token.")
     _valid_document_id(bundle_id)
     if filename != os.path.basename(filename):
         raise HTTPException(status_code=400, detail="Invalid document filename.")
