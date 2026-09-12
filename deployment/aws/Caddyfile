@@ -21,3 +21,11 @@
 	encode gzip
 	reverse_proxy gold-rate-monitor:8080
 }
+
+# Payment notifier (bank-activity backend for the desktop popup + Android
+# SMS relay). Unlisted; auth is per-request (NOTIFIER_TOKEN/RELAY_TOKEN
+# headers), not network position, since this is now public.
+{$APN_SITE_ADDRESS} {
+	encode gzip
+	reverse_proxy payment-notifier:8000
+}
