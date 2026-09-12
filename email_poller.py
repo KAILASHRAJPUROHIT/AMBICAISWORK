@@ -16,7 +16,7 @@ import re
 import imaplib
 import email
 from email.header import decode_header
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from models import SMSAlert
@@ -24,6 +24,22 @@ from sms_parser import detect_credit_or_debit, parse_bank_sms
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# The business runs on IST. This service is hosted on a cloud box whose
+# system clock is UTC (unlike the original on-prem Billing PC, where
+# datetime.now() naturally returned IST wall time) - every "now"/checkpoint
+# here needs to be computed in IST explicitly, or a UTC host clock silently
+# shifts every comparison by 5:30 and business-hours logic breaks (e.g. the
+# 10 AM checkpoint default becomes 3:30 PM IST, and every email sent before
+# that gets treated as already-seen and skipped). India has no DST, so a
+# fixed offset is correct year-round - no tzdata package needed.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def now_ist() -> datetime:
+    """Current IST wall-clock time as a naive datetime, matching the naive
+    (no-tzinfo) convention used for every timestamp already stored here."""
+    return datetime.now(IST).replace(tzinfo=None)
 
 EMAIL_POLL_INTERVAL_SECONDS = max(1, int(os.getenv("EMAIL_POLL_INTERVAL_SECONDS", "5")))
 
@@ -69,7 +85,7 @@ def get_checkpoint(db: Session):
             return datetime.fromisoformat(value)
         except ValueError:
             pass
-    now = datetime.now()
+    now = now_ist()
     default_open = now.replace(hour=10, minute=0, second=0, microsecond=0)
     if now.weekday() == 3:  # Thursday
         default_open = now.replace(hour=12, minute=0, second=0, microsecond=0)
@@ -77,7 +93,7 @@ def get_checkpoint(db: Session):
 
 
 def save_checkpoint(db: Session, last_ts: datetime):
-    now = datetime.now()
+    now = now_ist()
     if last_ts > now:
         logger.warning(f"FUTURE CHECKPOINT DETECTED: {last_ts}. System time: {now}. Clamping to current time.")
         last_ts = now
@@ -146,9 +162,13 @@ def fetch_real_emails(since_date: datetime):
                         sender = get_decoded_header(msg.get("From"))
                         date_tuple = email.utils.parsedate_tz(msg.get("Date"))
                         if date_tuple:
-                            local_date = datetime.fromtimestamp(email.utils.mktime_tz(date_tuple))
+                            # mktime_tz gives a correct epoch regardless of
+                            # the email's own timezone; convert that to IST
+                            # explicitly rather than via fromtimestamp()'s
+                            # host-local interpretation (UTC on this box).
+                            local_date = datetime.fromtimestamp(email.utils.mktime_tz(date_tuple), tz=IST).replace(tzinfo=None)
                         else:
-                            local_date = datetime.now()
+                            local_date = now_ist()
 
                         if local_date <= since_date:
                             continue
@@ -248,15 +268,43 @@ def process_emails():
             if sender_match:
                 sms_sender = sender_match.group(1)
 
+            # sms_parser.parse_bank_sms() can hand back several different
+            # shapes depending on which branch matched: the ICICI branch
+            # produces "YYYY-MM-DD HH:MM:SS" (has a real time), but the
+            # general fallback only ever captures a bare date - "DD-MM-YYYY",
+            # "DD/MM/YYYY", or "DD Mon YYYY" - with no time component at all.
+            # Only trying fromisoformat()/the ICICI format meant every one of
+            # those fallback-branch dates silently failed to parse and got
+            # replaced with the email's arrival time instead of what the bank
+            # actually stated - wrong whenever an alert sat in the inbox a
+            # while before being polled. Try every shape the parser can
+            # actually produce; for a date-only match, keep the email's
+            # time-of-day (closer to the truth than midnight) but use the
+            # bank's stated date.
             ts = received_at
             if parsed_sms.transaction_date:
-                try:
-                    ts = datetime.fromisoformat(parsed_sms.transaction_date)
-                except ValueError:
+                raw_date = parsed_sms.transaction_date.strip()
+                parsed_ts = None
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
                     try:
-                        ts = datetime.strptime(parsed_sms.transaction_date, "%Y-%m-%d %H:%M:%S")
+                        parsed_ts = datetime.strptime(raw_date, fmt)
+                        break
                     except ValueError:
-                        pass
+                        continue
+                if parsed_ts is None:
+                    for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%d %b %Y", "%d %B %Y"):
+                        try:
+                            date_only = datetime.strptime(raw_date, fmt)
+                            parsed_ts = date_only.replace(
+                                hour=received_at.hour, minute=received_at.minute, second=received_at.second,
+                            )
+                            break
+                        except ValueError:
+                            continue
+                if parsed_ts is not None:
+                    ts = parsed_ts
+                else:
+                    logger.warning(f"Could not parse transaction_date {raw_date!r}; using email arrival time instead")
 
             new_sms = SMSAlert(
                 sender=sms_sender,
@@ -280,7 +328,7 @@ def process_emails():
 
         db.commit()
         update_email_status(
-            last_sync=datetime.now().isoformat(),
+            last_sync=now_ist().isoformat(),
             next_sync=(datetime.now().timestamp() + EMAIL_POLL_INTERVAL_SECONDS),
             events_found=events_found
         )

@@ -42,14 +42,19 @@ def extract_account_display(body: str) -> Optional[str]:
 def extract_counterparty(body: str, direction: str) -> Optional[str]:
     """Best-effort counterparty from common Indian bank SMS templates."""
     labels = r"(?:from|by|remitter|sender)" if direction == "CREDIT" else r"(?:to|at|merchant|beneficiary|towards|by)"
-    match = re.search(
+    # The relay/forwarder always prepends a "From : <SENDER-CODE>" metadata
+    # line before the actual bank SMS text, so the FIRST "from"/"by" in the
+    # body is that prefix, not the real counterparty - which instead sits
+    # right before "Ref No" near the end (e.g. "...credited ... from
+    # KAILASHRAJPUROHIT. Ref No 123..."). Take the LAST match, not the first.
+    matches = list(re.finditer(
         rf"\b{labels}\b\s*[:.-]?\s*([^\n.;]{{2,80}})",
         body or "",
         re.IGNORECASE,
-    )
-    if not match:
+    ))
+    if not matches:
         return None
-    candidate = re.sub(r"\s+", " ", match.group(1)).strip(" -:.")
+    candidate = re.sub(r"\s+", " ", matches[-1].group(1)).strip(" -:.")
     return candidate or None
 
 
