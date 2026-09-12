@@ -361,6 +361,11 @@ namespace AradhanaOrnateAutoPrint
         private string activeVoucherLaterPrinter = "";
         private string voucherDecisionFileForCurrentBill = null;
         private bool voucherDecisionPendingForCurrentBill = false;
+        // Ensures the document-decision check below fires exactly once per
+        // bill, on the P355 customer copy (which is the one that actually
+        // needs it) rather than the P1007 office copy - see the call site in
+        // TryHandlePrintDialog for why this moved off copyNumber==1.
+        private bool documentWorkflowCheckedForVoucherBill = false;
         private static string cachedPythonExe;
 
         // "py" only resolves via the process's inherited PATH, which goes stale
@@ -1052,8 +1057,18 @@ namespace AradhanaOrnateAutoPrint
             handled.Add(hWnd);
 
             int copyNumber = ResolveCopyNumber();
-            if (copyNumber == 1)
+            // Deliberately on the P355 customer copy (copyNumber >= 2), not
+            // the P1007 office copy: only the customer copy can actually use
+            // the attached document, and checking here means the P1007 copy
+            // never waits on anything, while the customer copy's own wait
+            // starts after Ornate's own dialog gets here - both a shorter
+            // total wait and no wait at all on the office copy, compared to
+            // checking on copy 1.
+            if (copyNumber >= 2 && !documentWorkflowCheckedForVoucherBill)
+            {
+                documentWorkflowCheckedForVoucherBill = true;
                 PrepareDocumentWorkflowForNextCustomerCopy();
+            }
             string targetPrinter = ResolveActiveVoucherPrinter(copyNumber);
 
             var diagnostics = new List<string>();
@@ -1090,6 +1105,7 @@ namespace AradhanaOrnateAutoPrint
                 // let an unanswered document choice from an earlier bill attach here.
                 voucherDecisionPendingForCurrentBill = false;
                 voucherDecisionFileForCurrentBill = null;
+                documentWorkflowCheckedForVoucherBill = false;
                 voucherBillSessionActive = false;
                 officeCopyHandledForVoucherBill = false;
                 lastHandledUtc = DateTime.MinValue;
@@ -1334,9 +1350,12 @@ namespace AradhanaOrnateAutoPrint
                 startInfo.EnvironmentVariables["AIS_DOCUMENT_BRIDGE_TOKEN"] = token;
         }
 
-        // Runs only on the first real Ornate Print dialog for a bill. The
-        // popup is a separate local process and cannot select printers or send
-        // a print job. Any timeout/error safely falls back to the normal bill.
+        // Runs once per bill, on the P355 customer-copy print dialog (see the
+        // call site in TryHandlePrintDialog) - never on the P1007 office
+        // copy, which has no use for the attached document and should never
+        // wait on anything. The popup is a separate local process and cannot
+        // select printers or send a print job. Any timeout/error safely
+        // falls back to the normal bill.
         private void PrepareDocumentWorkflowForNextCustomerCopy()
         {
             documentWorkflowManifestForNextCustomerCopy = null;
@@ -1346,8 +1365,30 @@ namespace AradhanaOrnateAutoPrint
                 // When Alt+P was seen, the panel already exists and this method
                 // must never open a second blocking one.  Consume its choice if
                 // available; an unattended panel deliberately means bill-only.
+                //
+                // The panel is a separate Python process that needs real
+                // wall-clock time to start and render before a person can
+                // possibly have read it, let alone clicked it - a biller who
+                // moves quickly from Alt+P straight into Print can otherwise
+                // reach this check well under a second later, before the
+                // panel is even on screen (seen live 2026-09-11: 1s gap,
+                // panel never had a chance). Give it a bounded window here
+                // instead of checking once and giving up instantly. This
+                // only ever runs for a bill that actually has a pending QR
+                // document (rare), and now that it's gated on the P355
+                // customer copy rather than P1007, this wait is free to be
+                // generous - it delays only that one copy, on a bill that
+                // already has extra work to do, never the office copy.
                 if (voucherDecisionPendingForCurrentBill)
                 {
+                    const int pollIntervalMs = 200;
+                    const int maxWaitMs = 6000;
+                    for (int waited = 0;
+                         waited < maxWaitMs && !File.Exists(voucherDecisionFileForCurrentBill);
+                         waited += pollIntervalMs)
+                    {
+                        System.Threading.Thread.Sleep(pollIntervalMs);
+                    }
                     ApplyVoucherDecisionIfAvailable();
                     voucherDecisionPendingForCurrentBill = false;
                     voucherDecisionFileForCurrentBill = null;
