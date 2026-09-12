@@ -108,9 +108,10 @@ def list_local_printers():
     a transient enumeration failure shouldn't crash the poll loop."""
     try:
         result = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command",
              "Get-Printer | Select-Object -ExpandProperty Name"],
             capture_output=True, text=True, timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         if result.returncode != 0:
             logging.warning(f"Could not list local printers: {result.stderr.strip()}")
