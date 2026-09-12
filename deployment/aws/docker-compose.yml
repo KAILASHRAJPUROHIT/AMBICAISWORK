@@ -1,0 +1,27 @@
+services:
+  payment-notifier:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: aradhana/payment-notifier:${APN_RELEASE_TAG:-prod}
+    container_name: payment-notifier
+    env_file:
+      - .env
+    environment:
+      PORT: "8000"
+      DATABASE_URL: sqlite:////var/lib/aradhana-payment-notifier/notifier.db
+    volumes:
+      - ${APN_DATA_DIR:-/srv/aradhana-payment-notifier/data}:/var/lib/aradhana-payment-notifier
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    networks:
+      - ambic-shared
+
+networks:
+  ambic-shared:
+    external: true
