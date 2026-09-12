@@ -75,10 +75,54 @@ def _valid_document_id(value: str) -> str:
     return value
 
 
+def _file_type_key(bundle_id: str, filename: str) -> str:
+    return f"document_file_type:{hashlib.sha256(f'{bundle_id}:{filename}'.encode('utf-8')).hexdigest()}"
+
+
 @router.get("/api/documents")
-async def get_document_dashboard(_auth=Depends(require_notifier_token)):
+async def get_document_dashboard(db: Session = Depends(get_db), _auth=Depends(require_notifier_token)):
+    """Proxies the QR server's bundle dashboard, then enriches each file with
+    its classified document type (PAN/Aadhaar/Driving License/...) if the
+    local OCR classifier has already tagged it - falls back to the raw
+    filename for anything not yet classified, never blocks on it."""
     raw, _ = _qr_document_request("/api/document-bundles/dashboard")
-    return JSONResponse(content=json.loads(raw))
+    payload = json.loads(raw)
+    for doc in payload.get("documents", []):
+        bundle_id = doc.get("bundle_id", "")
+        enriched = []
+        for filename in doc.get("files", []):
+            key = _file_type_key(bundle_id, filename)
+            setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+            doc_type = None
+            if setting:
+                try:
+                    doc_type = json.loads(setting.value).get("type")
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    doc_type = None
+            enriched.append({"filename": filename, "document_type": doc_type})
+        doc["files"] = enriched
+    return JSONResponse(content=payload)
+
+
+class DocumentFileClassificationInput(BaseModel):
+    bundle_id: str
+    filename: str
+    document_type: str
+
+
+@router.post("/api/documents/file-classification/ingest")
+async def ingest_document_file_classification(payload: DocumentFileClassificationInput, db: Session = Depends(get_db), _auth=Depends(require_kyc_ingest_token)):
+    """Called by the local OCR classifier (same machine/token as the KYC-OCR
+    consumer) once it has determined one file's document type."""
+    key = _file_type_key(payload.bundle_id, payload.filename)
+    record = {"type": payload.document_type.strip()[:60], "classified_at": datetime.now().isoformat()}
+    setting = db.query(SystemSetting).filter(SystemSetting.key == key).first()
+    if setting:
+        setting.value = json.dumps(record)
+    else:
+        db.add(SystemSetting(key=key, value=json.dumps(record)))
+    db.commit()
+    return {"status": "stored", "bundle_id": payload.bundle_id, "filename": payload.filename, "document_type": record["type"]}
 
 
 @router.get("/api/documents/{bundle_id}/files/{filename}")
