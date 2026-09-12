@@ -7,7 +7,9 @@ import json
 import os
 import tkinter as tk
 import ctypes
+import hashlib
 import re
+import subprocess
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 
@@ -17,7 +19,8 @@ LOGO_PATH = r"C:\Content\Logos\Logo Dimensions in Reel 30% x=220 y=200.png"
 if not os.path.exists(LOGO_PATH):
     LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
 NAVY, GOLD, LIGHT_GOLD, INK = "#23519D", "#CCA137", "#F7CA5B", "#10254A"
-DEFAULTS = {"server_url": "http://ARADHANA:8000/api/bank-activity", "poll_seconds": 1, "display_seconds": 30, "opacity": 92, "max_alerts": 3, "sound": False, "sound_threshold": 100000, "position": "centre-right", "enabled": True, "paused_until": None, "popup_width": 360, "popup_height": 188}
+DEFAULTS = {"server_url": "http://ARADHANA:8000/api/bank-activity", "notifier_token": "", "poll_seconds": 1, "display_seconds": 30, "opacity": 92, "max_alerts": 3, "sound": False, "sound_threshold": 100000, "position": "centre-right", "enabled": True, "paused_until": None, "popup_width": 360, "popup_height": 188}
+UPDATE_CHECK_MS = 15 * 60 * 1000
 
 def _bounded_int(value, default, minimum, maximum):
     try:
@@ -56,6 +59,7 @@ def load_settings():
         paused_until = None
     return {
         "server_url": server_url if server_url.startswith(("http://", "https://")) else DEFAULTS["server_url"],
+        "notifier_token": str(raw.get("notifier_token", DEFAULTS["notifier_token"])).strip(),
         "poll_seconds": _bounded_int(raw.get("poll_seconds"), DEFAULTS["poll_seconds"], 1, 60),
         "display_seconds": _bounded_int(raw.get("display_seconds"), DEFAULTS["display_seconds"], 1, 300),
         "opacity": _bounded_int(raw.get("opacity"), DEFAULTS["opacity"], 50, 100),
@@ -90,6 +94,61 @@ def reference_only(value):
     numeric_candidates = [candidate for candidate in candidates if any(char.isdigit() for char in candidate)]
     return (numeric_candidates[-1] if numeric_candidates else raw.splitlines()[0]).strip()
 
+
+def _version_key(value):
+    """Comparable numeric version; malformed manifests never trigger an update."""
+    try:
+        return tuple(int(part) for part in str(value).strip().split("."))
+    except ValueError:
+        return ()
+
+
+def _update_manifest_url(api_url):
+    root = api_url.rstrip("/").rsplit("/api/bank-activity", 1)[0]
+    return f"{root}/api/bank-activity/notifier-release"
+
+
+def _download_update(manifest, destination):
+    url = str(manifest.get("download_url") or "").strip()
+    digest = str(manifest.get("sha256") or "").strip().lower()
+    if not url.startswith(("http://", "https://")) or not re.fullmatch(r"[a-f0-9]{64}", digest):
+        raise ValueError("release manifest is incomplete")
+    request = Request(url, headers={"User-Agent": "AradhanaBankNotifier"})
+    hasher = hashlib.sha256()
+    with urlopen(request, timeout=20) as response, open(destination, "wb") as output:
+        while True:
+            block = response.read(1024 * 256)
+            if not block:
+                break
+            hasher.update(block)
+            output.write(block)
+    if hasher.hexdigest().lower() != digest:
+        try:
+            os.remove(destination)
+        except OSError:
+            pass
+        raise ValueError("release checksum did not match")
+
+
+def install_available_update(api_url):
+    """Stage a verified newer EXE and let it replace this notifier atomically."""
+    current_version = _version_key(os.getenv("BANK_NOTIFIER_VERSION", "0"))
+    current_exe = os.getenv("BANK_NOTIFIER_EXECUTABLE", "")
+    if not current_exe or not os.path.isfile(current_exe):
+        return False
+    with urlopen(_update_manifest_url(api_url), timeout=3) as response:
+        manifest = json.loads(response.read().decode("utf-8"))
+    target_version = _version_key(manifest.get("version"))
+    if not target_version or target_version <= current_version:
+        return False
+    update_dir = os.path.join(os.getenv("LOCALAPPDATA", os.path.expanduser("~")), "AradhanaBankActivityNotifier", "updates")
+    os.makedirs(update_dir, exist_ok=True)
+    staged = os.path.join(update_dir, f"AradhanaBankActivityNotifier-{manifest['version']}.exe")
+    _download_update(manifest, staged)
+    log(f"verified update {manifest['version']}; installing")
+    subprocess.Popen([staged, "--update"], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return True
+
 def active_work_area(root):
     """Use the monitor under the user's mouse, not a fixed primary display."""
     class POINT(ctypes.Structure):
@@ -117,13 +176,25 @@ class Notifier:
         self.failure_count = 0
         log(f"started api={self.api_url}")
         self.root.after(0, self.poll)
+        self.root.after(UPDATE_CHECK_MS, self.check_for_update)
+
+    def check_for_update(self):
+        try:
+            if install_available_update(self.api_url):
+                self.root.after(1000, self.root.destroy)
+                return
+        except Exception as error:
+            # Update availability must never interrupt payment notifications.
+            log(f"update check skipped: {error}")
+        self.root.after(UPDATE_CHECK_MS, self.check_for_update)
 
     def poll(self):
         try:
             self.reload_settings()
             if not self.is_enabled():
                 return
-            with urlopen(self.api_url, timeout=2) as response:
+            request = Request(self.api_url, headers=self._auth_headers())
+            with urlopen(request, timeout=2) as response:
                 data = json.loads(response.read().decode("utf-8"))
             rows = [dict(item, direction="CREDIT") for item in data.get("credits", [])]
             rows += [dict(item, direction="DEBIT") for item in data.get("debits", [])]
@@ -159,6 +230,16 @@ class Notifier:
     @property
     def api_url(self):
         return os.getenv("BANK_ACTIVITY_URL", SETTINGS["server_url"])
+
+    @property
+    def notifier_token(self):
+        return os.getenv("BANK_ACTIVITY_TOKEN", SETTINGS.get("notifier_token", ""))
+
+    def _auth_headers(self, extra=None):
+        headers = dict(extra or {})
+        if self.notifier_token:
+            headers["X-Notifier-Token"] = self.notifier_token
+        return headers
 
     @property
     def poll_ms(self):
@@ -227,8 +308,15 @@ class Notifier:
             except tk.TclError:
                 pass
         party_name = str(item.get("counterparty") or item.get("payer_name") or "BANK TRANSACTION").strip()
-        tk.Label(header, text=party_name[:34].upper(), bg=NAVY, fg=LIGHT_GOLD, font=("Segoe UI", 8, "bold")).pack(side="left")
-        tk.Label(header, text=f"NEW {item.get('direction', 'PAYMENT')}", bg=semantic, fg="white", font=("Segoe UI", 8, "bold"), padx=7, pady=2).pack(side="right")
+        # Reserve room for the close control and the status badge.  At the
+        # minimum supported popup width this prevents "NEW CREDIT" clipping.
+        tk.Button(header, text="×", command=lambda: self.close(item_id), bg=NAVY, fg=LIGHT_GOLD,
+                  activebackground=NAVY, activeforeground="white", relief="flat",
+                  font=("Segoe UI", 12, "bold"), padx=2, pady=0).pack(side="right")
+        tk.Label(header, text=f"NEW {item.get('direction', 'PAYMENT')}", bg=semantic, fg="white",
+                 font=("Segoe UI", 8, "bold"), padx=7, pady=2).pack(side="right", padx=(0, 6))
+        tk.Label(header, text=party_name[:23].upper(), bg=NAVY, fg=LIGHT_GOLD,
+                 font=("Segoe UI", 8, "bold"), anchor="w").pack(side="left", fill="x", expand=True)
         tk.Label(frame, text=f"₹{float(item.get('amount', 0)):,.2f}", bg=NAVY, fg=LIGHT_GOLD, font=("Segoe UI", 21, "bold")).pack(anchor="w", pady=(7, 0))
         tk.Label(frame, text=item.get("bank_name", "Bank not recorded"), bg=NAVY, fg="white", font=("Segoe UI", 11, "bold")).pack(anchor="w")
         reference = reference_only(item.get("reference", "Not recorded"))
@@ -237,12 +325,13 @@ class Notifier:
         copy_colours = {"blue": "#2563EB", "green": "#15803D", "red": "#DC2626"}
         copy_state = item.get("copy_state", "blue")
         copy_colour = copy_colours.get(copy_state, copy_colours["blue"])
-        reference_label = tk.Label(row, text=reference, bg=NAVY, fg=copy_colour, font=("Consolas", 9, "bold"), anchor="w")
+        # The state stays visible on the COPY button.  Keep the reference
+        # itself white so it is readable against every popup colour/opacity.
+        reference_label = tk.Label(row, text=reference, bg=NAVY, fg="white", font=("Consolas", 9, "bold"), anchor="w")
         reference_label.pack(side="left", fill="x", expand=True)
         copy_button = tk.Button(row, text="COPY", font=("Segoe UI", 8, "bold"), bg=copy_colour, fg="white", activebackground=copy_colour, relief="flat", padx=8)
         copy_button.configure(command=lambda: self.copy(item, reference_label, copy_button))
         copy_button.pack(side="right")
-        tk.Button(frame, text="×", command=lambda: self.close(item_id), bg=NAVY, fg=LIGHT_GOLD, activebackground=NAVY, activeforeground="white", relief="flat", font=("Segoe UI", 12, "bold")).place(relx=1, x=-3, y=-8, anchor="ne")
         self.windows[item_id] = popup
         log(f"shown id={item_id} amount={item.get('amount', 0)}")
         if SETTINGS.get("sound") and float(item.get("amount", 0)) >= float(SETTINGS.get("sound_threshold", 100000)):
@@ -259,7 +348,7 @@ class Notifier:
             return
         endpoint = f"{self.api_url.rstrip('/').rsplit('/api/bank-activity', 1)[0]}/api/bank-activity/reference-copied"
         try:
-            request = Request(endpoint, data=json.dumps({"reference": value, "source": "popup"}).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
+            request = Request(endpoint, data=json.dumps({"reference": value, "source": "popup"}).encode("utf-8"), headers=self._auth_headers({"Content-Type": "application/json"}), method="POST")
             with urlopen(request, timeout=2) as response:
                 state = json.loads(response.read().decode("utf-8"))
             colour = {"blue": "#2563EB", "green": "#15803D", "red": "#DC2626"}.get(state.get("copy_state"), "#2563EB")
