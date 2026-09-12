@@ -8,6 +8,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     QR_DATA_DIR=/var/lib/aradhana-print
 
 WORKDIR /app
+
+# fonts-dejavu-core: gold_rate_renderer.py's Linux font fallback expects
+# these exact files (DejaVuSans-Bold.ttf / DejaVuSerif.ttf) under
+# /usr/share/fonts/truetype/dejavu/ - without this package it silently
+# falls through to Pillow's built-in default font, which lacks a ₹ glyph
+# and renders it as a tofu box on the /dailyprice poster.
+RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .

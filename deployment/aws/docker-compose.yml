@@ -12,6 +12,13 @@ services:
       DATABASE_URL: sqlite:////var/lib/aradhana-print/jobs.db
     volumes:
       - ${AIS_DATA_DIR:-/srv/aradhana-print/data}:/var/lib/aradhana-print
+      # /dailyprice (gold-rate poster generator) writes to BASE_DIR/uploads
+      # but is served back from DATA_DIR/uploads - these only coincided on
+      # Render because QR_DATA_DIR was never set there. Nesting this mount
+      # under the same host path as the main data volume (above) makes the
+      # same files appear at both container paths with zero code changes,
+      # avoiding touching the route's own "LOCKED" render code.
+      - ${AIS_DATA_DIR:-/srv/aradhana-print/data}/uploads/dailyprice:/app/uploads/dailyprice
     ports:
       - "127.0.0.1:${AIS_BIND_PORT:-8000}:8000"
     user: "10001:10001"
