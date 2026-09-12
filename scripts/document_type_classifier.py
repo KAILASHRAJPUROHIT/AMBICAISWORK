@@ -95,9 +95,12 @@ def _download_file(bundle_id: str, filename: str) -> bytes:
 
 
 def _ingest_classification(bundle_id: str, filename: str, document_type: str) -> None:
+    headers = {"Content-Type": "application/json"}
+    if KYC_INGEST_TOKEN:
+        headers["X-Kyc-Ingest-Token"] = KYC_INGEST_TOKEN
     resp = requests.post(
         f"{NOTIFIER_URL}/api/documents/file-classification/ingest",
-        headers={**_headers(KYC_INGEST_TOKEN), "Content-Type": "application/json"},
+        headers=headers,
         json={"bundle_id": bundle_id, "filename": filename, "document_type": document_type},
         timeout=15,
     )

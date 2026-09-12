@@ -21,7 +21,10 @@ LOG_PATH = os.path.join(os.path.dirname(SETTINGS_PATH), "runtime.log")
 LOGO_PATH = r"C:\Content\Logos\Logo Dimensions in Reel 30% x=220 y=200.png"
 if not os.path.exists(LOGO_PATH):
     LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
-NAVY, GOLD, LIGHT_GOLD, INK = "#23519D", "#CCA137", "#F7CA5B", "#10254A"
+# Sampled directly from the approved verification-card reference design.
+NAVY, GOLD, LIGHT_GOLD, INK = "#23519D", "#D9B54A", "#FDDF83", "#0B2050"
+CARD_WASH = "#1B4B9E"
+CREDIT_GREEN, DEBIT_RED, COPY_BLUE = "#116741", "#B42332", "#0B4FC9"
 # A colour nobody would deliberately use in the popup itself, set as the
 # window's -transparentcolor so a Canvas-drawn rounded rectangle is the
 # only thing visible - everything outside the rounded shape (including the
@@ -414,11 +417,11 @@ class Notifier:
 
     @property
     def width(self):
-        return max(360, int(SETTINGS["popup_width"]))
+        return max(380, int(SETTINGS["popup_width"]))
 
     @property
     def height(self):
-        return max(188, int(SETTINGS["popup_height"]))
+        return max(234, int(SETTINGS["popup_height"]))
 
     @property
     def max_alerts(self):
@@ -469,55 +472,75 @@ class Notifier:
         popup.geometry(f"{self.width}x{self.height}+0+0")
 
         credit = item.get("direction") == "CREDIT"
-        semantic = "#146C43" if credit else "#B42332"
+        semantic = CREDIT_GREEN if credit else DEBIT_RED
 
         canvas = tk.Canvas(popup, width=self.width, height=self.height, bg=CORNER_KEY, highlightthickness=0, bd=0)
         canvas.pack(fill="both", expand=True)
+        # Base fill first (no border yet), then a soft lighter wash confined
+        # well inside the card bounds so it reads as a gradient rather than a
+        # flat block, then the gold border drawn on top of both so it stays
+        # crisp - matches the verification-card reference without an image.
         canvas.create_polygon(
             _rounded_rect_points(2, 2, self.width - 2, self.height - 2, POPUP_RADIUS),
-            smooth=True, fill=NAVY, outline=GOLD, width=2,
+            smooth=True, fill=INK, outline="",
         )
+        canvas.create_oval(6, 6, self.width * 0.7, self.height * 0.65,
+                            fill=CARD_WASH, outline="", stipple="gray50")
+        canvas.create_polygon(
+            _rounded_rect_points(2, 2, self.width - 2, self.height - 2, POPUP_RADIUS),
+            smooth=True, fill="", outline=GOLD, width=2,
+        )
+        # Thin diagonal gold accent line sweeping the lower-right corner.
+        canvas.create_line(self.width - 34, self.height * 0.28, self.width * 0.45, self.height - 6,
+                            fill=GOLD, width=1)
 
-        content = tk.Frame(canvas, bg=NAVY)
-        canvas.create_window(16, 12, window=content, anchor="nw", width=self.width - 32, height=self.height - 24)
+        content = tk.Frame(canvas, bg=INK)
+        canvas.create_window(18, 14, window=content, anchor="nw", width=self.width - 36, height=self.height - 28)
 
-        header = tk.Frame(content, bg=NAVY); header.pack(fill="x")
+        header = tk.Frame(content, bg=INK); header.pack(fill="x")
         if os.path.exists(LOGO_PATH):
             try:
                 logo = tk.PhotoImage(file=LOGO_PATH)
-                logo = logo.subsample(max(1, logo.width() // 38), max(1, logo.height() // 34))
-                logo_label = tk.Label(header, image=logo, bg=NAVY); logo_label.image = logo; logo_label.pack(side="left", padx=(0, 8))
+                logo = logo.subsample(max(1, logo.width() // 40), max(1, logo.height() // 36))
+                logo_label = tk.Label(header, image=logo, bg=INK); logo_label.image = logo; logo_label.pack(side="left", padx=(0, 8))
             except tk.TclError:
                 pass
-        party_name = str(item.get("counterparty") or item.get("payer_name") or "BANK TRANSACTION").strip()
+        title_col = tk.Frame(header, bg=INK); title_col.pack(side="left", fill="x", expand=True)
         # Reserve room for the close control and the status badge.  At the
         # minimum supported popup width this prevents "NEW CREDIT" clipping.
-        tk.Button(header, text="×", command=lambda: self.close(item_id), bg=NAVY, fg=LIGHT_GOLD,
-                  activebackground=NAVY, activeforeground="white", relief="flat",
-                  font=("Segoe UI", 12, "bold"), padx=2, pady=0).pack(side="right")
+        tk.Button(header, text="×", command=lambda: self.close(item_id), bg=INK, fg=LIGHT_GOLD,
+                  activebackground=INK, activeforeground="white", relief="flat",
+                  font=("Segoe UI", 13, "bold"), padx=2, pady=0).pack(side="right", anchor="n")
         tk.Label(header, text=f"NEW {item.get('direction', 'PAYMENT')}", bg=semantic, fg="white",
-                 font=("Segoe UI", 8, "bold"), padx=7, pady=2).pack(side="right", padx=(0, 6))
-        tk.Label(header, text=party_name[:23].upper(), bg=NAVY, fg=LIGHT_GOLD,
-                 font=("Segoe UI", 8, "bold"), anchor="w").pack(side="left", fill="x", expand=True)
+                 font=("Segoe UI", 8, "bold"), padx=7, pady=2).pack(side="right", padx=(0, 6), anchor="n")
+        tk.Label(title_col, text="PAYMENT VERIFIED", bg=INK, fg=LIGHT_GOLD,
+                 font=("Segoe UI", 10, "bold"), anchor="w").pack(fill="x")
+        tk.Label(title_col, text="TRANSACTION SUCCESSFUL", bg=INK, fg="#8EA3C7",
+                 font=("Segoe UI", 7, "bold"), anchor="w").pack(fill="x")
 
-        tk.Label(content, text=f"₹{float(item.get('amount', 0)):,.2f}", bg=NAVY, fg=LIGHT_GOLD,
-                 font=("Segoe UI", 22, "bold")).pack(anchor="w", pady=(9, 0))
-        tk.Label(content, text=item.get("bank_name", "Bank not recorded"), bg=NAVY, fg="white",
-                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        tk.Label(content, text=f"₹{float(item.get('amount', 0)):,.2f}", bg=INK, fg=LIGHT_GOLD,
+                 font=("Segoe UI", 25, "bold")).pack(anchor="w", pady=(10, 0))
+        party_name = str(item.get("counterparty") or item.get("payer_name") or "BANK TRANSACTION").strip()
+        name_row = tk.Frame(content, bg=INK); name_row.pack(fill="x")
+        tk.Label(name_row, text=party_name[:23].upper(), bg=INK, fg="white",
+                 font=("Segoe UI", 11, "bold")).pack(side="left")
+        tk.Label(name_row, text=f"  ·  {item.get('bank_name', 'Bank not recorded')}", bg=INK, fg="#8EA3C7",
+                 font=("Segoe UI", 8, "bold")).pack(side="left")
 
         reference = reference_only(item.get("reference", "Not recorded"))
-        copy_colours = {"blue": "#2563EB", "green": "#15803D", "red": "#DC2626"}
+        copy_colours = {"blue": COPY_BLUE, "green": "#15803D", "red": "#DC2626"}
         copy_state = item.get("copy_state", "blue")
         copy_colour = copy_colours.get(copy_state, copy_colours["blue"])
-        tk.Label(content, text="TXN ID", bg=NAVY, fg=GOLD, font=("Segoe UI", 7, "bold"),
-                 anchor="w").pack(fill="x", pady=(11, 0))
-        row = tk.Frame(content, bg=NAVY)
-        row.pack(fill="x")
+        tk.Label(content, text="TXN ID", bg=INK, fg=GOLD, font=("Segoe UI", 7, "bold"),
+                 anchor="w").pack(fill="x", pady=(13, 0))
+        row = tk.Frame(content, bg=INK)
+        row.pack(fill="x", pady=(3, 0))
         # The state stays visible on the COPY button.  Keep the reference
         # itself white so it is readable against every popup colour/opacity.
-        reference_label = tk.Label(row, text=reference, bg=NAVY, fg="white", font=("Consolas", 10, "bold"), anchor="w")
+        reference_label = tk.Label(row, text=reference, bg=INK, fg="white", font=("Consolas", 10, "bold"), anchor="w")
         reference_label.pack(side="left", fill="x", expand=True)
-        copy_button = tk.Button(row, text="COPY", font=("Segoe UI", 8, "bold"), bg=copy_colour, fg="white", activebackground=copy_colour, relief="flat", padx=8)
+        copy_button = tk.Button(row, text="⧉  COPY", font=("Segoe UI", 9, "bold"), bg=copy_colour, fg="white",
+                                 activebackground=copy_colour, relief="flat", padx=14, pady=5)
         copy_button.configure(command=lambda: self.copy(item, reference_label, copy_button))
         copy_button.pack(side="right")
 
@@ -543,7 +566,7 @@ class Notifier:
             request = Request(endpoint, data=json.dumps({"reference": value, "source": "popup"}).encode("utf-8"), headers=self._auth_headers({"Content-Type": "application/json"}), method="POST")
             with urlopen(request, timeout=2) as response:
                 state = json.loads(response.read().decode("utf-8"))
-            colour = {"blue": "#2563EB", "green": "#15803D", "red": "#DC2626"}.get(state.get("copy_state"), "#2563EB")
+            colour = {"blue": COPY_BLUE, "green": "#15803D", "red": "#DC2626"}.get(state.get("copy_state"), COPY_BLUE)
             item["copy_count"] = state.get("copy_count", 0)
             item["copy_state"] = state.get("copy_state", "blue")
             reference_label.configure(fg=colour)
