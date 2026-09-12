@@ -18,7 +18,7 @@ TASK_NAME = "AradhanaBankActivityNotifierUser"
 INSTALL_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "AradhanaBankActivityNotifier", "releases")
 # Bump only through scripts/build_bank_activity_notifier_release.ps1.  Every
 # running notifier compares this value to the LAN checksum release manifest.
-APP_VERSION = "1.8.0"
+APP_VERSION = "1.9.3"
 
 
 def bundled_path(relative_path):

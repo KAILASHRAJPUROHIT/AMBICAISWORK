@@ -7,9 +7,12 @@ import json
 import os
 import tkinter as tk
 import ctypes
+import ctypes.wintypes as wintypes
 import hashlib
+import queue
 import re
 import subprocess
+import threading
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
 
@@ -19,6 +22,12 @@ LOGO_PATH = r"C:\Content\Logos\Logo Dimensions in Reel 30% x=220 y=200.png"
 if not os.path.exists(LOGO_PATH):
     LOGO_PATH = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
 NAVY, GOLD, LIGHT_GOLD, INK = "#23519D", "#CCA137", "#F7CA5B", "#10254A"
+# A colour nobody would deliberately use in the popup itself, set as the
+# window's -transparentcolor so a Canvas-drawn rounded rectangle is the
+# only thing visible - everything outside the rounded shape (including the
+# Toplevel's own square corners) shows the desktop through instead.
+CORNER_KEY = "#0a0a0a"
+POPUP_RADIUS = 18
 DEFAULTS = {"server_url": "http://ARADHANA:8000/api/bank-activity", "notifier_token": "", "poll_seconds": 1, "display_seconds": 30, "opacity": 92, "max_alerts": 3, "sound": False, "sound_threshold": 100000, "position": "centre-right", "enabled": True, "paused_until": None, "popup_width": 360, "popup_height": 188}
 UPDATE_CHECK_MS = 15 * 60 * 1000
 
@@ -165,6 +174,117 @@ def active_work_area(root):
     return 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
 
 
+def _rounded_rect_points(x0, y0, x1, y1, radius):
+    """Point list for a Canvas smooth polygon that reads as a true rounded
+    rectangle rather than an octagon - smooth=True quadratic-interpolates
+    between these, so only the corners need extra points."""
+    return [
+        x0 + radius, y0,
+        x1 - radius, y0,
+        x1, y0,
+        x1, y0 + radius,
+        x1, y1 - radius,
+        x1, y1,
+        x1 - radius, y1,
+        x0 + radius, y1,
+        x0, y1,
+        x0, y1 - radius,
+        x0, y0 + radius,
+        x0, y0,
+        x0 + radius, y0,
+    ]
+
+
+class GlobalHotkeyListener:
+    """System-wide Alt+F1, working no matter which application has focus.
+
+    Tkinter has no concept of a global hotkey - only RegisterHotKey (a raw
+    Win32 call) can claim one across every application. That call delivers
+    WM_HOTKEY through a normal Windows message loop, so this runs its own
+    tiny message-only window on a background thread (never touching
+    Tkinter's own loop, which isn't thread-safe) and hands the result to
+    the caller through a queue for the Tkinter mainloop to pick up safely.
+    """
+    WM_HOTKEY = 0x0312
+    MOD_ALT = 0x0001
+    VK_F1 = 0x70
+    HOTKEY_ID = 1
+
+    def __init__(self, on_triggered):
+        self.on_triggered = on_triggered
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def _run(self):
+        try:
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+            WNDPROCTYPE = ctypes.WINFUNCTYPE(ctypes.c_long, wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM)
+
+            # Without explicit argtypes, ctypes guesses each argument's width
+            # from the Python value alone - on 64-bit Windows a handle/
+            # pointer value routinely exceeds what that guess assumes,
+            # raising "OverflowError: int too long to convert" even though
+            # the call itself would have been perfectly valid. Declaring the
+            # real Win32 signatures makes ctypes marshal every handle
+            # correctly regardless of its numeric size.
+            user32.DefWindowProcW.argtypes = [wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM]
+            user32.DefWindowProcW.restype = ctypes.c_long
+            user32.RegisterClassW.argtypes = [ctypes.c_void_p]
+            user32.RegisterClassW.restype = wintypes.ATOM
+            user32.CreateWindowExW.argtypes = [
+                wintypes.DWORD, wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD,
+                ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                wintypes.HWND, wintypes.HMENU, wintypes.HINSTANCE, wintypes.LPVOID,
+            ]
+            user32.CreateWindowExW.restype = wintypes.HWND
+            user32.RegisterHotKey.argtypes = [wintypes.HWND, ctypes.c_int, wintypes.UINT, wintypes.UINT]
+            user32.RegisterHotKey.restype = wintypes.BOOL
+            user32.GetMessageW.argtypes = [ctypes.POINTER(wintypes.MSG), wintypes.HWND, wintypes.UINT, wintypes.UINT]
+            user32.GetMessageW.restype = ctypes.c_int
+            user32.TranslateMessage.argtypes = [ctypes.POINTER(wintypes.MSG)]
+            user32.DispatchMessageW.argtypes = [ctypes.POINTER(wintypes.MSG)]
+            kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+            kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+
+            def wndproc(hwnd, msg, wparam, lparam):
+                if msg == self.WM_HOTKEY and wparam == self.HOTKEY_ID:
+                    self.on_triggered()
+                return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
+
+            self._wndproc_ref = WNDPROCTYPE(wndproc)  # kept alive on self
+
+            class WNDCLASS(ctypes.Structure):
+                _fields_ = [
+                    ("style", ctypes.c_uint), ("lpfnWndProc", WNDPROCTYPE), ("cbClsExtra", ctypes.c_int),
+                    ("cbWndExtra", ctypes.c_int), ("hInstance", wintypes.HINSTANCE), ("hIcon", wintypes.HICON),
+                    ("hCursor", wintypes.HANDLE), ("hbrBackground", wintypes.HBRUSH),
+                    ("lpszMenuName", wintypes.LPCWSTR), ("lpszClassName", wintypes.LPCWSTR),
+                ]
+
+            class_name = "AradhanaBankActivityHotkeyWindow"
+            wndclass = WNDCLASS()
+            wndclass.lpfnWndProc = self._wndproc_ref
+            wndclass.hInstance = kernel32.GetModuleHandleW(None)
+            wndclass.lpszClassName = class_name
+            user32.RegisterClassW(ctypes.byref(wndclass))
+
+            hwnd = user32.CreateWindowExW(0, class_name, "AradhanaHotkey", 0, 0, 0, 0, 0, None, None, wndclass.hInstance, None)
+            if not hwnd:
+                log("global hotkey window creation failed; Alt+F1 unavailable")
+                return
+            if not user32.RegisterHotKey(hwnd, self.HOTKEY_ID, self.MOD_ALT, self.VK_F1):
+                log("RegisterHotKey(Alt+F1) failed - likely already claimed by another app")
+                return
+
+            msg = wintypes.MSG()
+            while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) != 0:
+                user32.TranslateMessage(ctypes.byref(msg))
+                user32.DispatchMessageW(ctypes.byref(msg))
+        except Exception as error:
+            log(f"global hotkey listener stopped: {error}")
+
+
 class Notifier:
     def __init__(self):
         self.root = tk.Tk()
@@ -174,9 +294,52 @@ class Notifier:
         self.windows = {}
         self.settings_mtime = None
         self.failure_count = 0
+        self.last_real_item = None
+        # Alt+F1 works from any application, not just when a popup has
+        # focus - see GlobalHotkeyListener. It runs on its own thread and
+        # can never touch Tkinter directly, so it just drops a token in this
+        # queue; _poll_hotkey_queue (on the Tkinter mainloop) is what
+        # actually acts on it.
+        self._hotkey_queue = queue.Queue()
+        self.hotkey_listener = GlobalHotkeyListener(on_triggered=lambda: self._hotkey_queue.put(True))
         log(f"started api={self.api_url}")
         self.root.after(0, self.poll)
         self.root.after(UPDATE_CHECK_MS, self.check_for_update)
+        self.root.after(150, self._poll_hotkey_queue)
+
+    def _poll_hotkey_queue(self):
+        triggered = False
+        while True:
+            try:
+                self._hotkey_queue.get_nowait()
+                triggered = True
+            except queue.Empty:
+                break
+        if triggered:
+            self.redisplay_last()
+        self.root.after(150, self._poll_hotkey_queue)
+
+    def redisplay_last(self):
+        """Alt+F1: copy the most recent real payment's txn id and bring its
+        popup back for exactly 10 seconds, regardless of whether it already
+        closed or what the configured display_seconds is."""
+        if not self.last_real_item:
+            log("Alt+F1 pressed but no payment has been shown yet this session")
+            return
+        item = self.last_real_item
+        reference = reference_only(item.get("reference", ""))
+        if reference and reference.lower() != "not recorded":
+            try:
+                self.root.clipboard_clear()
+                self.root.clipboard_append(reference)
+                self.root.update()
+                log(f"Alt+F1: copied last txn id to clipboard ({reference})")
+            except tk.TclError as error:
+                log(f"Alt+F1: clipboard copy failed: {error}")
+        item_id = item["id"]
+        if item_id in self.windows:
+            self.close(item_id)
+        self.show(item, force_duration_ms=10000)
 
     def check_for_update(self):
         try:
@@ -283,23 +446,42 @@ class Notifier:
         except ValueError:
             return True
 
-    def show(self, item):
+    def show(self, item, force_duration_ms=None):
         item_id = item["id"]
         if item_id in self.windows:
             return
         while len(self.windows) >= self.max_alerts:
             self.close(next(iter(self.windows)))
+
         popup = tk.Toplevel(self.root)
         popup.overrideredirect(True)
         popup.attributes("-topmost", True)
         popup.attributes("-alpha", max(0.5, min(1.0, float(SETTINGS["opacity"]) / 100)))
+        popup.configure(bg=CORNER_KEY)
+        try:
+            # Windows-only: makes CORNER_KEY pixels see-through, so only the
+            # rounded shape drawn on the canvas below is actually visible -
+            # everything outside it (including the Toplevel's own square
+            # corners) shows the desktop through instead.
+            popup.wm_attributes("-transparentcolor", CORNER_KEY)
+        except tk.TclError:
+            pass
+        popup.geometry(f"{self.width}x{self.height}+0+0")
+
         credit = item.get("direction") == "CREDIT"
         semantic = "#146C43" if credit else "#B42332"
-        popup.configure(bg=NAVY, highlightbackground=GOLD, highlightthickness=3)
-        popup.geometry(f"{self.width}x{self.height}+0+0")
-        frame = tk.Frame(popup, bg=NAVY, padx=16, pady=12)
-        frame.pack(fill="both", expand=True)
-        header = tk.Frame(frame, bg=NAVY); header.pack(fill="x")
+
+        canvas = tk.Canvas(popup, width=self.width, height=self.height, bg=CORNER_KEY, highlightthickness=0, bd=0)
+        canvas.pack(fill="both", expand=True)
+        canvas.create_polygon(
+            _rounded_rect_points(2, 2, self.width - 2, self.height - 2, POPUP_RADIUS),
+            smooth=True, fill=NAVY, outline=GOLD, width=2,
+        )
+
+        content = tk.Frame(canvas, bg=NAVY)
+        canvas.create_window(16, 12, window=content, anchor="nw", width=self.width - 32, height=self.height - 24)
+
+        header = tk.Frame(content, bg=NAVY); header.pack(fill="x")
         if os.path.exists(LOGO_PATH):
             try:
                 logo = tk.PhotoImage(file=LOGO_PATH)
@@ -317,27 +499,37 @@ class Notifier:
                  font=("Segoe UI", 8, "bold"), padx=7, pady=2).pack(side="right", padx=(0, 6))
         tk.Label(header, text=party_name[:23].upper(), bg=NAVY, fg=LIGHT_GOLD,
                  font=("Segoe UI", 8, "bold"), anchor="w").pack(side="left", fill="x", expand=True)
-        tk.Label(frame, text=f"₹{float(item.get('amount', 0)):,.2f}", bg=NAVY, fg=LIGHT_GOLD, font=("Segoe UI", 21, "bold")).pack(anchor="w", pady=(7, 0))
-        tk.Label(frame, text=item.get("bank_name", "Bank not recorded"), bg=NAVY, fg="white", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+
+        tk.Label(content, text=f"₹{float(item.get('amount', 0)):,.2f}", bg=NAVY, fg=LIGHT_GOLD,
+                 font=("Segoe UI", 22, "bold")).pack(anchor="w", pady=(9, 0))
+        tk.Label(content, text=item.get("bank_name", "Bank not recorded"), bg=NAVY, fg="white",
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w")
+
         reference = reference_only(item.get("reference", "Not recorded"))
-        row = tk.Frame(frame, bg=NAVY)
-        row.pack(fill="x", pady=(10, 0))
         copy_colours = {"blue": "#2563EB", "green": "#15803D", "red": "#DC2626"}
         copy_state = item.get("copy_state", "blue")
         copy_colour = copy_colours.get(copy_state, copy_colours["blue"])
+        tk.Label(content, text="TXN ID", bg=NAVY, fg=GOLD, font=("Segoe UI", 7, "bold"),
+                 anchor="w").pack(fill="x", pady=(11, 0))
+        row = tk.Frame(content, bg=NAVY)
+        row.pack(fill="x")
         # The state stays visible on the COPY button.  Keep the reference
         # itself white so it is readable against every popup colour/opacity.
-        reference_label = tk.Label(row, text=reference, bg=NAVY, fg="white", font=("Consolas", 9, "bold"), anchor="w")
+        reference_label = tk.Label(row, text=reference, bg=NAVY, fg="white", font=("Consolas", 10, "bold"), anchor="w")
         reference_label.pack(side="left", fill="x", expand=True)
         copy_button = tk.Button(row, text="COPY", font=("Segoe UI", 8, "bold"), bg=copy_colour, fg="white", activebackground=copy_colour, relief="flat", padx=8)
         copy_button.configure(command=lambda: self.copy(item, reference_label, copy_button))
         copy_button.pack(side="right")
+
         self.windows[item_id] = popup
+        if not str(item_id).startswith("test-"):
+            self.last_real_item = item
         log(f"shown id={item_id} amount={item.get('amount', 0)}")
         if SETTINGS.get("sound") and float(item.get("amount", 0)) >= float(SETTINGS.get("sound_threshold", 100000)):
             self.root.bell()
         self.reposition()
-        popup.after(self.display_ms, lambda: self.close(item_id))
+        duration = force_duration_ms if force_duration_ms is not None else self.display_ms
+        popup.after(duration, lambda: self.close(item_id))
 
     def copy(self, item, reference_label, copy_button):
         value = reference_only(item.get("reference", ""))
