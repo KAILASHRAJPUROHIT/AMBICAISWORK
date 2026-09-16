@@ -17,6 +17,9 @@ object EventType {
     const val APP_UNINSTALLED = "appUninstalled"
     const val COMMAND_RESULT = "commandResult"
     const val CONNECTIVITY = "connectivityChange"
+    const val CONNECTIVITY_LOST = "connectivityLost"
+    const val CONNECTIVITY_RESTORED = "connectivityRestored"
+    const val LOCATION_OFFLINE = "locationOffline"
     const val LOW_BATTERY = "lowBattery"
     const val ENROLLED = "enrolled"
 }

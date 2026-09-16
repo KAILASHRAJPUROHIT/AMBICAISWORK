@@ -8,21 +8,27 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
+import android.os.UserManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.mdmesh.agent.R
+import com.mdmesh.core.location.LocationCollector
 import com.mdmesh.core.power.PowerModeStore
 import com.mdmesh.core.store.DeviceIdentity
 import com.mdmesh.core.sync.CheckInCoordinator
 import com.mdmesh.core.telemetry.EventLog
 import com.mdmesh.core.transport.TransportManager
 import com.mdmesh.core.transport.WakeSignal
+import com.mdmesh.policy.wifi.DpmHandle
 import com.mdmesh.proto.EventType
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
@@ -50,6 +56,8 @@ class CheckInService : LifecycleService() {
     @Inject lateinit var identity: DeviceIdentity
     @Inject lateinit var powerModeStore: PowerModeStore
     @Inject lateinit var eventLog: EventLog
+    @Inject lateinit var locationCollector: LocationCollector
+    @Inject lateinit var dpmHandle: DpmHandle
 
     @Volatile private var started = false
     @Volatile private var interactiveUntil = 0L
@@ -61,16 +69,93 @@ class CheckInService : LifecycleService() {
     // usually means an operator is acting on it. After the window, adaptive gating resumes.
     @Volatile private var graceUntil = 0L
 
+    // Tracks the last-observed connectivity state so onReceive can tell a genuine lost<->restored
+    // transition apart from any other connectivity broadcast (Android fires CONNECTIVITY_ACTION on
+    // far more than just full loss/recovery — e.g. switching wifi<->cellular while still online).
+    @Volatile private var wasOnline = true
+
     @Suppress("DEPRECATION")
     private val powerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                android.net.ConnectivityManager.CONNECTIVITY_ACTION ->
-                    runCatching { eventLog.record(EventType.CONNECTIVITY) }
+                android.net.ConnectivityManager.CONNECTIVITY_ACTION -> {
+                    val nowOnline = isOnline()
+                    if (nowOnline != wasOnline) {
+                        wasOnline = nowOnline
+                        if (nowOnline) {
+                            runCatching { eventLog.record(EventType.CONNECTIVITY_RESTORED) }
+                        } else {
+                            runCatching { eventLog.record(EventType.CONNECTIVITY_LOST) }
+                            // Capture a fix right as we go dark — the single most useful sample
+                            // in an offline window, since it's the last confirmed location before
+                            // the trail goes cold.
+                            cacheLocationOffline()
+                        }
+                    }
+                    enforceAlwaysOnConnectivity()
+                }
                 Intent.ACTION_BATTERY_LOW ->
                     runCatching { eventLog.record(EventType.LOW_BATTERY) }
             }
             reevaluateSocket()
+        }
+    }
+
+    private fun isOnline(): Boolean {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    /** Best-effort: keep this device reachable when the fleet has it set to always-on.
+     *  - Wi-Fi: DevicePolicyManager exempts a Device Owner from the API 29+ restriction that
+     *    blocks third-party apps from toggling the radio — [WifiManager.setWifiEnabled] still
+     *    works for us specifically. If the OS or user turns it off, flip it back on.
+     *  - Airplane mode: there's no DO-exempt radio toggle for this one, so block the user from
+     *    entering it at all via [UserManager.DISALLOW_AIRPLANE_MODE] instead.
+     *  Silently no-ops in adaptive mode, and swallows failures (e.g. non-Device-Owner Lite tier)
+     *  the same way the rest of this service treats best-effort platform calls. */
+    @Suppress("DEPRECATION") // WifiManager.setWifiEnabled is deprecated for 3rd-party apps, not DO
+    private fun enforceAlwaysOnConnectivity() {
+        val alwaysOn = powerModeStore.isAlwaysOn()
+        runCatching {
+            if (!dpmHandle.dpm.isDeviceOwnerApp(packageName)) return
+            if (alwaysOn) {
+                dpmHandle.dpm.addUserRestriction(dpmHandle.admin, UserManager.DISALLOW_AIRPLANE_MODE)
+            } else {
+                dpmHandle.dpm.clearUserRestriction(dpmHandle.admin, UserManager.DISALLOW_AIRPLANE_MODE)
+            }
+        }
+        if (!alwaysOn) return
+        runCatching {
+            val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            if (!wm.isWifiEnabled) wm.isWifiEnabled = true
+        }
+    }
+
+    /** Cache a location fix locally via [EventLog] (offline-safe, survives process restart,
+     *  capped) rather than dropping it — [LocationCollector] itself needs no network at all, only
+     *  *delivering* the fix does. Flushed as ordinary buffered events on the next successful
+     *  check-in, same as every other event type. */
+    private fun cacheLocationOffline() {
+        runCatching {
+            val loc = locationCollector.collect() ?: return
+            eventLog.record(
+                EventType.LOCATION_OFFLINE,
+                "${loc.lat},${loc.lon},${loc.accuracyM ?: -1},${loc.capturedAt}",
+            )
+        }
+    }
+
+    /** Independent of any connectivity-change broadcast firing: while genuinely offline, keep
+     *  sampling location on the same cadence a normal check-in would, so a long dead zone still
+     *  leaves a trail instead of only the single fix captured at the lost-connectivity instant. */
+    private fun startOfflineLocationTicker() {
+        lifecycleScope.launch {
+            while (true) {
+                delay(OFFLINE_LOCATION_INTERVAL_MS)
+                if (!isOnline()) cacheLocationOffline()
+            }
         }
     }
 
@@ -86,6 +171,8 @@ class CheckInService : LifecycleService() {
             addAction(Intent.ACTION_BATTERY_LOW)
         }
         ContextCompat.registerReceiver(this, powerReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        wasOnline = isOnline()
+        startOfflineLocationTicker()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -223,5 +310,9 @@ class CheckInService : LifecycleService() {
 
         /** Post-(re)start window during which the socket is held regardless of power mode. */
         private const val REACHABILITY_GRACE_MS = 10L * 60L * 1000L
+
+        /** How often to sample a location fix while offline — matches a normal check-in's cadence
+         *  closely enough that a dead zone still leaves a usable trail, not a tight poll loop. */
+        private const val OFFLINE_LOCATION_INTERVAL_MS = 15L * 60L * 1000L
     }
 }

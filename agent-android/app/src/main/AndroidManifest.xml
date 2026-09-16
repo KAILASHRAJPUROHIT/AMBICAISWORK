@@ -42,6 +42,9 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Device Owner is exempt from the API 29+ third-party restriction on toggling the radio —
+         needed for CheckInService.enforceAlwaysOnConnectivity() to actually flip Wi-Fi back on. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Report location while parked/backgrounded (Android 10+); DO auto-grants it at provisioning. -->
