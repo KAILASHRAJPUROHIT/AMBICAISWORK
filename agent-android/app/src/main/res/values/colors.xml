@@ -1,4 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#0B3D91</color>
+
+    <!-- Shared brand palette, used by the launcher icon and the app's programmatic UI screens
+         (LinkDeviceActivity, PermissionsChecklistActivity) so they read as one product instead of
+         ad-hoc per-screen hex values. -->
+    <color name="brand_ink">#0B0F17</color>
+    <color name="brand_surface">#151B26</color>
+    <color name="brand_navy">#0B3D91</color>
+    <color name="brand_navy_light">#1D5FCC</color>
+    <color name="brand_accent">#22D3C7</color>
+    <color name="brand_text">#F3F5F8</color>
+    <color name="brand_text_muted">#8992A0</color>
+    <color name="brand_error">#FF6B6B</color>
 </resources>

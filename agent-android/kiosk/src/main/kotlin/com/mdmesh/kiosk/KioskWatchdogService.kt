@@ -30,7 +30,22 @@ import android.view.accessibility.AccessibilityEvent
  */
 class KioskWatchdogService : AccessibilityService() {
 
+    companion object {
+        /** Set (in-process, no IPC) the instant an intentional exit begins — BEFORE
+         *  `stopLockTask()`/`setComponentEnabledSetting(DISABLED)` — and cleared when the
+         *  watchdog is next armed. `setComponentEnabledSetting` does not synchronously unbind an
+         *  already-running AccessibilityService, so relying on the component's enabled state alone
+         *  loses a race: the still-alive service can observe the resulting `LOCK_TASK_MODE_NONE`
+         *  transition and misread an intentional, password-verified exit as an escape gesture,
+         *  instantly relaunching right back into kiosk. This flag is the actual guard; the
+         *  component disable is just cleanup for when the service process is later killed/rebound.
+         */
+        @Volatile
+        var suppressed: Boolean = false
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        if (suppressed) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val am = getSystemService(ACTIVITY_SERVICE) as? ActivityManager ?: return
         if (am.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) {

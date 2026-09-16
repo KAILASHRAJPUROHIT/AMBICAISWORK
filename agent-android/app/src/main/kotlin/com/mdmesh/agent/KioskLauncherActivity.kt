@@ -20,6 +20,8 @@ import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -114,6 +116,7 @@ class KioskLauncherActivity : ComponentActivity() {
             return
         }
         if (bailOnCrashLoop()) return
+        promptDefaultHomeIfNeeded()
         startLockTaskSafely()
         if (p.mode == "single" && p.pinPackage != null) {
             launchPinned(p)
@@ -158,6 +161,12 @@ class KioskLauncherActivity : ComponentActivity() {
      *  Lite (Device Admin only) tier's [com.mdmesh.kiosk.SoftPinKioskController]. */
     private fun setWatchdogArmed(armed: Boolean) {
         if (dpmHandle.dpm.isDeviceOwnerApp(packageName)) return
+        // Set/clear the in-process suppression flag BEFORE touching the component's enabled
+        // state — see KioskWatchdogService.suppressed's doc comment for why the component-enabled
+        // flag alone loses a race against an already-running service instance.
+        if (!armed) {
+            com.mdmesh.kiosk.KioskWatchdogService.suppressed = true
+        }
         runCatching {
             val state = if (armed) {
                 android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED
@@ -170,6 +179,31 @@ class KioskLauncherActivity : ComponentActivity() {
                 android.content.pm.PackageManager.DONT_KILL_APP,
             )
         }
+        if (armed) {
+            com.mdmesh.kiosk.KioskWatchdogService.suppressed = false
+        }
+    }
+
+    /** Lite mode (no Device-Owner) cannot force itself to become the default home app — Android
+     *  requires the user to pick it manually. Without this, "Enter Kiosk" silently does nothing
+     *  visible: lock task still starts, but pressing Home just falls through to whatever launcher
+     *  was already set as default. Detect that gap and send the user straight to the picker. */
+    private fun promptDefaultHomeIfNeeded() {
+        if (dpmHandle.dpm.isDeviceOwnerApp(packageName)) return // Device-Owner path forces this itself.
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val resolved = packageManager.resolveActivity(home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+        if (resolved?.activityInfo?.packageName == packageName) return // Already the default home app.
+        AlertDialog.Builder(this)
+            .setTitle("One-time setup needed")
+            .setMessage(
+                "To lock this device, Android needs AMBIC MDM set as the Home app.\n\n" +
+                    "Tap Continue, then choose AMBIC MDM and set it as default.",
+            )
+            .setCancelable(false)
+            .setPositiveButton("Continue") { _, _ ->
+                runCatching { startActivity(Intent(android.provider.Settings.ACTION_HOME_SETTINGS)) }
+            }
+            .show()
     }
 
     private fun startLockTaskSafely() {
@@ -462,5 +496,20 @@ private class FrameWrap(
                 setMargins(marginPx, marginPx, marginPx, marginPx)
             },
         )
+        // Android 15 (targetSdk 35) draws edge-to-edge by default, so the nav/status bars overlay
+        // content instead of reserving their own space — without this, a bottom- or top-gravity
+        // exit affordance sits partially behind the system bar. Push the child out from under
+        // whichever system bar edges its gravity touches.
+        ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val lp = child.layoutParams as android.widget.FrameLayout.LayoutParams
+            lp.bottomMargin = marginPx + if (gravity and Gravity.BOTTOM == Gravity.BOTTOM) bars.bottom else 0
+            lp.topMargin = marginPx + if (gravity and Gravity.TOP == Gravity.TOP) bars.top else 0
+            lp.leftMargin = marginPx + if (gravity and Gravity.START == Gravity.START || gravity and Gravity.LEFT == Gravity.LEFT) bars.left else 0
+            lp.rightMargin = marginPx + if (gravity and Gravity.END == Gravity.END || gravity and Gravity.RIGHT == Gravity.RIGHT) bars.right else 0
+            child.layoutParams = lp
+            insets
+        }
+        requestApplyInsets()
     }
 }
