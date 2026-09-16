@@ -10,7 +10,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.ImageView
@@ -616,12 +615,19 @@ class KioskLauncherActivity : ComponentActivity() {
     private fun addExitAffordance(p: KioskApplyPayload, parent: ViewGroup) {
         when (p.exitMode) {
             "visible" -> {
-                val btn = Button(this).apply {
-                    text = "Exit kiosk"
+                // A standard kebab (⋮) icon rather than a text button — this is the one entry
+                // point to the whole admin menu (exit is now just one item in it, not the only
+                // outcome), so it should read as "menu," not "exit."
+                val kebab = TextView(this).apply {
+                    text = "⋮"
+                    setTextColor(TEXT)
+                    textSize = 22f
+                    gravity = Gravity.CENTER
+                    setBackgroundColor(Color.argb(90, 0, 0, 0))
                     setOnClickListener { promptExit(p) }
                 }
                 parent.addView(
-                    FrameWrap(this, btn, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, dp(24)),
+                    FrameWrap(this, kebab, Gravity.TOP or Gravity.END, dp(16), dp(48), dp(48)),
                 )
             }
             "gesture" -> {
