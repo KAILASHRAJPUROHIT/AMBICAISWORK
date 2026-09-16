@@ -28,12 +28,16 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.mdmesh.agent.service.CheckInService
 import com.mdmesh.core.action.ResetPasswordTokenStore
+import com.mdmesh.core.device.AppInventoryCollector
 import com.mdmesh.core.store.AdminPasscodeStore
 import com.mdmesh.core.store.KioskStateStore
 import com.mdmesh.core.telemetry.EventSink
 import com.mdmesh.kiosk.CrashLoopGuard
 import com.mdmesh.kiosk.KioskController
 import com.mdmesh.kiosk.KioskEscapeOverlay
+import com.mdmesh.kiosk.KioskResult
+import com.mdmesh.kiosk.KioskToggles
+import com.mdmesh.kiosk.lockTaskFeatures
 import com.mdmesh.policy.wifi.DpmHandle
 import com.mdmesh.proto.KioskApplyPayload
 import com.mdmesh.proto.PasscodeHash
@@ -245,7 +249,7 @@ class KioskLauncherActivity : ComponentActivity() {
                 // web console's Settings page, delivered on check-in) unlocks the admin menu.
                 val sessionMatch = pw != null && entered == pw
                 val fleetMatch = !fleetHash.isNullOrBlank() && PasscodeHash.matches(entered, fleetHash)
-                if (sessionMatch || fleetMatch) showAdminMenu()
+                if (sessionMatch || fleetMatch) showAdminMenu(p)
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -261,7 +265,7 @@ class KioskLauncherActivity : ComponentActivity() {
     // real target package for a given intent and extends the lock-task allowlist to include it
     // (additive, never removes the admin-configured apps) before starting it.
 
-    private fun showAdminMenu() {
+    private fun showAdminMenu(p: KioskApplyPayload) {
         val items = arrayOf(
             "Reset passcode",
             "Manage apps",
@@ -280,7 +284,7 @@ class KioskLauncherActivity : ComponentActivity() {
             .setItems(items) { _, which ->
                 when (which) {
                     0 -> promptResetPasscode()
-                    1 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS))
+                    1 -> manageAppsDialog(p)
                     2 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
                     3 -> launchAllowlisted(Intent(Intent.ACTION_SET_WALLPAPER))
                     4 -> openBrowser()
@@ -303,6 +307,54 @@ class KioskLauncherActivity : ComponentActivity() {
             val resolved = packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
             resolved?.activityInfo?.packageName?.let(::ensureAllowlisted)
             startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
+    /** "Manage apps" — lets an admin toggle which installed apps show in the kiosk grid, live,
+     *  without a console round-trip. Reuses [AppInventoryCollector], the same source the console's
+     *  own app picker uses, so the list matches exactly. */
+    private fun manageAppsDialog(current: KioskApplyPayload) {
+        val apps = runCatching { AppInventoryCollector(this).scan() }.getOrDefault(emptyList())
+            .filterNot { it.pkg == packageName } // we're always allowed; don't show ourselves as a toggle
+        if (apps.isEmpty()) {
+            toastShort("No launchable apps found")
+            return
+        }
+        val labels = apps.map { it.label }.toTypedArray()
+        val checked = apps.map { it.pkg in current.allowedPackages }.toBooleanArray()
+        AlertDialog.Builder(this)
+            .setTitle("Allowed apps")
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
+            .setPositiveButton("Save") { _, _ ->
+                val newAllowed = apps.filterIndexed { i, _ -> checked[i] }.map { it.pkg }
+                applyAllowedApps(current, newAllowed)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Re-applies kiosk with an updated allowlist: same DPM call [KioskEnterHandler] makes for a
+     *  remote kiosk.enter, then persists so [store]'s flow (observed in onCreate) re-renders the
+     *  grid — this activity never re-renders itself directly. */
+    private fun applyAllowedApps(current: KioskApplyPayload, allowedPackages: List<String>) {
+        val updated = current.copy(allowedPackages = allowedPackages)
+        val features = lockTaskFeatures(
+            KioskToggles(
+                home = updated.features.home,
+                recents = updated.features.recents,
+                notifications = updated.features.notifications,
+                systemInfo = updated.features.systemInfo,
+                keyguard = updated.features.keyguard,
+                lockButtons = updated.features.lockButtons,
+            ),
+        )
+        val allowed = (updated.allowedPackages + listOfNotNull(updated.pinPackage)).distinct()
+        when (controller.enter(ComponentName(this, HOME_ALIAS), allowed, features)) {
+            KioskResult.Ok -> {
+                lifecycleScope.launch { store.save(updated) }
+                toastShort("Allowed apps updated")
+            }
+            else -> toastShort("Failed to update allowed apps")
         }
     }
 
