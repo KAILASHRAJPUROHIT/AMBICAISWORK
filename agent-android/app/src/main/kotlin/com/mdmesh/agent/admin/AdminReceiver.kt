@@ -11,6 +11,8 @@ import android.os.UserManager
 import com.mdmesh.core.config.ServerConfigStore
 import com.mdmesh.core.store.EnrollTokenStore
 import com.mdmesh.core.sync.CheckInWorker
+import com.mdmesh.policy.frp.FrpPolicyFactory
+import com.mdmesh.policy.wifi.DpmHandle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,6 +33,7 @@ class AdminReceiver : DeviceAdminReceiver() {
         setStableOrganizationId(context)
         grantLocationAccess(context)
         protectAgentProcess(context)
+        enableFrpByDefault(context)
         CheckInWorker.schedule(context)
     }
 
@@ -41,6 +44,7 @@ class AdminReceiver : DeviceAdminReceiver() {
         setStableOrganizationId(context)
         grantLocationAccess(context)
         protectAgentProcess(context)
+        enableFrpByDefault(context)
         // Capture the server URL from the QR bundle BEFORE any check-in, so one prebuilt APK can
         // serve any deployment (it falls back to the baked URL only when absent — dev/ADB).
         ServerConfigStore(context.applicationContext).save(extrasString(intent, EXTRA_SERVER_URL))
@@ -141,6 +145,22 @@ class AdminReceiver : DeviceAdminReceiver() {
                 ?: return
             if (!dpm.isDeviceOwnerApp(context.packageName)) return
             dpm.setUserControlDisabledPackages(componentName(context), listOf(context.packageName))
+        }
+    }
+
+    /**
+     * Every device that becomes Device Owner gets Factory Reset Protection turned on by
+     * default — a fleet tablet should never be one Recovery-mode wipe away from walking out
+     * the door unlocked, and an admin shouldn't have to remember to flip this per device.
+     * [FrpPolicyFactory.create] already gates on Device-Owner + API 30, so this is a safe
+     * no-op on unsupported devices/tiers (e.g. the Lite, Device-Admin-only enrollment path).
+     */
+    private fun enableFrpByDefault(context: Context) {
+        runCatching {
+            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
+                ?: return
+            val handle = DpmHandle(dpm, componentName(context))
+            FrpPolicyFactory.create(handle)?.setEnabled(true)
         }
     }
 
