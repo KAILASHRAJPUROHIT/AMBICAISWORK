@@ -82,7 +82,10 @@ services:
   # only on VERIFIED manifests + AUTHORIZED callers (cookie-forward authz). It NEVER recreates itself
   # or postgres; apply.sh touches only `server` + `caddy`.
   supervisor:
-    image: ghcr.io/${IMAGE_OWNER:-local}/mdmesh-supervisor:${SUPERVISOR_VERSION:-latest}
+    # Deliberately NOT ${IMAGE_OWNER} — apply.sh never touches this service (see comment above), so
+    # it must always build fresh from local source (picks up release/minisign.pub etc.) rather than
+    # silently pulling a possibly-stale published tag whenever IMAGE_OWNER is set for server/caddy.
+    image: ghcr.io/local/mdmesh-supervisor:${SUPERVISOR_VERSION:-latest}
     build:
       context: .
       dockerfile: docker/supervisor.Dockerfile
