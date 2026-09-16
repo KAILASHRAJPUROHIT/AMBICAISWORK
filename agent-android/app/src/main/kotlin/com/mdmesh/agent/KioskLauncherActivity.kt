@@ -27,6 +27,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.mdmesh.agent.service.CheckInService
+import com.mdmesh.core.action.ResetPasswordTokenStore
 import com.mdmesh.core.store.AdminPasscodeStore
 import com.mdmesh.core.store.KioskStateStore
 import com.mdmesh.core.telemetry.EventSink
@@ -65,6 +66,7 @@ class KioskLauncherActivity : ComponentActivity() {
     @Inject lateinit var crashGuard: CrashLoopGuard
     @Inject lateinit var adminPasscodeStore: AdminPasscodeStore
     @Inject lateinit var dpmHandle: DpmHandle
+    @Inject lateinit var resetTokenStore: ResetPasswordTokenStore
 
     /** Last applied non-null kiosk state, so [onResume] can recover a bounced single-app pin. */
     private var active: KioskApplyPayload? = null
@@ -235,18 +237,178 @@ class KioskLauncherActivity : ComponentActivity() {
             hint = "Admin password"
         }
         AlertDialog.Builder(this)
-            .setTitle("Exit kiosk")
+            .setTitle("Admin access")
             .setView(input)
-            .setPositiveButton("Exit") { _, _ ->
+            .setPositiveButton("Continue") { _, _ ->
                 val entered = input.text.toString()
                 // Either the per-session password or the fleet-wide admin passcode (set from the
-                // web console's Settings page, delivered on check-in) unlocks the exit.
+                // web console's Settings page, delivered on check-in) unlocks the admin menu.
                 val sessionMatch = pw != null && entered == pw
                 val fleetMatch = !fleetHash.isNullOrBlank() && PasscodeHash.matches(entered, fleetHash)
-                if (sessionMatch || fleetMatch) doExit()
+                if (sessionMatch || fleetMatch) showAdminMenu()
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    // --- Admin menu ---------------------------------------------------------------------------
+    //
+    // Everything below is gated behind the same passcode check as kiosk exit (promptExit, above)
+    // — reachable only after a correct session/fleet passcode, exactly like exit itself. None of
+    // these screens (Settings, a browser, the wallpaper picker) are in the kiosk's own allowlist
+    // (KioskApplyPayload.allowedPackages — what actually shows as icons to the end user), so lock
+    // task mode would otherwise silently refuse to launch them. launchAllowlisted() resolves the
+    // real target package for a given intent and extends the lock-task allowlist to include it
+    // (additive, never removes the admin-configured apps) before starting it.
+
+    private fun showAdminMenu() {
+        val items = arrayOf(
+            "Reset passcode",
+            "Manage apps",
+            "Set default application",
+            "Change background",
+            "Browser shortcuts",
+            "Browser settings",
+            "Configure Wi-Fi",
+            "Open system settings",
+            "Uninstall AMBIC MDM",
+            "About AMBIC MDM",
+            "Exit AMBIC MDM",
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Admin menu")
+            .setItems(items) { _, which ->
+                when (which) {
+                    0 -> promptResetPasscode()
+                    1 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS))
+                    2 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+                    3 -> launchAllowlisted(Intent(Intent.ACTION_SET_WALLPAPER))
+                    4 -> openBrowser()
+                    5 -> openBrowserSettings()
+                    6 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS))
+                    7 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_SETTINGS))
+                    8 -> confirmUninstall()
+                    9 -> showAbout()
+                    10 -> doExit()
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    /** Extend the lock-task allowlist (additive) to include whatever package [intent] actually
+     *  resolves to, then start it. No-op (silently) if nothing on-device can handle it. */
+    private fun launchAllowlisted(intent: Intent) {
+        runCatching {
+            val resolved = packageManager.resolveActivity(intent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            resolved?.activityInfo?.packageName?.let(::ensureAllowlisted)
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
+    private fun ensureAllowlisted(pkg: String) {
+        runCatching {
+            if (!dpmHandle.dpm.isDeviceOwnerApp(packageName)) return
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) return
+            val current = dpmHandle.dpm.getLockTaskPackages(dpmHandle.admin).toList()
+            if (pkg !in current) {
+                dpmHandle.dpm.setLockTaskPackages(dpmHandle.admin, (current + pkg).distinct().toTypedArray())
+            }
+        }
+    }
+
+    private fun promptResetPasscode() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) {
+            toastShort("Passcode reset needs Android 8.0 or newer")
+            return
+        }
+        val input = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or
+                android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            hint = "New device PIN (blank clears it)"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Reset device passcode")
+            .setMessage("Changes the device's screen-lock PIN directly on this device.")
+            .setView(input)
+            .setPositiveButton("Set") { _, _ ->
+                val token = resetTokenStore.token() ?: resetTokenStore.ensureToken()
+                if (token.isEmpty()) {
+                    toastShort("No reset token on this device — cannot reset locally")
+                    return@setPositiveButton
+                }
+                val ok = runCatching {
+                    dpmHandle.dpm.resetPasswordWithToken(dpmHandle.admin, input.text.toString(), token, 0)
+                }.getOrDefault(false)
+                toastShort(if (ok) "Passcode updated" else "Reset failed")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun defaultBrowserPackage(): String? {
+        val probe = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://"))
+        return packageManager.resolveActivity(probe, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            ?.activityInfo?.packageName
+    }
+
+    private fun openBrowser() {
+        launchAllowlisted(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://")))
+    }
+
+    private fun openBrowserSettings() {
+        val browserPkg = defaultBrowserPackage()
+        if (browserPkg == null) {
+            toastShort("No browser found on this device")
+            return
+        }
+        launchAllowlisted(
+            Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(android.net.Uri.fromParts("package", browserPkg, null)),
+        )
+    }
+
+    private fun confirmUninstall() {
+        AlertDialog.Builder(this)
+            .setTitle("Uninstall AMBIC MDM")
+            .setMessage(
+                "This permanently removes MDM management from this device — it drops Device " +
+                    "Owner status and cannot be undone without a factory reset. The console will " +
+                    "stop hearing from this device.\n\nAre you sure?",
+            )
+            .setPositiveButton("Uninstall") { _, _ -> doUninstall() }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun doUninstall() {
+        runCatching { events.record("selfUninstall", "admin menu: uninstall initiated on-device") }
+        setWatchdogArmed(false)
+        KioskEscapeOverlay.hide()
+        runCatching { if (isFinishing.not()) stopLockTask() }
+        runCatching { controller.exit() }
+        runCatching { dpmHandle.dpm.clearDeviceOwnerApp(packageName) }
+        runCatching {
+            startActivity(
+                Intent(Intent.ACTION_DELETE, android.net.Uri.parse("package:$packageName"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
+
+    private fun showAbout() {
+        val versionName = runCatching {
+            packageManager.getPackageInfo(packageName, 0).versionName
+        }.getOrNull() ?: "unknown"
+        AlertDialog.Builder(this)
+            .setTitle("About AMBIC MDM")
+            .setMessage("AMBIC Digital MDM\nVersion $versionName\n\nDevice fleet management agent.")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun toastShort(message: String) {
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
     }
 
     private fun doExit() {
