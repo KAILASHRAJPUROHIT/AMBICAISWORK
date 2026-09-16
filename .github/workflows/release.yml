@@ -41,6 +41,12 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v3
+        with:
+          # Google has stopped serving the legacy standalone 'tools' package (only
+          # platform-tools/cmdline-tools/build-tools remain), which the action installs by
+          # default and which Gradle-based builds never needed anyway. Override the packages
+          # list to skip it — see android-actions/setup-android#537.
+          packages: "platform-tools"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10"
