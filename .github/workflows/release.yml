@@ -74,6 +74,22 @@ jobs:
           [ -n "$CK" ] || { echo "APK signature checksum came out empty — aborting the release"; exit 1; }
           echo "CK=$CK" >> "$GITHUB_ENV"
 
+      # RELEASING.md: "NEVER ROTATE" the release keystore — every enrolled device is a Device
+      # Owner install, and Android only allows a silent self-update when the new APK's signing
+      # cert matches the currently-installed one. A changed keystore (accidental rotation, a
+      # restored stale secret, anything) builds and signs fine but silently breaks every fleet
+      # device's upgrade path, recoverable only by a physical factory reset per device. Catch
+      # that here, loudly, before the mismatched APK ever gets published.
+      - name: Verify signing cert hasn't drifted from prior releases
+        run: |
+          EXPECTED=$(cat release/expected-signing-checksum.txt)
+          if [ "$CK" != "$EXPECTED" ]; then
+            echo "::error::Release keystore signature checksum changed ($EXPECTED -> $CK)."
+            echo "::error::This would break silent self-update on every enrolled device (factory reset required to recover)."
+            echo "::error::If this is a deliberate, intentional keystore change, update release/expected-signing-checksum.txt in the same PR and document why in RELEASING.md."
+            exit 1
+          fi
+
       # --- Build + push images to GHCR ---
       - uses: docker/login-action@v3
         with:

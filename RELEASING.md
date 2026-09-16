@@ -33,6 +33,12 @@ keytool -genkeypair -v -keystore mdmesh-release.jks -alias mdmesh \
 base64 -w0 mdmesh-release.jks   # value for the MDM_RELEASE_STORE_B64 secret
 ```
 
+CI enforces the "never rotate" rule automatically: `release/expected-signing-checksum.txt` pins the
+signing cert's checksum, and the release workflow fails loudly if a build's checksum doesn't match —
+before publishing — rather than silently shipping an APK that breaks every fleet device's upgrade
+path. If you ever *deliberately* need to change the keystore (e.g. starting a brand-new fleet with no
+existing enrollments to protect), update that file in the same PR and say why.
+
 Secrets: `MDM_RELEASE_STORE_B64` (the base64), `MDM_RELEASE_STORE_PASSWORD`, `MDM_RELEASE_KEY_ALIAS`
 (`mdmesh`), `MDM_RELEASE_KEY_PASSWORD`.
 
