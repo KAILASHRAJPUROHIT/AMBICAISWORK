@@ -216,12 +216,12 @@ export function SettingsPage() {
             <span className="k">Role</span>
             <span className="v">{user?.superAdmin ? 'Super admin' : 'Admin'}</span>
           </div>
-          <div className="set-row">
+          <div className="set-row frp-row">
             <span className="k">
               FRP recovery accounts
               <small>Google accounts approved to unlock a Device Owner device after a factory reset. Google sign-in happens on Google; AMBIC MDM stores only verified numeric account IDs and display email.</small>
             </span>
-            <span className="v">
+            <span className="v wide-actions">
               <div className="upd-actions">
                 <button className="btn btn-sm btn-primary" disabled={frpBusy} onClick={() => void connectFrpAccount()}>
                   {frpBusy ? 'Working…' : 'Connect Google account'}
