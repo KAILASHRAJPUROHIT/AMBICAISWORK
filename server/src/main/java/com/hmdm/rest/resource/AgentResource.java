@@ -312,6 +312,13 @@ public class AgentResource {
             commandDAO.updateHardwareId(deviceNumber, request.getHardwareId().trim());
         }
 
+        // Refresh the FCM token whenever this build reports one - a partial update (see
+        // updateFcmToken), so an older agent's check-in (no fcmToken field at all) never erases
+        // a previously-stored token.
+        if (request.getFcmToken() != null && !request.getFcmToken().trim().isEmpty()) {
+            commandDAO.updateFcmToken(deviceNumber, request.getFcmToken().trim());
+        }
+
         // Refresh the stored capability matrix (kept fresh every check-in). Computed once here and
         // reused for command gating below — no need to read back what we just wrote.
         String capsJson = null;

@@ -142,6 +142,14 @@ public class AgentCommandDAO {
         deviceMapper.updateHardwareId(deviceNumber, hardwareId);
     }
 
+    public void updateFcmToken(String deviceNumber, String fcmToken) {
+        deviceMapper.updateFcmToken(deviceNumber, fcmToken);
+    }
+
+    public String getFcmToken(String deviceNumber) {
+        return deviceMapper.getFcmToken(deviceNumber);
+    }
+
     public String getDeviceSecretHash(String deviceNumber) {
         return deviceMapper.getDeviceSecretHash(deviceNumber);
     }

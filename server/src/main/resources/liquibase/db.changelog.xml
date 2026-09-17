@@ -2969,5 +2969,13 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.09.17-devices-fcm-token" author="ambic" context="common">
+        <comment>Column,new: devices#fcmToken - the device's current Firebase Cloud Messaging
+        registration token, so the server can wake a device via FCM (survives Doze/OEM battery
+        restrictions that kill the agent's own WebSocket) as well as the existing wake socket.
+        Nullable: null until the device runs an FCM-capable agent build and reports one.</comment>
+        <sql>ALTER TABLE devices ADD COLUMN fcmToken TEXT;</sql>
+        <rollback>ALTER TABLE devices DROP COLUMN fcmToken;</rollback>
+    </changeSet>
 
 </databaseChangeLog>

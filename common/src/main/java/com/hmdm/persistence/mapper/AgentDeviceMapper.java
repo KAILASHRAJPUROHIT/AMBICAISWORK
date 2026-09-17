@@ -58,6 +58,14 @@ public interface AgentDeviceMapper {
     void updateHardwareId(@Param("deviceNumber") String deviceNumber,
                           @Param("hardwareId") String hardwareId);
 
+    /** Partial update, unlike device_state's full-row upsert - a check-in that omits fcmToken
+     *  (older agent, or a transient Firebase failure) must never erase the last known-good one. */
+    @Update({"UPDATE devices SET fcmToken = #{fcmToken} WHERE number = #{deviceNumber}"})
+    void updateFcmToken(@Param("deviceNumber") String deviceNumber, @Param("fcmToken") String fcmToken);
+
+    @Select({"SELECT fcmToken FROM devices WHERE number = #{deviceNumber}"})
+    String getFcmToken(@Param("deviceNumber") String deviceNumber);
+
     /**
      * Store the Android version into infojson (the device list reads
      * {@code devices.infojson ->> 'androidVersion'}; our agent reports it via telemetry/state).

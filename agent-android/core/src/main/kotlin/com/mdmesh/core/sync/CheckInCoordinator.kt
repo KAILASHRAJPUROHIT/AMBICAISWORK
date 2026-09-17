@@ -2,6 +2,7 @@ package com.mdmesh.core.sync
 
 import com.mdmesh.core.capability.CapabilitySource
 import com.mdmesh.core.command.CommandDispatcher
+import com.mdmesh.core.config.FcmTokenStore
 import com.mdmesh.core.net.MdmApi
 import com.mdmesh.core.state.DeviceStateSource
 import com.mdmesh.core.store.AdminPasscodeStore
@@ -46,6 +47,7 @@ class CheckInCoordinator @Inject constructor(
     private val hardwareIdSource: HardwareIdSource = HardwareIdSource { null },
     private val syncStatus: SyncStatus = SyncStatus(),
     private val adminPasscodeStore: AdminPasscodeStore? = null,
+    private val fcmTokenStore: FcmTokenStore? = null,
 ) {
 
     private val mutex = Mutex()
@@ -78,6 +80,7 @@ class CheckInCoordinator @Inject constructor(
                     telemetry = runCatching { telemetrySource.snapshot() }.getOrNull(),
                     events = bufferedEvents,
                     hardwareId = runCatching { hardwareIdSource.get() }.getOrNull(),
+                    fcmToken = fcmTokenStore?.get(),
                 ),
             )
         } catch (t: Throwable) {

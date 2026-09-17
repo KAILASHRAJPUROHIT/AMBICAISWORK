@@ -4,6 +4,7 @@
 package com.hmdm.notification;
 
 import com.hmdm.persistence.AgentCommandDAO;
+import com.hmdm.service.FcmSenderService;
 import com.hmdm.util.CryptoUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,11 +35,13 @@ public class AgentWakeHub {
     public static volatile AgentWakeHub INSTANCE;
 
     private final AgentCommandDAO commandDAO;
+    private final FcmSenderService fcm;
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
 
     @Inject
-    public AgentWakeHub(AgentCommandDAO commandDAO) {
+    public AgentWakeHub(AgentCommandDAO commandDAO, FcmSenderService fcm) {
         this.commandDAO = commandDAO;
+        this.fcm = fcm;
         INSTANCE = this;
     }
 
@@ -69,19 +72,27 @@ public class AgentWakeHub {
         return s != null && s.isOpen();
     }
 
-    /** Send a wake-only signal to the device if connected. No-op (floor reconciles) when offline. */
+    /** Send a wake-only signal to the device over every channel available: the live WebSocket if
+     *  one is open (fastest when the screen is already on), and an FCM data message (survives
+     *  Doze/OEM battery restrictions that kill the WebSocket while the screen is off) if this
+     *  device has a registered token. Neither channel is required to succeed - a caller that needs
+     *  guaranteed delivery still relies on the periodic check-in floor, same as before either
+     *  channel existed. */
     public void wake(String deviceNumber, String wakeKind) {
         Session s = sessions.get(deviceNumber);
-        if (s == null || !s.isOpen()) {
-            return;
+        if (s != null && s.isOpen()) {
+            String payload = "interactive".equals(wakeKind)
+                    ? "{\"wake\":\"interactive\",\"ttlSec\":120}"
+                    : "{\"wake\":\"commands\"}";
+            try {
+                s.getAsyncRemote().sendText(payload);
+            } catch (Exception e) {
+                log.warn("Agent wake send failed for {}: {}", deviceNumber, e.getMessage());
+            }
         }
-        String payload = "interactive".equals(wakeKind)
-                ? "{\"wake\":\"interactive\",\"ttlSec\":120}"
-                : "{\"wake\":\"commands\"}";
-        try {
-            s.getAsyncRemote().sendText(payload);
-        } catch (Exception e) {
-            log.warn("Agent wake send failed for {}: {}", deviceNumber, e.getMessage());
+        String fcmToken = commandDAO.getFcmToken(deviceNumber);
+        if (fcmToken != null && !fcmToken.trim().isEmpty()) {
+            fcm.wakeDevice(fcmToken, wakeKind);
         }
     }
 }

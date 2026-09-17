@@ -67,6 +67,10 @@ data class AgentCheckInRequest(
     val events: List<TelemetryEventDto> = emptyList(),
     /** Same stable device id as enroll — lets already-enrolled devices backfill it. */
     val hardwareId: String? = null,
+    /** Current Firebase Cloud Messaging registration token, if this build has FCM. Null/omitted
+     *  on older agents or when Play Services / FCM registration isn't available - the server keeps
+     *  whatever it already has rather than treating a missing value as "clear the token". */
+    val fcmToken: String? = null,
 )
 
 /** Compact device-state snapshot (device -> server) reported on each check-in. */

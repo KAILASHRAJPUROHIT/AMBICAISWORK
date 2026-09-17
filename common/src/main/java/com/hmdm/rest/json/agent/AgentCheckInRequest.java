@@ -56,6 +56,10 @@ public class AgentCheckInRequest {
     /** Buffered lifecycle events flushed on this check-in. */
     private List<AgentTelemetryEvent> events;
 
+    /** Current Firebase Cloud Messaging registration token, if this build has FCM. Null/omitted
+     *  on older agents - the server keeps whatever it already has, never clears on absence. */
+    private String fcmToken;
+
     public AgentCheckInRequest() {
     }
 }
