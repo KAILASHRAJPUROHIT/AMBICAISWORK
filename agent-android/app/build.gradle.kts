@@ -101,6 +101,7 @@ dependencies {
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.service)
+    implementation(libs.androidx.biometric)
     implementation(libs.kotlinx.coroutines.android)
 
     // WorkManager (scheduling check-in)

@@ -18,6 +18,9 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AlertDialog
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.fragment.app.FragmentActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -61,7 +64,7 @@ import javax.inject.Inject
  * kiosk instead of re-pinning, so a misconfigured deployment cannot brick the device.
  */
 @AndroidEntryPoint
-class KioskLauncherActivity : ComponentActivity() {
+class KioskLauncherActivity : FragmentActivity() {
 
     @Inject lateinit var store: KioskStateStore
     @Inject lateinit var controller: KioskController
@@ -234,6 +237,49 @@ class KioskLauncherActivity : ComponentActivity() {
             doExit()
             return
         }
+        if (biometricAvailable()) {
+            promptBiometric(p, onUnavailableOrDeclined = { promptPasscode(p) })
+        } else {
+            promptPasscode(p)
+        }
+    }
+
+    /** True only when this device has enrolled, working biometrics right now — never device
+     *  credential (PIN/pattern), which would just be a second way to bypass our own passcode. */
+    private fun biometricAvailable(): Boolean =
+        BiometricManager.from(this).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) ==
+            BiometricManager.BIOMETRIC_SUCCESS
+
+    /** Fast path only — the fleet/session passcode ([promptPasscode]) stays the source of truth an
+     *  admin can always fall back to, since biometrics are enrolled per-device with no console
+     *  visibility or remote revocation. Any outcome other than success (declined, error, no match
+     *  configured) falls through to the passcode dialog rather than dead-ending the admin. */
+    private fun promptBiometric(p: KioskApplyPayload, onUnavailableOrDeclined: () -> Unit) {
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    showAdminMenu(p)
+                }
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    onUnavailableOrDeclined()
+                }
+                override fun onAuthenticationFailed() = Unit // let the prompt's own retry UI handle it
+            },
+        )
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Admin access")
+            .setSubtitle("Use face or fingerprint unlock")
+            .setNegativeButtonText("Use passcode instead")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .build()
+        prompt.authenticate(info)
+    }
+
+    private fun promptPasscode(p: KioskApplyPayload) {
+        val pw = p.password
+        val fleetHash = fleetPasscodeHash
         val input = EditText(this).apply {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
