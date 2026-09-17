@@ -15,7 +15,7 @@ import com.mdmesh.proto.CommandResult
 /**
  * `kiosk.exit` — release COSU lock-task (clear allowlist + persistent-HOME claim). On success the
  * persisted [KioskStateStore] payload is cleared so the agent does not re-enter kiosk on next boot,
- * and the launcher is brought forward so it unpins and drops to its idle screen immediately.
+ * and the AMBIC MDM status/settings screen is opened after lock task releases.
  */
 class KioskExitHandler(
     private val kiosk: KioskController,
@@ -30,10 +30,10 @@ class KioskExitHandler(
         when (val r = kiosk.exit()) {
             KioskResult.Ok -> {
                 store.save(null)
-                // Drop our HOME claim so HOME falls back to the OEM launcher, then send the device
-                // there — otherwise the user is stuck on our (now-unpinned) launcher surface.
+                // Drop the kiosk-only HOME claim, then open the agent status screen. This keeps
+                // management settings available immediately after a local or remote kiosk exit.
                 disableHomeAlias()
-                goToOemHome()
+                openAgentHome()
                 CommandResults.done(command)
             }
             KioskResult.Unsupported -> CommandResults.unsupported(command, "kiosk unsupported on this device")
@@ -50,11 +50,10 @@ class KioskExitHandler(
         }
     }
 
-    private fun goToOemHome() {
+    private fun openAgentHome() {
         runCatching {
             context.startActivity(
-                Intent(Intent.ACTION_MAIN)
-                    .addCategory(Intent.CATEGORY_HOME)
+                Intent().setClassName(context.packageName, "com.mdmesh.agent.MainActivity")
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         }

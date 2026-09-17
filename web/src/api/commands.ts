@@ -332,6 +332,9 @@ export interface DeviceState {
 
 export interface CommandHistoryItem {
   id: number | string; type: string; status: string;
+  /** Opaque command payload returned by the existing history endpoint. Used only to restore
+   * the current kiosk/FRP controls; never rendered. */
+  payload?: string | null;
   detail?: string | null; createdAt?: number; completedAt?: number;
 }
 

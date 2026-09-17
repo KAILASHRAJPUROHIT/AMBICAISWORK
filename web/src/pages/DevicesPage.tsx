@@ -498,13 +498,13 @@ function DeviceCard({
       <div className="h">
         <SelectBox selected={selected} onToggle={onToggle} />
         <span className={`dot ${online ? 'on' : 'off'}`} />
-        <span className="nm">{orDash(d.number)}</span>
+        <span className="nm">{orDash(d.description || d.number)}</span>
         {dup > 1 && <DupBadge n={dup} />}
         {d.enrollmentMode === 'deviceAdmin' && <LiteBadge />}
         {frpPending && <FrpPendingBadge />}
         <DeviceGlyph className="ico" name={d.description || d.number} size={16} />
       </div>
-      {d.description && <div className="sub">{d.description}</div>}
+      {d.description && <div className="sub">ID: {d.number}</div>}
       <div className="kv">
         <div>
           <div className="k">Android</div>
@@ -559,8 +559,8 @@ function DeviceRow({
         <span className={`dot ${online ? 'on' : 'off'}`} />
         <DeviceGlyph className="ico" name={d.description || d.number} size={15} />
         <div style={{ minWidth: 0 }}>
-          <div className="nm">{orDash(d.number)}</div>
-          {d.description && <div className="sub">{d.description}</div>}
+          <div className="nm">{orDash(d.description || d.number)}</div>
+          {d.description && <div className="sub">ID: {d.number}</div>}
         </div>
         {dup > 1 && <DupBadge n={dup} />}
         {d.enrollmentMode === 'deviceAdmin' && <LiteBadge />}

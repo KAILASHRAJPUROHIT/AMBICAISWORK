@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { scanApps, fetchIcons, getLatestScan, type AppInfo } from '../api/deviceApps';
 import { listApplications, appCategory, type Application } from '../api/applications';
-import { queueCommand } from '../api/commands';
+import { getDeviceState, listCommandHistory, queueCommand } from '../api/commands';
 import { useToast } from '../ui/toast';
 
 type Device = { number: string };
@@ -73,6 +73,8 @@ export function KioskEnterModal({
   const [exitMode, setExitMode] = useState<'gesture' | 'visible' | 'remote'>('gesture');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [kioskActive, setKioskActive] = useState<boolean | null>(null);
+  const [restored, setRestored] = useState(false);
 
   // Library (default source) — the app catalog / uploaded apps.
   const [lib, setLib] = useState<Application[] | null>(null);
@@ -94,6 +96,34 @@ export function KioskEnterModal({
     abortRef.current = ac;
     return () => ac.abort();
   }, []);
+
+  // Restore the most recently confirmed kiosk choice. The device state is the authority for
+  // whether kiosk is active; command history only supplies the app/options to display.
+  useEffect(() => {
+    let alive = true;
+    Promise.all([getDeviceState(device.number), listCommandHistory(device.number)])
+      .then(([state, history]) => {
+        if (!alive) return;
+        setKioskActive(state?.kioskActive ?? false);
+        const command = history.find((item) => item.type === 'kiosk.enter' && item.status === 'done');
+        if (!command?.payload) return;
+        const payload = JSON.parse(command.payload) as Partial<KioskChoice>;
+        const packages = [...new Set([
+          ...(payload.packages ?? []),
+          ...((payload as { allowedPackages?: string[] }).allowedPackages ?? []),
+          ...((payload as { pinPackage?: string }).pinPackage ? [(payload as { pinPackage?: string }).pinPackage!] : []),
+        ])];
+        if (!packages.length) return;
+        setMode(payload.mode === 'single' ? 'single' : 'launcher');
+        setSelected(new Set(packages));
+        if (payload.exitMode === 'visible' || payload.exitMode === 'remote' || payload.exitMode === 'gesture') {
+          setExitMode(payload.exitMode);
+        }
+        setRestored(true);
+      })
+      .catch(() => { if (alive) setKioskActive(false); });
+    return () => { alive = false; };
+  }, [device.number]);
 
   useEffect(() => {
     listApplications()
@@ -212,6 +242,12 @@ export function KioskEnterModal({
       <div className="modal kiosk-modal">
         <h3>Enter kiosk</h3>
         <p className="muted">Pick the apps to lock the device to — from your library, or by scanning the device.</p>
+        {kioskActive && (
+          <p className="banner banner-alert">Kiosk is currently active. Editing this selection queues a replacement kiosk policy.</p>
+        )}
+        {restored && (
+          <p className="muted">Loaded the last confirmed kiosk app selection and exit mode.</p>
+        )}
 
         <div className="kiosk-source">
           <button className={`seg-btn ${source === 'library' ? 'on' : ''}`} onClick={() => setSource('library')}>Library</button>

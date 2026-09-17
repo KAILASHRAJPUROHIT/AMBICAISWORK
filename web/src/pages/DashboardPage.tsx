@@ -247,12 +247,12 @@ export function DashboardPage() {
                   </span>
                   <div className="feed-tx">
                     <span>
-                      <b>{orDash(a.device.number)}</b>{' '}
+                      <b>{a.device.description || orDash(a.device.number)}</b>{' '}
                       {EVENT_VERBS[a.ev.type] ?? a.ev.type}
                     </span>
                     {(a.device.description || a.ev.detail) && (
                       <div className="feed-sub">
-                        {a.ev.detail || a.device.description}
+                        {[a.device.description ? a.device.number : undefined, a.ev.detail].filter(Boolean).join(' · ')}
                       </div>
                     )}
                   </div>
@@ -293,9 +293,9 @@ export function DashboardPage() {
                       }
                     >
                       <span className={`dot dot-${m.tone}`} />
-                      <span className="att-nm">{orDash(d.number)}</span>
+                      <span className="att-nm">{d.description || orDash(d.number)}</span>
                       <span className="att-reason">
-                        {m.label} · {fmtRelative(d.lastUpdate)}
+                        {d.description ? `${d.number} · ` : ''}{m.label} · {fmtRelative(d.lastUpdate)}
                       </span>
                     </div>
                   );

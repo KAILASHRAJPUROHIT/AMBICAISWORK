@@ -119,6 +119,21 @@ export function ActionConsole({ device }: { device: Device }) {
     : active.params?.some((p) => p.required && !values[p.key]) ? false
     : true;
 
+  const frpState = (() => {
+    for (const command of history) {
+      if (command.type !== 'policy.apply' || !command.payload) continue;
+      try {
+        const payload = JSON.parse(command.payload) as { policy?: string; value?: boolean };
+        if (payload.policy !== 'factoryResetProtection') continue;
+        if (payload.value !== true) return 'none' as const;
+        if (command.status === 'done') return 'enabled' as const;
+        if (command.status === 'pending' || command.status === 'delivered') return 'pending' as const;
+        return 'none' as const;
+      } catch { /* malformed historic payload — continue through historic commands */ }
+    }
+    return 'none' as const;
+  })();
+
   return (
     <div className="panel">
       <div className="panel-head">
@@ -138,10 +153,11 @@ export function ActionConsole({ device }: { device: Device }) {
         <p className="muted">Uses this tenant’s OAuth-verified Google recovery accounts. Wait for command result <strong>done</strong> before a reset.</p>
         <button
           className="btn btn-primary"
-          disabled={busy || device.enrollmentMode === 'deviceAdmin'}
+          disabled={busy || device.enrollmentMode === 'deviceAdmin' || frpState !== 'none'}
+          title={frpState === 'enabled' ? 'Factory reset protection is already enabled on this device.' : undefined}
           onClick={() => { void applyFrp(); }}
         >
-          Apply verified FRP accounts
+          {frpState === 'enabled' ? 'FRP enabled' : frpState === 'pending' ? 'FRP applying…' : 'Apply verified FRP accounts'}
         </button>
       </section>
       {device.enrollmentMode === 'deviceAdmin' && (

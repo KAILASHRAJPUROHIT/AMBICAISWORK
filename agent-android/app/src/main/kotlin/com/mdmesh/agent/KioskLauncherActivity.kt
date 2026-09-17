@@ -258,8 +258,8 @@ class KioskLauncherActivity : ComponentActivity() {
         runCatching { if (isFinishing.not()) stopLockTask() }
         controller.exit()
         events.record("kioskExit", "exited on-device")
-        // Drop our HOME claim and hand off to the OEM launcher so the device returns to normal
-        // (mirrors KioskExitHandler for the remote-exit path).
+        // Drop the kiosk-only HOME claim and return to AMBIC MDM's status/settings screen
+        // (mirrors KioskExitHandler for a remote exit).
         runCatching {
             packageManager.setComponentEnabledSetting(
                 ComponentName(this, HOME_ALIAS),
@@ -270,11 +270,8 @@ class KioskLauncherActivity : ComponentActivity() {
         lifecycleScope.launch {
             store.save(null)
             runCatching {
-                startActivity(
-                    Intent(Intent.ACTION_MAIN)
-                        .addCategory(Intent.CATEGORY_HOME)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
+                startActivity(Intent(this@KioskLauncherActivity, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }
             finish()
         }
