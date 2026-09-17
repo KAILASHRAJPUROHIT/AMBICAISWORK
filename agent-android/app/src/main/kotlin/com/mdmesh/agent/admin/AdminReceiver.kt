@@ -9,11 +9,8 @@ import android.os.Build
 import android.os.PersistableBundle
 import android.os.UserManager
 import com.mdmesh.core.config.ServerConfigStore
-import com.mdmesh.core.action.ResetPasswordTokenStore
 import com.mdmesh.core.store.EnrollTokenStore
 import com.mdmesh.core.sync.CheckInWorker
-import com.mdmesh.policy.PolicyManager
-import com.mdmesh.policy.wifi.DpmHandle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -30,40 +27,35 @@ class AdminReceiver : DeviceAdminReceiver() {
 
     override fun onEnabled(context: Context, intent: Intent) {
         super.onEnabled(context, intent)
-        // Admin (and, when provisioned this way, Device Owner) is now active.
-        setStableOrganizationId(context)
-        grantLocationAccess(context)
-        protectAgentProcess(context)
+        // Deliberately no policy work here. Android runs this during Device Owner Setup Wizard;
+        // some Android 16/OEM builds abort provisioning if a DPC mutates policy at this point.
+        // MainActivity invokes DeviceOwnerInitializer after Setup Wizard has completed.
     }
 
     override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
         super.onProfileProvisioningComplete(context, intent)
-        // Fully-managed provisioning finished. Set the org id FIRST so getEnrollmentSpecificId()
-        // is populated before the first check-in reports the hardware id (see HardwareIdCollector).
-        setStableOrganizationId(context)
-        grantLocationAccess(context)
-        protectAgentProcess(context)
-        applyBaselinePolicy(context)
+        // Android 12+ hands the QR bundle to AdminPolicyComplianceActivity, which returns
+        // RESULT_OK before scheduling any post-setup work. Do not duplicate that work here:
+        // this callback is still on Setup Wizard's critical path on Android 16.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
+
+        // Legacy Android path: capture the QR credentials only after the callback returns.
         // Capture the server URL from the QR bundle BEFORE any check-in, so one prebuilt APK can
         // serve any deployment (it falls back to the baked URL only when absent — dev/ADB).
         ServerConfigStore(context.applicationContext).save(extrasString(intent, EXTRA_SERVER_URL))
         // Capture the single-use enroll token handed in via the QR provisioning bundle, then
         // trigger an immediate check-in so the device enrolls within seconds rather than on the
         // periodic cycle.
-        CheckInWorker.schedule(context)
-
         val token = extrasToken(intent)
-        if (token.isNullOrBlank()) {
-            CheckInWorker.scheduleNow(context)
-            return
-        }
-        // EnrollTokenStore.save is suspend; keep the receiver alive while it persists.
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                EnrollTokenStore(context.applicationContext).save(token)
-            } finally {
+                if (!token.isNullOrBlank()) {
+                    EnrollTokenStore(context.applicationContext).save(token)
+                }
+                CheckInWorker.schedule(context)
                 CheckInWorker.scheduleNow(context)
+            } finally {
                 pending.finish()
             }
         }
@@ -79,100 +71,6 @@ class AdminReceiver : DeviceAdminReceiver() {
     override fun onLockTaskModeExiting(context: Context, intent: Intent) {
         super.onLockTaskModeExiting(context, intent)
         setCreateWindowsRestriction(context, restrict = false)
-    }
-
-    /**
-     * Set a fleet-wide, constant organization id so [DevicePolicyManager.getEnrollmentSpecificId]
-     * returns a stable per-device id. The enrollment-specific id is derived from this org id + our
-     * DPC package + a hardware identifier, and — unlike `ANDROID_ID` — is **stable across factory
-     * resets**, which is what lets the server de-duplicate a wiped-and-re-enrolled device. Using one
-     * constant id for the whole fleet keeps each physical device's id stable while still differing
-     * between devices. Idempotent: it can only be set once per owner session, so a repeat call
-     * throws and is swallowed. API 31+.
-     */
-    private fun setStableOrganizationId(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
-        runCatching {
-            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
-                ?: return
-            if (!dpm.isDeviceOwnerApp(context.packageName)) return
-            dpm.setOrganizationId(ORGANIZATION_ID)
-        }
-    }
-
-    /**
-     * As Device Owner, silently grant location permission (incl. background) and turn location
-     * services on, so the agent can report device location for telemetry without any user prompt.
-     */
-    private fun grantLocationAccess(context: Context) {
-        runCatching {
-            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
-                ?: return
-            val pkg = context.packageName
-            if (!dpm.isDeviceOwnerApp(pkg)) return
-            val admin = componentName(context)
-            val perms = mutableListOf(
-                android.Manifest.permission.ACCESS_FINE_LOCATION,
-                android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            )
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                perms.add(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-            }
-            perms.forEach { perm ->
-                runCatching {
-                    dpm.setPermissionGrantState(
-                        admin, pkg, perm, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED,
-                    )
-                }
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                runCatching { dpm.setLocationEnabled(admin, true) }
-            }
-        }
-    }
-
-    /**
-     * As Device Owner, exempt the agent itself from user/OEM "app control": force-stop, and the
-     * background restrictions OEM battery managers (notably Samsung's app sleep) apply to unused
-     * apps. A force-stopped app receives NO broadcasts — not even BOOT_COMPLETED — which severs
-     * management permanently until someone taps the app. API 30+; idempotent.
-     */
-    private fun protectAgentProcess(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        runCatching {
-            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
-                ?: return
-            if (!dpm.isDeviceOwnerApp(context.packageName)) return
-            dpm.setUserControlDisabledPackages(componentName(context), listOf(context.packageName))
-        }
-    }
-
-    /** Applies Device-Owner baseline only after Setup Wizard has completed provisioning. */
-    private fun applyBaselinePolicy(context: Context) {
-        runCatching {
-            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-            val handle = DpmHandle(dpm, componentName(context), context.applicationContext)
-            PolicyManager(handle).setPermissionAutoGrant()
-            ResetPasswordTokenStore(context.applicationContext, handle).ensureToken()
-            listOf(
-                android.Manifest.permission.READ_PHONE_STATE,
-                android.Manifest.permission.READ_PHONE_NUMBERS,
-                android.Manifest.permission.ACCESS_FINE_LOCATION,
-                android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            ).forEach { permission ->
-                runCatching {
-                    dpm.setPermissionGrantState(
-                        handle.admin,
-                        context.packageName,
-                        permission,
-                        DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED,
-                    )
-                }
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                runCatching { dpm.setLocationEnabled(handle.admin, true) }
-            }
-        }
     }
 
     // FRP is applied only after the server has supplied this tenant's verified Google IDs.

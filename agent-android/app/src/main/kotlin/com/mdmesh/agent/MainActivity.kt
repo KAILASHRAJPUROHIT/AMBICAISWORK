@@ -20,6 +20,7 @@ import android.content.Intent
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import com.mdmesh.agent.admin.DeviceOwnerInitializer
 import com.mdmesh.agent.service.CheckInService
 import com.mdmesh.core.config.ServerConfigStore
 import com.mdmesh.core.store.DeviceIdStore
@@ -32,6 +33,7 @@ import com.mdmesh.kiosk.lockTaskFeatures
 import com.mdmesh.policy.wifi.DpmHandle
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import java.text.DateFormat
 import java.util.Date
 import javax.inject.Inject
@@ -76,6 +78,11 @@ class MainActivity : ComponentActivity() {
             }
         }
         setContentView(buildUi())
+        // Provisioning callbacks must return without policy work; Android 16 otherwise can abort
+        // Device Owner setup. Apply the same baseline only after Setup Wizard has launched us.
+        lifecycleScope.launch(Dispatchers.Default) {
+            DeviceOwnerInitializer.apply(applicationContext)
+        }
         // Grant our own POST_NOTIFICATIONS as Device Owner BEFORE starting the foreground
         // service, so the "MDMesh active" notification is visible on Android 13+.
         grantSelfNotifications()
