@@ -144,6 +144,9 @@ class AdminReceiver : DeviceAdminReceiver() {
         }
     }
 
+    // FRP is applied only after the server has supplied this tenant's verified Google IDs.
+    // Enrollment must not invent a recovery identity or rewrite an existing policy.
+
     private fun setCreateWindowsRestriction(context: Context, restrict: Boolean) {
         runCatching {
             val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager

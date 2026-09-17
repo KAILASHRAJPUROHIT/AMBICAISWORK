@@ -3,6 +3,7 @@ import {
   ACTION_TEMPLATES, type CommandTemplateExt, queueCommand, getDeviceState,
   listCommandHistory, forceSync, type DeviceState, type CommandHistoryItem,
 } from '../api/commands';
+import { applyFrpToDevice } from '../api/frp';
 import { useToast } from '../ui/toast';
 import { KioskEnterModal } from './KioskEnterModal';
 
@@ -90,6 +91,21 @@ export function ActionConsole({ device }: { device: Device }) {
     await send(t, {});
   }
 
+  async function applyFrp() {
+    if (!window.confirm('Apply factory reset protection using this tenant’s verified Google recovery accounts? Do not reset this device until the resulting command is done.')) return;
+    setBusy(true);
+    try {
+      const result = await applyFrpToDevice(device.number) as { id?: number } | undefined;
+      toast.push('ok', 'Factory reset protection queued', result?.id ? `Command ${result.id}` : '');
+      await forceSync(device.number).catch(() => undefined);
+      await refresh();
+    } catch (e) {
+      toast.push('err', 'Factory reset protection was not queued', e instanceof Error ? e.message : '');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function confirmAndSend() {
     if (!active) return;
     const t = active;
@@ -117,6 +133,17 @@ export function ActionConsole({ device }: { device: Device }) {
       </div>
 
       <DeviceStatePanel state={state} />
+      <section className="action-group">
+        <h3 className="action-group-title">Factory reset protection</h3>
+        <p className="muted">Uses this tenant’s OAuth-verified Google recovery accounts. Wait for command result <strong>done</strong> before a reset.</p>
+        <button
+          className="btn btn-primary"
+          disabled={busy || device.enrollmentMode === 'deviceAdmin'}
+          onClick={() => { void applyFrp(); }}
+        >
+          Apply verified FRP accounts
+        </button>
+      </section>
       {device.enrollmentMode === 'deviceAdmin' && (
         <p className="muted" style={{ marginBottom: 12 }}>
           Lite device (linked without a factory reset) — actions that need Device Owner are disabled below.

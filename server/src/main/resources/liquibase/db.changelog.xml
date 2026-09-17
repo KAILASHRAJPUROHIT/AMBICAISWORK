@@ -2938,4 +2938,36 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.09.17-frp-recovery-accounts" author="ambic" context="common">
+        <comment>Tenant-scoped OAuth-verified Google account IDs for Android enterprise factory reset protection. OAuth state is SHA-256-only, one-time, and short lived; no Google credential or token is persisted.</comment>
+        <sql>
+            CREATE TABLE frpRecoveryAccount (
+                id                SERIAL PRIMARY KEY,
+                customerId        INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+                googleUserId      VARCHAR(64) NOT NULL,
+                email             VARCHAR(320) NOT NULL,
+                connectedByUserId INT REFERENCES users(id) ON DELETE SET NULL,
+                connectedAt       BIGINT NOT NULL,
+                UNIQUE (customerId, googleUserId)
+            );
+            CREATE INDEX frpRecoveryAccount_customer_idx ON frpRecoveryAccount (customerId);
+            CREATE TABLE frpOAuthState (
+                id          SERIAL PRIMARY KEY,
+                stateHash   CHAR(64) NOT NULL UNIQUE,
+                customerId  INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+                userId      INT REFERENCES users(id) ON DELETE SET NULL,
+                expiresAt   BIGINT NOT NULL,
+                consumedAt  BIGINT
+            );
+            CREATE INDEX frpOAuthState_expiry_idx ON frpOAuthState (expiresAt);
+        </sql>
+        <rollback>
+            DROP INDEX frpOAuthState_expiry_idx;
+            DROP TABLE frpOAuthState;
+            DROP INDEX frpRecoveryAccount_customer_idx;
+            DROP TABLE frpRecoveryAccount;
+        </rollback>
+    </changeSet>
+
+
 </databaseChangeLog>

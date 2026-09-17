@@ -4,6 +4,7 @@ import com.mdmesh.core.command.CommandHandler
 import com.mdmesh.core.command.CommandResults
 import com.mdmesh.policy.PolicyOutcome
 import com.mdmesh.policy.TogglePolicy
+import com.mdmesh.policy.frp.FrpPolicy
 import com.mdmesh.proto.CommandEnvelope
 import com.mdmesh.proto.CommandResult
 import com.mdmesh.proto.ProtocolJson
@@ -29,6 +30,7 @@ class PolicyApplyHandler(
     private data class Payload(
         val policy: String,
         @SerialName("value") val enabled: Boolean,
+        val recoveryAccountIds: List<String>? = null,
     )
 
     override suspend fun handle(command: CommandEnvelope): CommandResult {
@@ -42,7 +44,10 @@ class PolicyApplyHandler(
         val toggle = toggles[parsed.policy]
             ?: return CommandResults.unsupported(command, "policy not supported: ${parsed.policy}")
 
-        return when (val outcome = toggle.setEnabled(parsed.enabled)) {
+        val outcome = if (toggle is FrpPolicy && parsed.enabled) {
+            toggle.enableWithAccounts(parsed.recoveryAccountIds ?: emptyList())
+        } else toggle.setEnabled(parsed.enabled)
+        return when (outcome) {
             PolicyOutcome.Applied -> CommandResults.done(command)
             PolicyOutcome.Unsupported -> CommandResults.unsupported(command)
             is PolicyOutcome.Failed -> CommandResults.failed(command, outcome.reason)

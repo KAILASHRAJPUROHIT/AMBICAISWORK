@@ -2,6 +2,7 @@ package com.mdmesh.policy.wifi
 
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
+import android.content.Context
 
 /**
  * Thin holder bundling the [DevicePolicyManager] with this agent's admin
@@ -11,4 +12,5 @@ import android.content.ComponentName
 data class DpmHandle(
     val dpm: DevicePolicyManager,
     val admin: ComponentName,
+    val context: Context,
 )

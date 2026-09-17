@@ -19,6 +19,9 @@ interface FrpPolicy : TogglePolicy {
 
     override fun setEnabled(enabled: Boolean): PolicyOutcome
 
+    /** IDs must originate from a server-verified recovery-account connection for this tenant. */
+    fun enableWithAccounts(accountIds: List<String>): PolicyOutcome
+
     companion object {
         const val CAPABILITY_KEY = "factoryResetProtection"
     }

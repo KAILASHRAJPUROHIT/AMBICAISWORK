@@ -11,6 +11,7 @@ import { getFleetSettings, setAdminPasscode } from '../api/settings';
 import { RolloutPanel } from '../components/RolloutPanel';
 import { AlertRulesPanel } from '../components/AlertRulesPanel';
 import { GeofencePanel } from '../components/GeofencePanel';
+import { beginFrpRecoveryAccountConnection, listFrpRecoveryAccounts, removeFrpRecoveryAccount, type FrpRecoveryAccount } from '../api/frp';
 import { orDash, fmtRelative } from '../ui/format';
 
 const APP_VERSION = '0.1.0';
@@ -34,6 +35,10 @@ export function SettingsPage() {
   const [passcodeInput, setPasscodeInput] = useState('');
   const [passcodeSaving, setPasscodeSaving] = useState(false);
   const [passcodeMsg, setPasscodeMsg] = useState<string | null>(null);
+  const [frpAccounts, setFrpAccounts] = useState<FrpRecoveryAccount[]>([]);
+  const [frpLoading, setFrpLoading] = useState(true);
+  const [frpBusy, setFrpBusy] = useState(false);
+  const [frpMsg, setFrpMsg] = useState<string | null>(null);
   const [defaultConfig, setDefaultConfig] = useState<string>(() => {
     try {
       return localStorage.getItem(DEFAULT_CONFIG_KEY) ?? '';
@@ -59,10 +64,38 @@ export function SettingsPage() {
     getFleetSettings()
       .then((s) => !cancelled && setAdminPasscodeSet(s.adminPasscodeSet))
       .catch(() => undefined);
+    listFrpRecoveryAccounts()
+      .then((accounts) => !cancelled && setFrpAccounts(accounts))
+      .catch(() => !cancelled && setFrpMsg('Recovery accounts are unavailable until the server is upgraded and Google OAuth is configured.'))
+      .finally(() => !cancelled && setFrpLoading(false));
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const connectFrpAccount = async () => {
+    setFrpBusy(true); setFrpMsg(null);
+    try {
+      const { authorizationUrl } = await beginFrpRecoveryAccountConnection();
+      window.location.assign(authorizationUrl);
+    } catch (e) {
+      setFrpMsg((e as Error)?.message || 'Could not start Google account connection.');
+      setFrpBusy(false);
+    }
+  };
+
+  const removeFrpAccount = async (account: FrpRecoveryAccount) => {
+    if (!window.confirm(`Remove ${account.email} from future FRP policies? Existing devices keep their current policy until FRP is explicitly reapplied or cleared.`)) return;
+    setFrpBusy(true); setFrpMsg(null);
+    try {
+      await removeFrpRecoveryAccount(account.id);
+      setFrpAccounts((items) => items.filter((item) => item.id !== account.id));
+    } catch (e) {
+      setFrpMsg((e as Error)?.message || 'Could not remove this recovery account.');
+    } finally {
+      setFrpBusy(false);
+    }
+  };
 
   const savePasscode = async () => {
     setPasscodeSaving(true);
@@ -182,6 +215,25 @@ export function SettingsPage() {
           <div className="set-row">
             <span className="k">Role</span>
             <span className="v">{user?.superAdmin ? 'Super admin' : 'Admin'}</span>
+          </div>
+          <div className="set-row">
+            <span className="k">
+              FRP recovery accounts
+              <small>Google accounts approved to unlock a Device Owner device after a factory reset. Google sign-in happens on Google; AMBIC MDM stores only verified numeric account IDs and display email.</small>
+            </span>
+            <span className="v">
+              <div className="upd-actions">
+                <button className="btn btn-sm btn-primary" disabled={frpBusy} onClick={() => void connectFrpAccount()}>
+                  {frpBusy ? 'Working…' : 'Connect Google account'}
+                </button>
+              </div>
+              {frpLoading ? <p className="au-note">Loading…</p> : frpAccounts.length === 0 ? <p className="au-note">No recovery accounts connected.</p> : (
+                <ul className="plain-list">
+                  {frpAccounts.map((account) => <li key={account.id}><span className="mono">{account.email}</span> <button className="btn btn-sm" disabled={frpBusy} onClick={() => void removeFrpAccount(account)}>Remove</button></li>)}
+                </ul>
+              )}
+              {frpMsg && <p className="au-note">{frpMsg}</p>}
+            </span>
           </div>
         </section>
 

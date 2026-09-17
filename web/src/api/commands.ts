@@ -261,14 +261,6 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     },
   },
   {
-    key: 'frp-on', label: 'Factory reset protection: on', group: 'safe', requiresDeviceOwner: true,
-    description: 'A hardware-level (Recovery-mode) wipe will require the fleet recovery account to unlock afterward.',
-    request: {
-      type: 'policy.apply', requiresCapability: 'policy.factoryResetProtection',
-      payload: JSON.stringify({ policy: 'factoryResetProtection', value: true }),
-    },
-  },
-  {
     key: 'frp-off', label: 'Factory reset protection: off', group: 'safe', requiresDeviceOwner: true,
     description: 'Clear FRP — use before a legitimate resale/repurpose wipe, otherwise the account lock will block setup.',
     request: {
