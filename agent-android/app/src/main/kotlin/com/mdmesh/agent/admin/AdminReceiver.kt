@@ -9,8 +9,11 @@ import android.os.Build
 import android.os.PersistableBundle
 import android.os.UserManager
 import com.mdmesh.core.config.ServerConfigStore
+import com.mdmesh.core.action.ResetPasswordTokenStore
 import com.mdmesh.core.store.EnrollTokenStore
 import com.mdmesh.core.sync.CheckInWorker
+import com.mdmesh.policy.PolicyManager
+import com.mdmesh.policy.wifi.DpmHandle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,7 +34,6 @@ class AdminReceiver : DeviceAdminReceiver() {
         setStableOrganizationId(context)
         grantLocationAccess(context)
         protectAgentProcess(context)
-        CheckInWorker.schedule(context)
     }
 
     override fun onProfileProvisioningComplete(context: Context, intent: Intent) {
@@ -41,6 +43,7 @@ class AdminReceiver : DeviceAdminReceiver() {
         setStableOrganizationId(context)
         grantLocationAccess(context)
         protectAgentProcess(context)
+        applyBaselinePolicy(context)
         // Capture the server URL from the QR bundle BEFORE any check-in, so one prebuilt APK can
         // serve any deployment (it falls back to the baked URL only when absent — dev/ADB).
         ServerConfigStore(context.applicationContext).save(extrasString(intent, EXTRA_SERVER_URL))
@@ -141,6 +144,34 @@ class AdminReceiver : DeviceAdminReceiver() {
                 ?: return
             if (!dpm.isDeviceOwnerApp(context.packageName)) return
             dpm.setUserControlDisabledPackages(componentName(context), listOf(context.packageName))
+        }
+    }
+
+    /** Applies Device-Owner baseline only after Setup Wizard has completed provisioning. */
+    private fun applyBaselinePolicy(context: Context) {
+        runCatching {
+            val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            val handle = DpmHandle(dpm, componentName(context), context.applicationContext)
+            PolicyManager(handle).setPermissionAutoGrant()
+            ResetPasswordTokenStore(context.applicationContext, handle).ensureToken()
+            listOf(
+                android.Manifest.permission.READ_PHONE_STATE,
+                android.Manifest.permission.READ_PHONE_NUMBERS,
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            ).forEach { permission ->
+                runCatching {
+                    dpm.setPermissionGrantState(
+                        handle.admin,
+                        context.packageName,
+                        permission,
+                        DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED,
+                    )
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                runCatching { dpm.setLocationEnabled(handle.admin, true) }
+            }
         }
     }
 

@@ -3,15 +3,14 @@ package com.mdmesh.agent
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import com.mdmesh.agent.service.WakeKeepAlive
-import com.mdmesh.core.sync.CheckInWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
 /**
  * Hilt application root. Also supplies the Hilt-aware [HiltWorkerFactory] so
- * WorkManager can construct injected workers ([CheckInWorker]), and schedules the
- * periodic check-in on startup.
+ * WorkManager can construct injected workers. Scheduling is deliberately owned by
+ * the Device Owner lifecycle callbacks, never application startup: Android loads
+ * the DPC while Setup Wizard is still completing provisioning.
  */
 @HiltAndroidApp
 class MdmApplication : Application(), Configuration.Provider {
@@ -23,10 +22,4 @@ class MdmApplication : Application(), Configuration.Provider {
             .setWorkerFactory(workerFactory)
             .build()
 
-    override fun onCreate() {
-        super.onCreate()
-        CheckInWorker.schedule(this)   // periodic reconcile (WorkManager floor)
-        CheckInWorker.scheduleNow(this) // prompt check-in on every cold start (post-install/reboot)
-        WakeKeepAlive.schedule(this)   // doze-proof reconcile heartbeat
-    }
 }

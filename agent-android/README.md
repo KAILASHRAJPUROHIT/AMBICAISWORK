@@ -77,10 +77,8 @@ factory-reset). Then:
 # 1. Install the agent.
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 
-# 2. Bind it as Device Owner (note the .debug applicationIdSuffix on debug builds).
-adb shell dpm set-device-owner com.mdmesh.agent.debug/com.mdmesh.agent.admin.AdminReceiver
-#   release build would be:
-#   adb shell dpm set-device-owner com.mdmesh.agent/com.mdmesh.agent.admin.AdminReceiver
+# 2. Bind it as Device Owner.
+adb shell dpm set-device-owner com.mdmesh.agent/com.mdmesh.agent.admin.AdminReceiver
 
 # 3. Confirm.
 adb shell dumpsys device_policy | grep -i "Device Owner"
@@ -95,7 +93,7 @@ A Device Owner cannot simply be uninstalled. To clear it:
 
 ```bash
 # Clears the DO binding (works on debug/userdebug builds).
-adb shell dpm remove-active-admin com.mdmesh.agent.debug/com.mdmesh.agent.admin.AdminReceiver
+adb shell dpm remove-active-admin com.mdmesh.agent/com.mdmesh.agent.admin.AdminReceiver
 
 # If that is blocked, factory reset:
 adb shell am broadcast -a android.intent.action.MASTER_CLEAR   # or wipe via Settings / recovery
