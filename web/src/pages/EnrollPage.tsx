@@ -19,7 +19,14 @@ const STEPS = [
   { title: 'Wait for enrollment', sub: 'The device appears in Devices after its first check-in.' },
 ];
 
-type Mode = 'qr' | 'token';
+const LITE_STEPS = [
+  { title: 'Open this link on the device', sub: 'No reset needed — works on a device that\'s already set up and in daily use.' },
+  { title: 'Install the APK', sub: 'Android may ask to allow installs from this source — allow it for this one install.' },
+  { title: 'Open AMBIC MDM', sub: 'With no enrollment token on the device yet, it goes straight to a link screen.' },
+  { title: 'Sign in with your admin email + password', sub: 'The same login as this console. The device links as Lite tier — Device Admin, not Device Owner.' },
+];
+
+type Mode = 'qr' | 'token' | 'lite';
 
 export function EnrollPage() {
   const toast = useToast();
@@ -99,6 +106,7 @@ export function EnrollPage() {
           <span className="seg" role="tablist" aria-label="Enrollment method">
             <button className={mode === 'qr' ? 'on' : ''} onClick={() => setMode('qr')}>Scan QR</button>
             <button className={mode === 'token' ? 'on' : ''} onClick={() => setMode('token')}>Token</button>
+            <button className={mode === 'lite' ? 'on' : ''} onClick={() => setMode('lite')}>Lite (no reset)</button>
           </span>
         </div>
 
@@ -213,6 +221,53 @@ export function EnrollPage() {
               ) : (
                 <p className="note">For headless or scripted provisioning. For the usual flow, scan the QR.</p>
               )}
+            </div>
+          </section>
+        )}
+
+        {mode === 'lite' && (
+          <section className="panel">
+            <div className="panel-head">
+              <h2 className="panel-title">Link without a reset</h2>
+            </div>
+            <div className="qr-layout">
+              <div style={{ padding: '0 20px 20px', maxWidth: 420 }}>
+                <p className="note" style={{ marginTop: 0 }}>
+                  For a device that's already set up and in daily use, where a factory reset isn't an
+                  option. The device links as <b>Lite tier</b> — Device Admin only, not Device Owner, so
+                  some fleet actions (including factory reset protection) aren't available on it, and
+                  kiosk exit relies on a watchdog rather than a hard lock.
+                </p>
+                <div className="token-box">
+                  <span className="tok mono">{agentApkUrl()}</span>
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    aria-label="Copy install link"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(agentApkUrl());
+                        toast.push('ok', 'Link copied', 'Open it on the device to install the agent.');
+                      } catch {
+                        toast.push('err', 'Copy failed', 'Select and copy the link manually.');
+                      }
+                    }}
+                  >
+                    <IconCopy className="ico" />
+                  </button>
+                </div>
+                <p className="note">
+                  Send this link to the device however is easiest — a chat message, email, or typing it
+                  into the device's browser directly.
+                </p>
+              </div>
+              <ol className="qr-steps" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                {LITE_STEPS.map((s, i) => (
+                  <li className="qr-step" key={i}>
+                    <span className="step-n">{i + 1}</span>
+                    <span className="st-tx">{s.title}<span className="sub">{s.sub}</span></span>
+                  </li>
+                ))}
+              </ol>
             </div>
           </section>
         )}
