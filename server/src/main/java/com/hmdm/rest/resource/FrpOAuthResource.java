@@ -1,7 +1,7 @@
 package com.hmdm.rest.resource;
 
-import com.google.inject.Inject;
-import com.google.inject.Singleton;
+import javax.inject.Inject;
+import javax.inject.Singleton;
 import com.hmdm.service.GoogleFrpOAuthService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
