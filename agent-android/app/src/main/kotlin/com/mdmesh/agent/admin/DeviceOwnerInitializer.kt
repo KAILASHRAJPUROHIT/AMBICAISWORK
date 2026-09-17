@@ -5,6 +5,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.os.Build
 import com.mdmesh.core.action.ResetPasswordTokenStore
+import com.mdmesh.core.device.AppInventoryCache
 import com.mdmesh.policy.PolicyManager
 import com.mdmesh.policy.wifi.DpmHandle
 
@@ -51,5 +52,10 @@ object DeviceOwnerInitializer {
                 )
             }
         }
+
+        // Warm the kiosk app picker's inventory now, while an admin is still setting the device
+        // up, so "Manage apps" is instant the first time someone actually opens it - not the
+        // moment they're standing at the device wanting to add/remove an app.
+        runCatching { AppInventoryCache.warm(appContext) }
     }
 }

@@ -30,6 +30,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.distinctUntilChanged
 import com.mdmesh.agent.service.CheckInService
 import com.mdmesh.core.action.ResetPasswordTokenStore
+import com.mdmesh.core.device.AppInventoryCache
 import com.mdmesh.core.device.AppInventoryCollector
 import com.mdmesh.core.store.AdminPasscodeStore
 import com.mdmesh.core.store.KioskStateStore
@@ -359,8 +360,13 @@ class KioskLauncherActivity : FragmentActivity() {
      *  without a console round-trip. Reuses [AppInventoryCollector], the same source the console's
      *  own app picker uses, so the list matches exactly. */
     private fun manageAppsDialog(current: KioskApplyPayload) {
-        val apps = runCatching { AppInventoryCollector(this).scan() }.getOrDefault(emptyList())
-            .filterNot { it.pkg == packageName } // we're always allowed; don't show ourselves as a toggle
+        // Instant path: DeviceOwnerInitializer already warmed this after enrollment, so opening
+        // this dialog normally never waits on a live scan. Falls back to scanning live (and
+        // populating the cache for next time) for an agent that enrolled before this cache
+        // existed, or if warming failed for some reason - a stale cache is never worse than an
+        // empty one, but an empty one when a real scan would have worked is a real regression.
+        val apps = (AppInventoryCache.get() ?: run { AppInventoryCache.warm(this); AppInventoryCache.get() }
+            ?: emptyList()).filterNot { it.pkg == packageName } // we're always allowed; don't show ourselves as a toggle
         if (apps.isEmpty()) {
             toastShort("No launchable apps found")
             return
