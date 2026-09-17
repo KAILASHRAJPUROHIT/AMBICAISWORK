@@ -92,6 +92,11 @@ public class AgentCommandDAO {
         return mapper.listHistory(deviceNumber, since, limit);
     }
 
+    /** Device numbers with an FRP-enable command queued but not yet done, for this tenant. */
+    public List<String> listPendingFrpDeviceNumbers(int customerId) {
+        return mapper.listPendingFrpDeviceNumbers(customerId);
+    }
+
     /** Upsert the latest device-state snapshot. */
     public void upsertState(DeviceState state) {
         stateMapper.upsert(state);

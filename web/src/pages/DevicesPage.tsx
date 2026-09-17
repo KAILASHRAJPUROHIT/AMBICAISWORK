@@ -13,6 +13,7 @@ import {
   type ConfigurationLookup,
 } from '../api/devices';
 import { listConfigurations, type ConfigurationSummary } from '../api/configurations';
+import { listPendingFrpDevices } from '../api/frp';
 import { BulkActionModal } from '../components/BulkActionModal';
 
 type View = 'grid' | 'list';
@@ -76,10 +77,14 @@ export function DevicesPage() {
   const [actionsOpen, setActionsOpen] = useState(false);
   const [target, setTarget] = useState('');
   const [busy, setBusy] = useState(false);
+  const [frpPending, setFrpPending] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     listConfigurations()
       .then((l) => setAllConfigs([...l].sort((a, b) => a.name.localeCompare(b.name))))
+      .catch(() => undefined);
+    listPendingFrpDevices()
+      .then((numbers) => setFrpPending(new Set(numbers)))
       .catch(() => undefined);
   }, []);
 
@@ -329,6 +334,7 @@ export function DevicesPage() {
                   dup={dupOf(d)}
                   selected={selected.has(d.id)}
                   selectionActive={selectionActive}
+                  frpPending={frpPending.has(d.number)}
                   onToggle={() => toggle(d.id)}
                   onOpen={() => go(d)}
                 />
@@ -345,6 +351,7 @@ export function DevicesPage() {
                   dup={dupOf(d)}
                   selected={selected.has(d.id)}
                   selectionActive={selectionActive}
+                  frpPending={frpPending.has(d.number)}
                   onToggle={() => toggle(d.id)}
                   onOpen={() => go(d)}
                 />
@@ -445,6 +452,17 @@ function LiteBadge() {
   );
 }
 
+function FrpPendingBadge() {
+  return (
+    <span
+      className="lite-badge"
+      title="Factory reset protection was queued for this device but has not yet been confirmed applied — do not reset until the command shows done"
+    >
+      FRP pending
+    </span>
+  );
+}
+
 function DeviceCard({
   d,
   now,
@@ -452,6 +470,7 @@ function DeviceCard({
   dup,
   selected,
   selectionActive,
+  frpPending,
   onToggle,
   onOpen,
 }: {
@@ -461,6 +480,7 @@ function DeviceCard({
   dup: number;
   selected: boolean;
   selectionActive: boolean;
+  frpPending: boolean;
   onToggle: () => void;
   onOpen: () => void;
 }) {
@@ -481,6 +501,7 @@ function DeviceCard({
         <span className="nm">{orDash(d.number)}</span>
         {dup > 1 && <DupBadge n={dup} />}
         {d.enrollmentMode === 'deviceAdmin' && <LiteBadge />}
+        {frpPending && <FrpPendingBadge />}
         <DeviceGlyph className="ico" name={d.description || d.number} size={16} />
       </div>
       {d.description && <div className="sub">{d.description}</div>}
@@ -509,6 +530,7 @@ function DeviceRow({
   dup,
   selected,
   selectionActive,
+  frpPending,
   onToggle,
   onOpen,
 }: {
@@ -518,6 +540,7 @@ function DeviceRow({
   dup: number;
   selected: boolean;
   selectionActive: boolean;
+  frpPending: boolean;
   onToggle: () => void;
   onOpen: () => void;
 }) {
@@ -541,6 +564,7 @@ function DeviceRow({
         </div>
         {dup > 1 && <DupBadge n={dup} />}
         {d.enrollmentMode === 'deviceAdmin' && <LiteBadge />}
+        {frpPending && <FrpPendingBadge />}
       </div>
       <div className="lc">
         <span className="lk">Android</span>

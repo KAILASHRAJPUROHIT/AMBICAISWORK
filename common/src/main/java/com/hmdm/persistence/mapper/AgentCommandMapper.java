@@ -86,4 +86,11 @@ public interface AgentCommandMapper {
             "ORDER BY id DESC LIMIT #{limit}"})
     List<AgentCommand> listHistory(@Param("deviceNumber") String deviceNumber,
                                    @Param("since") long since, @Param("limit") int limit);
+    /** Device numbers (within this tenant) with an FRP-enable command queued but not yet done -
+     * the "FRP pending" badge is driven off this, so nobody assumes protection before it's confirmed. */
+    @Select({"SELECT DISTINCT c.deviceNumber FROM agentCommand c JOIN devices d ON d.number = c.deviceNumber " +
+            "WHERE d.customerId = #{customerId} AND c.type = 'policy.apply' " +
+            "AND c.requiresCapability IN ('factoryResetProtection','policy.factoryResetProtection') " +
+            "AND c.status IN ('pending','delivered')"})
+    List<String> listPendingFrpDeviceNumbers(@Param("customerId") int customerId);
 }

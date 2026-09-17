@@ -7,11 +7,10 @@ import com.hmdm.persistence.FrpRecoveryAccountDAO;
 import com.hmdm.persistence.UnsecureDAO;
 import com.hmdm.persistence.domain.AgentCommand;
 import com.hmdm.persistence.domain.Device;
-import com.hmdm.persistence.domain.FrpRecoveryAccount;
 import com.hmdm.rest.json.Response;
 import com.hmdm.security.SecurityContext;
+import com.hmdm.service.FrpApplyService;
 import com.hmdm.service.GoogleFrpOAuthService;
-import org.json.JSONObject;
 
 import javax.ws.rs.DELETE;
 import javax.ws.rs.GET;
@@ -21,7 +20,6 @@ import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 
 /** Tenant-only FRP recovery account management and safe device policy dispatch. */
@@ -30,13 +28,15 @@ import java.util.Optional;
 public class FrpRecoveryAccountResource {
     private final FrpRecoveryAccountDAO accounts;
     private final GoogleFrpOAuthService oauth;
-    private final AgentCommandDAO commands;
+    private final FrpApplyService applyService;
     private final UnsecureDAO devices;
+    private final AgentCommandDAO commands;
 
     @Inject
     public FrpRecoveryAccountResource(FrpRecoveryAccountDAO accounts, GoogleFrpOAuthService oauth,
-                                      AgentCommandDAO commands, UnsecureDAO devices) {
-        this.accounts = accounts; this.oauth = oauth; this.commands = commands; this.devices = devices;
+                                      FrpApplyService applyService, UnsecureDAO devices, AgentCommandDAO commands) {
+        this.accounts = accounts; this.oauth = oauth; this.applyService = applyService;
+        this.devices = devices; this.commands = commands;
     }
 
     @GET @Path("/accounts") @Produces(MediaType.APPLICATION_JSON)
@@ -73,20 +73,16 @@ public class FrpRecoveryAccountResource {
         Device device = devices.getDeviceByNumber(deviceId);
         if (device == null) return Response.DEVICE_NOT_FOUND_ERROR();
         if (device.getCustomerId() != customerId.get()) return Response.PERMISSION_DENIED();
-        List<FrpRecoveryAccount> configured = accounts.list(customerId.get());
-        if (configured.isEmpty()) return Response.ERROR("Connect at least one Google recovery account before enabling FRP");
-        org.json.JSONArray ids = new org.json.JSONArray();
-        for (FrpRecoveryAccount account : configured) ids.put(account.getGoogleUserId());
-        AgentCommand command = new AgentCommand();
-        command.setDeviceNumber(deviceId);
-        command.setType("policy.apply");
-        command.setPayload(new JSONObject().put("policy", "factoryResetProtection").put("value", true)
-                .put("recoveryAccountIds", ids).toString());
-        command.setRequiresCapability("factoryResetProtection");
-        command.setStatus("pending");
-        command.setCreatedAt(System.currentTimeMillis());
-        commands.insert(command);
+        AgentCommand command = applyService.queueIfAccountsConnected(customerId.get(), deviceId);
+        if (command == null) return Response.ERROR("Connect at least one Google recovery account before enabling FRP");
         return Response.OK(command);
+    }
+
+    /** Device numbers with an FRP-enable command queued but not yet done - drives the "FRP pending" badge. */
+    @GET @Path("/pending-devices") @Produces(MediaType.APPLICATION_JSON)
+    public Response pendingDevices() {
+        Optional<Integer> customerId = currentCustomer();
+        return customerId.isPresent() ? Response.OK(commands.listPendingFrpDeviceNumbers(customerId.get())) : Response.PERMISSION_DENIED();
     }
 
     private static Optional<Integer> currentCustomer() {

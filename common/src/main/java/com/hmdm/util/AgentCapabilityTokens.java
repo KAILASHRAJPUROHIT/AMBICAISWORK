@@ -131,6 +131,15 @@ public final class AgentCapabilityTokens {
         if (requiresCapability == null || requiresCapability.isEmpty()) {
             return true;
         }
-        return deviceTokens != null && deviceTokens.contains(requiresCapability);
+        if (deviceTokens == null) {
+            return false;
+        }
+        if (deviceTokens.contains(requiresCapability)) {
+            return true;
+        }
+        // v0.2.18 briefly queued FRP commands without the policy. namespace. Keep this
+        // narrowly-scoped compatibility path so those existing commands are not stranded.
+        return "factoryResetProtection".equals(requiresCapability)
+                && deviceTokens.contains("policy.factoryResetProtection");
     }
 }

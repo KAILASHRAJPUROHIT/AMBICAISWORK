@@ -121,6 +121,13 @@ public class AgentCapabilityTokensTest {
     }
 
     @Test
+    public void testLegacyUnprefixedFrpTokenPasses() {
+        Set<String> deviceTokens = AgentCapabilityTokens.flatten(
+                "{\"policy\":[\"factoryResetProtection\"]}");
+        Assert.assertTrue(AgentCapabilityTokens.isAllowed("factoryResetProtection", deviceTokens));
+    }
+
+    @Test
     public void testRequiredTokenAbsentBlocked() {
         Set<String> deviceTokens = AgentCapabilityTokens.flatten("{\"policy\":[\"wifi\"]}");
         Assert.assertFalse(AgentCapabilityTokens.isAllowed("app.silentInstall", deviceTokens));

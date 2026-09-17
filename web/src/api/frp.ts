@@ -17,6 +17,9 @@ export const beginFrpRecoveryAccountConnection = () =>
 
 export const removeFrpRecoveryAccount = (id: number) => apiClient.del(`${BASE}/accounts/${id}`);
 
+/** Device numbers with an FRP-enable command queued but not yet done. */
+export const listPendingFrpDevices = () => apiClient.get<string[]>(`${BASE}/pending-devices`);
+
 /** Queues an ID-bearing EFRP command; Android rejects the old unsafe generic enable action. */
 export const applyFrpToDevice = (deviceId: string) =>
   apiClient.post(`${BASE}/devices/${encodeURIComponent(deviceId)}/apply`, {});

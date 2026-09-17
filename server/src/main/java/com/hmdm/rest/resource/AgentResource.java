@@ -97,6 +97,7 @@ public class AgentResource {
     private com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller;
     private com.hmdm.service.AlertDispatcher alertDispatcher;
     private com.hmdm.service.GeofenceEvaluator geofenceEvaluator;
+    private com.hmdm.service.FrpApplyService frpApplyService;
     private LocalAuth localAuth;
 
     /** Guards {@link #enrollByCredentials}: this is a public, unauthenticated, credential-bearing
@@ -118,6 +119,7 @@ public class AgentResource {
                          com.hmdm.rest.resource.support.ConfigAppInstaller configAppInstaller,
                          com.hmdm.service.AlertDispatcher alertDispatcher,
                          com.hmdm.service.GeofenceEvaluator geofenceEvaluator,
+                         com.hmdm.service.FrpApplyService frpApplyService,
                          LocalAuth localAuth) {
         this.unsecureDAO = unsecureDAO;
         this.tokenDAO = tokenDAO;
@@ -125,6 +127,7 @@ public class AgentResource {
         this.configAppInstaller = configAppInstaller;
         this.alertDispatcher = alertDispatcher;
         this.geofenceEvaluator = geofenceEvaluator;
+        this.frpApplyService = frpApplyService;
         this.localAuth = localAuth;
     }
 
@@ -179,6 +182,12 @@ public class AgentResource {
             commandDAO.updateDeviceSecretHash(deviceId, CryptoUtil.getSHA256String(deviceSecret));
             commandDAO.updateDeviceCapabilities(deviceId, capabilitiesJson(request.getCapabilities()));
             commandDAO.updateEnrollmentMode(deviceId, "deviceOwner");
+            // Auto-queue FRP using whatever recovery accounts this tenant has already verified via
+            // OAuth - queueIfAccountsConnected() is a deliberate no-op (not a fallback identity) when
+            // none are connected yet, so this can never regress into the old unverified-account bug.
+            // The console flags this device as "FRP pending" until the queued command reports done -
+            // enrollment queues it, it does not promise it, and nobody should reset before that lands.
+            frpApplyService.queueIfAccountsConnected(token.getCustomerId(), deviceId);
             // Record the agent's stable hardware id so duplicate enrollments of the same physical
             // device can be detected/flagged in the admin UI (we still create a fresh row per enroll).
             if (request.getHardwareId() != null && !request.getHardwareId().trim().isEmpty()) {
