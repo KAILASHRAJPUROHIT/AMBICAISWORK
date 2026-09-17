@@ -65,7 +65,7 @@ jobs:
           CODE: ${{ steps.ver.outputs.code }}
         run: |
           gradle --no-daemon :proto:test :core:test :app:assembleRelease \
-            -PmdmBaseUrl=https://mdm.example.com/ \
+            -PmdmBaseUrl=https://mdm.ambicdigital.in/ \
             -PversionName="$VERSION" -PversionCode="$CODE"
       - name: Stage APK + compute checksum
         run: |

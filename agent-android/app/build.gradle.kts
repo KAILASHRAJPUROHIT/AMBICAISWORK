@@ -67,7 +67,14 @@ android {
             if (System.getenv("MDM_RELEASE_STORE_FILE") != null) {
                 signingConfig = signingConfigs.getByName("release")
             }
-            buildConfigField("String", "MDM_BASE_URL", "\"https://mdm.example.com/\"")
+            // Falls back through the QR/provisioning bundle's own SERVER_URL for Device-Owner
+            // enrollment (ServerConfigStore) regardless - this baked-in value is what Lite
+            // enrollment (a direct APK install, no provisioning bundle) actually uses at first
+            // launch, so it must be the real server, not a placeholder. -PmdmBaseUrl overrides
+            // it (release.yml passes the production URL); this default only matters for a local
+            // release build run without that flag.
+            val mdmBaseUrl = (project.findProperty("mdmBaseUrl") as String? ?: "https://mdm.example.com/")
+            buildConfigField("String", "MDM_BASE_URL", "\"$mdmBaseUrl\"")
         }
     }
 
