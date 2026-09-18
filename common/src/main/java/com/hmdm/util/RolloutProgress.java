@@ -24,6 +24,7 @@ package com.hmdm.util;
 import com.hmdm.persistence.domain.RolloutDeviceRow;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -58,6 +59,45 @@ public final class RolloutProgress {
             return Status.INELIGIBLE; // too old / can't self-install — the gate would block the command
         }
         return hasPending ? Status.PENDING : Status.OUTSTANDING;
+    }
+
+    /** Classify one device for a "command"-tracked rollout (any app other than the agent itself —
+     *  see {@code AgentRollout.trackingMode}) — progress comes from the live status of the specific
+     *  app.install command recorded for this device, not a version comparison (the server has no
+     *  installed-version record for an arbitrary package). {@code commandStatus} is null when no
+     *  command has been enqueued for this device under this rollout yet. */
+    public static Status classifyByCommand(RolloutDeviceRow row, String commandStatus) {
+        Set<String> tokens = AgentCapabilityTokens.flatten(row == null ? null : row.getCapabilitiesJson());
+        if (!AgentCapabilityTokens.isAllowed(INSTALL_CAPABILITY, tokens)) {
+            return Status.INELIGIBLE;
+        }
+        if (commandStatus == null) return Status.OUTSTANDING;
+        switch (commandStatus) {
+            case "done": return Status.UPDATED;
+            case "pending":
+            case "delivered": return Status.PENDING;
+            default: return Status.OUTSTANDING; // failed/expired — eligible for a fresh attempt
+        }
+    }
+
+    /** Tally a cohort for a "command"-tracked rollout. {@code commandStatusByDevice} = each
+     *  device's live app.install command status (see {@link #classifyByCommand}), keyed by
+     *  device number; devices with no entry are treated as not yet targeted. */
+    public static Counts countsByCommand(List<RolloutDeviceRow> rows, Map<String, String> commandStatusByDevice) {
+        Counts c = new Counts();
+        if (rows == null) return c;
+        for (RolloutDeviceRow row : rows) {
+            c.total++;
+            String status = (commandStatusByDevice == null || row == null)
+                    ? null : commandStatusByDevice.get(row.getDeviceNumber());
+            switch (classifyByCommand(row, status)) {
+                case UPDATED:     c.updated++; break;
+                case INELIGIBLE:  c.ineligible++; break;
+                case PENDING:     c.pending++; break;
+                default:          c.outstanding++; break;
+            }
+        }
+        return c;
     }
 
     /** Tally a cohort. {@code pendingDeviceNumbers} = the set with an outstanding app.install. */

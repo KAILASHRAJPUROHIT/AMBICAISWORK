@@ -2978,4 +2978,37 @@
         <rollback>ALTER TABLE devices DROP COLUMN fcmToken;</rollback>
     </changeSet>
 
+    <changeSet id="26.09.18-rollout-per-package" author="ambic" context="common">
+        <comment>agentRollout: generalize from "one active rollout per customer" (agent-only) to
+        "one active rollout per (customer, package)", so a Library-app push can run concurrently
+        with the agent's own self-update rollout. Adds trackingMode ("version": compare against
+        device_state.agentVersion, agent-only; "command": derive progress from the live status of
+        the specific app.install command enqueued per device — see agentRolloutCommand below, used
+        for any other app since the server has no installed-version record for arbitrary packages)
+        and displayName (a "command"-tracked rollout's app name; null for "version"-tracked ones,
+        which the UI already labels by targetVersion).</comment>
+        <sql>
+            DROP INDEX uq_agentRollout_active;
+            CREATE UNIQUE INDEX uq_agentRollout_active ON agentRollout (customerId, packageName)
+                WHERE stage IN ('canary','fleet');
+            ALTER TABLE agentRollout ADD COLUMN trackingMode VARCHAR(16) NOT NULL DEFAULT 'version';
+            ALTER TABLE agentRollout ADD COLUMN displayName VARCHAR(255);
+
+            CREATE TABLE agentRolloutCommand (
+                rolloutId    INT NOT NULL REFERENCES agentRollout(id) ON DELETE CASCADE,
+                deviceNumber VARCHAR(255) NOT NULL,
+                commandId    INT NOT NULL,
+                PRIMARY KEY (rolloutId, deviceNumber)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE agentRolloutCommand;
+            ALTER TABLE agentRollout DROP COLUMN displayName;
+            ALTER TABLE agentRollout DROP COLUMN trackingMode;
+            DROP INDEX uq_agentRollout_active;
+            CREATE UNIQUE INDEX uq_agentRollout_active ON agentRollout (customerId)
+                WHERE stage IN ('canary','fleet');
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

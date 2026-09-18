@@ -7,6 +7,7 @@ import {
   type AppConfigLink,
 } from '../api/applications';
 import { installApp } from '../api/commands';
+import { createAppRollout } from '../api/appRollout';
 import { statusMeta } from '../ui/status';
 import { fmtRelative, orDash } from '../ui/format';
 import { useToast } from '../ui/toast';
@@ -20,6 +21,10 @@ export interface DeploySubject {
   sha256?: string;
   /** Present only for library apps — required for assign-to-configuration. */
   applicationId?: number;
+  /** Present only for a single-APK (non-split) library version with a hosted URL — enables the
+   *  tracked push (progress + "pending per device", via the Library rollout panel) instead of the
+   *  untracked fire-and-forget push. */
+  applicationVersionId?: number;
   /** Split-APK bundle parts — when set, push-to-device installs these together.
    *  (Config-assign stays single-URL and ignores this.) */
   parts?: { url: string; sha256?: string }[];
@@ -78,6 +83,24 @@ export function DeployModal({
   async function pushNow() {
     if (picked.size === 0) return;
     setBusy(true);
+
+    // A single-APK library version pushes through the tracked rollout path — real progress +
+    // "pending per device" on the Apps page, and it guards against double-pushing the same app
+    // while one is already in flight. Everything else (Custom APK / F-Droid / split bundles —
+    // nothing the server has a stable version row for) keeps the untracked fire-and-forget push.
+    if (subject.applicationVersionId != null) {
+      try {
+        await createAppRollout(subject.applicationVersionId, [...picked]);
+        toast.push('ok', `Deploy ${subject.label}`, `Queued to ${picked.size} device${picked.size === 1 ? '' : 's'} — see progress on the Apps page.`);
+        onClose();
+      } catch (e) {
+        toast.push('err', 'Deploy failed', e instanceof Error ? e.message : '');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     let ok = 0;
     let fail = 0;
     for (const num of picked) {

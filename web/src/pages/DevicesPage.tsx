@@ -14,6 +14,7 @@ import {
 } from '../api/devices';
 import { listConfigurations, type ConfigurationSummary } from '../api/configurations';
 import { listPendingFrpDevices } from '../api/frp';
+import { listActiveAppRollouts } from '../api/appRollout';
 import { BulkActionModal } from '../components/BulkActionModal';
 
 type View = 'grid' | 'list';
@@ -78,6 +79,7 @@ export function DevicesPage() {
   const [target, setTarget] = useState('');
   const [busy, setBusy] = useState(false);
   const [frpPending, setFrpPending] = useState<Set<string>>(new Set());
+  const [updatePending, setUpdatePending] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     listConfigurations()
@@ -85,6 +87,18 @@ export function DevicesPage() {
       .catch(() => undefined);
     listPendingFrpDevices()
       .then((numbers) => setFrpPending(new Set(numbers)))
+      .catch(() => undefined);
+    listActiveAppRollouts()
+      .then((rollouts) => {
+        const m = new Map<string, string>();
+        for (const r of rollouts) {
+          const name = r.displayName ?? r.packageName;
+          for (const d of [...r.progress.canaryDevices, ...(r.progress.fleetDevices ?? [])]) {
+            if (d.status === 'PENDING' || d.status === 'OUTSTANDING') m.set(d.deviceNumber, name);
+          }
+        }
+        setUpdatePending(m);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -335,6 +349,7 @@ export function DevicesPage() {
                   selected={selected.has(d.id)}
                   selectionActive={selectionActive}
                   frpPending={frpPending.has(d.number)}
+                  updatePendingApp={updatePending.get(d.number)}
                   onToggle={() => toggle(d.id)}
                   onOpen={() => go(d)}
                 />
@@ -352,6 +367,7 @@ export function DevicesPage() {
                   selected={selected.has(d.id)}
                   selectionActive={selectionActive}
                   frpPending={frpPending.has(d.number)}
+                  updatePendingApp={updatePending.get(d.number)}
                   onToggle={() => toggle(d.id)}
                   onOpen={() => go(d)}
                 />
@@ -463,6 +479,14 @@ function FrpPendingBadge() {
   );
 }
 
+function UpdatePendingBadge({ appName }: { appName: string }) {
+  return (
+    <span className="lite-badge" title={`${appName} update queued — installing on next check-in`}>
+      Update pending
+    </span>
+  );
+}
+
 function DeviceCard({
   d,
   now,
@@ -471,6 +495,7 @@ function DeviceCard({
   selected,
   selectionActive,
   frpPending,
+  updatePendingApp,
   onToggle,
   onOpen,
 }: {
@@ -481,6 +506,7 @@ function DeviceCard({
   selected: boolean;
   selectionActive: boolean;
   frpPending: boolean;
+  updatePendingApp?: string;
   onToggle: () => void;
   onOpen: () => void;
 }) {
@@ -502,6 +528,7 @@ function DeviceCard({
         {dup > 1 && <DupBadge n={dup} />}
         {d.enrollmentMode === 'deviceAdmin' && <LiteBadge />}
         {frpPending && <FrpPendingBadge />}
+        {updatePendingApp && <UpdatePendingBadge appName={updatePendingApp} />}
         <DeviceGlyph className="ico" name={d.description || d.number} size={16} />
       </div>
       {d.description && <div className="sub">ID: {d.number}</div>}
@@ -531,6 +558,7 @@ function DeviceRow({
   selected,
   selectionActive,
   frpPending,
+  updatePendingApp,
   onToggle,
   onOpen,
 }: {
@@ -541,6 +569,7 @@ function DeviceRow({
   selected: boolean;
   selectionActive: boolean;
   frpPending: boolean;
+  updatePendingApp?: string;
   onToggle: () => void;
   onOpen: () => void;
 }) {
@@ -565,6 +594,7 @@ function DeviceRow({
         {dup > 1 && <DupBadge n={dup} />}
         {d.enrollmentMode === 'deviceAdmin' && <LiteBadge />}
         {frpPending && <FrpPendingBadge />}
+        {updatePendingApp && <UpdatePendingBadge appName={updatePendingApp} />}
       </div>
       <div className="lc">
         <span className="lk">Android</span>

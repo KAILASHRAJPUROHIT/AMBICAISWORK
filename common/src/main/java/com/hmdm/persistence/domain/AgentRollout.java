@@ -37,6 +37,15 @@ public class AgentRollout implements Serializable {
     private String stage;       // canary | fleet | done | cancelled
     private Long createdAt;
     private Long updatedAt;
+    // "version" (default): progress is derived by comparing each device's reported agentVersion —
+    // only meaningful for the agent's own self-update rollout, which is the only thing that reports
+    // a version this way. "command": progress is derived from the live status of the specific
+    // app.install command enqueued per device (see agentRolloutCommand) — used for any other app,
+    // where there's no server-side record of "installed version" to compare against.
+    private String trackingMode = "version";
+    // Human-readable label for a "command"-tracked rollout (e.g. the app's display name) — null for
+    // "version"-tracked (agent) rollouts, which the UI already labels by targetVersion.
+    private String displayName;
 
     public Integer getId() { return id; }
     public void setId(Integer id) { this.id = id; }
@@ -67,4 +76,10 @@ public class AgentRollout implements Serializable {
 
     public Long getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Long updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getTrackingMode() { return trackingMode; }
+    public void setTrackingMode(String trackingMode) { this.trackingMode = trackingMode; }
+
+    public String getDisplayName() { return displayName; }
+    public void setDisplayName(String displayName) { this.displayName = displayName; }
 }

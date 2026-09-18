@@ -13,6 +13,7 @@ import {
 } from '../api/applications';
 import { searchFdroid, type FDroidApp } from '../api/fdroid';
 import { DeployModal, type DeploySubject } from '../components/DeployModal';
+import { AppRolloutStatus } from '../components/AppRolloutStatus';
 
 type SourceId = 'library' | 'custom' | 'fdroid' | 'play';
 
@@ -42,6 +43,7 @@ async function resolveApp(app: Application): Promise<DeploySubject> {
   let versionCode = app.versionCode;
   let sha256: string | undefined;
   let partsJson: string | undefined = app.parts;
+  let applicationVersionId: number | undefined;
   try {
     const vs = await getVersions(app.id);
     const latest = [...vs]
@@ -52,6 +54,10 @@ async function resolveApp(app: Application): Promise<DeploySubject> {
       versionCode = latest.versionCode ?? versionCode;
       sha256 = latest.apkHash || undefined;
       partsJson = latest.parts ?? partsJson;
+      // Tracked (pending-per-device) push needs a single-APK, non-split version with a real
+      // server-recorded id — split bundles and versions with no hosted URL fall back to the
+      // untracked push-now path below.
+      if (latest.id != null && latest.url) applicationVersionId = latest.id;
     }
   } catch {
     /* fall back to the app's own fields */
@@ -65,7 +71,10 @@ async function resolveApp(app: Application): Promise<DeploySubject> {
     }
   }
   if (!url && !(parts && parts.length)) throw new Error('This app has no APK to deploy.');
-  return { label: app.name, packageName: app.pkg, url: url ?? '', versionCode, sha256, applicationId: app.id, parts };
+  return {
+    label: app.name, packageName: app.pkg, url: url ?? '', versionCode, sha256,
+    applicationId: app.id, applicationVersionId, parts,
+  };
 }
 
 export function AppsPage() {
@@ -100,6 +109,7 @@ export function AppsPage() {
         ))}
       </span>
 
+      {source === 'library' && <AppRolloutStatus />}
       {source === 'library' && (
         <LibrarySource onDeploy={(app) => {
           resolveApp(app)

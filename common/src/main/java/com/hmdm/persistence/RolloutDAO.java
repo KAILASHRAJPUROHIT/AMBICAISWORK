@@ -24,6 +24,7 @@ package com.hmdm.persistence;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.hmdm.persistence.domain.AgentRollout;
+import com.hmdm.persistence.domain.RolloutCommandStatusRow;
 import com.hmdm.persistence.domain.RolloutDeviceRow;
 import com.hmdm.persistence.mapper.RolloutMapper;
 
@@ -52,6 +53,14 @@ public class RolloutDAO {
         return mapper.findActiveByCustomer(customerId);
     }
 
+    public AgentRollout findActiveByCustomerAndPackage(int customerId, String packageName) {
+        return mapper.findActiveByCustomerAndPackage(customerId, packageName);
+    }
+
+    public List<AgentRollout> listActiveAppRollouts(int customerId) {
+        return mapper.listActiveAppRollouts(customerId);
+    }
+
     public AgentRollout findById(int id) {
         return mapper.findById(id);
     }
@@ -71,5 +80,13 @@ public class RolloutDAO {
     /** Device numbers in this customer with an in-flight (pending/delivered) app.install. */
     public List<String> listPendingInstallNumbers(int customerId) {
         return mapper.listPendingInstallNumbers(customerId);
+    }
+
+    public void upsertRolloutCommand(int rolloutId, String deviceNumber, int commandId) {
+        mapper.upsertRolloutCommand(rolloutId, deviceNumber, commandId);
+    }
+
+    public List<RolloutCommandStatusRow> listCommandStatuses(int rolloutId) {
+        return mapper.listCommandStatuses(rolloutId);
     }
 }

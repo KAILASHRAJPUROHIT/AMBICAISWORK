@@ -22,6 +22,7 @@
 package com.hmdm.persistence.mapper;
 
 import com.hmdm.persistence.domain.AgentRollout;
+import com.hmdm.persistence.domain.RolloutCommandStatusRow;
 import com.hmdm.persistence.domain.RolloutDeviceRow;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
@@ -34,8 +35,8 @@ import java.util.List;
 /** MyBatis mapper for staged agent-APK rollouts. Auto-registered via the mapper package scan. */
 public interface RolloutMapper {
 
-    @Insert({"INSERT INTO agentRollout (customerId, targetVersion, packageName, apkUrl, apkSha256, apkVersionCode, stage, createdAt, updatedAt) " +
-            "VALUES (#{customerId}, #{targetVersion}, #{packageName}, #{apkUrl}, #{apkSha256}, #{apkVersionCode}, #{stage}, #{createdAt}, #{updatedAt})"})
+    @Insert({"INSERT INTO agentRollout (customerId, targetVersion, packageName, apkUrl, apkSha256, apkVersionCode, stage, createdAt, updatedAt, trackingMode, displayName) " +
+            "VALUES (#{customerId}, #{targetVersion}, #{packageName}, #{apkUrl}, #{apkSha256}, #{apkVersionCode}, #{stage}, #{createdAt}, #{updatedAt}, #{trackingMode}, #{displayName})"})
     @SelectKey(statement = "SELECT currval('agentrollout_id_seq')", keyColumn = "id", keyProperty = "id",
             before = false, resultType = int.class)
     void insertRollout(AgentRollout rollout);
@@ -44,8 +45,22 @@ public interface RolloutMapper {
             "ON CONFLICT DO NOTHING"})
     void insertCanary(@Param("rolloutId") int rolloutId, @Param("deviceNumber") String deviceNumber);
 
-    @Select({"SELECT * FROM agentRollout WHERE customerId = #{customerId} AND stage IN ('canary','fleet') ORDER BY id DESC LIMIT 1"})
+    /** Most recent active ("version"-tracked, i.e. the agent's own) rollout — the Settings page's
+     *  single "Agent rollout" card. Package-scoped so a concurrent Library-app rollout never
+     *  shadows it (and vice versa via {@link #findActiveByCustomerAndPackage}). */
+    @Select({"SELECT * FROM agentRollout WHERE customerId = #{customerId} AND trackingMode = 'version' " +
+            "AND stage IN ('canary','fleet') ORDER BY id DESC LIMIT 1"})
     AgentRollout findActiveByCustomer(@Param("customerId") int customerId);
+
+    @Select({"SELECT * FROM agentRollout WHERE customerId = #{customerId} AND packageName = #{packageName} " +
+            "AND stage IN ('canary','fleet') ORDER BY id DESC LIMIT 1"})
+    AgentRollout findActiveByCustomerAndPackage(@Param("customerId") int customerId, @Param("packageName") String packageName);
+
+    /** Every active "command"-tracked (Library-app) rollout for this customer — the Apps page's
+     *  per-app progress cards. */
+    @Select({"SELECT * FROM agentRollout WHERE customerId = #{customerId} AND trackingMode = 'command' " +
+            "AND stage IN ('canary','fleet') ORDER BY id DESC"})
+    List<AgentRollout> listActiveAppRollouts(@Param("customerId") int customerId);
 
     @Select({"SELECT * FROM agentRollout WHERE id = #{id}"})
     AgentRollout findById(@Param("id") int id);
@@ -63,4 +78,14 @@ public interface RolloutMapper {
     @Select({"SELECT DISTINCT c.deviceNumber FROM agentCommand c JOIN devices d ON d.number = c.deviceNumber " +
             "WHERE d.customerId = #{customerId} AND c.type = 'app.install' AND c.status IN ('pending','delivered')"})
     List<String> listPendingInstallNumbers(@Param("customerId") int customerId);
+
+    /** Records which live {@code agentCommand} row is this "command"-tracked rollout's install
+     *  attempt for one device, so progress can be read straight off that command's own status. */
+    @Insert({"INSERT INTO agentRolloutCommand (rolloutId, deviceNumber, commandId) VALUES (#{rolloutId}, #{deviceNumber}, #{commandId}) " +
+            "ON CONFLICT (rolloutId, deviceNumber) DO UPDATE SET commandId = EXCLUDED.commandId"})
+    void upsertRolloutCommand(@Param("rolloutId") int rolloutId, @Param("deviceNumber") String deviceNumber, @Param("commandId") int commandId);
+
+    @Select({"SELECT rc.deviceNumber AS deviceNumber, c.status AS status FROM agentRolloutCommand rc " +
+            "JOIN agentCommand c ON c.id = rc.commandId WHERE rc.rolloutId = #{rolloutId}"})
+    List<RolloutCommandStatusRow> listCommandStatuses(@Param("rolloutId") int rolloutId);
 }
