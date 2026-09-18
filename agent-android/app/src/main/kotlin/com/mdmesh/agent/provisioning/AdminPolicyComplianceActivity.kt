@@ -5,6 +5,7 @@ import android.app.admin.DevicePolicyManager
 import android.os.Bundle
 import android.os.PersistableBundle
 import com.mdmesh.agent.admin.AdminReceiver
+import com.mdmesh.agent.service.WakeKeepAlive
 import com.mdmesh.core.config.ServerConfigStore
 import com.mdmesh.core.store.EnrollTokenStore
 import com.mdmesh.core.sync.CheckInWorker
@@ -40,6 +41,10 @@ class AdminPolicyComplianceActivity : Activity() {
             // provisioning result, never on Setup Wizard's critical path.
             CoroutineScope(Dispatchers.IO).launch {
                 EnrollTokenStore(ctx).save(token)
+                // Establish both durable reconcile paths during initial enrollment.  The
+                // foreground service later re-arms these idempotently on every start.
+                runCatching { CheckInWorker.schedule(ctx) }
+                runCatching { WakeKeepAlive.schedule(ctx) }
                 runCatching { CheckInWorker.scheduleNow(ctx) }
             }
         }

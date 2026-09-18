@@ -20,6 +20,7 @@ import com.mdmesh.agent.R
 import com.mdmesh.core.power.PowerModeStore
 import com.mdmesh.core.store.DeviceIdentity
 import com.mdmesh.core.sync.CheckInCoordinator
+import com.mdmesh.core.sync.CheckInWorker
 import com.mdmesh.core.telemetry.EventLog
 import com.mdmesh.core.transport.TransportManager
 import com.mdmesh.core.transport.WakeSignal
@@ -90,6 +91,12 @@ class CheckInService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+        // The service is started from normal enrollment/kiosk paths as well as boot.  Arming the
+        // WorkManager floor and Doze alarm here is essential: Android/OEM memory management can
+        // kill an otherwise healthy FGS while the tablet sleeps, and a boot-only alarm leaves no
+        // recovery path until someone restarts the tablet.
+        runCatching { CheckInWorker.schedule(applicationContext) }
+        runCatching { WakeKeepAlive.schedule(applicationContext) }
         startAsForeground()
         if (!started) {
             started = true
