@@ -728,14 +728,17 @@ class KioskLauncherActivity : FragmentActivity() {
         }
     }
 
-    /** Battery/Wi-Fi readout, top-start (the exit affordance owns top-end). Re-points
+    /** Battery/Wi-Fi readout, top-end — same corner as the exit affordance. Re-points
      *  [statusText] so the shared poll loop ([statusTick]) keeps whichever copy is on screen
-     *  live across [setContentView] swaps. Coloured by [KioskThemeDto.accentColor] when set. */
+     *  live across [setContentView] swaps. Coloured by [KioskThemeDto.accentColor] when set.
+     *  Offset below the kebab menu when [KioskApplyPayload.exitMode] is "visible" so the two
+     *  top-end elements don't overlap; the "gesture" tap target is invisible, so no offset needed. */
     private fun addStatusBar(p: KioskApplyPayload, parent: ViewGroup) {
         val color = parseColor(p.theme.accentColor, parseColor(p.theme.textColor, TEXT))
         val tv = text("", 12f, color).apply { text = formatStatus(KioskStatusSource.read(this@KioskLauncherActivity)) }
         statusText = tv
-        parent.addView(FrameWrap(this, tv, Gravity.TOP or Gravity.START, dp(16), heightPx = dp(32)))
+        val topExtra = if (p.exitMode == "visible") dp(56) else 0
+        parent.addView(FrameWrap(this, tv, Gravity.TOP or Gravity.END, dp(16), heightPx = dp(32), topExtraPx = topExtra))
     }
 
     private fun formatStatus(s: KioskStatusSource.Status): String {
@@ -798,6 +801,9 @@ private class FrameWrap(
     marginPx: Int,
     widthPx: Int = ViewGroup.LayoutParams.WRAP_CONTENT,
     heightPx: Int = ViewGroup.LayoutParams.WRAP_CONTENT,
+    /** Extra offset added only on the edge(s) [gravity] touches — e.g. pushing a second TOP|END
+     *  element down below a sibling (like the kebab menu) that already occupies that corner. */
+    topExtraPx: Int = 0,
 ) : android.widget.FrameLayout(activity) {
     init {
         layoutParams = ViewGroup.LayoutParams(
@@ -807,7 +813,7 @@ private class FrameWrap(
         addView(
             child,
             android.widget.FrameLayout.LayoutParams(widthPx, heightPx, gravity).apply {
-                setMargins(marginPx, marginPx, marginPx, marginPx)
+                setMargins(marginPx, marginPx + topExtraPx, marginPx, marginPx)
             },
         )
         // Android 15 (targetSdk 35) draws edge-to-edge by default, so the nav/status bars overlay
@@ -818,7 +824,7 @@ private class FrameWrap(
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             val lp = child.layoutParams as android.widget.FrameLayout.LayoutParams
             lp.bottomMargin = marginPx + if (gravity and Gravity.BOTTOM == Gravity.BOTTOM) bars.bottom else 0
-            lp.topMargin = marginPx + if (gravity and Gravity.TOP == Gravity.TOP) bars.top else 0
+            lp.topMargin = marginPx + topExtraPx + if (gravity and Gravity.TOP == Gravity.TOP) bars.top else 0
             lp.leftMargin = marginPx + if (gravity and Gravity.START == Gravity.START || gravity and Gravity.LEFT == Gravity.LEFT) bars.left else 0
             lp.rightMargin = marginPx + if (gravity and Gravity.END == Gravity.END || gravity and Gravity.RIGHT == Gravity.RIGHT) bars.right else 0
             child.layoutParams = lp
