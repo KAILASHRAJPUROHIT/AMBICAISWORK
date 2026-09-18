@@ -82,7 +82,13 @@ public class FcmSenderService {
                 logger.info("FCM wake accepted (HTTP {}) for token ending ...{}", status, tail(fcmToken));
             }
         } catch (Exception e) {
-            logger.warn("FCM wake error for token ending ...{}: {}", tail(fcmToken), e.getMessage());
+            // The real detail (HTTP status + response body) is almost always on the CAUSE, not this
+            // wrapper's own message (GoogleWifTokenService wraps every failure in one generic
+            // "Unable to acquire..." IllegalStateException) - walk the chain so a real failure is
+            // ever actually diagnosable from these logs instead of just "something failed."
+            Throwable cause = e.getCause();
+            logger.warn("FCM wake error for token ending ...{}: {}{}", tail(fcmToken), e.getMessage(),
+                    cause != null ? " — caused by: " + cause.getMessage() : "");
         }
     }
 
