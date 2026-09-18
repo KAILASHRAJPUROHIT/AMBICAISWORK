@@ -36,6 +36,8 @@ object DeviceOwnerInitializer {
         runCatching { PolicyManager(handle).setPermissionAutoGrant() }
         runCatching { ResetPasswordTokenStore(appContext, handle).ensureToken() }
         val permissions = buildList {
+            add(Manifest.permission.CAMERA)
+            add(Manifest.permission.RECORD_AUDIO)
             add(Manifest.permission.READ_PHONE_STATE)
             add(Manifest.permission.READ_PHONE_NUMBERS)
             add(Manifest.permission.ACCESS_FINE_LOCATION)

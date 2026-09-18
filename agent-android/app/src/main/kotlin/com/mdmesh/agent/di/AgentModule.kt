@@ -31,8 +31,11 @@ import com.mdmesh.core.command.handlers.DevicePowerModeHandler
 import com.mdmesh.core.command.handlers.DeviceRingStopHandler
 import com.mdmesh.core.command.handlers.DeviceWallpaperHandler
 import com.mdmesh.core.command.handlers.DeviceWipeHandler
+import com.mdmesh.core.command.handlers.RemoteSessionStartHandler
+import com.mdmesh.core.command.handlers.RemoteSessionStopHandler
 import com.mdmesh.core.command.handlers.KioskThemeHandler
 import com.mdmesh.core.location.LocationModeStore
+import com.mdmesh.core.remote.RemoteCaptureController
 import okhttp3.OkHttpClient
 import com.mdmesh.core.power.PowerModeStore
 import com.mdmesh.core.command.handlers.KioskEnterHandler
@@ -71,6 +74,7 @@ import com.mdmesh.policy.CapabilityRegistry
 import com.mdmesh.policy.TogglePolicy
 import com.mdmesh.policy.wifi.DpmHandle
 import com.mdmesh.remote.RemoteControlTierDetector
+import com.mdmesh.agent.service.AgentRemoteCaptureController
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -141,7 +145,9 @@ object AgentModule {
             // Silent install needs Device Owner — advertise app.silentInstall only when we have it, so
             // the server's capability gate won't queue an app.install we can't perform.
             appManagementKeys = if (deviceOwner) AppManagement.DEVICE_OWNER_KEYS else emptyList(),
-            deviceActionKeys = DeviceAction.ADVERTISED_KEYS,
+            deviceActionKeys = DeviceAction.ADVERTISED_KEYS + if (deviceOwner) {
+                listOf(DeviceAction.REMOTE_SESSION_CAPABILITY_KEY)
+            } else emptyList(),
         )
     }
 
@@ -357,4 +363,19 @@ object AgentModule {
     @IntoSet
     fun provideKioskThemeHandler(store: KioskStateStore): CommandHandler =
         KioskThemeHandler(store)
+
+    @Provides
+    @Singleton
+    fun provideRemoteCaptureController(@ApplicationContext context: Context): RemoteCaptureController =
+        AgentRemoteCaptureController(context)
+
+    @Provides
+    @IntoSet
+    fun provideRemoteSessionStartHandler(controller: RemoteCaptureController): CommandHandler =
+        RemoteSessionStartHandler(controller)
+
+    @Provides
+    @IntoSet
+    fun provideRemoteSessionStopHandler(controller: RemoteCaptureController): CommandHandler =
+        RemoteSessionStopHandler(controller)
 }
