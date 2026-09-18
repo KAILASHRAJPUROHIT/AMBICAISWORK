@@ -580,7 +580,11 @@ class KioskLauncherActivity : FragmentActivity() {
             setPadding(dp(24), dp(28), dp(24), dp(12))
             layoutParams = ViewGroup.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
-        column.addView(text("AMBIC MDM Kiosk", 20f, fg, bold = true))
+        column.addView(text(p.deviceLabel?.takeIf { it.isNotBlank() } ?: "AMBIC MDM Kiosk", 20f, fg, bold = true))
+        p.orgName?.takeIf { it.isNotBlank() }?.let { column.addView(text(it, 14f, fg)) }
+        column.addView(
+            text("powered by AMBIC DIGITAL", 10f, MUTED).apply { setPadding(0, dp(2), 0, 0) },
+        )
         if (rendered == 0) {
             column.addView(
                 text(

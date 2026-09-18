@@ -4,7 +4,7 @@ import { listApplications, appCategory, type Application } from '../api/applicat
 import { getDeviceState, listCommandHistory, queueCommand } from '../api/commands';
 import { useToast } from '../ui/toast';
 
-type Device = { number: string };
+type Device = { number: string; description?: string };
 type Mode = 'launcher' | 'single';
 type Source = 'library' | 'device';
 
@@ -15,15 +15,20 @@ export type KioskChoice = {
   password?: string;
 };
 
-/** Build the `kiosk.enter` payload (device-independent). Mirrors the single-device apply() exactly. */
-export function buildKioskPayload(c: KioskChoice): object {
+/** This deployment's fixed branding — shown under the device label in the kiosk header. */
+export const ORG_NAME = 'Aradhana Jewellers';
+
+/** Build the `kiosk.enter` payload. `deviceLabel` is the one per-device value (the console's
+ *  friendly name for this device, e.g. "TAB1") — everything else is device-independent. */
+export function buildKioskPayload(c: KioskChoice, deviceLabel?: string): object {
+  const branding = { deviceLabel: deviceLabel || undefined, orgName: ORG_NAME };
   return c.mode === 'single'
     ? { mode: 'single', pinPackage: c.packages[0], allowedPackages: c.packages,
         exitMode: c.exitMode, password: c.password || undefined,
-        features: { home: true, notifications: false, lockButtons: true } }
+        features: { home: true, notifications: false, lockButtons: true }, ...branding }
     : { mode: 'launcher', allowedPackages: c.packages,
         exitMode: c.exitMode, password: c.password || undefined,
-        features: { home: true, notifications: false, lockButtons: true } };
+        features: { home: true, notifications: false, lockButtons: true }, ...branding };
 }
 
 /** A row in either source, normalised so the list renders the same way. */
@@ -223,7 +228,7 @@ export function KioskEnterModal({
 
   async function apply() {
     const pkgs = [...selected];
-    const payload = buildKioskPayload({ mode, packages: pkgs, exitMode, password });
+    const payload = buildKioskPayload({ mode, packages: pkgs, exitMode, password }, device.description);
     setBusy(true);
     try {
       await queueCommand(device.number, { type: 'kiosk.enter', payload: JSON.stringify(payload) });

@@ -7,7 +7,7 @@ import { applyFrpToDevice } from '../api/frp';
 import { useToast } from '../ui/toast';
 import { KioskEnterModal } from './KioskEnterModal';
 
-type Device = { number: string; enrollmentMode?: string };
+type Device = { number: string; enrollmentMode?: string; description?: string };
 
 /** Reads a File as base64 (no data-URL prefix), for params like `certBase64`. */
 function readFileAsBase64(file: File): Promise<string> {

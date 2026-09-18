@@ -14,6 +14,11 @@ import kotlinx.serialization.Serializable
  * @property exitMode `"gesture"` | `"visible"` | `"remote"` — how a technician leaves kiosk on device.
  * @property password admin password required by the on-device exit (gesture/visible).
  * @property theme launcher appearance.
+ * @property deviceLabel this device's console-assigned friendly name (e.g. "TAB1"), shown in the
+ *   kiosk header in place of a generic app name. Null on older payloads/senders — the launcher
+ *   falls back to a generic label rather than showing nothing.
+ * @property orgName the deploying organisation's name (e.g. "Aradhana Jewellers"), shown under the
+ *   device label. Null hides that line entirely rather than showing a placeholder.
  */
 @Serializable
 data class KioskApplyPayload(
@@ -24,6 +29,8 @@ data class KioskApplyPayload(
     val exitMode: String = "gesture",
     val password: String? = null,
     val theme: KioskThemeDto = KioskThemeDto(),
+    val deviceLabel: String? = null,
+    val orgName: String? = null,
 )
 
 @Serializable
