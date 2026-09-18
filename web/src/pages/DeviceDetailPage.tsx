@@ -10,6 +10,7 @@ import { TelemetryCard } from '../components/TelemetryCard';
 import { EventTimeline } from '../components/EventTimeline';
 import { LocationPanel } from '../components/LocationPanel';
 import { DataUsagePanel } from '../components/DataUsagePanel';
+import { RemoteViewPanel } from '../components/RemoteViewPanel';
 import { getTelemetry, type TelemetrySnapshot } from '../api/telemetry';
 import {
   getDeviceState, forceSync, queueCommand, syncConfigApps, type DeviceState,
@@ -19,7 +20,7 @@ import { isOnline as isOnlineByRecency } from '../ui/status';
 import { useToast } from '../ui/toast';
 import { fmtDateTime, fmtRelative, orDash } from '../ui/format';
 
-type Tab = 'control' | 'telemetry' | 'events' | 'location' | 'dataUsage';
+type Tab = 'control' | 'telemetry' | 'events' | 'location' | 'dataUsage' | 'remote';
 
 interface Row {
   k: string;
@@ -395,6 +396,9 @@ export function DeviceDetailPage() {
             <button className={tab === 'dataUsage' ? 'on' : ''} onClick={() => setTab('dataUsage')}>
               Data usage
             </button>
+            <button className={tab === 'remote' ? 'on' : ''} onClick={() => setTab('remote')}>
+              Remote view
+            </button>
           </div>
 
           <div className="tabbody">
@@ -403,6 +407,7 @@ export function DeviceDetailPage() {
             {tab === 'events' && <EventTimeline device={device} />}
             {tab === 'location' && <LocationPanel device={device} />}
             {tab === 'dataUsage' && <DataUsagePanel device={device} />}
+            {tab === 'remote' && <RemoteViewPanel deviceId={device.number} isDeviceOwner={sec.isDeviceOwner === true || device.mdmMode === true} />}
           </div>
         </section>
       </div>
