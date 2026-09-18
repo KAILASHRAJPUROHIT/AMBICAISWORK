@@ -3011,4 +3011,31 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.09.18-remote-snapshot" author="ambic" context="common">
+        <comment>Table,new: remoteSnapshot - the latest screen/camera/mic capture per device per
+        kind, for the console's time-boxed "remote view" session. Bytes stored inline (BYTEA), not
+        as a hosted file: each kind keeps only its single latest capture (UNIQUE deviceNumber+kind,
+        upserted every time a new one lands), captures are small (compressed JPEG / short audio
+        clip), and — unlike a wallpaper or APK, which are fine to host at a plain URL — these are
+        sensitive and must only ever be reachable through an authenticated admin-session request,
+        never a public file path.</comment>
+        <sql>
+            CREATE TABLE remoteSnapshot (
+                id           SERIAL PRIMARY KEY,
+                customerId   INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+                deviceNumber VARCHAR(255) NOT NULL,
+                kind         VARCHAR(32) NOT NULL,
+                capturedAt   BIGINT NOT NULL,
+                contentType  VARCHAR(64) NOT NULL,
+                data         BYTEA NOT NULL,
+                UNIQUE (deviceNumber, kind)
+            );
+            CREATE INDEX remoteSnapshot_customer_idx ON remoteSnapshot (customerId, deviceNumber);
+        </sql>
+        <rollback>
+            DROP INDEX remoteSnapshot_customer_idx;
+            DROP TABLE remoteSnapshot;
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

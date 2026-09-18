@@ -56,6 +56,20 @@ object DeviceAction {
      *  leaves that part of the theme unchanged. No-op if no kiosk is currently active. */
     const val KIOSK_THEME = "device.kioskTheme"
 
+    /** Begin a time-boxed remote-view capture session. Payload: [RemoteSessionStartPayload].
+     *  Gated separately from [ADVERTISED_KEYS] (Device-Owner only — see
+     *  `CapabilityCollector`/AgentModule wiring) since it needs silently-grantable camera/mic
+     *  permissions, unlike most `device.*` actions. */
+    const val REMOTE_SESSION_START = "device.remoteSessionStart"
+
+    /** End the current remote-view session immediately rather than waiting for its duration to
+     *  elapse. No payload. Same capability gate as [REMOTE_SESSION_START]. */
+    const val REMOTE_SESSION_STOP = "device.remoteSessionStop"
+
+    /** Capability token (after `device.` prefix) for [REMOTE_SESSION_START]/[REMOTE_SESSION_STOP] —
+     *  advertised separately from [ADVERTISED_KEYS], only when Device Owner. */
+    const val REMOTE_SESSION_CAPABILITY_KEY = "remoteSession"
+
     /** Keys (after the `device.` prefix) advertised in `capabilities.device`. */
     val ADVERTISED_KEYS: List<String> = listOf(
         "lock", "reboot", "lockscreenMessage", "alert", "ring", "ringStop",

@@ -457,31 +457,11 @@ public class AgentResource {
 
     /**
      * Verifies the {@code Authorization: Bearer <deviceSecret>} header against the
-     * SHA-256 hash stored at enrollment. Constant-time compare; fails closed when the
-     * header is missing or the device has no stored secret.
+     * SHA-256 hash stored at enrollment. See {@link com.hmdm.util.AgentAuth} (shared with every
+     * other device-authenticated /public/agent/v1/... endpoint).
      */
     private boolean authenticate(String authorization, String deviceNumber) {
-        String presented = bearer(authorization);
-        if (presented == null) {
-            return false;
-        }
-        String expectedHash = commandDAO.getDeviceSecretHash(deviceNumber);
-        if (expectedHash == null) {
-            return false;
-        }
-        return CryptoUtil.constantTimeEquals(CryptoUtil.getSHA256String(presented), expectedHash);
-    }
-
-    private static String bearer(String authorization) {
-        if (authorization == null) {
-            return null;
-        }
-        String s = authorization.trim();
-        if (s.regionMatches(true, 0, "Bearer ", 0, 7)) {
-            String token = s.substring(7).trim();
-            return token.isEmpty() ? null : token;
-        }
-        return null;
+        return com.hmdm.util.AgentAuth.authenticate(authorization, deviceNumber, commandDAO);
     }
 
     private com.hmdm.rest.json.agent.AgentCommand toWire(AgentCommand stored) {

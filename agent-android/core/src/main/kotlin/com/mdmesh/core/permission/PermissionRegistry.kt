@@ -15,6 +15,7 @@ object PermissionRegistry {
         WriteSettingsPermission,
         DisableAssistPermission,
         ExternalStoragePermission,
+        ScreenCaptureAccessibilityPermission,
         BatteryOptimizationPermission,
     )
 }

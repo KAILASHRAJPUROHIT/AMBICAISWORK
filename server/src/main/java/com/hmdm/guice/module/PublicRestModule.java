@@ -43,6 +43,7 @@ public class PublicRestModule extends ServletModule {
         this.bind(QRCodeResource.class);
         this.bind(StatsResource.class);
         this.bind(AgentResource.class);
+        this.bind(com.hmdm.rest.resource.RemoteSnapshotUploadResource.class);
         this.bind(FrpOAuthResource.class);
     }
 }
