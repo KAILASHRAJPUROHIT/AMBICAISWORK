@@ -46,6 +46,17 @@ public class GoogleWifTokenService {
     public static final String SCOPE_ANDROID_MANAGEMENT = "https://www.googleapis.com/auth/androidmanagement";
     public static final String SCOPE_FIREBASE_MESSAGING = "https://www.googleapis.com/auth/firebase.messaging";
 
+    /** The scope the federated (STS-exchanged) token itself must carry to be allowed to call
+     *  iamcredentials.googleapis.com:generateAccessToken at all — verified against
+     *  google-auth-library-python's own iam.py (`_IAM_SCOPE`) and impersonated_credentials.py
+     *  ("Service account source credentials must have the _IAM_SCOPE"). This is INDEPENDENT of
+     *  whatever target scope (androidmanagement, firebase.messaging, ...) is being impersonated —
+     *  the target scope only appears in the generateAccessToken request body, never as the OAuth
+     *  scope of the bearer token calling it. Using a target scope here instead (as an earlier
+     *  version of this file did) fails with HTTP 403 ACCESS_TOKEN_SCOPE_INSUFFICIENT the moment the
+     *  target scope isn't broad enough to also cover IAM Credentials API access. */
+    private static final String SCOPE_IAM = "https://www.googleapis.com/auth/iam";
+
     private static final class CachedToken {
         volatile String accessToken;
         volatile long expiryMillis;
@@ -154,13 +165,14 @@ public class GoogleWifTokenService {
         return enc(signedRequest.toString());
     }
 
-    /** The STS token-exchange step itself always uses cloud-platform - the NARROW scope is applied
-     *  only at impersonation time (below). This matches Google's own external_account.py: the
-     *  federated token is a stepping stone, never used directly against any API. */
+    /** The STS token-exchange step always requests {@link #SCOPE_IAM} — the federated token is a
+     *  stepping stone that only ever gets used for ONE thing (calling generateAccessToken below),
+     *  never directly against any target API, so it must carry the scope THAT call needs, not the
+     *  final target scope. See {@link #SCOPE_IAM}'s doc comment for how this was verified. */
     private static String exchangeForFederatedToken(String tokenUrl, String audience, String subjectToken, String subjectTokenType) throws Exception {
         String body = "grant_type=" + enc(STS_GRANT_TYPE)
                 + "&audience=" + enc(audience)
-                + "&scope=" + enc(SCOPE_ANDROID_MANAGEMENT)
+                + "&scope=" + enc(SCOPE_IAM)
                 + "&requested_token_type=" + enc(STS_REQUESTED_TOKEN_TYPE)
                 + "&subject_token=" + enc(subjectToken)
                 + "&subject_token_type=" + enc(subjectTokenType);
