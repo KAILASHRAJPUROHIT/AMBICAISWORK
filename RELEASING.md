@@ -56,7 +56,19 @@ minisign -G -p release/minisign.pub -s mdmesh-release.key   # set a password
 - No `minisign` binary? Generate it in a container:
   `docker run --rm -it -v "$PWD:/keys" -w /keys alpine sh -c 'apk add --no-cache minisign && minisign -G -p minisign.pub -s minisign.key'`
 
-### 3. Make the GHCR packages public (one-time, after the first release)
+### 3. Firebase Cloud Messaging config (`google-services.json`)
+Needed to build the FCM wake channel into the release APK — not custody-critical like the two keys
+above (it's a per-app config file, not a signing key), but still kept out of git since the repo's
+convention is no static credentials committed (see `docs/FCM-WAKE-SETUP.md`).
+
+```bash
+base64 -w0 agent-android/app/google-services.json   # value for the MDM_GOOGLE_SERVICES_B64 secret
+```
+
+Secret: `MDM_GOOGLE_SERVICES_B64`. Re-download and re-encode if the Firebase app is ever
+re-registered (package name change, project migration, etc.).
+
+### 4. Make the GHCR packages public (one-time, after the first release)
 Images pushed by Actions to an org are **private by default**. For the no-clone `docker compose pull`
 to work anonymously, set each package to public: **org → Packages → `mdmesh-server` / `mdmesh-web` /
 `mdmesh-supervisor` → Package settings → Change visibility → Public.** (Otherwise deployers must

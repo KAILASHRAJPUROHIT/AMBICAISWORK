@@ -4,7 +4,7 @@ name: release
 # Produces a tested, signed GitHub Release: the release APK, server+web images on GHCR, and a
 # minisign-signed manifest the fleet updater consumes. Requires repo secrets (see RELEASING.md):
 # MDM_RELEASE_STORE_B64, MDM_RELEASE_STORE_PASSWORD, MDM_RELEASE_KEY_ALIAS, MDM_RELEASE_KEY_PASSWORD,
-# MINISIGN_SECRET_KEY, MINISIGN_PASSWORD.
+# MINISIGN_SECRET_KEY, MINISIGN_PASSWORD, MDM_GOOGLE_SERVICES_B64.
 
 on:
   push:
@@ -54,6 +54,10 @@ jobs:
         env:
           STORE_B64: ${{ secrets.MDM_RELEASE_STORE_B64 }}
         run: printf '%s' "$STORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Decode google-services.json
+        env:
+          GOOGLE_SERVICES_B64: ${{ secrets.MDM_GOOGLE_SERVICES_B64 }}
+        run: printf '%s' "$GOOGLE_SERVICES_B64" | base64 -d > agent-android/app/google-services.json
       - name: Test + assemble signed release
         working-directory: agent-android
         env:

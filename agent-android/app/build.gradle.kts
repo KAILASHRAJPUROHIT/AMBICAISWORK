@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -112,13 +113,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     // Firebase Cloud Messaging - a second, Doze-surviving wake channel alongside the agent's own
-    // WebSocket (see AmbicFirebaseMessagingService). Compiles and links today; actually
-    // initializing at runtime needs google-services.json (from the Firebase console, package
-    // com.mdmesh.agent) placed at agent-android/app/google-services.json PLUS the
-    // com.google.gms.google-services Gradle plugin applied in this file - deliberately not done
-    // yet, since applying that plugin without the JSON present fails the whole build. Until then
-    // FirebaseMessaging calls fail closed (caught, logged, no-op) - see ServerConfigStore-style
-    // defensive handling in AmbicFirebaseMessagingService.
+    // WebSocket (see AmbicFirebaseMessagingService). google-services.json (project ambic-mdm-prod,
+    // package com.mdmesh.agent) is in place and the google-services plugin is applied above.
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging.ktx)
 
