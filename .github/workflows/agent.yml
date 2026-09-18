@@ -37,6 +37,10 @@ jobs:
           # Installs this Gradle and puts `gradle` on PATH, so we don't need a
           # committed wrapper jar (can't be generated in the authoring sandbox).
           gradle-version: "8.10"
+      - name: Decode google-services.json
+        env:
+          GOOGLE_SERVICES_B64: ${{ secrets.MDM_GOOGLE_SERVICES_B64 }}
+        run: printf '%s' "$GOOGLE_SERVICES_B64" | base64 -d > app/google-services.json
       - name: Assemble + lint + unit tests
         run: gradle --no-daemon assembleDebug lintDebug testDebugUnitTest
 
