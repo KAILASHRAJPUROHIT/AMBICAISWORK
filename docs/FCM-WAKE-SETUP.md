@@ -58,14 +58,44 @@ so today's build is safe to ship as-is; it simply doesn't send FCM pushes.
    (The dependency + service class + manifest entry are already in place — this is the only
    remaining code change, and it's exactly two lines plus the JSON file.)
 
-4. **Grant the service account permission to send FCM messages** — same Cloud Shell flow as this
-   morning's AMAPI IAM binding. Open `https://shell.cloud.google.com/?project=ambic-mdm-prod` and
-   run:
-   ```bash
-   gcloud projects add-iam-policy-binding ambic-mdm-prod \
-     --member="serviceAccount:ambic-mdm-server@ambic-mdm-prod.iam.gserviceaccount.com" \
-     --role="roles/firebasecloudmessaging.admin"
-   ```
+4. **Grant permissions** — this step originally under-specified what's actually needed; the real
+   requirement, found by working through every failure this produced end-to-end on 2026-09-18, is
+   **three** separate grants:
+
+   a. **The AWS WIF principal needs `roles/iam.serviceAccountTokenCreator`** on the service
+      account itself (not the project) — this is what actually lets the impersonation call
+      succeed at all. Without it: `GoogleWifTokenService` throws "Unable to acquire Google WIF
+      access token." In the Cloud Console: the service account's own page → **Permissions** tab →
+      **Grant access** → principal
+      `principalSet://iam.googleapis.com/projects/<project-number>/locations/global/workloadIdentityPools/<pool>/attribute.aws_role/<role-name>`
+      (the AWS **role name**, not its ARN — a previous attempt with the ARN failed with an
+      unknown-principal-type error) → role **Service Account Token Creator**.
+
+   b. **The service account needs `roles/cloudmessaging.editor`** ("Firebase Cloud Messaging
+      Service Editor") **on the project** to actually call `messages:send` —
+      `roles/firebasecloudmessaging.admin` ("Firebase Cloud Messaging Admin") looks like the
+      obvious role but does **not** include `cloudmessaging.messages.create`; granting it produces
+      a *different*, confusingly-similar-sounding failure (`HTTP 403
+      ACCESS_TOKEN_SCOPE_INSUFFICIENT` → then, once (c) below is also fixed, `HTTP 403
+      PERMISSION_DENIED: cloudmessaging.messages.create`). Cloud Console → IAM → Grant access →
+      the service account → role **Firebase Cloud Messaging Service Editor**
+      (`roles/cloudmessaging.editor`). If this ever recurs, IAM's own **Policy Troubleshooter**
+      (linked directly in the 403 error body as a `troubleshooter_url`) names the exact missing
+      role immediately — don't re-guess from scratch.
+
+   c. Separately (a **code** issue, not an IAM one, already fixed in `GoogleWifTokenService.java`):
+      the STS token-exchange step must request scope `https://www.googleapis.com/auth/iam`
+      — *not* the final target scope (androidmanagement/firebase.messaging) — since that's the
+      scope `iamcredentials.googleapis.com:generateAccessToken` itself requires to be callable at
+      all, independent of what's being impersonated. Verified against
+      `google-auth-library-python`'s own `iam.py` (`_IAM_SCOPE`). If a future scope-related 403
+      shows up, check this constant before assuming an IAM grant is missing.
+
+   Also: **the server container never had the WIF credential file mounted** —
+   `GoogleWifTokenService` reads `/etc/ambic-mdm/google-wif.json` from its own filesystem, but
+   `docker-compose.yml` had no volume for it, so the file was invisible inside the container
+   regardless of any IAM state. Now mounted read-only:
+   `/etc/ambic-mdm/google-wif.json:/etc/ambic-mdm/google-wif.json:ro` on the `server` service.
 
 5. **Set the project id on the server** — in `/home/ubuntu/ambic-digital-mdm/.env` on the AWS box:
    ```
@@ -87,8 +117,16 @@ so today's build is safe to ship as-is; it simply doesn't send FCM pushes.
 
 - Don't skip step 4 and assume WIF alone is enough — `roles/iam.workloadIdentityUser` (already
   granted) lets the AWS role impersonate the service account; it says nothing about what that
-  service account itself can *do*. FCM sending needs its own IAM role, same two-step shape as
-  AMAPI's `roles/androidmanagement.user` grant this morning.
+  service account itself can *do*. FCM sending needs its own IAM role — and specifically
+  `roles/cloudmessaging.editor`, not `roles/firebasecloudmessaging.admin` (see 4b above).
 - Don't create a static Firebase/Google service-account JSON key as a shortcut — the whole point
   of today's WIF work was avoiding exactly that; `FcmSenderService` already goes through
   `GoogleWifTokenService`, so there's no reason to.
+
+## Status: working in production (confirmed 2026-09-18)
+
+All of the above is done for `ambic-mdm-prod` / the `ambic-digital-mdm` deployment — this section
+exists for the next deployment, or if something regresses. Confirmed end-to-end: `FCM wake
+accepted (HTTP 200)` in server logs, followed by the target device checking in within ~30 seconds
+of "Sync now" while asleep (verified on TAB1, `devices.lastUpdate` moved from several minutes
+stale to `<1 minute` immediately after the push).
