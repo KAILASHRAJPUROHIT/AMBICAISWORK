@@ -54,6 +54,9 @@ services:
       AMBIC_FCM_PROJECT_ID: ${AMBIC_FCM_PROJECT_ID:-}
     volumes:
       - mdmeshdata:/opt/mdmesh
+      # AMAPI/FCM Workload Identity Federation credential (GoogleWifTokenService's default path).
+      # Lives on the host only, never in the image/repo — read-only, root:root 640 on the host.
+      - /etc/ambic-mdm/google-wif.json:/etc/ambic-mdm/google-wif.json:ro
 
   caddy:
     # The web image (Caddy + baked SPA). Same pull/build duality as `server`; WEB_VERSION tracks the
