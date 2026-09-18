@@ -21,6 +21,15 @@ set -e
 CONF_DIR=/usr/local/tomcat/conf/Catalina/localhost
 mkdir -p "$CONF_DIR" /opt/mdmesh/files /opt/mdmesh/plugins
 
+# Tomcat's default Connector caps request bodies at 2MB (maxPostSize), which rejects any real APK
+# upload (custom-APK deploy routinely handles files well over 100MB) with a 413 before the request
+# even reaches Jersey. Raise it to 500MB — generous for an APK/split-bundle upload, still bounded
+# (not -1/unlimited) since this is a network-reachable, authenticated admin endpoint.
+# server.xml's commented-out example connectors repeat this same attribute text, so `0,/pat/`
+# restricts the substitution to the file's FIRST match only — the real, active port 8080 connector.
+sed -i '0,/maxParameterCount="1000"/s//maxParameterCount="1000" maxPostSize="524288000" maxSwallowSize="524288000"/' \
+    /usr/local/tomcat/conf/server.xml
+
 cat > "$CONF_DIR/ROOT.xml" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <Context>
