@@ -6,6 +6,8 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -32,6 +34,7 @@ import com.mdmesh.agent.service.CheckInService
 import com.mdmesh.core.action.ResetPasswordTokenStore
 import com.mdmesh.core.device.AppInventoryCache
 import com.mdmesh.core.device.AppInventoryCollector
+import com.mdmesh.core.state.KioskStatusSource
 import com.mdmesh.core.store.AdminPasscodeStore
 import com.mdmesh.core.store.KioskStateStore
 import com.mdmesh.core.telemetry.EventSink
@@ -82,6 +85,18 @@ class KioskLauncherActivity : FragmentActivity() {
      *  synchronously without blocking on a DataStore read from a dialog callback. */
     private var fleetPasscodeHash: String? = null
 
+    /** The currently-displayed status-bar TextView (battery/Wi-Fi), re-pointed by whichever view
+     *  builder last ran ([splashView]/[launcherGrid]) so a single timer can keep it live across
+     *  [setContentView] swaps without each view needing its own polling loop. */
+    private var statusText: TextView? = null
+    private val statusHandler = Handler(Looper.getMainLooper())
+    private val statusTick: Runnable = object : Runnable {
+        override fun run() {
+            statusText?.text = formatStatus(KioskStatusSource.read(this@KioskLauncherActivity))
+            statusHandler.postDelayed(this, STATUS_POLL_MS)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A kiosk device boots straight into HOME (this); keep the command channel alive even if
@@ -101,6 +116,12 @@ class KioskLauncherActivity : FragmentActivity() {
                 adminPasscodeStore.flow().distinctUntilChanged().collect { fleetPasscodeHash = it }
             }
         }
+        statusHandler.post(statusTick)
+    }
+
+    override fun onDestroy() {
+        statusHandler.removeCallbacks(statusTick)
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -550,6 +571,7 @@ class KioskLauncherActivity : FragmentActivity() {
         return frame(bg).apply {
             addView(centeredText("Loading…", 18f, fg))
             addExitAffordance(p, this)
+            addStatusBar(fg, this)
         }
     }
 
@@ -604,6 +626,7 @@ class KioskLauncherActivity : FragmentActivity() {
             },
         )
         addExitAffordance(p, root)
+        addStatusBar(fg, root)
         return root
     }
 
@@ -705,6 +728,22 @@ class KioskLauncherActivity : FragmentActivity() {
         }
     }
 
+    /** Battery/Wi-Fi readout, top-start (the exit affordance owns top-end). Re-points
+     *  [statusText] so the shared poll loop ([statusTick]) keeps whichever copy is on screen
+     *  live across [setContentView] swaps. */
+    private fun addStatusBar(fg: Int, parent: ViewGroup) {
+        val tv = text("", 12f, fg).apply { text = formatStatus(KioskStatusSource.read(this@KioskLauncherActivity)) }
+        statusText = tv
+        parent.addView(FrameWrap(this, tv, Gravity.TOP or Gravity.START, dp(16), heightPx = dp(32)))
+    }
+
+    private fun formatStatus(s: KioskStatusSource.Status): String {
+        val battery = if (s.batteryPct >= 0) "${s.batteryPct}%${if (s.charging) " ⚡" else ""}" else "—"
+        val bars = s.wifiBars.coerceIn(0, 4)
+        val wifi = if (!s.wifiConnected) "Wi-Fi off" else "Wi-Fi " + "●".repeat(bars + 1) + "○".repeat(4 - bars)
+        return "$wifi   🔋 $battery"
+    }
+
     // --- View helpers ------------------------------------------------------------------------
 
     private fun frame(bg: Int): android.widget.FrameLayout =
@@ -739,6 +778,7 @@ class KioskLauncherActivity : FragmentActivity() {
         const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         const val GESTURE_TAPS = 7
         const val GESTURE_WINDOW_MS = 3_000L
+        const val STATUS_POLL_MS = 15_000L
         const val HOME_ALIAS = "com.mdmesh.agent.KioskHomeAlias"
         val INK = Color.parseColor("#0E1117")
         val TEXT = Color.parseColor("#E8EEF4")
