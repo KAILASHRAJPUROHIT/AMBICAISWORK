@@ -9,6 +9,7 @@ import { fetchAuthOptions } from '../api/auth';
 import { getUpdateStatus, setAutoUpdate, checkForUpdates, applyUpdate, type UpdateStatus } from '../api/updates';
 import { getFleetSettings, setAdminPasscode } from '../api/settings';
 import { RolloutPanel } from '../components/RolloutPanel';
+import { WallpaperPanel } from '../components/WallpaperPanel';
 import { AlertRulesPanel } from '../components/AlertRulesPanel';
 import { GeofencePanel } from '../components/GeofencePanel';
 import { beginFrpRecoveryAccountConnection, listFrpRecoveryAccounts, removeFrpRecoveryAccount, type FrpRecoveryAccount } from '../api/frp';
@@ -303,6 +304,8 @@ export function SettingsPage() {
             </span>
           </div>
         </section>
+
+        <WallpaperPanel />
 
         {/* Updates */}
         {upd && (

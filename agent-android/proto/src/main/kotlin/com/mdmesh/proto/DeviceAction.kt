@@ -46,10 +46,20 @@ object DeviceAction {
      *  the cert by its own bytes (no separate alias), so uninstall must resend the same bytes. */
     const val CERTIFICATE = "device.certificate"
 
+    /** Push a home/lock screen wallpaper. Payload: `{ "url": "...", "target": "home" | "lock" |
+     *  "both" }`. Needs only the normal (install-time, no runtime prompt) SET_WALLPAPER
+     *  permission — unlike most device.* actions this doesn't need Device Owner at all. */
+    const val WALLPAPER = "device.wallpaper"
+
+    /** Restyle the currently-active kiosk (status bar/exit chrome colours) without a full
+     *  kiosk.enter round-trip. Payload: [com.mdmesh.proto.KioskThemePayload] — any null field
+     *  leaves that part of the theme unchanged. No-op if no kiosk is currently active. */
+    const val KIOSK_THEME = "device.kioskTheme"
+
     /** Keys (after the `device.` prefix) advertised in `capabilities.device`. */
     val ADVERTISED_KEYS: List<String> = listOf(
         "lock", "reboot", "lockscreenMessage", "alert", "ring", "ringStop",
         "passcodeReset", "wipe", "powerMode", "locationMode",
-        "passwordQuality", "wifiProfile", "certificate",
+        "passwordQuality", "wifiProfile", "certificate", "wallpaper", "kioskTheme",
     )
 }

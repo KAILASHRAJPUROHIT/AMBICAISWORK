@@ -571,7 +571,7 @@ class KioskLauncherActivity : FragmentActivity() {
         return frame(bg).apply {
             addView(centeredText("Loading…", 18f, fg))
             addExitAffordance(p, this)
-            addStatusBar(fg, this)
+            addStatusBar(p, this)
         }
     }
 
@@ -626,7 +626,7 @@ class KioskLauncherActivity : FragmentActivity() {
             },
         )
         addExitAffordance(p, root)
-        addStatusBar(fg, root)
+        addStatusBar(p, root)
         return root
     }
 
@@ -699,7 +699,7 @@ class KioskLauncherActivity : FragmentActivity() {
                 // outcome), so it should read as "menu," not "exit."
                 val kebab = TextView(this).apply {
                     text = "⋮"
-                    setTextColor(TEXT)
+                    setTextColor(parseColor(p.theme.accentColor, TEXT))
                     textSize = 22f
                     gravity = Gravity.CENTER
                     setBackgroundColor(Color.argb(90, 0, 0, 0))
@@ -730,9 +730,10 @@ class KioskLauncherActivity : FragmentActivity() {
 
     /** Battery/Wi-Fi readout, top-start (the exit affordance owns top-end). Re-points
      *  [statusText] so the shared poll loop ([statusTick]) keeps whichever copy is on screen
-     *  live across [setContentView] swaps. */
-    private fun addStatusBar(fg: Int, parent: ViewGroup) {
-        val tv = text("", 12f, fg).apply { text = formatStatus(KioskStatusSource.read(this@KioskLauncherActivity)) }
+     *  live across [setContentView] swaps. Coloured by [KioskThemeDto.accentColor] when set. */
+    private fun addStatusBar(p: KioskApplyPayload, parent: ViewGroup) {
+        val color = parseColor(p.theme.accentColor, parseColor(p.theme.textColor, TEXT))
+        val tv = text("", 12f, color).apply { text = formatStatus(KioskStatusSource.read(this@KioskLauncherActivity)) }
         statusText = tv
         parent.addView(FrameWrap(this, tv, Gravity.TOP or Gravity.START, dp(16), heightPx = dp(32)))
     }

@@ -29,8 +29,11 @@ import com.mdmesh.core.command.handlers.DeviceRingHandler
 import com.mdmesh.core.command.handlers.DeviceLocationModeHandler
 import com.mdmesh.core.command.handlers.DevicePowerModeHandler
 import com.mdmesh.core.command.handlers.DeviceRingStopHandler
+import com.mdmesh.core.command.handlers.DeviceWallpaperHandler
 import com.mdmesh.core.command.handlers.DeviceWipeHandler
+import com.mdmesh.core.command.handlers.KioskThemeHandler
 import com.mdmesh.core.location.LocationModeStore
+import okhttp3.OkHttpClient
 import com.mdmesh.core.power.PowerModeStore
 import com.mdmesh.core.command.handlers.KioskEnterHandler
 import com.mdmesh.core.command.handlers.KioskExitHandler
@@ -342,4 +345,16 @@ object AgentModule {
     @IntoSet
     fun provideCertificateHandler(handle: DpmHandle): CommandHandler =
         DeviceCertificateHandler(handle)
+
+    @Provides
+    @IntoSet
+    fun provideWallpaperHandler(
+        @ApplicationContext context: Context,
+        httpClient: OkHttpClient,
+    ): CommandHandler = DeviceWallpaperHandler(context, httpClient)
+
+    @Provides
+    @IntoSet
+    fun provideKioskThemeHandler(store: KioskStateStore): CommandHandler =
+        KioskThemeHandler(store)
 }

@@ -48,4 +48,21 @@ data class KioskThemeDto(
     val backgroundColor: String? = null,
     val textColor: String? = null,
     val iconSize: String? = null,
+    /** Accent colour for kiosk chrome (status bar readout, exit affordance) — distinct from
+     *  [textColor], which is the app-grid label colour. Null keeps the existing default. */
+    val accentColor: String? = null,
+)
+
+/**
+ * Payload of the `device.kioskTheme` command — restyles the currently-active kiosk without
+ * re-picking apps or exit settings. Any null field leaves that part of the theme unchanged; the
+ * agent merges this into the persisted [KioskApplyPayload.theme] and re-renders immediately via
+ * the same reactive path [KioskApplyPayload] itself uses (no kiosk.enter round-trip). A no-op
+ * (leaves the device idle) if no kiosk is currently active — there's no theme to restyle.
+ */
+@Serializable
+data class KioskThemePayload(
+    val backgroundColor: String? = null,
+    val textColor: String? = null,
+    val accentColor: String? = null,
 )

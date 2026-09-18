@@ -104,6 +104,9 @@ dependencies {
     implementation(project(":kiosk"))
     implementation(project(":remote"))
 
+    // OkHttpClient is :core's implementation-only dependency (NetworkModule provides the instance);
+    // AgentModule.provideWallpaperHandler needs the type itself to declare the DI parameter.
+    implementation(libs.okhttp)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity.ktx)
