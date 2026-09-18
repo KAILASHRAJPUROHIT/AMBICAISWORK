@@ -72,7 +72,14 @@ public class AgentWakeEndpoint {
 
     @OnError
     public void onError(Session session, @PathParam("deviceNumber") String deviceNumber, Throwable t) {
-        log.debug("Agent wake socket error for {}: {}", deviceNumber, t.getMessage());
+        // A null Throwable is legal for some container close paths. Keep the full cause when
+        // one is supplied: the message alone was often null and made production disconnects
+        // impossible to diagnose.
+        if (t == null) {
+            log.debug("Agent wake socket closed with no container cause for {}", deviceNumber);
+        } else {
+            log.debug("Agent wake socket error for {}", deviceNumber, t);
+        }
         if (AgentWakeHub.INSTANCE != null) {
             AgentWakeHub.INSTANCE.unregister(deviceNumber, session);
         }

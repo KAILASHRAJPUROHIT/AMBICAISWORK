@@ -76,6 +76,10 @@ public class FcmSenderService {
             if (status < 200 || status >= 300) {
                 logger.warn("FCM wake failed (HTTP {}) for token ending ...{}: {}",
                         status, tail(fcmToken), readBody(c));
+            } else {
+                // Log only the redacted token suffix. This proves server-to-FCM acceptance
+                // without exposing a reusable registration token in production logs.
+                logger.info("FCM wake accepted (HTTP {}) for token ending ...{}", status, tail(fcmToken));
             }
         } catch (Exception e) {
             logger.warn("FCM wake error for token ending ...{}: {}", tail(fcmToken), e.getMessage());

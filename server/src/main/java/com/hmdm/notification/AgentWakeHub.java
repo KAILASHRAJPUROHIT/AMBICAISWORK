@@ -64,6 +64,12 @@ public class AgentWakeHub {
     }
 
     public void unregister(String deviceNumber, Session session) {
+        // JSR-356 is permitted to call an error callback without a Session. ConcurrentHashMap
+        // rejects null values, so cleanup must be a no-op in that case rather than turning a
+        // routine transport failure into a second server-side exception.
+        if (deviceNumber == null || session == null) {
+            return;
+        }
         sessions.remove(deviceNumber, session);
     }
 
