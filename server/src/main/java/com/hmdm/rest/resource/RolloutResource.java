@@ -74,6 +74,8 @@ public class RolloutResource {
 
     private static final Logger logger = LoggerFactory.getLogger(RolloutResource.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final String GMS_AGENT_PACKAGE = "com.mdmesh.agent";
+    private static final String AOSP_AGENT_PACKAGE = "com.mdmesh.agent.cn";
 
     private RolloutDAO rolloutDAO;
     private AgentCommandDAO commandDAO;
@@ -130,6 +132,9 @@ public class RolloutResource {
                 || body.getApkVersionCode() == null) {
             return Response.ERROR("error.rollout.invalid");
         }
+        if (!GMS_AGENT_PACKAGE.equals(body.getPackageName()) && !AOSP_AGENT_PACKAGE.equals(body.getPackageName())) {
+            return Response.ERROR("error.rollout.package");
+        }
         // Require a full SHA-256 — the device verifies the APK against it; never roll out unverified.
         if (body.getApkSha256() == null || !body.getApkSha256().matches("[0-9a-fA-F]{64}")) {
             return Response.ERROR("error.rollout.sha256");
@@ -144,7 +149,9 @@ public class RolloutResource {
         // Build the APK URL server-side from THIS deployment's base URL — the client never supplies a
         // host, so a rollout cannot be pointed at an attacker-controlled APK (the mirror is at
         // /update/agent.apk, proxied to the supervisor by Caddy).
-        String apkUrl = baseUrl.replaceAll("/+$", "") + "/update/agent.apk?v=" + body.getApkVersionCode();
+        String apkPath = AOSP_AGENT_PACKAGE.equals(body.getPackageName())
+                ? "/update/agent-cn.apk?v=" : "/update/agent.apk?v=";
+        String apkUrl = baseUrl.replaceAll("/+$", "") + apkPath + body.getApkVersionCode();
 
         long now = System.currentTimeMillis();
         AgentRollout r = new AgentRollout();
@@ -288,6 +295,9 @@ public class RolloutResource {
         AgentRollout r = rolloutDAO.findById(id);
         if (r == null || !customerId.get().equals(r.getCustomerId())) return Response.PERMISSION_DENIED();
         if (!"canary".equals(r.getStage())) return Response.ERROR("error.rollout.stage");
+        // Until the agent reports a persisted distribution channel, the server cannot safely
+        // derive the China/AOSP fleet cohort. Never risk queuing com.mdmesh.agent.cn to GMS devices.
+        if (AOSP_AGENT_PACKAGE.equals(r.getPackageName())) return Response.ERROR("error.rollout.cn.manual_canary_only");
 
         rolloutDAO.updateStage(r.getId(), "fleet");
         r.setStage("fleet");

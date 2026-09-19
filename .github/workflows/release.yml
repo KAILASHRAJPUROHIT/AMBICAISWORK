@@ -149,7 +149,7 @@ jobs:
         run: |
           sudo apt-get update -y && sudo apt-get install -y minisign
           release/build-manifest.sh "$VERSION" stable \
-            "$SERVER_IMG" "$WEB_IMG" mdmesh-agent.apk "$CODE" "$CK" "$PROTO"
+            "$SERVER_IMG" "$WEB_IMG" mdmesh-agent.apk "$CODE" "$CK" "$PROTO" ambic-mdm-agent-cn.apk
           release/sign-manifest.sh manifest.json
 
       # --- Publish ---

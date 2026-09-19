@@ -49,8 +49,8 @@ function imageTags(manifest) {
 
 /** Resolve the downloadable APK for a verified release: the manifest's apk block + the GitHub asset's
  *  download URL (matched by file name). Returns null if any piece is missing. */
-function apkAsset(release, manifest) {
-  const apk = manifest && manifest.components && manifest.components.apk;
+function apkAsset(release, manifest, component = 'apk') {
+  const apk = manifest && manifest.components && manifest.components[component];
   if (!apk || !apk.file || apk.versionCode == null || !apk.sha256) return null;
   const asset = ((release && release.assets) || []).find((a) => a.name === apk.file);
   if (!asset || !asset.browser_download_url) return null;

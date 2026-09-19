@@ -34,6 +34,8 @@ let currentVersion = process.env.CURRENT_VERSION || '0.0.0';
 let lastManifest = null;
 // Downloadable APK for the latest verified release {version,versionCode,sha256,url}; null if none.
 let lastApk = null;
+// GMS-free China/AOSP agent. Kept separate from the normal agent at every stage.
+let lastAospApk = null;
 // Release notes / link / date for the picked release {notes,url,publishedAt}; null when no release.
 let lastRelease = null;
 // In-flight apply state surfaced via /update/status; null when no apply has run.
@@ -83,22 +85,23 @@ async function verifyManifest(manifestUrl, sigUrl) {
 // --- APK mirror: download the verified release APK and serve it from the deployment's own origin, so
 // devices never need to reach GitHub. Served only after SHA-256 matches the signed manifest. ---
 const APK_DIR = process.env.APK_CACHE_DIR || '/backups/apk';
-function apkPath() { return lastApk ? path.join(APK_DIR, `agent-${lastApk.versionCode}.apk`) : null; }
-function apkReady() { const p = apkPath(); return !!(p && fs.existsSync(p)); }
-let apkFetching = null;
-async function ensureApk() {
-  if (!lastApk) return false;
-  const dest = apkPath();
+function apkPath(apk, suffix = '') { return apk ? path.join(APK_DIR, `agent${suffix}-${apk.versionCode}.apk`) : null; }
+function apkReady(apk, suffix = '') { const p = apkPath(apk, suffix); return !!(p && fs.existsSync(p)); }
+const apkFetching = new Map();
+async function ensureApk(apk = lastApk, suffix = '') {
+  if (!apk) return false;
+  const dest = apkPath(apk, suffix);
   if (fs.existsSync(dest)) return true;
-  if (apkFetching) return apkFetching; // coalesce concurrent first-requests
-  apkFetching = (async () => {
+  const key = suffix || 'gms';
+  if (apkFetching.has(key)) return apkFetching.get(key);
+  const fetchPromise = (async () => {
     const tmp = dest + '.tmp';
     try {
       fs.mkdirSync(APK_DIR, { recursive: true });
-      const r = await fetch(lastApk.url, { redirect: 'follow' }); // GitHub asset 302s to a CDN
+      const r = await fetch(apk.url, { redirect: 'follow' }); // GitHub asset 302s to a CDN
       if (!r.ok) { console.log('[apk] download failed', r.status); return false; }
       const buf = Buffer.from(await r.arrayBuffer());
-      if (!sha256Matches(buf, lastApk.sha256)) { console.log('[apk] sha256 mismatch — refusing to serve'); return false; }
+      if (!sha256Matches(buf, apk.sha256)) { console.log('[apk] sha256 mismatch — refusing to serve'); return false; }
       fs.writeFileSync(tmp, buf);
       fs.renameSync(tmp, dest); // atomic publish only after verification
       console.log('[apk] mirrored', dest);
@@ -108,9 +111,10 @@ async function ensureApk() {
       console.log('[apk] error', String((e && e.message) || e));
       try { fs.rmSync(tmp, { force: true }); } catch { /* ignore */ }
       return false;
-    } finally { apkFetching = null; }
+    } finally { apkFetching.delete(key); }
   })();
-  return apkFetching;
+  apkFetching.set(key, fetchPromise);
+  return fetchPromise;
 }
 
 /** Copy a freshly-verified APK over the deployment's static hosting path (native installs). */
@@ -133,6 +137,7 @@ function setStatus(args) {
     auto: autoUpdate,
     applySupported: APPLY_SUPPORTED,
     apk: lastApk ? { version: lastApk.version, versionCode: lastApk.versionCode, sha256: lastApk.sha256, available: apkReady() } : null,
+    apkCn: lastAospApk ? { version: lastAospApk.version, versionCode: lastAospApk.versionCode, sha256: lastAospApk.sha256, available: apkReady(lastAospApk, '-cn') } : null,
     release: lastRelease,
   };
   maybeAutoApply();
@@ -161,9 +166,11 @@ async function poll() {
     const manifest = (m && s) ? await verifyManifest(m.browser_download_url, s.browser_download_url) : null;
     lastManifest = manifest; // only verified manifests are ever stored (verifyManifest returns null otherwise)
     lastApk = manifest ? apkAsset(rel, manifest) : null;
+    lastAospApk = manifest ? apkAsset(rel, manifest, 'apkCn') : null;
     setStatus({ current: currentVersion, manifest, verified: !!manifest, checkedAt: Date.now(),
       error: manifest ? null : 'manifest missing or signature invalid' });
     if (lastApk) void ensureApk(); // warm the mirror cache (download+verify) so a rollout is instant
+    if (lastAospApk) void ensureApk(lastAospApk, '-cn');
   } catch (e) {
     state = { ...state, checkedAt: Date.now(), error: String((e && e.message) || e) };
   }
@@ -307,6 +314,15 @@ http.createServer(async (req, res) => {
       const ready = await ensureApk();
       const p = apkPath();
       if (!ready || !p || !fs.existsSync(p)) { json(res, 502, { error: 'apk unavailable or checksum mismatch' }); return; }
+      res.writeHead(200, { 'content-type': 'application/vnd.android.package-archive', 'content-length': fs.statSync(p).size });
+      fs.createReadStream(p).pipe(res);
+      return;
+    }
+    if (req.url.startsWith('/update/agent-cn.apk')) {
+      if (!lastAospApk) { res.writeHead(404).end('no China APK'); return; }
+      const ready = await ensureApk(lastAospApk, '-cn');
+      const p = apkPath(lastAospApk, '-cn');
+      if (!ready || !p || !fs.existsSync(p)) { json(res, 502, { error: 'China APK unavailable or checksum mismatch' }); return; }
       res.writeHead(200, { 'content-type': 'application/vnd.android.package-archive', 'content-length': fs.statSync(p).size });
       fs.createReadStream(p).pipe(res);
       return;
