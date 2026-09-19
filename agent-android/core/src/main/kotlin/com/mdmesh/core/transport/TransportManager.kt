@@ -76,6 +76,7 @@ class TransportManager @Inject constructor(
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     openedAt = System.currentTimeMillis()
+                    Log.d(TAG, "wake socket opened for $deviceId")
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
@@ -88,12 +89,18 @@ class TransportManager @Inject constructor(
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                    Log.w(
+                        TAG,
+                        "wake socket failed for $deviceId; HTTP ${response?.code ?: "none"}",
+                        t,
+                    )
                     scheduleReconnect()
                 }
 
                 // A server-initiated clean close is a failure for backoff purposes too — otherwise
                 // an accept-then-close server drives a reconnect every second, forever.
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                    Log.w(TAG, "wake socket closed for $deviceId; code=$code reason=$reason")
                     scheduleReconnect()
                 }
             },

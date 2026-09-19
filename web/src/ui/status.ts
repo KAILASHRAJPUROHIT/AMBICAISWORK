@@ -22,7 +22,9 @@ export function statusMeta(code?: string): StatusMeta {
 }
 
 /** Online if last sync is within this window (ms). */
-export const ONLINE_WINDOW_MS = 10 * 60 * 1000;
+// Android and OEM Doze can defer an inexact allow-while-idle heartbeat. Keep this safely above
+// the agent's five-minute heartbeat so a healthy sleeping device is not shown as offline.
+export const ONLINE_WINDOW_MS = 15 * 60 * 1000;
 
 export function isOnline(lastUpdate?: number, now: number = Date.now()): boolean {
   if (!lastUpdate) return false;

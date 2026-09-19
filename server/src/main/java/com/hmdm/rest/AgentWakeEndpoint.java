@@ -64,7 +64,10 @@ public class AgentWakeEndpoint {
     }
 
     @OnClose
-    public void onClose(Session session, @PathParam("deviceNumber") String deviceNumber) {
+    public void onClose(Session session, @PathParam("deviceNumber") String deviceNumber, CloseReason reason) {
+        log.debug("Agent wake socket closed for {}: {} ({})", deviceNumber,
+                reason == null ? "unknown" : reason.getCloseCode(),
+                reason == null ? "" : reason.getReasonPhrase());
         if (AgentWakeHub.INSTANCE != null) {
             AgentWakeHub.INSTANCE.unregister(deviceNumber, session);
         }
