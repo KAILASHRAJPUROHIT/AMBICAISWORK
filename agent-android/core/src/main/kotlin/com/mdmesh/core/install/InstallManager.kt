@@ -8,6 +8,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
+import com.mdmesh.core.di.RawHttpClient
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -90,7 +91,9 @@ sealed interface InstallOutcome {
 class InstallManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val resultBus: InstallResultBus,
-    private val httpClient: OkHttpClient,
+    // Must be the un-rewritten client: an APK URL is an absolute target that may be outside the
+    // MDM server (e.g. f-droid.org) — see [RawHttpClient].
+    @RawHttpClient private val httpClient: OkHttpClient,
 ) {
 
     private val packageInstaller: PackageInstaller

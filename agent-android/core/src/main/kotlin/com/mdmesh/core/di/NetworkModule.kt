@@ -14,7 +14,18 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
+import javax.inject.Qualifier
 import javax.inject.Singleton
+
+/**
+ * An [OkHttpClient] with no [BaseUrlInterceptor] — for requests whose URL is already the real,
+ * absolute target (APK/asset downloads from anywhere, including outside the MDM server, e.g.
+ * F-Droid). The default (unqualified) client rewrites every request's host to the configured MDM
+ * server, which is correct for [MdmApi] calls but silently corrupts a download from any other host.
+ */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class RawHttpClient
 
 /**
  * Provides the networking stack: OkHttp + Retrofit wired to the shared
@@ -41,6 +52,22 @@ object NetworkModule {
             // Resolve the real server (provisioned at enrollment) per-request, so the Retrofit base
             // below is only a placeholder and one APK serves every deployment.
             .addInterceptor(BaseUrlInterceptor(serverConfig))
+            .addInterceptor(logging)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    @RawHttpClient
+    fun provideRawOkHttp(): OkHttpClient {
+        val logging = HttpLoggingInterceptor().apply {
+            level = if (BuildConfig.DEBUG) {
+                HttpLoggingInterceptor.Level.BASIC
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
+        }
+        return OkHttpClient.Builder()
             .addInterceptor(logging)
             .build()
     }
