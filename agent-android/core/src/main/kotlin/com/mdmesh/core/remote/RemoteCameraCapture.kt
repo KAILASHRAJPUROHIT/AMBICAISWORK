@@ -11,6 +11,7 @@ import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.suspendCancellableCoroutine
 import javax.inject.Inject
@@ -27,14 +28,19 @@ import kotlin.coroutines.resume
 class RemoteCameraCapture @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
+    private companion object {
+        const val TAG = "RemoteCameraCapture"
+    }
+
     /** [facing] one of [CameraCharacteristics.LENS_FACING_FRONT]/[CameraCharacteristics.LENS_FACING_BACK].
      *  Returns JPEG bytes, or null if no matching camera exists or capture failed. */
     @SuppressLint("MissingPermission") // caller-verified: only invoked when CAMERA is granted
     suspend fun captureJpeg(facing: Int): ByteArray? {
-        val manager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager ?: return null
+        val manager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+            ?: run { Log.w(TAG, "no CameraManager"); return null }
         val cameraId = manager.cameraIdList.firstOrNull {
             manager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == facing
-        } ?: return null
+        } ?: run { Log.w(TAG, "no camera for facing=$facing (available: ${manager.cameraIdList.joinToString()})"); return null }
 
         val thread = HandlerThread("RemoteCameraCapture").apply { start() }
         val handler = Handler(thread.looper)
@@ -62,7 +68,7 @@ class RemoteCameraCapture @Inject constructor(
                             // Cap resolution: this is a periodic monitoring snapshot, not a photo the
                             // admin will print — keep captures small and fast to encode/upload.
                             val size = sizes?.minByOrNull { kotlin.math.abs(it.width * it.height - 1280 * 960) }
-                                ?: run { finish(null); return }
+                                ?: run { Log.w(TAG, "no JPEG output sizes for camera $cameraId"); finish(null); return }
                             val imgReader = ImageReader.newInstance(size.width, size.height, ImageFormat.JPEG, 1)
                                 .also { reader = it }
                             imgReader.setOnImageAvailableListener({ r ->
@@ -83,17 +89,26 @@ class RemoteCameraCapture @Inject constructor(
                                             addTarget(imgReader.surface)
                                         }.build()
                                         runCatching { session.capture(request, null, handler) }
-                                            .onFailure { finish(null) }
+                                            .onFailure { Log.w(TAG, "capture request failed for $cameraId", it); finish(null) }
                                     }
-                                    override fun onConfigureFailed(session: CameraCaptureSession) = finish(null)
+                                    override fun onConfigureFailed(session: CameraCaptureSession) {
+                                        Log.w(TAG, "capture session config failed for $cameraId")
+                                        finish(null)
+                                    }
                                 },
                                 handler,
                             )
                         }
-                        override fun onDisconnected(cam: CameraDevice) = finish(null)
-                        override fun onError(cam: CameraDevice, error: Int) = finish(null)
+                        override fun onDisconnected(cam: CameraDevice) {
+                            Log.w(TAG, "camera $cameraId disconnected")
+                            finish(null)
+                        }
+                        override fun onError(cam: CameraDevice, error: Int) {
+                            Log.w(TAG, "camera $cameraId error=$error")
+                            finish(null)
+                        }
                     }, handler)
-                }.onFailure { finish(null) }
+                }.onFailure { Log.w(TAG, "openCamera threw for $cameraId", it); finish(null) }
 
                 cont.invokeOnCancellation { cleanup() }
             }

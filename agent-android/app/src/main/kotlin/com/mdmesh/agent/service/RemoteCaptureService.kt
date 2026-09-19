@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.hardware.camera2.CameraCharacteristics
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
@@ -35,13 +36,19 @@ class RemoteCaptureService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val session = intent?.toSession() ?: return Service.START_NOT_STICKY
-        startForegroundFor(session)
+        val started = runCatching { startForegroundFor(session) }
+            .onFailure { Log.e(TAG, "startForeground failed for session ${session.sessionId}", it) }
+            .isSuccess
+        if (!started) return Service.START_NOT_STICKY
         captureJob?.cancel()
         captureJob = lifecycleScope.launch {
             val until = System.currentTimeMillis() + session.durationSec.coerceIn(30, 1800) * 1000L
             val interval = session.intervalSec.coerceIn(1, 60) * 1000L
             while (System.currentTimeMillis() < until) {
-                session.kinds.forEach { kind -> runCatching { captureAndUpload(kind) } }
+                session.kinds.forEach { kind ->
+                    runCatching { captureAndUpload(kind) }
+                        .onFailure { Log.w(TAG, "capture/upload threw for kind=$kind", it) }
+                }
                 delay(interval)
             }
             stopSelf(startId)
@@ -59,7 +66,12 @@ class RemoteCaptureService : LifecycleService() {
             "mic" -> mic.captureAac()?.let { "audio/mp4" to it }
             else -> null
         }
-        if (capture != null) uploader.upload(kind, capture.first, capture.second)
+        if (capture == null) {
+            Log.w(TAG, "capture returned null for kind=$kind")
+            return
+        }
+        val uploaded = uploader.upload(kind, capture.first, capture.second)
+        if (!uploaded) Log.w(TAG, "upload failed for kind=$kind (${capture.second.size} bytes)")
     }
 
     override fun onDestroy() {
@@ -104,6 +116,7 @@ class RemoteCaptureService : LifecycleService() {
     }
 
     companion object {
+        private const val TAG = "RemoteCaptureService"
         private const val CHANNEL_ID = "mdm_remote_capture"
         private const val NOTIFICATION_ID = 1002
         private const val EXTRA_SESSION_ID = "sessionId"

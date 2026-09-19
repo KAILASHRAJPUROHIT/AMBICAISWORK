@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.media.MediaRecorder
 import android.os.Build
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import java.io.File
@@ -18,6 +19,10 @@ import javax.inject.Singleton
 class RemoteMicCapture @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
+    private companion object {
+        const val TAG = "RemoteMicCapture"
+    }
+
     @SuppressLint("MissingPermission") // caller-verified: only invoked when RECORD_AUDIO is granted
     suspend fun captureAac(clipSeconds: Int = 6): ByteArray? {
         val out = File(context.cacheDir, "mdm-remote-mic-${System.nanoTime()}.m4a")
@@ -37,7 +42,9 @@ class RemoteMicCapture @Inject constructor(
             delay(clipSeconds * 1000L)
             runCatching { recorder.stop() }
             out.takeIf { it.exists() && it.length() > 0 }?.readBytes()
+                ?: run { Log.w(TAG, "mic clip empty or missing (exists=${out.exists()}, len=${out.length()})"); null }
         } catch (e: Exception) {
+            Log.w(TAG, "mic capture threw", e)
             null
         } finally {
             runCatching { recorder.release() }
