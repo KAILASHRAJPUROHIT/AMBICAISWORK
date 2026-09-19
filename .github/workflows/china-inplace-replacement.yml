@@ -1,0 +1,63 @@
+name: China in-place replacement APK
+
+# Deliberately manual and artifact-only. This must never create a GitHub Release,
+# publish an image, update the server, or enter a fleet rollout channel.
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Private 14R build version name"
+        required: true
+        default: "0.2.37"
+      version_code:
+        description: "Must be higher than the installed agent version code"
+        required: true
+        default: "237"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10"
+      - name: Decode release keystore
+        env:
+          STORE_B64: ${{ secrets.MDM_RELEASE_STORE_B64 }}
+        run: printf '%s' "$STORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Build signed no-GMS in-place replacement
+        working-directory: agent-android
+        env:
+          MDM_RELEASE_STORE_FILE: ${{ runner.temp }}/release.jks
+          MDM_RELEASE_STORE_PASSWORD: ${{ secrets.MDM_RELEASE_STORE_PASSWORD }}
+          MDM_RELEASE_KEY_ALIAS: ${{ secrets.MDM_RELEASE_KEY_ALIAS }}
+          MDM_RELEASE_KEY_PASSWORD: ${{ secrets.MDM_RELEASE_KEY_PASSWORD }}
+        run: |
+          gradle --no-daemon :proto:test :core:test :app:assembleAospRelease \
+            -PchinaInPlaceReplacement=true \
+            -PmdmBaseUrl=https://mdm.ambicdigital.in/ \
+            -PversionName="${{ inputs.version_name }}" \
+            -PversionCode="${{ inputs.version_code }}"
+      - name: Verify signing identity
+        run: |
+          APK=agent-android/app/build/outputs/apk/aosp/release/app-aosp-release.apk
+          ACTUAL=$(release/apk-checksum.sh "$APK")
+          EXPECTED=$(cat release/expected-signing-checksum.txt)
+          [ "$ACTUAL" = "$EXPECTED" ] || { echo "Signing certificate mismatch"; exit 1; }
+      - name: Upload private 14R APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ambic-mdm-agent-14r-no-gms
+          path: agent-android/app/build/outputs/apk/aosp/release/app-aosp-release.apk
+          retention-days: 1

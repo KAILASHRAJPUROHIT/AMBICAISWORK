@@ -1,5 +1,12 @@
 import java.util.Properties
 
+// Set only by the private China replacement workflow. It emits an AOSP APK with
+// the existing production package name so it can safely update an already
+// provisioned Device Owner. Normal AOSP releases retain their .cn package.
+val chinaInPlaceReplacement = providers.gradleProperty("chinaInPlaceReplacement")
+    .map { it.equals("true", ignoreCase = true) }
+    .getOrElse(false)
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -24,9 +31,11 @@ android {
         create("aosp") {
             dimension = "distribution"
             // China-ROM/AOSP distribution. Keep a distinct package so it can coexist with,
-            // and never accidentally replace, the GMS Device Owner agent.
-            applicationIdSuffix = ".cn"
-            versionNameSuffix = "-cn"
+            // and never accidentally replace, the GMS Device Owner agent. The one exception
+            // is the explicitly named private China replacement workflow, used to remove GMS
+            // from an already-enrolled China-ROM Device Owner without a factory reset.
+            if (!chinaInPlaceReplacement) applicationIdSuffix = ".cn"
+            versionNameSuffix = if (chinaInPlaceReplacement) "-cn-replace" else "-cn"
             buildConfigField("boolean", "GMS_DISTRIBUTION", "false")
         }
     }
