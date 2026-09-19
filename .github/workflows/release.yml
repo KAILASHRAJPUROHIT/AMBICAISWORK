@@ -68,15 +68,18 @@ jobs:
           VERSION: ${{ steps.ver.outputs.version }}
           CODE: ${{ steps.ver.outputs.code }}
         run: |
-          gradle --no-daemon :proto:test :core:test :app:assembleRelease \
+          gradle --no-daemon :proto:test :core:test :app:assembleGmsRelease :app:assembleAospRelease \
             -PmdmBaseUrl=https://mdm.ambicdigital.in/ \
             -PversionName="$VERSION" -PversionCode="$CODE"
       - name: Stage APK + compute checksum
         run: |
-          cp agent-android/app/build/outputs/apk/release/app-release.apk mdmesh-agent.apk
+          cp agent-android/app/build/outputs/apk/gms/release/app-gms-release.apk mdmesh-agent.apk
           CK=$(release/apk-checksum.sh mdmesh-agent.apk)
           [ -n "$CK" ] || { echo "APK signature checksum came out empty — aborting the release"; exit 1; }
           echo "CK=$CK" >> "$GITHUB_ENV"
+      - name: Stage China / AOSP agent APK
+        run: |
+          cp agent-android/app/build/outputs/apk/aosp/release/app-aosp-release.apk ambic-mdm-agent-cn.apk
 
       # RELEASING.md: "NEVER ROTATE" the release keystore — every enrolled device is a Device
       # Owner install, and Android only allows a silent self-update when the new APK's signing
@@ -154,5 +157,6 @@ jobs:
         with:
           files: |
             mdmesh-agent.apk
+            ambic-mdm-agent-cn.apk
             manifest.json
             manifest.json.minisig

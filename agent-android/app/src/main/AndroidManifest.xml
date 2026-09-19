@@ -199,18 +199,6 @@
                 android:resource="@xml/screen_capture_accessibility_service" />
         </service>
 
-        <!-- Second, Doze-surviving wake channel alongside CheckInService's own WebSocket - see
-             AmbicFirebaseMessagingService's doc comment. The intent-filter is how the FCM SDK
-             finds this service; it's a no-op until google-services.json + the google-services
-             Gradle plugin are added (see app/build.gradle.kts). -->
-        <service
-            android:name=".service.AmbicFirebaseMessagingService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
         <!-- PackageInstaller commit results land here (explicit, non-exported). -->
         <receiver
             android:name=".install.InstallResultReceiver"

@@ -13,6 +13,24 @@ android {
     namespace = "com.mdmesh.agent"
     compileSdk = 35
 
+    flavorDimensions += "distribution"
+
+    productFlavors {
+        create("gms") {
+            dimension = "distribution"
+            // Production Android Enterprise / Google Play distribution.
+            buildConfigField("boolean", "GMS_DISTRIBUTION", "true")
+        }
+        create("aosp") {
+            dimension = "distribution"
+            // China-ROM/AOSP distribution. Keep a distinct package so it can coexist with,
+            // and never accidentally replace, the GMS Device Owner agent.
+            applicationIdSuffix = ".cn"
+            versionNameSuffix = "-cn"
+            buildConfigField("boolean", "GMS_DISTRIBUTION", "false")
+        }
+    }
+
     defaultConfig {
         applicationId = "com.mdmesh.agent"
         minSdk = 24
@@ -115,11 +133,10 @@ dependencies {
     implementation(libs.androidx.biometric)
     implementation(libs.kotlinx.coroutines.android)
 
-    // Firebase Cloud Messaging - a second, Doze-surviving wake channel alongside the agent's own
-    // WebSocket (see AmbicFirebaseMessagingService). google-services.json (project ambic-mdm-prod,
-    // package com.mdmesh.agent) is in place and the google-services plugin is applied above.
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.messaging.ktx)
+    // GMS-only wake channel. The AOSP/China APK deliberately contains neither the Firebase
+    // runtime nor the Firebase messaging service; it uses TransportManager + WakeKeepAlive.
+    add("gmsImplementation", platform(libs.firebase.bom))
+    add("gmsImplementation", libs.firebase.messaging.ktx)
 
     // WorkManager (scheduling check-in)
     implementation(libs.work.runtime.ktx)
@@ -132,4 +149,13 @@ dependencies {
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
+}
+
+// The Google Services plugin is retained for the gms flavor. It otherwise tries to validate the
+// root google-services.json against the deliberately distinct `.cn` package and makes a GMS-free
+// AOSP build impossible. AOSP has no Firebase dependency or generated Google resource to consume.
+tasks.configureEach {
+    if (name.startsWith("processAosp") && name.endsWith("GoogleServices")) {
+        enabled = false
+    }
 }
