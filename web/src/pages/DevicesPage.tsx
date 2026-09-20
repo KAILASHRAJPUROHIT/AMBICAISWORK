@@ -12,6 +12,8 @@ import {
   type DeviceView,
   type ConfigurationLookup,
 } from '../api/devices';
+import { getDeviceState, type DeviceState } from '../api/commands';
+import { getTelemetry, type TelemetrySnapshot } from '../api/telemetry';
 import { listConfigurations, type ConfigurationSummary } from '../api/configurations';
 import { listPendingFrpDevices } from '../api/frp';
 import { listActiveAppRollouts } from '../api/appRollout';
@@ -101,6 +103,38 @@ export function DevicesPage() {
       })
       .catch(() => undefined);
   }, []);
+
+  const [devStates, setDevStates] = useState<Map<string, DeviceState>>(new Map());
+  const [devTele, setDevTele] = useState<Map<string, TelemetrySnapshot>>(new Map());
+
+  // Load state and telemetry for the displayed devices
+  useEffect(() => {
+    if (devices.length === 0) return;
+    let cancelled = false;
+
+    // Fetch state and telemetry for each device in parallel
+    devices.forEach((d) => {
+      getDeviceState(d.number)
+        .then((s) => {
+          if (!cancelled && s) {
+            setDevStates((prev) => new Map(prev).set(d.number, s));
+          }
+        })
+        .catch(() => undefined);
+
+      getTelemetry(d.number)
+        .then((t) => {
+          if (!cancelled && t) {
+            setDevTele((prev) => new Map(prev).set(d.number, t));
+          }
+        })
+        .catch(() => undefined);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [devices]);
 
   // Tick every 30s so online/offline chips and dots decay as devices go quiet.
   const [now, setNow] = useState(() => Date.now());
@@ -346,6 +380,8 @@ export function DevicesPage() {
                   now={now}
                   config={configName(d, configurations)}
                   dup={dupOf(d)}
+                  state={devStates.get(d.number)}
+                  tele={devTele.get(d.number)}
                   selected={selected.has(d.id)}
                   selectionActive={selectionActive}
                   frpPending={frpPending.has(d.number)}
@@ -364,6 +400,8 @@ export function DevicesPage() {
                   now={now}
                   config={configName(d, configurations)}
                   dup={dupOf(d)}
+                  state={devStates.get(d.number)}
+                  tele={devTele.get(d.number)}
                   selected={selected.has(d.id)}
                   selectionActive={selectionActive}
                   frpPending={frpPending.has(d.number)}
@@ -487,11 +525,45 @@ function UpdatePendingBadge({ appName }: { appName: string }) {
   );
 }
 
+function formatInternetStrength(tele?: TelemetrySnapshot | null): string {
+  if (!tele?.dynamic) return '—';
+  const dyn = tele.dynamic;
+  const netType = typeof dyn.networkType === 'string' ? dyn.networkType : '';
+  const ssid = typeof dyn.wifiSsid === 'string' && dyn.wifiSsid ? dyn.wifiSsid : null;
+  const rssi = typeof dyn.wifiRssi === 'number' ? dyn.wifiRssi : null;
+
+  if (netType === 'wifi' || ssid) {
+    if (ssid && rssi != null) {
+      let bars = '📶';
+      if (rssi >= -65) bars = '📶 Strong';
+      else if (rssi >= -75) bars = '📶 Good';
+      else bars = '📶 Fair';
+      return `${ssid} · ${bars}`;
+    }
+    if (ssid) return ssid;
+    if (rssi != null) return `${rssi} dBm`;
+    return 'Wi-Fi';
+  }
+  if (netType === 'cellular') {
+    const op = typeof dyn.cellularOperator === 'string' ? dyn.cellularOperator : 'Cellular';
+    return op;
+  }
+  if (netType) return netType;
+  return '—';
+}
+
+function formatBattery(state?: DeviceState | null): string {
+  if (!state || state.battery == null || state.battery < 0) return '—';
+  return `${state.battery}%${state.charging ? ' ⚡' : ''}`;
+}
+
 function DeviceCard({
   d,
   now,
   config,
   dup,
+  state,
+  tele,
   selected,
   selectionActive,
   frpPending,
@@ -503,6 +575,8 @@ function DeviceCard({
   now: number;
   config: string;
   dup: number;
+  state?: DeviceState;
+  tele?: TelemetrySnapshot;
   selected: boolean;
   selectionActive: boolean;
   frpPending: boolean;
@@ -513,6 +587,9 @@ function DeviceCard({
   const online = isOnline(d, now);
   // Once a selection is in progress, clicking a card toggles it instead of opening it.
   const act = selectionActive ? onToggle : onOpen;
+  const isKiosk = state ? !!state.kioskActive : !!d.kioskMode;
+  const agentVer = state?.agentVersion || d.launcherVersion || '—';
+
   return (
     <div
       className={`dev ${selected ? 'sel' : ''}`}
@@ -531,11 +608,28 @@ function DeviceCard({
         {updatePendingApp && <UpdatePendingBadge appName={updatePendingApp} />}
         <DeviceGlyph className="ico" name={d.description || d.number} size={16} />
       </div>
-      {d.description && <div className="sub">ID: {d.number}</div>}
       <div className="kv">
         <div>
-          <div className="k">Android</div>
-          <div className="v">{orDash(d.androidVersion)}</div>
+          <div className="k">Battery</div>
+          <div className="v">{formatBattery(state)}</div>
+        </div>
+        <div>
+          <div className="k">Internet</div>
+          <div className="v" title={formatInternetStrength(tele)} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {formatInternetStrength(tele)}
+          </div>
+        </div>
+        <div>
+          <div className="k">Kiosk</div>
+          <div className="v">
+            <span className={`kiosk-badge ${isKiosk ? 'on' : 'off'}`}>
+              {isKiosk ? 'On' : 'Off'}
+            </span>
+          </div>
+        </div>
+        <div>
+          <div className="k">Agent</div>
+          <div className="v">{agentVer}</div>
         </div>
         <div>
           <div className="k">Config</div>
@@ -555,6 +649,8 @@ function DeviceRow({
   now,
   config,
   dup,
+  state,
+  tele,
   selected,
   selectionActive,
   frpPending,
@@ -566,6 +662,8 @@ function DeviceRow({
   now: number;
   config: string;
   dup: number;
+  state?: DeviceState;
+  tele?: TelemetrySnapshot;
   selected: boolean;
   selectionActive: boolean;
   frpPending: boolean;
@@ -575,6 +673,9 @@ function DeviceRow({
 }) {
   const online = isOnline(d, now);
   const act = selectionActive ? onToggle : onOpen;
+  const isKiosk = state ? !!state.kioskActive : !!d.kioskMode;
+  const agentVer = state?.agentVersion || d.launcherVersion || '—';
+
   return (
     <div
       className={`dev-row ${selected ? 'sel' : ''}`}
@@ -587,18 +688,33 @@ function DeviceRow({
         <SelectBox selected={selected} onToggle={onToggle} />
         <span className={`dot ${online ? 'on' : 'off'}`} />
         <DeviceGlyph className="ico" name={d.description || d.number} size={15} />
-        <div style={{ minWidth: 0 }}>
-          <div className="nm">{orDash(d.description || d.number)}</div>
-          {d.description && <div className="sub">ID: {d.number}</div>}
-        </div>
+        <span className="nm">{orDash(d.description || d.number)}</span>
         {dup > 1 && <DupBadge n={dup} />}
         {d.enrollmentMode === 'deviceAdmin' && <LiteBadge />}
         {frpPending && <FrpPendingBadge />}
         {updatePendingApp && <UpdatePendingBadge appName={updatePendingApp} />}
       </div>
       <div className="lc">
-        <span className="lk">Android</span>
-        <span className="lv">{orDash(d.androidVersion)}</span>
+        <span className="lk">Battery</span>
+        <span className="lv">{formatBattery(state)}</span>
+      </div>
+      <div className="lc">
+        <span className="lk">Internet</span>
+        <span className="lv" title={formatInternetStrength(tele)} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {formatInternetStrength(tele)}
+        </span>
+      </div>
+      <div className="lc">
+        <span className="lk">Kiosk</span>
+        <span className="lv">
+          <span className={`kiosk-badge ${isKiosk ? 'on' : 'off'}`}>
+            {isKiosk ? 'On' : 'Off'}
+          </span>
+        </span>
+      </div>
+      <div className="lc">
+        <span className="lk">Agent</span>
+        <span className="lv">{agentVer}</span>
       </div>
       <div className="lc">
         <span className="lk">Config</span>

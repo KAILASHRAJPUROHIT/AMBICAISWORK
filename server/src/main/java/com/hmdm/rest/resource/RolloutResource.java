@@ -336,10 +336,29 @@ public class RolloutResource {
         Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
         if (!customerId.isPresent()) return Response.PERMISSION_DENIED();
         AgentRollout r = rolloutDAO.findActiveByCustomer(customerId.get());
+        if (r != null) {
+            reconcileRollout(r);
+        }
         return Response.OK(r == null ? null : buildView(r));
     }
 
     // ---- helpers ----------------------------------------------------------------------------------------------------
+
+    /** Ensure all devices in active stage have received commands. */
+    private void reconcileRollout(AgentRollout r) {
+        int cust = r.getCustomerId();
+        List<RolloutDeviceRow> rows = rolloutDAO.listCustomerDevices(cust);
+        Set<String> canary = new HashSet<>(rolloutDAO.listCanaryNumbers(r.getId()));
+        List<RolloutDeviceRow> targetRows = "fleet".equals(r.getStage())
+                ? rows
+                : filter(rows, canary, true);
+        if ("command".equals(r.getTrackingMode())) {
+            enqueueEligibleByCommand(r, targetRows);
+        } else {
+            Set<String> pending = new HashSet<>(rolloutDAO.listPendingInstallNumbers(cust));
+            enqueueEligible(r, targetRows, pending);
+        }
+    }
 
     private static boolean isBlank(String s) { return s == null || s.trim().isEmpty(); }
 

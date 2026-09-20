@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, API_BASE } from './client';
 
 export type RemoteKind = 'screen' | 'cameraFront' | 'cameraBack' | 'mic';
 
@@ -36,5 +36,5 @@ export function getLatestSnapshots(deviceId: string): Promise<RemoteSnapshotMeta
 }
 
 export function snapshotUrl(deviceId: string, kind: RemoteKind, capturedAt: number): string {
-  return `/rest${base(deviceId)}/snapshot/${kind}?_=${capturedAt}`;
+  return `${API_BASE}${base(deviceId)}/snapshot/${kind}?_=${capturedAt}`;
 }
