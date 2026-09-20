@@ -27,9 +27,15 @@ object KioskAppKillOverlay {
 
     /** [onKill] is invoked on tap; the caller (KioskLauncherActivity, which owns DevicePolicyManager
      *  access) is responsible for actually suspending/relaunching the app -- this object only owns
-     *  the floating button's lifecycle. */
+     *  the floating button's lifecycle.
+     *
+     *  Re-targetable (2026-09-20, grid/multi-app mode follow-up): production kiosks run the
+     *  multi-app grid, not single-pin mode -- staff open a DIFFERENT app from the grid each time,
+     *  so this must retarget to whichever app is now in the foreground, not just show once and
+     *  freeze on the first app ever launched. If the button already exists, only its click target
+     *  is swapped; the window itself isn't recreated. */
     fun show(context: Context, onKill: () -> Unit) {
-        if (view != null) return
+        view?.let { it.setOnClickListener { _ -> onKill() }; return }
         if (!Settings.canDrawOverlays(context)) return
         val appContext = context.applicationContext
         val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as? WindowManager ?: return

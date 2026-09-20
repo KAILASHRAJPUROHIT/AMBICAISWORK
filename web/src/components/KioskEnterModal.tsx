@@ -22,13 +22,19 @@ export const ORG_NAME = 'Aradhana Jewellers';
  *  friendly name for this device, e.g. "TAB1") — everything else is device-independent. */
 export function buildKioskPayload(c: KioskChoice, deviceLabel?: string): object {
   const branding = { deviceLabel: deviceLabel || undefined, orgName: ORG_NAME };
+  // recents: true re-enables Android's native Recents/multitasking screen while STAYING inside
+  // lock-task kiosk mode (LOCK_TASK_FEATURE_OVERVIEW) -- staff can swipe away a frozen app the
+  // normal way. Safe by construction, not by convention: lock-task mode itself never lets Recents
+  // exit the locked mode or remove the root/HOME task, so this can't be used to kill AMBIC MDM --
+  // if our own task were swiped, Device Owner + persistent-HOME just relaunches it immediately,
+  // the same recovery path already used for any other kiosk exit today.
   return c.mode === 'single'
     ? { mode: 'single', pinPackage: c.packages[0], allowedPackages: c.packages,
         exitMode: c.exitMode, password: c.password || undefined,
-        features: { home: true, notifications: false, lockButtons: true }, ...branding }
+        features: { home: true, notifications: false, lockButtons: true, recents: true }, ...branding }
     : { mode: 'launcher', allowedPackages: c.packages,
         exitMode: c.exitMode, password: c.password || undefined,
-        features: { home: true, notifications: false, lockButtons: true }, ...branding };
+        features: { home: true, notifications: false, lockButtons: true, recents: true }, ...branding };
 }
 
 /** A row in either source, normalised so the list renders the same way. */

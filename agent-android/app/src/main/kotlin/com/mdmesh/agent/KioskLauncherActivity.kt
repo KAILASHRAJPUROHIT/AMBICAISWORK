@@ -140,6 +140,10 @@ class KioskLauncherActivity : FragmentActivity() {
             crashGuard.registerFault()
             if (bailOnCrashLoop()) return
             launchPinned(p)
+        } else {
+            // Grid mode: being resumed means whatever app was open just exited/backgrounded to
+            // HOME, so there's no "current app" for the kill button to target anymore.
+            KioskAppKillOverlay.hide()
         }
     }
 
@@ -153,12 +157,6 @@ class KioskLauncherActivity : FragmentActivity() {
             return
         }
         if (bailOnCrashLoop()) return
-        if (!(p.mode == "single" && p.pinPackage != null)) {
-            // Grid/multi-app mode: the kill switch is specific to a single pinned app right now
-            // (see launchPinned()'s doc comment) — don't leave a stale button pointed at whatever
-            // app was pinned last time this device was in single mode.
-            KioskAppKillOverlay.hide()
-        }
         promptDefaultHomeIfNeeded()
         startLockTaskSafely()
         if (p.mode == "single" && p.pinPackage != null) {
@@ -698,6 +696,11 @@ class KioskLauncherActivity : FragmentActivity() {
             runCatching {
                 packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) }
             }
+            // Grid mode (the actual production configuration -- explicit correction,
+            // 2026-09-20: no tablet ever runs single-pin mode) needs the kill switch retargeted
+            // to whichever app was just opened, not fixed to one pinned package. See
+            // KioskAppKillOverlay.show()'s doc comment for the retarget behavior.
+            KioskAppKillOverlay.show(this@KioskLauncherActivity) { killAndRelaunchPinnedApp(pkg) }
         }
     }
 
