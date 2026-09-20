@@ -92,8 +92,8 @@ export function WallpaperPanel() {
                 e.target.value = '';
               }}
             />
-            <button className="btn btn-sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
-              {uploading ? 'Uploading…' : fileName ? `✓ ${fileName}` : 'Choose image…'}
+            <button className="btn btn-sm" onClick={() => fileRef.current?.click()} disabled={uploading} title={fileName || 'Choose an image file'}>
+              {uploading ? 'Uploading…' : fileName ? (fileName.length > 20 ? `✓ ${fileName.slice(0, 17)}…` : `✓ ${fileName}`) : 'Choose image…'}
             </button>
             <select className="sel" value={target} onChange={(e) => setTarget(e.target.value as WallpaperTarget)}>
               <option value="both">Home + lock screen</option>
@@ -121,13 +121,22 @@ export function WallpaperPanel() {
         </span>
         <span className="v wide-actions">
           <div className="upd-actions">
-            <input
-              type="color"
-              value={accent}
-              onChange={(e) => setAccent(e.target.value)}
-              style={{ width: 48, height: 32, padding: 2 }}
-            />
-            <input className="input mono" value={accent} onChange={(e) => setAccent(e.target.value)} style={{ width: 110 }} />
+            <div className="color-picker-wrap">
+              <input
+                type="color"
+                className="color-swatch-input"
+                value={accent}
+                onChange={(e) => setAccent(e.target.value)}
+                title="Choose accent color"
+              />
+              <input
+                className="input input-sm mono"
+                value={accent}
+                onChange={(e) => setAccent(e.target.value)}
+                style={{ width: 88 }}
+                placeholder="#000000"
+              />
+            </div>
             <button className="btn btn-sm btn-primary" onClick={() => void pushAccent()} disabled={pushingAccent}>
               {pushingAccent ? 'Pushing…' : 'Push to all devices'}
             </button>

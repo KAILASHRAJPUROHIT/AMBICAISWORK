@@ -223,15 +223,28 @@ export function SettingsPage() {
               <small>Google accounts approved to unlock a Device Owner device after a factory reset. Google sign-in happens on Google; AMBIC MDM stores only verified numeric account IDs and display email.</small>
             </span>
             <span className="v wide-actions">
-              <div className="upd-actions">
-                <button className="btn btn-sm btn-primary" disabled={frpBusy} onClick={() => void connectFrpAccount()}>
-                  {frpBusy ? 'Working…' : 'Connect Google account'}
-                </button>
-              </div>
-              {frpLoading ? <p className="au-note">Loading…</p> : frpAccounts.length === 0 ? <p className="au-note">No recovery accounts connected.</p> : (
-                <ul className="plain-list">
-                  {frpAccounts.map((account) => <li key={account.id}><span className="mono">{account.email}</span> <button className="btn btn-sm" disabled={frpBusy} onClick={() => void removeFrpAccount(account)}>Remove</button></li>)}
-                </ul>
+              <button className="btn btn-sm btn-primary" disabled={frpBusy} onClick={() => void connectFrpAccount()}>
+                {frpBusy ? 'Working…' : '+ Connect Google account'}
+              </button>
+              {frpLoading ? (
+                <p className="au-note">Loading…</p>
+              ) : frpAccounts.length === 0 ? (
+                <p className="au-note">No recovery accounts connected.</p>
+              ) : (
+                <div className="frp-accounts-list">
+                  {frpAccounts.map((account) => (
+                    <div key={account.id} className="frp-account-item">
+                      <span className="mono frp-email" title={account.email}>{account.email}</span>
+                      <button
+                        className="btn btn-sm btn-ghost btn-danger"
+                        disabled={frpBusy}
+                        onClick={() => void removeFrpAccount(account)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
               {frpMsg && <p className="au-note">{frpMsg}</p>}
             </span>
@@ -275,14 +288,16 @@ export function SettingsPage() {
                 per-session kiosk password). Delivered to devices on their next check-in.
               </small>
             </span>
-            <span className="v">
+            <span className="v wide-actions">
               <div className="upd-actions">
                 <input
                   type="password"
+                  className="input input-sm"
                   placeholder={adminPasscodeSet ? 'Set — enter a new passcode to replace it' : 'Enter a passcode'}
                   value={passcodeInput}
                   onChange={(e) => setPasscodeInput(e.target.value)}
                   disabled={passcodeSaving}
+                  style={{ maxWidth: 240, flex: '1 1 180px' }}
                 />
                 <button
                   className="btn btn-sm btn-primary"
@@ -297,10 +312,13 @@ export function SettingsPage() {
                   </button>
                 )}
               </div>
-              <p className="au-note">
-                {adminPasscodeSet === null ? '' : adminPasscodeSet ? 'Currently set.' : 'Not set.'}
-              </p>
-              {passcodeMsg && <p className="au-note">{passcodeMsg}</p>}
+              <div className="passcode-status-wrap">
+                <span className={`passcode-badge ${adminPasscodeSet ? 'badge-set' : 'badge-unset'}`}>
+                  <span className="dot" />
+                  {adminPasscodeSet === null ? 'Checking…' : adminPasscodeSet ? 'Currently set' : 'Not set'}
+                </span>
+                {passcodeMsg && <span className="au-note">{passcodeMsg}</span>}
+              </div>
             </span>
           </div>
         </section>
@@ -331,7 +349,7 @@ export function SettingsPage() {
                   What&rsquo;s new
                   <small>Release notes for v{orDash(upd.latest)}.</small>
                 </span>
-                <span className="v">
+                <span className="v wide-actions">
                   <div className="whatsnew">{upd.release.notes}</div>
                   {upd.release.url && (
                     <a className="whatsnew-link" href={upd.release.url} target="_blank" rel="noreferrer">
@@ -351,7 +369,7 @@ export function SettingsPage() {
                       : 'Server + console update now; agent APK rolls out to devices.'}
                   </small>
                 </span>
-                <span className="v">
+                <span className="v wide-actions">
                   <div className="upd-actions">
                     {upd.applySupported !== false && (
                       <button
