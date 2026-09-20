@@ -158,7 +158,24 @@ class KioskLauncherActivity : FragmentActivity() {
         }
         if (bailOnCrashLoop()) return
         promptDefaultHomeIfNeeded()
-        startLockTaskSafely()
+        // Use controller.enter() instead of bare startLockTask() so that lock-task features
+        // (Recents, Home, notifications, etc.) are applied on every state restore — not just
+        // when a kiosk.enter command arrives. Without this, an APK update or reboot reverts
+        // features to LOCK_TASK_FEATURE_NONE (the framework default when only startLockTask()
+        // is called), which disables the Recents button even though the persisted payload has
+        // recents=true.
+        val features = lockTaskFeatures(
+            KioskToggles(
+                home = p.features.home,
+                recents = p.features.recents,
+                notifications = p.features.notifications,
+                systemInfo = p.features.systemInfo,
+                keyguard = p.features.keyguard,
+                lockButtons = p.features.lockButtons,
+            ),
+        )
+        val allowed = (p.allowedPackages + listOfNotNull(p.pinPackage)).distinct()
+        controller.enter(ComponentName(this, HOME_ALIAS), allowed, features)
         if (p.mode == "single" && p.pinPackage != null) {
             launchPinned(p)
         } else {
