@@ -24,6 +24,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
@@ -40,6 +41,7 @@ import com.mdmesh.core.store.KioskStateStore
 import com.mdmesh.core.telemetry.EventSink
 import com.mdmesh.kiosk.CrashLoopGuard
 import com.mdmesh.kiosk.KioskController
+import com.mdmesh.kiosk.KioskAppKillOverlay
 import com.mdmesh.kiosk.KioskEscapeOverlay
 import com.mdmesh.kiosk.KioskResult
 import com.mdmesh.kiosk.KioskToggles
@@ -85,14 +87,18 @@ class KioskLauncherActivity : FragmentActivity() {
      *  synchronously without blocking on a DataStore read from a dialog callback. */
     private var fleetPasscodeHash: String? = null
 
-    /** The currently-displayed status-bar TextView (battery/Wi-Fi), re-pointed by whichever view
-     *  builder last ran ([splashView]/[launcherGrid]) so a single timer can keep it live across
-     *  [setContentView] swaps without each view needing its own polling loop. */
-    private var statusText: TextView? = null
+    /** The currently-displayed battery/Wi-Fi TextViews, re-pointed by whichever view builder last
+     *  ran ([splashView]/[launcherGrid]) so a single timer can keep them live across
+     *  [setContentView] swaps without each view needing its own polling loop. Battery sits at the
+     *  extreme left, Wi-Fi at the extreme right (beside the kebab menu). */
+    private var batteryText: TextView? = null
+    private var wifiText: TextView? = null
     private val statusHandler = Handler(Looper.getMainLooper())
     private val statusTick: Runnable = object : Runnable {
         override fun run() {
-            statusText?.text = formatStatus(KioskStatusSource.read(this@KioskLauncherActivity))
+            val s = KioskStatusSource.read(this@KioskLauncherActivity)
+            batteryText?.text = formatBattery(s)
+            wifiText?.text = formatWifi(s)
             statusHandler.postDelayed(this, STATUS_POLL_MS)
         }
     }
@@ -142,10 +148,17 @@ class KioskLauncherActivity : FragmentActivity() {
         setWatchdogArmed(p != null)
         if (p == null) {
             stopLockTaskSafely()
+            KioskAppKillOverlay.hide()
             setContentView(idleView())
             return
         }
         if (bailOnCrashLoop()) return
+        if (!(p.mode == "single" && p.pinPackage != null)) {
+            // Grid/multi-app mode: the kill switch is specific to a single pinned app right now
+            // (see launchPinned()'s doc comment) — don't leave a stale button pointed at whatever
+            // app was pinned last time this device was in single mode.
+            KioskAppKillOverlay.hide()
+        }
         promptDefaultHomeIfNeeded()
         startLockTaskSafely()
         if (p.mode == "single" && p.pinPackage != null) {
@@ -157,13 +170,39 @@ class KioskLauncherActivity : FragmentActivity() {
 
     /** Launch + show the pinned app (single mode), with a themed splash behind it. */
     private fun launchPinned(p: KioskApplyPayload) {
-        val intent = p.pinPackage?.let { packageManager.getLaunchIntentForPackage(it) }
+        val pkg = p.pinPackage ?: return setContentView(launcherGrid(p))
+        val intent = packageManager.getLaunchIntentForPackage(pkg)
         if (intent == null) {
             setContentView(launcherGrid(p)) // unknown package → fall back to the grid
             return
         }
         setContentView(splashView(p))
         runCatching { startActivity(intent) }
+        // Ungated self-service kill switch (explicit request, 2026-09-20): staff need a way to
+        // force-stop + relaunch a frozen pinned app on the spot, without the admin PIN and without
+        // exiting kiosk mode entirely. See killAndRelaunchPinnedApp()'s doc comment for the
+        // self-protection guard.
+        KioskAppKillOverlay.show(this) { killAndRelaunchPinnedApp(pkg) }
+    }
+
+    /** Force-stops [pkg] (via a suspend/unsuspend pulse -- same primitive as the console's remote
+     *  `device.appKill`, see `AppKillHandler`'s doc comment for why: a Device Owner has no public
+     *  `forceStopPackage` API, but suspending a package stops its process immediately, and
+     *  un-suspending right after leaves it killed but freely launchable again) then relaunches it.
+     *  Hard-refuses to ever target this agent's own package, mirroring `AppKillHandler`'s guard --
+     *  [pkg] should never legitimately be us (we're never our own pinned app), but this stays a
+     *  correctness invariant, not an assumption. */
+    private fun killAndRelaunchPinnedApp(pkg: String) {
+        if (pkg == packageName) return
+        runCatching {
+            val packages = arrayOf(pkg)
+            dpmHandle.dpm.setPackagesSuspended(dpmHandle.admin, packages, true)
+            dpmHandle.dpm.setPackagesSuspended(dpmHandle.admin, packages, false)
+        }
+        toastShort("Relaunching…")
+        runCatching {
+            packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) }
+        }
     }
 
     /** @return true if a crash loop tripped (kiosk dropped + recovery shown), so the caller stops. */
@@ -541,6 +580,7 @@ class KioskLauncherActivity : FragmentActivity() {
         // Safety net: clear a stale KioskEscapeOverlay in case exit fires mid-escape — see the
         // identical note in bailOnCrashLoop().
         KioskEscapeOverlay.hide()
+        KioskAppKillOverlay.hide()
         runCatching { if (isFinishing.not()) stopLockTask() }
         controller.exit()
         events.record("kioskExit", "exited on-device")
@@ -706,7 +746,7 @@ class KioskLauncherActivity : FragmentActivity() {
                     setOnClickListener { promptExit(p) }
                 }
                 parent.addView(
-                    FrameWrap(this, kebab, Gravity.TOP or Gravity.END, dp(16), dp(48), dp(48)),
+                    FrameWrap(this, kebab, Gravity.TOP or Gravity.END, dp(16), dp(48), dp(48), avoidSystemBars = false),
                 )
             }
             "gesture" -> {
@@ -728,24 +768,40 @@ class KioskLauncherActivity : FragmentActivity() {
         }
     }
 
-    /** Battery/Wi-Fi readout, top-end — same corner as the exit affordance. Re-points
-     *  [statusText] so the shared poll loop ([statusTick]) keeps whichever copy is on screen
+    /** Battery (extreme left) and Wi-Fi (extreme right) readouts, both flush with the true top
+     *  edge — same row as the exit affordance, not stacked under it. Re-points [batteryText]/
+     *  [wifiText] so the shared poll loop ([statusTick]) keeps whichever copies are on screen
      *  live across [setContentView] swaps. Coloured by [KioskThemeDto.accentColor] when set.
-     *  Offset below the kebab menu when [KioskApplyPayload.exitMode] is "visible" so the two
-     *  top-end elements don't overlap; the "gesture" tap target is invisible, so no offset needed. */
+     *  Wi-Fi is offset left of the kebab menu when [KioskApplyPayload.exitMode] is "visible" so
+     *  the two top-end elements sit side by side instead of overlapping; the "gesture" tap target
+     *  is invisible, so no offset needed. */
     private fun addStatusBar(p: KioskApplyPayload, parent: ViewGroup) {
         val color = parseColor(p.theme.accentColor, parseColor(p.theme.textColor, TEXT))
-        val tv = text("", 12f, color).apply { text = formatStatus(KioskStatusSource.read(this@KioskLauncherActivity)) }
-        statusText = tv
-        val topExtra = if (p.exitMode == "visible") dp(56) else 0
-        parent.addView(FrameWrap(this, tv, Gravity.TOP or Gravity.END, dp(16), heightPx = dp(32), topExtraPx = topExtra))
+        val s = KioskStatusSource.read(this@KioskLauncherActivity)
+
+        val battery = text("", 12f, color).apply { text = formatBattery(s) }
+        batteryText = battery
+        parent.addView(
+            FrameWrap(this, battery, Gravity.TOP or Gravity.START, dp(16), heightPx = dp(32), avoidSystemBars = false),
+        )
+
+        val wifi = text("", 12f, color).apply { text = formatWifi(s) }
+        wifiText = wifi
+        val endExtra = if (p.exitMode == "visible") dp(64) else 0
+        parent.addView(
+            FrameWrap(
+                this, wifi, Gravity.TOP or Gravity.END, dp(16),
+                heightPx = dp(32), endExtraPx = endExtra, avoidSystemBars = false,
+            ),
+        )
     }
 
-    private fun formatStatus(s: KioskStatusSource.Status): String {
-        val battery = if (s.batteryPct >= 0) "${s.batteryPct}%${if (s.charging) " ⚡" else ""}" else "—"
+    private fun formatBattery(s: KioskStatusSource.Status): String =
+        if (s.batteryPct >= 0) "🔋 ${s.batteryPct}%${if (s.charging) " ⚡" else ""}" else "🔋 —"
+
+    private fun formatWifi(s: KioskStatusSource.Status): String {
         val bars = s.wifiBars.coerceIn(0, 4)
-        val wifi = if (!s.wifiConnected) "Wi-Fi off" else "Wi-Fi " + "●".repeat(bars + 1) + "○".repeat(4 - bars)
-        return "$wifi   🔋 $battery"
+        return if (!s.wifiConnected) "Wi-Fi off" else "Wi-Fi " + "●".repeat(bars + 1) + "○".repeat(4 - bars)
     }
 
     // --- View helpers ------------------------------------------------------------------------
@@ -804,6 +860,14 @@ private class FrameWrap(
     /** Extra offset added only on the edge(s) [gravity] touches — e.g. pushing a second TOP|END
      *  element down below a sibling (like the kebab menu) that already occupies that corner. */
     topExtraPx: Int = 0,
+    /** Extra offset on the END/right edge — for placing a second TOP|END element *beside* a
+     *  sibling (like the kebab menu) on the same row instead of stacking it underneath. */
+    endExtraPx: Int = 0,
+    /** Whether to push the child out from under the system bars on the edge(s) [gravity] touches.
+     *  Kiosk mode hides the system bars, so text-only readouts (like the status line) can hug the
+     *  true screen edge instead; leave true for real tap targets (kebab menu, gesture corner) in
+     *  case the bars are ever visible. */
+    avoidSystemBars: Boolean = true,
 ) : android.widget.FrameLayout(activity) {
     init {
         layoutParams = ViewGroup.LayoutParams(
@@ -813,7 +877,7 @@ private class FrameWrap(
         addView(
             child,
             android.widget.FrameLayout.LayoutParams(widthPx, heightPx, gravity).apply {
-                setMargins(marginPx, marginPx + topExtraPx, marginPx, marginPx)
+                setMargins(marginPx, marginPx + topExtraPx, marginPx + endExtraPx, marginPx)
             },
         )
         // Android 15 (targetSdk 35) draws edge-to-edge by default, so the nav/status bars overlay
@@ -821,12 +885,12 @@ private class FrameWrap(
         // exit affordance sits partially behind the system bar. Push the child out from under
         // whichever system bar edges its gravity touches.
         ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
-            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val bars = if (avoidSystemBars) insets.getInsets(WindowInsetsCompat.Type.systemBars()) else Insets.NONE
             val lp = child.layoutParams as android.widget.FrameLayout.LayoutParams
             lp.bottomMargin = marginPx + if (gravity and Gravity.BOTTOM == Gravity.BOTTOM) bars.bottom else 0
             lp.topMargin = marginPx + topExtraPx + if (gravity and Gravity.TOP == Gravity.TOP) bars.top else 0
             lp.leftMargin = marginPx + if (gravity and Gravity.START == Gravity.START || gravity and Gravity.LEFT == Gravity.LEFT) bars.left else 0
-            lp.rightMargin = marginPx + if (gravity and Gravity.END == Gravity.END || gravity and Gravity.RIGHT == Gravity.RIGHT) bars.right else 0
+            lp.rightMargin = marginPx + endExtraPx + if (gravity and Gravity.END == Gravity.END || gravity and Gravity.RIGHT == Gravity.RIGHT) bars.right else 0
             child.layoutParams = lp
             insets
         }
