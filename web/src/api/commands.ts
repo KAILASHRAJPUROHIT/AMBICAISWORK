@@ -321,6 +321,16 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
       payload: JSON.stringify({ policy: 'storageEncryption', value: false }),
     },
   },
+  {
+    key: 'app-kill', label: 'Kill app', group: 'disruptive', danger: true, requiresDeviceOwner: true,
+    description: 'Force-stop one app on the device right now (e.g. a frozen/misbehaving app). Does not uninstall it or block it from being reopened — and can never target the MDM agent itself, enforced on-device.',
+    params: [{ key: 'packageName', label: 'Package name', kind: 'text', placeholder: 'com.example.app', required: true }],
+    request: { type: 'device.appKill', requiresCapability: 'device.appKill' },
+    build: (v) => ({
+      type: 'device.appKill', requiresCapability: 'device.appKill',
+      payload: JSON.stringify({ packageName: (v.packageName ?? '').trim() }),
+    }),
+  },
 ];
 
 export interface DeviceState {

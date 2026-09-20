@@ -70,6 +70,18 @@ object DeviceAction {
      *  advertised separately from [ADVERTISED_KEYS], only when Device Owner. */
     const val REMOTE_SESSION_CAPABILITY_KEY = "remoteSession"
 
+    /** Force-stop a runaway/misbehaving app immediately. Payload: `{ "packageName": "..." }`.
+     *  Device-Owner only (uses [android.app.admin.DevicePolicyManager.setPackagesSuspended] as a
+     *  kill primitive — suspending stops the target process immediately; un-suspending right after
+     *  leaves it killed but launchable again, rather than permanently blocked). The handler
+     *  hard-refuses to target the agent's own package under any circumstance — see
+     *  `AppKillHandler`'s doc comment. Gated the same way as [REMOTE_SESSION_START]. */
+    const val APP_KILL = "device.appKill"
+
+    /** Capability token (after `device.` prefix) for [APP_KILL] — advertised separately from
+     *  [ADVERTISED_KEYS], only when Device Owner. */
+    const val APP_KILL_CAPABILITY_KEY = "appKill"
+
     /** Keys (after the `device.` prefix) advertised in `capabilities.device`. */
     val ADVERTISED_KEYS: List<String> = listOf(
         "lock", "reboot", "lockscreenMessage", "alert", "ring", "ringStop",

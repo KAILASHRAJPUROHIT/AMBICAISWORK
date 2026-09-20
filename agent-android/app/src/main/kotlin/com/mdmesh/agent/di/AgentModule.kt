@@ -13,6 +13,7 @@ import com.mdmesh.core.action.AlertNotifier
 import com.mdmesh.core.action.ResetPasswordTokenStore
 import com.mdmesh.core.action.RingController
 import com.mdmesh.core.command.handlers.AppIconsHandler
+import com.mdmesh.core.command.handlers.AppKillHandler
 import com.mdmesh.core.command.handlers.AppInstallHandler
 import com.mdmesh.core.command.handlers.AppScanHandler
 import com.mdmesh.core.command.handlers.AppUninstallHandler
@@ -146,7 +147,7 @@ object AgentModule {
             // the server's capability gate won't queue an app.install we can't perform.
             appManagementKeys = if (deviceOwner) AppManagement.DEVICE_OWNER_KEYS else emptyList(),
             deviceActionKeys = DeviceAction.ADVERTISED_KEYS + if (deviceOwner) {
-                listOf(DeviceAction.REMOTE_SESSION_CAPABILITY_KEY)
+                listOf(DeviceAction.REMOTE_SESSION_CAPABILITY_KEY, DeviceAction.APP_KILL_CAPABILITY_KEY)
             } else emptyList(),
         )
     }
@@ -378,4 +379,11 @@ object AgentModule {
     @IntoSet
     fun provideRemoteSessionStopHandler(controller: RemoteCaptureController): CommandHandler =
         RemoteSessionStopHandler(controller)
+
+    @Provides
+    @IntoSet
+    fun provideAppKillHandler(
+        @ApplicationContext context: Context,
+        handle: DpmHandle,
+    ): CommandHandler = AppKillHandler(context, handle)
 }
