@@ -2770,25 +2770,27 @@ a {
 .upd-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
+  width: 100%;
 }
 
 .set-row .v.wide-actions {
   flex: 1 1 340px;
   min-width: 260px;
-  text-align: left;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: flex-end;
   gap: 8px;
 }
-.frp-row .au-note { color: var(--muted); font-size: 12px; margin: 2px 0 0; max-width: 48ch; }
+.frp-row .au-note { color: var(--muted); font-size: 12px; margin: 2px 0 0; text-align: right; max-width: 48ch; }
 .frp-accounts-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
   width: 100%;
+  max-width: 420px;
 }
 .frp-account-item {
   display: flex;
@@ -2809,6 +2811,7 @@ a {
   white-space: nowrap;
   min-width: 0;
   flex: 1;
+  text-align: left;
 }
 .frp-account-item .btn {
   padding: 3px 8px;
@@ -2833,8 +2836,10 @@ a {
 .passcode-status-wrap {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+  width: 100%;
 }
 .passcode-badge {
   display: inline-flex;
