@@ -37,12 +37,22 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
         if (pkg != "com.ornate.nx") return
         if (isTransformingText) return
 
+        // 1. NEVER intervene on deletions, backspaces, cuts, or clears!
+        // When text is deleted or cleared, addedCount is 0. Intervening during deletion disrupts the
+        // keyboard's composing state and triggers Ornate's data-watcher to re-fill deleted prefilled text.
+        if (event.addedCount <= 0) return
+
         val source = event.source ?: return
         try {
-            // Exclude password inputs
+            // 2. Only transform if the input field is actively focused by the user.
+            // When Ornate opens a screen and prefills customer name, invoice info, etc. in the background,
+            // the view is NOT focused. Intervening on unfocused views corrupts Ornate's prefilled data.
+            if (!source.isFocused) return
+
+            // 3. Exclude password inputs
             if (source.isPassword) return
 
-            // Exclude Login screen views
+            // 4. Exclude Login screen views
             val viewId = source.viewIdResourceName?.lowercase()
             if (viewId != null) {
                 if (viewId.contains("username") || viewId.contains("password") ||
@@ -51,13 +61,13 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
                 }
             }
 
-            // Exclude AutoCompleteTextView (used by username dropdowns)
+            // 5. Exclude AutoCompleteTextView (used by login username dropdowns)
             val className = source.className?.toString() ?: ""
             if (className.contains("AutoCompleteTextView", ignoreCase = true)) return
 
             val currentText = source.text?.toString() ?: return
 
-            // Allow full deletion / backspace: if empty or only 1 char, don't intervene
+            // Allow full deletion / empty field
             if (currentText.isEmpty()) return
 
             // Only transform if there is at least one lowercase character to convert
@@ -68,10 +78,19 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
             if (upper != currentText) {
                 isTransformingText = true
                 try {
+                    val selStart = source.textSelectionStart
+                    val selEnd = source.textSelectionEnd
                     val arguments = Bundle().apply {
                         putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, upper)
                     }
-                    source.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+                    val ok = source.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+                    if (ok && selStart >= 0 && selEnd >= 0) {
+                        val selArgs = Bundle().apply {
+                            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, selStart)
+                            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, selEnd)
+                        }
+                        source.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selArgs)
+                    }
                 } finally {
                     isTransformingText = false
                 }
