@@ -6,8 +6,6 @@ import {
 } from '../api/rollout';
 import { searchDevices, type DeviceView } from '../api/devices';
 
-const AGENT_PACKAGE = (import.meta.env.VITE_AGENT_PACKAGE as string) || 'com.mdmesh.agent';
-
 const STATUS_LABEL: Record<RolloutDeviceStatus['status'], string> = {
   UPDATED: 'Updated',
   PENDING: 'Installing…',
@@ -29,7 +27,7 @@ function CohortBar({ label, c, devices }: { label: string; c: RolloutCounts; dev
       <div className="rollout-legend">
         {c.pending > 0 && <span className="ub-warn">{c.pending} installing</span>}
         {c.outstanding > 0 && <span>{c.outstanding} queued</span>}
-        {c.ineligible > 0 && <span className="muted">{c.ineligible} too old</span>}
+        {c.ineligible > 0 && <span className="muted">{c.ineligible} incompatible / filtered</span>}
       </div>
       {devices && devices.length > 0 && (
         <div className="rollout-devicelist" style={{ marginTop: 6 }}>
@@ -55,6 +53,7 @@ function CohortBar({ label, c, devices }: { label: string; c: RolloutCounts; dev
 export function RolloutPanel() {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [rollout, setRollout] = useState<ActiveRollout | null>(null);
+  const [targetPackage, setTargetPackage] = useState<'com.mdmesh.agent' | 'com.mdmesh.agent.cn'>('com.mdmesh.agent');
   const [picking, setPicking] = useState(false);
   const [devices, setDevices] = useState<DeviceView[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -96,7 +95,9 @@ export function RolloutPanel() {
     return next;
   });
 
-  const apk = status?.apk;
+  const apk = targetPackage === 'com.mdmesh.agent.cn'
+    ? (status?.apkCn || status?.apk)
+    : (status?.apk || status?.apkCn);
 
   const start = async () => {
     if (!apk) return;
@@ -104,7 +105,7 @@ export function RolloutPanel() {
     try {
       const created = await createRollout({
         targetVersion: apk.version,
-        packageName: AGENT_PACKAGE,
+        packageName: targetPackage,
         apkVersionCode: apk.versionCode,
         apkSha256: apk.sha256,
         canaryDeviceNumbers: Array.from(selected),
@@ -155,7 +156,8 @@ export function RolloutPanel() {
 
   // Nothing to show: no active rollout and no mirrored APK to offer.
   const active = rollout && (rollout.stage === 'canary' || rollout.stage === 'fleet');
-  if (!active && !(apk && apk.available)) return null;
+  const apkAvailable = (status?.apk && status.apk.available) || (status?.apkCn && status.apkCn.available);
+  if (!active && !apkAvailable) return null;
 
   return (
     <section className="panel">
@@ -166,7 +168,7 @@ export function RolloutPanel() {
           <div className="set-row">
             <span className="k">Rolling out</span>
             <span className="v mono">
-              v{rollout.targetVersion} · <span className="ub-ch">{rollout.stage}</span>
+              v{rollout.targetVersion} ({rollout.packageName === 'com.mdmesh.agent.cn' ? 'China / AOSP' : 'Global / GMS'}) · <span className="ub-ch">{rollout.stage}</span>
             </span>
           </div>
           <CohortBar label="Canary" c={rollout.progress.canary} devices={rollout.progress.canaryDevices} />
@@ -197,13 +199,21 @@ export function RolloutPanel() {
         </>
       )}
 
-      {!active && apk && apk.available && !picking && (
+      {!active && apkAvailable && !picking && (
         <div className="set-row">
           <span className="k">
-            Agent v{apk.version} available
+            Agent v{apk?.version || status?.apk?.version} available
             <small>Push the new agent APK to devices in stages.</small>
           </span>
-          <span className="v">
+          <span className="v" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select
+              value={targetPackage}
+              onChange={(e) => setTargetPackage(e.target.value as 'com.mdmesh.agent' | 'com.mdmesh.agent.cn')}
+              style={{ padding: '4px 8px', borderRadius: 4 }}
+            >
+              <option value="com.mdmesh.agent">Global / GMS (Samsung, etc.)</option>
+              <option value="com.mdmesh.agent.cn">China / AOSP (Redmi 14R)</option>
+            </select>
             <button className="btn btn-sm btn-primary" onClick={() => void openPicker()}>
               Roll out…
             </button>
@@ -213,18 +223,36 @@ export function RolloutPanel() {
 
       {!active && picking && (
         <>
+          <div style={{ marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ fontWeight: 600 }}>Target Fleet:</label>
+            <select
+              value={targetPackage}
+              onChange={(e) => setTargetPackage(e.target.value as 'com.mdmesh.agent' | 'com.mdmesh.agent.cn')}
+              style={{ padding: '4px 8px', borderRadius: 4 }}
+            >
+              <option value="com.mdmesh.agent">Global / GMS (com.mdmesh.agent)</option>
+              <option value="com.mdmesh.agent.cn">China / AOSP (com.mdmesh.agent.cn - Redmi 14R)</option>
+            </select>
+          </div>
+
           <p className="muted" style={{ margin: '0 0 8px' }}>
-            Select the <b>canary</b> devices to update first (v{apk?.version}). You'll promote to the
+            Select the <b>canary</b> devices to update first (v{apk?.version} · {targetPackage}). You'll promote to the
             rest of the fleet once they're confirmed healthy.
           </p>
           <div className="rollout-devicelist">
-            {devices.map((d) => (
-              <label key={d.id} className="rollout-device">
-                <input type="checkbox" checked={selected.has(d.number)} onChange={() => toggle(d.number)} />
-                <span className="mono">{d.description || d.number}</span>
-                {d.description && <span className="muted" style={{ marginLeft: 6 }}>({d.number})</span>}
-              </label>
-            ))}
+            {devices.map((d) => {
+              const desc = (d.description || '').toUpperCase();
+              const isRedmi = desc.includes('REDMI') || desc.includes('14R');
+              const match = targetPackage === 'com.mdmesh.agent.cn' ? isRedmi : !isRedmi;
+              return (
+                <label key={d.id} className="rollout-device" style={{ opacity: match ? 1 : 0.6 }}>
+                  <input type="checkbox" checked={selected.has(d.number)} onChange={() => toggle(d.number)} />
+                  <span className="mono">{d.description || d.number}</span>
+                  {d.description && <span className="muted" style={{ marginLeft: 6 }}>({d.number})</span>}
+                  {match && <span className="ub-ch" style={{ marginLeft: 'auto', fontSize: '0.8em' }}>Recommended</span>}
+                </label>
+              );
+            })}
             {devices.length === 0 && <span className="muted">No devices.</span>}
           </div>
           <div className="set-row" style={{ justifyContent: 'flex-end', gap: 8 }}>

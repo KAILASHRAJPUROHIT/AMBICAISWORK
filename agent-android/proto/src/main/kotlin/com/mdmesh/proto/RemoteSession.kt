@@ -33,4 +33,5 @@ data class RemoteInputPayload(
     val endY: Float? = null,
     val durationMs: Long? = null,
     val key: String? = null,
+    val text: String? = null,
 )

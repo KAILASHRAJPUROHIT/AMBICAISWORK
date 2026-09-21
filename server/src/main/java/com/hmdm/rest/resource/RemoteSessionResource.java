@@ -114,6 +114,7 @@ public class RemoteSessionResource {
         private Float endY;
         private Long durationMs;
         private String key;
+        private String text;
 
         public String getAction() { return action; }
         public void setAction(String action) { this.action = action; }
@@ -129,6 +130,8 @@ public class RemoteSessionResource {
         public void setDurationMs(Long durationMs) { this.durationMs = durationMs; }
         public String getKey() { return key; }
         public void setKey(String key) { this.key = key; }
+        public String getText() { return text; }
+        public void setText(String text) { this.text = text; }
     }
 
     // =================================================================================================================
@@ -150,6 +153,7 @@ public class RemoteSessionResource {
         if (body.getEndY() != null) payload.put("endY", body.getEndY());
         if (body.getDurationMs() != null) payload.put("durationMs", body.getDurationMs());
         if (body.getKey() != null) payload.put("key", body.getKey());
+        if (body.getText() != null) payload.put("text", body.getText());
 
         AgentCommand command = new AgentCommand();
         command.setDeviceNumber(deviceId);

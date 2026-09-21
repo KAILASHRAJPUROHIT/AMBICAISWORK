@@ -133,7 +133,41 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
             return svc.dispatchGesture(gesture, null, null)
         }
 
-        /** Inject global navigation key actions (back, home, recents, notifications, lock). */
+        /** Inject text into the currently focused input field. */
+        fun injectText(text: String): Boolean {
+            val svc = instance ?: return false
+            val root = svc.rootInActiveWindow ?: return false
+            val node = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: findEditable(root)
+            if (node == null) {
+                root.recycle()
+                return false
+            }
+            return try {
+                val args = Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+                }
+                node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
+            } finally {
+                @Suppress("DEPRECATION")
+                node.recycle()
+                @Suppress("DEPRECATION")
+                root.recycle()
+            }
+        }
+
+        private fun findEditable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+            if (node.isEditable) return AccessibilityNodeInfo.obtain(node)
+            for (i in 0 until node.childCount) {
+                val child = node.getChild(i) ?: continue
+                val found = findEditable(child)
+                @Suppress("DEPRECATION")
+                child.recycle()
+                if (found != null) return found
+            }
+            return null
+        }
+
+        /** Inject global navigation key actions (back, home, recents, notifications, quicksettings, power, lock, volume). */
         fun injectKey(key: String): Boolean {
             val svc = instance ?: return false
             return when (key.lowercase()) {
@@ -141,9 +175,21 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
                 "home" -> svc.performGlobalAction(GLOBAL_ACTION_HOME)
                 "recents" -> svc.performGlobalAction(GLOBAL_ACTION_RECENTS)
                 "notifications" -> svc.performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+                "quicksettings" -> svc.performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
+                "power" -> svc.performGlobalAction(GLOBAL_ACTION_POWER_DIALOG)
                 "lock" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     svc.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
                 } else false
+                "volume_up" -> {
+                    val am = svc.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                    am?.adjustVolume(android.media.AudioManager.ADJUST_RAISE, android.media.AudioManager.FLAG_SHOW_UI)
+                    true
+                }
+                "volume_down" -> {
+                    val am = svc.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                    am?.adjustVolume(android.media.AudioManager.ADJUST_LOWER, android.media.AudioManager.FLAG_SHOW_UI)
+                    true
+                }
                 else -> false
             }
         }

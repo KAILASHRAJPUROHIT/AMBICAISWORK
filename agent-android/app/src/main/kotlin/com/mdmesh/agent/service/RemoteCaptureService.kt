@@ -76,6 +76,7 @@ class RemoteCaptureService : LifecycleService() {
 
     override fun onDestroy() {
         captureJob?.cancel()
+        camera.close()
         super.onDestroy()
     }
 

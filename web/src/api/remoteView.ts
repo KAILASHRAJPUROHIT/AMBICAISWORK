@@ -40,13 +40,14 @@ export function snapshotUrl(deviceId: string, kind: RemoteKind, capturedAt: numb
 }
 
 export interface RemoteInputRequest {
-  action: 'tap' | 'swipe' | 'key';
+  action: 'tap' | 'swipe' | 'key' | 'text';
   x?: number;
   y?: number;
   endX?: number;
   endY?: number;
   durationMs?: number;
-  key?: 'back' | 'home' | 'recents' | 'notifications' | 'lock';
+  key?: 'back' | 'home' | 'recents' | 'notifications' | 'quicksettings' | 'power' | 'lock' | 'volume_up' | 'volume_down';
+  text?: string;
 }
 
 export function sendRemoteInput(deviceId: string, request: RemoteInputRequest): Promise<void> {

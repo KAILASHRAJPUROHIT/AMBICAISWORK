@@ -44,6 +44,11 @@ class RemoteInputHandler : CommandHandler {
                 if (key == null) false
                 else ScreenCaptureAccessibilityService.injectKey(key)
             }
+            "text" -> {
+                val textToInject = p.text
+                if (textToInject == null) false
+                else ScreenCaptureAccessibilityService.injectText(textToInject)
+            }
             else -> false
         }
 

@@ -295,9 +295,6 @@ public class RolloutResource {
         AgentRollout r = rolloutDAO.findById(id);
         if (r == null || !customerId.get().equals(r.getCustomerId())) return Response.PERMISSION_DENIED();
         if (!"canary".equals(r.getStage())) return Response.ERROR("error.rollout.stage");
-        // Until the agent reports a persisted distribution channel, the server cannot safely
-        // derive the China/AOSP fleet cohort. Never risk queuing com.mdmesh.agent.cn to GMS devices.
-        if (AOSP_AGENT_PACKAGE.equals(r.getPackageName())) return Response.ERROR("error.rollout.cn.manual_canary_only");
 
         rolloutDAO.updateStage(r.getId(), "fleet");
         r.setStage("fleet");
@@ -404,7 +401,7 @@ public class RolloutResource {
         int n = 0;
         for (RolloutDeviceRow row : rows) {
             boolean hasPending = pending.contains(row.getDeviceNumber());
-            if (RolloutProgress.classify(r.getTargetVersion(), row, hasPending) == RolloutProgress.Status.OUTSTANDING) {
+            if (RolloutProgress.classify(r.getTargetVersion(), r.getPackageName(), row, hasPending) == RolloutProgress.Status.OUTSTANDING) {
                 enqueueInstall(r, row.getDeviceNumber());
                 n++;
             }
@@ -452,14 +449,14 @@ public class RolloutResource {
     }
 
     /** Per-device breakdown for a "version"-tracked rollout's progress view. */
-    private List<Map<String, Object>> perDeviceVersionStatus(String targetVersion, List<RolloutDeviceRow> rows, Set<String> pending) {
+    private List<Map<String, Object>> perDeviceVersionStatus(String targetVersion, String targetPackage, List<RolloutDeviceRow> rows, Set<String> pending) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (RolloutDeviceRow row : rows) {
             boolean hasPending = pending != null && pending.contains(row.getDeviceNumber());
             Map<String, Object> d = new LinkedHashMap<>();
             d.put("deviceNumber", row.getDeviceNumber());
             d.put("description", row.getDescription());
-            d.put("status", RolloutProgress.classify(targetVersion, row, hasPending).name());
+            d.put("status", RolloutProgress.classify(targetVersion, targetPackage, row, hasPending).name());
             d.put("currentVersion", row.getAgentVersion());
             out.add(d);
         }
@@ -515,10 +512,10 @@ public class RolloutResource {
             progress.put("fleetDevices", fleetStarted ? perDeviceStatus(fleetRows, statusByDevice) : null);
         } else {
             Set<String> pending = new HashSet<>(rolloutDAO.listPendingInstallNumbers(cust));
-            progress.put("canary", RolloutProgress.counts(r.getTargetVersion(), canaryRows, pending));
-            progress.put("fleet", fleetStarted ? RolloutProgress.counts(r.getTargetVersion(), fleetRows, pending) : null);
-            progress.put("canaryDevices", perDeviceVersionStatus(r.getTargetVersion(), canaryRows, pending));
-            progress.put("fleetDevices", fleetStarted ? perDeviceVersionStatus(r.getTargetVersion(), fleetRows, pending) : null);
+            progress.put("canary", RolloutProgress.counts(r.getTargetVersion(), r.getPackageName(), canaryRows, pending));
+            progress.put("fleet", fleetStarted ? RolloutProgress.counts(r.getTargetVersion(), r.getPackageName(), fleetRows, pending) : null);
+            progress.put("canaryDevices", perDeviceVersionStatus(r.getTargetVersion(), r.getPackageName(), canaryRows, pending));
+            progress.put("fleetDevices", fleetStarted ? perDeviceVersionStatus(r.getTargetVersion(), r.getPackageName(), fleetRows, pending) : null);
         }
 
         Map<String, Object> view = new LinkedHashMap<>();

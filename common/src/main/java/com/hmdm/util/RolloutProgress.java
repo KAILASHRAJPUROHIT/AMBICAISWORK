@@ -58,9 +58,33 @@ public final class RolloutProgress {
         return tBase.equalsIgnoreCase(rBase);
     }
 
+    /** Check whether a device matches the target rollout package (e.g. AOSP vs GMS). */
+    public static boolean isPackageMatch(String targetPackage, RolloutDeviceRow row) {
+        if (targetPackage == null || row == null) return true;
+        boolean isAospTarget = "com.mdmesh.agent.cn".equals(targetPackage);
+        String desc = row.getDescription() == null ? "" : row.getDescription().toUpperCase();
+        String caps = row.getCapabilitiesJson() == null ? "" : row.getCapabilitiesJson();
+        boolean isAospDevice = desc.contains("REDMI") || desc.contains("14R") || desc.contains("AOSP") || desc.contains(".CN")
+                || caps.contains("com.mdmesh.agent.cn");
+        if (isAospTarget) {
+            return isAospDevice;
+        } else if ("com.mdmesh.agent".equals(targetPackage)) {
+            return !isAospDevice;
+        }
+        return true;
+    }
+
     /** Classify one device against the rollout target. {@code hasPending} = it has an outstanding
      *  (pending/delivered) app.install for this rollout. */
     public static Status classify(String targetVersion, RolloutDeviceRow row, boolean hasPending) {
+        return classify(targetVersion, null, row, hasPending);
+    }
+
+    /** Classify one device against the rollout target and target package. */
+    public static Status classify(String targetVersion, String targetPackage, RolloutDeviceRow row, boolean hasPending) {
+        if (!isPackageMatch(targetPackage, row)) {
+            return Status.INELIGIBLE;
+        }
         String version = row == null ? null : row.getAgentVersion();
         if (versionMatches(targetVersion, version)) {
             return Status.UPDATED;
@@ -113,6 +137,11 @@ public final class RolloutProgress {
 
     /** Tally a cohort. {@code pendingDeviceNumbers} = the set with an outstanding app.install. */
     public static Counts counts(String targetVersion, List<RolloutDeviceRow> rows, Set<String> pendingDeviceNumbers) {
+        return counts(targetVersion, null, rows, pendingDeviceNumbers);
+    }
+
+    /** Tally a cohort with targetPackage validation. */
+    public static Counts counts(String targetVersion, String targetPackage, List<RolloutDeviceRow> rows, Set<String> pendingDeviceNumbers) {
         Counts c = new Counts();
         if (rows == null) {
             return c;
@@ -121,7 +150,7 @@ public final class RolloutProgress {
             c.total++;
             boolean hasPending = pendingDeviceNumbers != null && row != null
                     && pendingDeviceNumbers.contains(row.getDeviceNumber());
-            switch (classify(targetVersion, row, hasPending)) {
+            switch (classify(targetVersion, targetPackage, row, hasPending)) {
                 case UPDATED:     c.updated++; break;
                 case INELIGIBLE:  c.ineligible++; break;
                 case PENDING:     c.pending++; break;

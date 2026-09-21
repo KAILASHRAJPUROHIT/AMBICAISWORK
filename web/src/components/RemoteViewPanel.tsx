@@ -13,17 +13,18 @@ const KINDS: Array<{ key: RemoteKind; label: string }> = [
   { key: 'mic', label: 'Microphone' },
 ];
 
-/** Admin-only, time-boxed latest-capture view. Bytes remain behind the private session-cookie API. */
+/** Admin-only, time-boxed latest-capture view and full remote control. */
 export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string; isDeviceOwner: boolean | null | undefined }) {
   const toast = useToast();
   const [durationSec, setDurationSec] = useState(300);
-  const [intervalSec, setIntervalSec] = useState(1);
+  const [intervalSec, setIntervalSec] = useState(0.5);
   const [kinds, setKinds] = useState<RemoteKind[]>(['screen']);
   const [session, setSession] = useState<RemoteSession | null>(null);
   const [snapshots, setSnapshots] = useState<RemoteSnapshotMeta[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number; y: number; time: number } | null>(null);
   const [ripple, setRipple] = useState<{ x: number; y: number; id: number } | null>(null);
+  const [inputText, setInputText] = useState('');
   const imgRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
@@ -36,7 +37,10 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
       } catch {
         // Remote capture is optional. Avoid repeated error toasts while polling a disconnected device.
       }
-      if (live) timer = setTimeout(() => void poll(), session ? Math.max(intervalSec * 1000, 1000) : 10000);
+      if (live) {
+        const delayMs = session ? Math.max(Math.round(intervalSec * 1000), 250) : 10000;
+        timer = setTimeout(() => void poll(), delayMs);
+      }
     };
     void poll();
     return () => { live = false; clearTimeout(timer); };
@@ -55,7 +59,12 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
     }
     setBusy(true);
     try {
-      const started = await startRemoteSession(deviceId, { durationSec, intervalSec, kinds });
+      // Server expects integer seconds for protocol compatibility; round interval to 1 minimum for command payload
+      const started = await startRemoteSession(deviceId, {
+        durationSec,
+        intervalSec: Math.max(1, Math.round(intervalSec)),
+        kinds,
+      });
       setSession(started);
       toast.push('ok', 'Remote session started', 'Live stream active. Click on screen to inject touch.');
     } catch (e) {
@@ -114,12 +123,24 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
     }
   };
 
-  const sendKey = async (key: 'back' | 'home' | 'recents' | 'notifications' | 'lock') => {
+  const sendKey = async (key: 'back' | 'home' | 'recents' | 'notifications' | 'quicksettings' | 'power' | 'lock' | 'volume_up' | 'volume_down') => {
     try {
       await sendRemoteInput(deviceId, { action: 'key', key });
       toast.push('ok', 'Action dispatched', `Key: ${key}`);
     } catch (err) {
       toast.push('err', 'Key injection failed', err instanceof Error ? err.message : '');
+    }
+  };
+
+  const handleSendText = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!inputText) return;
+    try {
+      await sendRemoteInput(deviceId, { action: 'text', text: inputText });
+      toast.push('ok', 'Text injected', inputText);
+      setInputText('');
+    } catch (err) {
+      toast.push('err', 'Text injection failed', err instanceof Error ? err.message : '');
     }
   };
 
@@ -130,22 +151,105 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
   return (
     <div className="remote-view">
       <p className="note">
-        Live remote view and touch control. Click or drag directly on the screen to tap or swipe.
-        Screen capture requires <b>AMBIC MDM</b> Accessibility Service enabled in device Settings.
+        Live remote view and full device control. Click or drag directly on the screen to tap or swipe.
+        Type text or click navigation buttons to control the device remotely.
       </p>
-      <div className="upd-actions" style={{ marginBottom: 12 }}>
-        <label>Duration <input type="number" min={30} max={1800} value={durationSec} disabled={busy || !!session} onChange={(e) => setDurationSec(Number(e.target.value) || 30)} /> sec</label>
-        <label>Interval <input type="number" min={1} max={60} value={intervalSec} disabled={busy || !!session} onChange={(e) => setIntervalSec(Number(e.target.value) || 1)} /> sec</label>
+      <div className="upd-actions" style={{ marginBottom: 12, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <label>
+          Duration{' '}
+          <input
+            type="number"
+            min={30}
+            max={1800}
+            value={durationSec}
+            disabled={busy || !!session}
+            onChange={(e) => setDurationSec(Number(e.target.value) || 30)}
+            style={{ width: 80 }}
+          />{' '}
+          sec
+        </label>
+        <label>
+          Speed / Interval{' '}
+          <select
+            value={intervalSec}
+            disabled={busy || !!session}
+            onChange={(e) => setIntervalSec(Number(e.target.value))}
+            style={{ padding: '4px 8px', borderRadius: 4 }}
+          >
+            <option value={0.25}>Ultra Fast (250ms / 4 fps)</option>
+            <option value={0.5}>Smooth (500ms / 2 fps)</option>
+            <option value={1}>Normal (1s / 1 fps)</option>
+            <option value={2}>Eco (2s)</option>
+            <option value={5}>Low Bandwidth (5s)</option>
+          </select>
+        </label>
       </div>
-      <div className="upd-actions" style={{ marginBottom: 12 }}>
-        {KINDS.map(({ key, label }) => <label key={key}><input type="checkbox" checked={kinds.includes(key)} disabled={busy || !!session} onChange={() => toggle(key)} /> {label}</label>)}
+
+      <div className="upd-actions" style={{ marginBottom: 12, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        {KINDS.map(({ key, label }) => (
+          <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={kinds.includes(key)}
+              disabled={busy || !!session}
+              onChange={() => toggle(key)}
+            />
+            {label}
+          </label>
+        ))}
       </div>
-      {session ? (
-        <button className="btn btn-sm" disabled={busy} onClick={() => void stop()}>{busy ? 'Stopping…' : 'Stop session'}</button>
-      ) : (
-        <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => void start()}>{busy ? 'Starting…' : 'Start remote session'}</button>
-      )}
-      <div style={{ marginTop: 18, display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+        {session ? (
+          <button className="btn btn-sm" disabled={busy} onClick={() => void stop()}>
+            {busy ? 'Stopping…' : 'Stop session'}
+          </button>
+        ) : (
+          <button className="btn btn-sm btn-primary" disabled={busy} onClick={() => void start()}>
+            {busy ? 'Starting…' : 'Start remote session'}
+          </button>
+        )}
+      </div>
+
+      {/* Global Device Control Bar */}
+      <div
+        className="panel"
+        style={{
+          padding: 12,
+          marginBottom: 16,
+          background: 'var(--bg-subtle, #1a1e24)',
+          borderRadius: 8,
+          border: '1px solid var(--border, #2d3748)',
+        }}
+      >
+        <strong style={{ display: 'block', marginBottom: 8 }}>Device Remote Control</strong>
+        <form onSubmit={handleSendText} style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            placeholder="Type text to type into focused input on device…"
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            style={{ flex: '1 1 240px', padding: '6px 10px', borderRadius: 4, border: '1px solid #4a5568', background: '#0d1117', color: '#fff' }}
+          />
+          <button type="submit" className="btn btn-sm btn-primary" disabled={!inputText}>
+            Send Text
+          </button>
+        </form>
+
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className="btn btn-sm" onClick={() => void sendKey('back')} title="Back key">◀ Back</button>
+          <button className="btn btn-sm" onClick={() => void sendKey('home')} title="Home key">⭘ Home</button>
+          <button className="btn btn-sm" onClick={() => void sendKey('recents')} title="Recents key">▢ Recents</button>
+          <button className="btn btn-sm" onClick={() => void sendKey('notifications')} title="Notification Shade">🔔 Notifications</button>
+          <button className="btn btn-sm" onClick={() => void sendKey('quicksettings')} title="Quick Settings">⚙️ Quick Settings</button>
+          <button className="btn btn-sm" onClick={() => void sendKey('power')} title="Power Menu">⚡ Power Menu</button>
+          <button className="btn btn-sm" onClick={() => void sendKey('lock')} title="Lock screen">🔒 Lock</button>
+          <button className="btn btn-sm" onClick={() => void sendKey('volume_down')} title="Volume Down">🔉 Vol -</button>
+          <button className="btn btn-sm" onClick={() => void sendKey('volume_up')} title="Volume Up">🔊 Vol +</button>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
         {KINDS.map(({ key, label }) => {
           const snapshot = byKind.get(key);
           const isScreen = key === 'screen';
@@ -199,16 +303,6 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
                       }}
                     />
                   )}
-                </div>
-              )}
-
-              {isScreen && snapshot && (
-                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 10, flexWrap: 'wrap' }}>
-                  <button className="btn btn-sm" onClick={() => void sendKey('back')} title="Back key">◀ Back</button>
-                  <button className="btn btn-sm" onClick={() => void sendKey('home')} title="Home key">⭘ Home</button>
-                  <button className="btn btn-sm" onClick={() => void sendKey('recents')} title="Recents key">▢ Recents</button>
-                  <button className="btn btn-sm" onClick={() => void sendKey('notifications')} title="Notifications">🔔 Shade</button>
-                  <button className="btn btn-sm" onClick={() => void sendKey('lock')} title="Lock screen">🔒 Lock</button>
                 </div>
               )}
 

@@ -28,6 +28,8 @@ export interface UpdateStatus {
   applySupported?: boolean;
   /** The mirrored agent APK for the latest verified release (for device rollouts), or null. */
   apk: { version: string; versionCode: number; sha256: string; available: boolean } | null;
+  /** The mirrored AOSP/China agent APK (for Redmi/China ROMs), or null. */
+  apkCn?: { version: string; versionCode: number; sha256: string; available: boolean } | null;
   /** Release notes / link / date for the picked release, or null when there's no release. */
   release: { notes: string | null; url: string | null; publishedAt: string | null } | null;
 }

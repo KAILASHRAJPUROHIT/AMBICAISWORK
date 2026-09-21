@@ -638,7 +638,8 @@ class KioskLauncherActivity : FragmentActivity() {
 
         val grid = GridLayout(this).apply {
             columnCount = cols
-            setPadding(dp(12), dp(16), dp(12), dp(28))
+            setPadding(dp(8), dp(16), dp(8), dp(28))
+            layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
         var rendered = 0
         for (pkg in p.allowedPackages.distinct()) {
@@ -654,8 +655,15 @@ class KioskLauncherActivity : FragmentActivity() {
         // the packages were installed on the device.
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(28), dp(24), dp(12))
+            setPadding(dp(24), dp(64), dp(24), dp(12))
             layoutParams = ViewGroup.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        // Account for status bar / display cutout (e.g. Redmi teardrop notch) so header text starts
+        // cleanly below the status line.
+        ViewCompat.setOnApplyWindowInsetsListener(column) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            v.setPadding(dp(24), bars.top + dp(48), dp(24), bars.bottom + dp(16))
+            insets
         }
         column.addView(text(p.deviceLabel?.takeIf { it.isNotBlank() } ?: "AMBIC MDM Kiosk", 20f, fg, bold = true))
         p.orgName?.takeIf { it.isNotBlank() }?.let { column.addView(text(it, 14f, fg)) }
@@ -694,7 +702,14 @@ class KioskLauncherActivity : FragmentActivity() {
     ): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
-        setPadding(dp(12), dp(12), dp(12), dp(12))
+        setPadding(dp(6), dp(10), dp(6), dp(10))
+        layoutParams = GridLayout.LayoutParams(
+            GridLayout.spec(GridLayout.UNDEFINED, 1f),
+            GridLayout.spec(GridLayout.UNDEFINED, 1f),
+        ).apply {
+            width = 0
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
+        }
         isClickable = true
         addView(
             ImageView(this@KioskLauncherActivity).apply {
@@ -705,7 +720,8 @@ class KioskLauncherActivity : FragmentActivity() {
         addView(
             text(label, 12f, fg).apply {
                 gravity = Gravity.CENTER
-                maxLines = 1
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
                 setPadding(0, dp(6), 0, 0)
             },
         )
@@ -766,7 +782,7 @@ class KioskLauncherActivity : FragmentActivity() {
                     setOnClickListener { promptExit(p) }
                 }
                 parent.addView(
-                    FrameWrap(this, kebab, Gravity.TOP or Gravity.END, dp(16), dp(48), dp(48), avoidSystemBars = false),
+                    FrameWrap(this, kebab, Gravity.TOP or Gravity.END, dp(16), dp(48), dp(48), avoidSystemBars = true),
                 )
             }
             "gesture" -> {
@@ -781,7 +797,7 @@ class KioskLauncherActivity : FragmentActivity() {
                     }
                 }
                 parent.addView(
-                    FrameWrap(this, target, Gravity.TOP or Gravity.END, 0, dp(72), dp(72)),
+                    FrameWrap(this, target, Gravity.TOP or Gravity.END, 0, dp(72), dp(72), avoidSystemBars = true),
                 )
             }
             else -> Unit // "remote": no on-device exit
@@ -802,16 +818,16 @@ class KioskLauncherActivity : FragmentActivity() {
         val battery = text("", 12f, color).apply { text = formatBattery(s) }
         batteryText = battery
         parent.addView(
-            FrameWrap(this, battery, Gravity.TOP or Gravity.START, dp(16), heightPx = dp(32), avoidSystemBars = false),
+            FrameWrap(this, battery, Gravity.TOP or Gravity.START, dp(16), heightPx = dp(32), avoidSystemBars = true),
         )
 
         val wifi = text("", 12f, color).apply { text = formatWifi(s) }
         wifiText = wifi
-        val endExtra = if (p.exitMode == "visible") dp(64) else 0
+        val endExtra = if (p.exitMode == "visible") dp(52) else 0
         parent.addView(
             FrameWrap(
                 this, wifi, Gravity.TOP or Gravity.END, dp(16),
-                heightPx = dp(32), endExtraPx = endExtra, avoidSystemBars = false,
+                heightPx = dp(32), endExtraPx = endExtra, avoidSystemBars = true,
             ),
         )
     }
@@ -905,7 +921,9 @@ private class FrameWrap(
         // exit affordance sits partially behind the system bar. Push the child out from under
         // whichever system bar edges its gravity touches.
         ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
-            val bars = if (avoidSystemBars) insets.getInsets(WindowInsetsCompat.Type.systemBars()) else Insets.NONE
+            val bars = if (avoidSystemBars) {
+                insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            } else Insets.NONE
             val lp = child.layoutParams as android.widget.FrameLayout.LayoutParams
             lp.bottomMargin = marginPx + if (gravity and Gravity.BOTTOM == Gravity.BOTTOM) bars.bottom else 0
             lp.topMargin = marginPx + topExtraPx + if (gravity and Gravity.TOP == Gravity.TOP) bars.top else 0
