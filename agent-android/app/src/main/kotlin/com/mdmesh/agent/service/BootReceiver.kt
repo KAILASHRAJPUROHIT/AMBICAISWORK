@@ -106,6 +106,13 @@ class BootReceiver : BroadcastReceiver() {
             )
         }
 
+        // Restrict permitted input methods to AMBIC keyboard only
+        if (isDo) {
+            runCatching {
+                dpmHandle.dpm.setPermittedInputMethods(dpmHandle.admin, listOf(context.packageName))
+            }
+        }
+
         // 2. Apply lock task settings
         val features = lockTaskFeatures(
             KioskToggles(
