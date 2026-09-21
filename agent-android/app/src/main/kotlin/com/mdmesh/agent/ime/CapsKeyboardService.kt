@@ -18,6 +18,9 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.view.Window
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.content.ContextCompat
 import com.mdmesh.agent.R
 
@@ -43,18 +46,33 @@ class CapsKeyboardService : InputMethodService() {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     }
 
+    override fun onConfigureWindow(win: Window, isFullscreen: Boolean, isCandidatesOnly: Boolean) {
+        super.onConfigureWindow(win, isFullscreen, isCandidatesOnly)
+        win.navigationBarColor = Color.parseColor("#0B0F17")
+    }
+
     override fun onCreateInputView(): View {
+        val padH = dp(4)
+        val padV = dp(6)
+        val fallbackNav = getSystemNavHeightFallback()
+
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#0B0F17"))
-            val padH = dp(4)
-            val padV = dp(6)
-            setPadding(padH, padV, padH, padV)
+            setPadding(padH, padV, padH, padV + fallbackNav)
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
         }
+
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val bottomPadding = if (navBottom > 0) padV + navBottom else padV + fallbackNav
+            v.setPadding(padH, padV, padH, bottomPadding)
+            insets
+        }
+
         rootLayout = root
         renderKeyboard()
         return root
@@ -120,13 +138,17 @@ class CapsKeyboardService : InputMethodService() {
         r3.addView(createBackspaceKey(1.5f))
         root.addView(r3)
 
-        // Row 4: TAB, Comma, SPACE, Period, ACTION
+        // Row 4: TAB, Comma, SPACE, Period, Dismiss, ACTION
         val r4 = createRow(rowHeight)
-        r4.addView(createControlKey("TAB", 1.5f) { handleTab() })
-        r4.addView(createKeyButton(",", 1.0f) { commitKey(",") })
-        r4.addView(createKeyButton("SPACE", 5.0f) { commitKey(" ") })
-        r4.addView(createKeyButton(".", 1.0f) { commitKey(".") })
-        val actionBtn = createActionKey(1.5f)
+        r4.addView(createControlKey("TAB", 1.2f) { handleTab() })
+        r4.addView(createKeyButton(",", 0.8f) { commitKey(",") })
+        r4.addView(createKeyButton("SPACE", 4.8f) { commitKey(" ") })
+        r4.addView(createKeyButton(".", 0.8f) { commitKey(".") })
+        r4.addView(createControlKey("▼", 1.0f) {
+            feedbackTap()
+            requestHideSelf(0)
+        })
+        val actionBtn = createActionKey(1.4f)
         actionButton = actionBtn
         r4.addView(actionBtn)
         root.addView(r4)
@@ -166,13 +188,17 @@ class CapsKeyboardService : InputMethodService() {
         r3.addView(createBackspaceKey(1.5f))
         root.addView(r3)
 
-        // Row 4: TAB, Comma, SPACE, Period, ACTION
+        // Row 4: TAB, Comma, SPACE, Period, Dismiss, ACTION
         val r4 = createRow(rowHeight)
-        r4.addView(createControlKey("TAB", 1.5f) { handleTab() })
-        r4.addView(createKeyButton(",", 1.0f) { commitKey(",") })
-        r4.addView(createKeyButton("SPACE", 5.0f) { commitKey(" ") })
-        r4.addView(createKeyButton(".", 1.0f) { commitKey(".") })
-        val actionBtn = createActionKey(1.5f)
+        r4.addView(createControlKey("TAB", 1.2f) { handleTab() })
+        r4.addView(createKeyButton(",", 0.8f) { commitKey(",") })
+        r4.addView(createKeyButton("SPACE", 4.8f) { commitKey(" ") })
+        r4.addView(createKeyButton(".", 0.8f) { commitKey(".") })
+        r4.addView(createControlKey("▼", 1.0f) {
+            feedbackTap()
+            requestHideSelf(0)
+        })
+        val actionBtn = createActionKey(1.4f)
         actionButton = actionBtn
         r4.addView(actionBtn)
         root.addView(r4)
@@ -359,6 +385,15 @@ class CapsKeyboardService : InputMethodService() {
     private fun dp(value: Int): Int {
         val scale = resources.displayMetrics.density
         return (value * scale + 0.5f).toInt()
+    }
+
+    private fun getSystemNavHeightFallback(): Int {
+        val resId = resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        return if (resId > 0) {
+            resources.getDimensionPixelSize(resId)
+        } else {
+            dp(48)
+        }
     }
 
     override fun onDestroy() {
