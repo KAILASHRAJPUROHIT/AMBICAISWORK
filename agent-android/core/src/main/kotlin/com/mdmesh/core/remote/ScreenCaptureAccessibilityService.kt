@@ -19,87 +19,99 @@ import android.view.accessibility.AccessibilityNodeInfo
  */
 class ScreenCaptureAccessibilityService : AccessibilityService() {
 
-    @Volatile private var isTransformingText = false
+    @Volatile private var transformingUntilMs = 0L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        Log.i("ScreenCaptureA11y", "ScreenCaptureAccessibilityService connected")
     }
 
     override fun onDestroy() {
         if (instance === this) instance = null
         super.onDestroy()
+        Log.i("ScreenCaptureA11y", "ScreenCaptureAccessibilityService destroyed")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        try {
+            handleAccessibilityEvent(event)
+        } catch (t: Throwable) {
+            Log.e("ScreenCaptureA11y", "Crash prevented in onAccessibilityEvent", t)
+        }
+    }
+
+    private fun handleAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         if (pkg != "com.ornate.nx") return
-        if (isTransformingText) return
 
-        // 1. NEVER intervene on deletions, backspaces, cuts, or clears!
+        // 1. Timed re-entrancy lock: ignore events triggered by our own transformations.
+        // Automatically expires so a stalled operation never permanently halts auto-caps.
+        if (System.currentTimeMillis() < transformingUntilMs) return
+
+        // 2. NEVER intervene on deletions, backspaces, cuts, or clears!
         // When text is deleted or cleared, addedCount is 0. Intervening during deletion disrupts the
         // keyboard's composing state and triggers Ornate's data-watcher to re-fill deleted prefilled text.
         if (event.addedCount <= 0) return
 
         val source = event.source ?: return
+
+        // 3. Focus check: only transform if the view is actively focused or being edited by the user.
+        // When Ornate opens a screen and prefills customer name, invoice info, etc. in the background,
+        // the view is NOT focused. Intervening on unfocused views corrupts Ornate's prefilled data.
+        val hasFocus = source.isFocused || source.isAccessibilityFocused
+        if (!hasFocus) {
+            val root = rootInActiveWindow
+            val activeInput = root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            val isCurrentInput = activeInput != null && activeInput == source
+            if (!isCurrentInput) return
+        }
+
+        // 4. Exclude password inputs
+        if (source.isPassword) return
+
+        // 5. Exclude Login / Server settings fields (usernames/passwords/IPs are often lowercase)
+        val viewId = runCatching { source.viewIdResourceName?.lowercase() }.getOrNull()
+        if (viewId != null) {
+            if (viewId.contains("username") || viewId.contains("password") ||
+                viewId.contains("login") || viewId.contains("server") ||
+                viewId.contains("ip") || viewId.contains("port")) {
+                return
+            }
+        }
+
+        val currentText = runCatching { source.text?.toString() }.getOrNull() ?: return
+        if (currentText.isEmpty()) return
+
+        // 6. Only transform if there is at least one lowercase character to convert
+        val hasLower = currentText.any { it.isLowerCase() }
+        if (!hasLower) return
+
+        val upper = currentText.uppercase()
+        if (upper == currentText) return
+
+        // Lock for 300ms while setting text so self-triggered text changes are ignored
+        transformingUntilMs = System.currentTimeMillis() + 300L
         try {
-            // 2. Only transform if the input field is actively focused by the user.
-            // When Ornate opens a screen and prefills customer name, invoice info, etc. in the background,
-            // the view is NOT focused. Intervening on unfocused views corrupts Ornate's prefilled data.
-            if (!source.isFocused) return
+            val selStart = runCatching { source.textSelectionStart }.getOrDefault(-1)
+            val selEnd = runCatching { source.textSelectionEnd }.getOrDefault(-1)
 
-            // 3. Exclude password inputs
-            if (source.isPassword) return
-
-            // 4. Exclude Login screen views
-            val viewId = source.viewIdResourceName?.lowercase()
-            if (viewId != null) {
-                if (viewId.contains("username") || viewId.contains("password") ||
-                    viewId.contains("ip") || viewId.contains("port")) {
-                    return
-                }
+            val arguments = Bundle().apply {
+                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, upper)
             }
-
-            // 5. Exclude AutoCompleteTextView (used by login username dropdowns)
-            val className = source.className?.toString() ?: ""
-            if (className.contains("AutoCompleteTextView", ignoreCase = true)) return
-
-            val currentText = source.text?.toString() ?: return
-
-            // Allow full deletion / empty field
-            if (currentText.isEmpty()) return
-
-            // Only transform if there is at least one lowercase character to convert
-            val hasLower = currentText.any { it.isLowerCase() }
-            if (!hasLower) return
-
-            val upper = currentText.uppercase()
-            if (upper != currentText) {
-                isTransformingText = true
-                try {
-                    val selStart = source.textSelectionStart
-                    val selEnd = source.textSelectionEnd
-                    val arguments = Bundle().apply {
-                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, upper)
-                    }
-                    val ok = source.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-                    if (ok && selStart >= 0 && selEnd >= 0) {
-                        val selArgs = Bundle().apply {
-                            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, selStart)
-                            putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, selEnd)
-                        }
-                        source.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selArgs)
-                    }
-                } finally {
-                    isTransformingText = false
+            val ok = source.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+            if (ok) {
+                val targetStart = if (selStart in 0..upper.length) selStart else upper.length
+                val targetEnd = if (selEnd in targetStart..upper.length) selEnd else targetStart
+                val selArgs = Bundle().apply {
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, targetStart)
+                    putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, targetEnd)
                 }
+                source.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selArgs)
             }
-        } catch (e: Exception) {
-            Log.w("ScreenCaptureA11y", "Auto-caps transform error: ${e.message}")
-        } finally {
-            @Suppress("DEPRECATION")
-            source.recycle()
+        } catch (t: Throwable) {
+            Log.w("ScreenCaptureA11y", "Auto-caps setText error", t)
         }
     }
 
@@ -157,30 +169,20 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
             val svc = instance ?: return false
             val root = svc.rootInActiveWindow ?: return false
             val node = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: findEditable(root)
-            if (node == null) {
-                root.recycle()
-                return false
-            }
-            return try {
+            if (node == null) return false
+            return runCatching {
                 val args = Bundle().apply {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
                 }
                 node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-            } finally {
-                @Suppress("DEPRECATION")
-                node.recycle()
-                @Suppress("DEPRECATION")
-                root.recycle()
-            }
+            }.getOrDefault(false)
         }
 
         private fun findEditable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-            if (node.isEditable) return AccessibilityNodeInfo.obtain(node)
+            if (node.isEditable) return node
             for (i in 0 until node.childCount) {
                 val child = node.getChild(i) ?: continue
                 val found = findEditable(child)
-                @Suppress("DEPRECATION")
-                child.recycle()
                 if (found != null) return found
             }
             return null

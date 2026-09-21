@@ -85,8 +85,8 @@ async function verifyManifest(manifestUrl, sigUrl) {
 // --- APK mirror: download the verified release APK and serve it from the deployment's own origin, so
 // devices never need to reach GitHub. Served only after SHA-256 matches the signed manifest. ---
 const APK_DIR = process.env.APK_CACHE_DIR || '/backups/apk';
-function apkPath(apk, suffix = '') { return apk ? path.join(APK_DIR, `agent${suffix}-${apk.versionCode}.apk`) : null; }
-function apkReady(apk, suffix = '') { const p = apkPath(apk, suffix); return !!(p && fs.existsSync(p)); }
+function apkPath(apk = lastApk, suffix = '') { return apk ? path.join(APK_DIR, `agent${suffix}-${apk.versionCode}.apk`) : null; }
+function apkReady(apk = lastApk, suffix = '') { const p = apkPath(apk, suffix); return !!(p && fs.existsSync(p)); }
 const apkFetching = new Map();
 async function ensureApk(apk = lastApk, suffix = '') {
   if (!apk) return false;
@@ -136,7 +136,7 @@ function setStatus(args) {
     apply,
     auto: autoUpdate,
     applySupported: APPLY_SUPPORTED,
-    apk: lastApk ? { version: lastApk.version, versionCode: lastApk.versionCode, sha256: lastApk.sha256, available: apkReady() } : null,
+    apk: lastApk ? { version: lastApk.version, versionCode: lastApk.versionCode, sha256: lastApk.sha256, available: apkReady(lastApk) } : null,
     apkCn: lastAospApk ? { version: lastAospApk.version, versionCode: lastAospApk.versionCode, sha256: lastAospApk.sha256, available: apkReady(lastAospApk, '-cn') } : null,
     release: lastRelease,
   };
@@ -311,8 +311,8 @@ http.createServer(async (req, res) => {
       // app.install); integrity is guaranteed by the SHA-256 check in ensureApk + the agent's own
       // payload sha256. ?v=<versionCode> is advisory — we always serve the current verified apk.
       if (!lastApk) { res.writeHead(404).end('no apk'); return; }
-      const ready = await ensureApk();
-      const p = apkPath();
+      const ready = await ensureApk(lastApk);
+      const p = apkPath(lastApk);
       if (!ready || !p || !fs.existsSync(p)) { json(res, 502, { error: 'apk unavailable or checksum mismatch' }); return; }
       res.writeHead(200, { 'content-type': 'application/vnd.android.package-archive', 'content-length': fs.statSync(p).size });
       fs.createReadStream(p).pipe(res);

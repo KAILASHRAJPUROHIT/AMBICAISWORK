@@ -396,6 +396,7 @@ class KioskLauncherActivity : FragmentActivity() {
             "Browser settings",
             "Configure Wi-Fi",
             "Open system settings",
+            "Accessibility / Auto-Caps settings",
             "Uninstall AMBIC MDM",
             "About AMBIC MDM",
             "Exit AMBIC MDM",
@@ -412,9 +413,10 @@ class KioskLauncherActivity : FragmentActivity() {
                     5 -> openBrowserSettings()
                     6 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS))
                     7 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_SETTINGS))
-                    8 -> confirmUninstall()
-                    9 -> showAbout()
-                    10 -> doExit()
+                    8 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    9 -> confirmUninstall()
+                    10 -> showAbout()
+                    11 -> doExit()
                 }
             }
             .setNegativeButton("Close", null)
