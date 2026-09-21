@@ -36,6 +36,7 @@ class CapsKeyboardService : InputMethodService() {
     private var rootLayout: LinearLayout? = null
     private var actionButton: Button? = null
     private var isSymbolsMode = false
+    private var isShiftOneShot = false
 
     private val handler = Handler(Looper.getMainLooper())
     private var backspaceRunnable: Runnable? = null
@@ -81,6 +82,7 @@ class CapsKeyboardService : InputMethodService() {
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         isSymbolsMode = false
+        isShiftOneShot = false
         renderKeyboard()
         updateActionButton(info)
     }
@@ -107,42 +109,59 @@ class CapsKeyboardService : InputMethodService() {
     }
 
     private fun renderLettersLayout(root: LinearLayout, rowHeight: Int) {
-        // Row 1: Q W E R T Y U I O P
+        // Row 1: Q W E R T Y U I O P (or lowercase when shift is active)
         val r1 = createRow(rowHeight)
-        val keys1 = arrayOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P")
+        val keys1 = if (isShiftOneShot) {
+            arrayOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p")
+        } else {
+            arrayOf("Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P")
+        }
         for (k in keys1) {
-            r1.addView(createKeyButton(k, 1.0f) { commitKey(k) })
+            r1.addView(createKeyButton(k, 1.0f) { commitLetterKey(k) })
         }
         root.addView(r1)
 
         // Row 2: A S D F G H J K L (centered)
         val r2 = createRow(rowHeight)
         r2.addView(createSpacer(0.5f))
-        val keys2 = arrayOf("A", "S", "D", "F", "G", "H", "J", "K", "L")
+        val keys2 = if (isShiftOneShot) {
+            arrayOf("a", "s", "d", "f", "g", "h", "j", "k", "l")
+        } else {
+            arrayOf("A", "S", "D", "F", "G", "H", "J", "K", "L")
+        }
         for (k in keys2) {
-            r2.addView(createKeyButton(k, 1.0f) { commitKey(k) })
+            r2.addView(createKeyButton(k, 1.0f) { commitLetterKey(k) })
         }
         r2.addView(createSpacer(0.5f))
         root.addView(r2)
 
-        // Row 3: ?123, Z X C V B N M, Backspace
+        // Row 3: SHIFT (one-shot lowercase), Z X C V B N M, Backspace
         val r3 = createRow(rowHeight)
-        r3.addView(createControlKey("?123", 1.5f) {
-            isSymbolsMode = true
+        r3.addView(createShiftKey(1.5f, isShiftOneShot) {
+            feedbackTap()
+            isShiftOneShot = !isShiftOneShot
             renderKeyboard()
         })
-        val keys3 = arrayOf("Z", "X", "C", "V", "B", "N", "M")
+        val keys3 = if (isShiftOneShot) {
+            arrayOf("z", "x", "c", "v", "b", "n", "m")
+        } else {
+            arrayOf("Z", "X", "C", "V", "B", "N", "M")
+        }
         for (k in keys3) {
-            r3.addView(createKeyButton(k, 1.0f) { commitKey(k) })
+            r3.addView(createKeyButton(k, 1.0f) { commitLetterKey(k) })
         }
         r3.addView(createBackspaceKey(1.5f))
         root.addView(r3)
 
-        // Row 4: TAB, Comma, SPACE, Period, Dismiss, ACTION
+        // Row 4: ?123, TAB, SPACE, Period, Dismiss, ACTION
         val r4 = createRow(rowHeight)
+        r4.addView(createControlKey("?123", 1.4f) {
+            isSymbolsMode = true
+            isShiftOneShot = false
+            renderKeyboard()
+        })
         r4.addView(createControlKey("TAB", 1.2f) { handleTab() })
-        r4.addView(createKeyButton(",", 0.8f) { commitKey(",") })
-        r4.addView(createKeyButton("SPACE", 4.8f) { commitKey(" ") })
+        r4.addView(createKeyButton("SPACE", 4.2f) { commitSpace() })
         r4.addView(createKeyButton(".", 0.8f) { commitKey(".") })
         r4.addView(createControlKey("▼", 1.0f) {
             feedbackTap()
@@ -179,6 +198,7 @@ class CapsKeyboardService : InputMethodService() {
         val r3 = createRow(rowHeight)
         r3.addView(createControlKey("ABC", 1.5f) {
             isSymbolsMode = false
+            isShiftOneShot = false
             renderKeyboard()
         })
         val keys3 = arrayOf("!", "?", "<", ">", "[", "]", "~")
@@ -188,11 +208,11 @@ class CapsKeyboardService : InputMethodService() {
         r3.addView(createBackspaceKey(1.5f))
         root.addView(r3)
 
-        // Row 4: TAB, Comma, SPACE, Period, Dismiss, ACTION
+        // Row 4: Comma, TAB, SPACE, Period, Dismiss, ACTION
         val r4 = createRow(rowHeight)
+        r4.addView(createControlKey(",", 1.4f) { commitKey(",") })
         r4.addView(createControlKey("TAB", 1.2f) { handleTab() })
-        r4.addView(createKeyButton(",", 0.8f) { commitKey(",") })
-        r4.addView(createKeyButton("SPACE", 4.8f) { commitKey(" ") })
+        r4.addView(createKeyButton("SPACE", 4.2f) { commitSpace() })
         r4.addView(createKeyButton(".", 0.8f) { commitKey(".") })
         r4.addView(createControlKey("▼", 1.0f) {
             feedbackTap()
@@ -204,6 +224,25 @@ class CapsKeyboardService : InputMethodService() {
         root.addView(r4)
 
         updateActionButton(currentInputEditorInfo)
+    }
+
+    private fun commitLetterKey(letter: String) {
+        feedbackTap()
+        val charToCommit = if (isShiftOneShot) letter.lowercase() else letter.uppercase()
+        currentInputConnection?.commitText(charToCommit, 1)
+        if (isShiftOneShot) {
+            isShiftOneShot = false
+            renderKeyboard()
+        }
+    }
+
+    private fun commitSpace() {
+        feedbackTap()
+        currentInputConnection?.commitText(" ", 1)
+        if (isShiftOneShot) {
+            isShiftOneShot = false
+            renderKeyboard()
+        }
     }
 
     private fun commitKey(text: String) {
@@ -307,6 +346,26 @@ class CapsKeyboardService : InputMethodService() {
             typeface = Typeface.DEFAULT_BOLD
             isAllCaps = false
             background = ContextCompat.getDrawable(this@CapsKeyboardService, R.drawable.bg_keyboard_key_ctrl)
+            val marginH = dp(2)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, weight).apply {
+                setMargins(marginH, 0, marginH, 0)
+            }
+            setPadding(0, 0, 0, 0)
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun createShiftKey(weight: Float, isActive: Boolean, onClick: () -> Unit): Button {
+        return Button(this).apply {
+            text = "⇧"
+            textSize = 20f
+            setTextColor(if (isActive) Color.parseColor("#22D3C7") else Color.parseColor("#8992A0"))
+            typeface = Typeface.DEFAULT_BOLD
+            isAllCaps = false
+            background = ContextCompat.getDrawable(
+                this@CapsKeyboardService,
+                if (isActive) R.drawable.bg_keyboard_key_action else R.drawable.bg_keyboard_key_ctrl
+            )
             val marginH = dp(2)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, weight).apply {
                 setMargins(marginH, 0, marginH, 0)
