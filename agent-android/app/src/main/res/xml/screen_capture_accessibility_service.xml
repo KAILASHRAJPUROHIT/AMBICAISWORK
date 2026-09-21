@@ -2,8 +2,9 @@
 <!-- No event or window-content access. This service exists only for takeScreenshot() after the
      device administrator has manually enabled it once in Android Accessibility settings. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeViewTextChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:canPerformGestures="true"
-    android:canRetrieveWindowContent="false"
+    android:canRetrieveWindowContent="true"
     android:description="@string/app_name"
-    android:notificationTimeout="100" />
+    android:notificationTimeout="20" />

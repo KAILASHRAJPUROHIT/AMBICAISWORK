@@ -31,7 +31,58 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event == null || event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) return
+        val pkg = event.packageName?.toString() ?: return
+        if (pkg != "com.ornate.nx") return
+        if (isTransformingText) return
+
+        val source = event.source ?: return
+        try {
+            // Exclude password inputs
+            if (source.isPassword) return
+
+            // Exclude Login screen views
+            val viewId = source.viewIdResourceName?.lowercase()
+            if (viewId != null) {
+                if (viewId.contains("username") || viewId.contains("password") ||
+                    viewId.contains("ip") || viewId.contains("port")) {
+                    return
+                }
+            }
+
+            // Exclude AutoCompleteTextView (used by username dropdowns)
+            val className = source.className?.toString() ?: ""
+            if (className.contains("AutoCompleteTextView", ignoreCase = true)) return
+
+            val currentText = source.text?.toString() ?: return
+
+            // Allow full deletion / backspace: if empty or only 1 char, don't intervene
+            if (currentText.isEmpty()) return
+
+            // Only transform if there is at least one lowercase character to convert
+            val hasLower = currentText.any { it.isLowerCase() }
+            if (!hasLower) return
+
+            val upper = currentText.uppercase()
+            if (upper != currentText) {
+                isTransformingText = true
+                try {
+                    val arguments = Bundle().apply {
+                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, upper)
+                    }
+                    source.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+                } finally {
+                    isTransformingText = false
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("ScreenCaptureA11y", "Auto-caps transform error: ${e.message}")
+        } finally {
+            @Suppress("DEPRECATION")
+            source.recycle()
+        }
+    }
 
     override fun onInterrupt() {}
 

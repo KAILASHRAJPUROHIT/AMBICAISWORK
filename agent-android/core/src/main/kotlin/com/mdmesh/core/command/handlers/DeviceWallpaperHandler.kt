@@ -1,5 +1,6 @@
 package com.mdmesh.core.command.handlers
 
+import android.annotation.SuppressLint
 import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.BitmapFactory
@@ -52,6 +53,7 @@ class DeviceWallpaperHandler(
                     "lock" -> WallpaperManager.FLAG_LOCK
                     else -> WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
                 }
+                @SuppressLint("MissingPermission")
                 wm.setBitmap(bitmap, null, true, which)
                 CommandResults.done(command)
             }.getOrElse { CommandResults.failed(command, it.message ?: "wallpaper failed") }
