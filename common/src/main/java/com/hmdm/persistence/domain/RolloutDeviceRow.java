@@ -28,11 +28,15 @@ public class RolloutDeviceRow implements Serializable {
     private static final long serialVersionUID = 1L;
 
     private String deviceNumber;
+    private String description;
     private String agentVersion;
     private String capabilitiesJson;
 
     public String getDeviceNumber() { return deviceNumber; }
     public void setDeviceNumber(String deviceNumber) { this.deviceNumber = deviceNumber; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
 
     public String getAgentVersion() { return agentVersion; }
     public void setAgentVersion(String agentVersion) { this.agentVersion = agentVersion; }

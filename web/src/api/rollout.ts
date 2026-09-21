@@ -11,11 +11,20 @@ export interface RolloutCounts {
   ineligible: number;
 }
 
+export interface RolloutDeviceStatus {
+  deviceNumber: string;
+  description?: string;
+  status: 'UPDATED' | 'PENDING' | 'OUTSTANDING' | 'INELIGIBLE';
+  currentVersion?: string;
+}
+
 export interface RolloutProgress {
   stage: string;
   targetVersion: string;
   canary: RolloutCounts;
   fleet: RolloutCounts | null; // null until the rollout is promoted to fleet
+  canaryDevices?: RolloutDeviceStatus[];
+  fleetDevices?: RolloutDeviceStatus[] | null;
 }
 
 export interface ActiveRollout {
@@ -58,4 +67,9 @@ export async function promoteRollout(id: number): Promise<ActiveRollout> {
 /** Stop offering the update (in-flight installs run their course). */
 export async function cancelRollout(id: number): Promise<void> {
   await apiClient.post<void>(`${BASE}/${id}/cancel`);
+}
+
+/** Re-queue install commands and wake all non-updated devices. */
+export async function retryRollout(id: number): Promise<ActiveRollout> {
+  return apiClient.post<ActiveRollout>(`${BASE}/${id}/retry`);
 }

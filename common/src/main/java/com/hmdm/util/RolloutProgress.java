@@ -47,11 +47,22 @@ public final class RolloutProgress {
     private RolloutProgress() {
     }
 
+    /** Robust check whether reported agent version matches the target version. */
+    public static boolean versionMatches(String targetVersion, String reportedVersion) {
+        if (targetVersion == null || reportedVersion == null) return false;
+        String t = targetVersion.trim().replaceFirst("^v", "");
+        String r = reportedVersion.trim().replaceFirst("^v", "");
+        if (t.equalsIgnoreCase(r)) return true;
+        String tBase = t.split("[-+]")[0];
+        String rBase = r.split("[-+]")[0];
+        return tBase.equalsIgnoreCase(rBase);
+    }
+
     /** Classify one device against the rollout target. {@code hasPending} = it has an outstanding
      *  (pending/delivered) app.install for this rollout. */
     public static Status classify(String targetVersion, RolloutDeviceRow row, boolean hasPending) {
         String version = row == null ? null : row.getAgentVersion();
-        if (targetVersion != null && targetVersion.equals(version)) {
+        if (versionMatches(targetVersion, version)) {
             return Status.UPDATED;
         }
         Set<String> tokens = AgentCapabilityTokens.flatten(row == null ? null : row.getCapabilitiesJson());

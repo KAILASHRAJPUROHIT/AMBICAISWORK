@@ -17,7 +17,7 @@ const KINDS: Array<{ key: RemoteKind; label: string }> = [
 export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string; isDeviceOwner: boolean | null | undefined }) {
   const toast = useToast();
   const [durationSec, setDurationSec] = useState(300);
-  const [intervalSec, setIntervalSec] = useState(5);
+  const [intervalSec, setIntervalSec] = useState(1);
   const [kinds, setKinds] = useState<RemoteKind[]>(['screen']);
   const [session, setSession] = useState<RemoteSession | null>(null);
   const [snapshots, setSnapshots] = useState<RemoteSnapshotMeta[]>([]);
@@ -33,11 +33,11 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
       } catch {
         // Remote capture is optional. Avoid repeated error toasts while polling a disconnected device.
       }
-      if (live) timer = setTimeout(() => void poll(), session ? 3000 : 10000);
+      if (live) timer = setTimeout(() => void poll(), session ? Math.max(intervalSec * 1000, 1000) : 10000);
     };
     void poll();
     return () => { live = false; clearTimeout(timer); };
-  }, [deviceId, session]);
+  }, [deviceId, session, intervalSec]);
 
   const byKind = useMemo(() => new Map(snapshots.map((s) => [s.kind, s])), [snapshots]);
 

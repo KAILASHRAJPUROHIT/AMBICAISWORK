@@ -328,6 +328,34 @@ public class RolloutResource {
     }
 
     // =================================================================================================================
+    @ApiOperation(value = "Retry rollout", notes = "Re-queue install commands and wake all non-updated devices.")
+    @POST
+    @Path("/{id}/retry")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response retry(@PathParam("id") int id) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) return Response.PERMISSION_DENIED();
+        AgentRollout r = rolloutDAO.findById(id);
+        if (r == null || !customerId.get().equals(r.getCustomerId())) return Response.PERMISSION_DENIED();
+        if (!"canary".equals(r.getStage()) && !"fleet".equals(r.getStage())) {
+            return Response.ERROR("error.rollout.stage");
+        }
+
+        int cust = customerId.get();
+        List<RolloutDeviceRow> rows = rolloutDAO.listCustomerDevices(cust);
+        Set<String> canary = new HashSet<>(rolloutDAO.listCanaryNumbers(r.getId()));
+        List<RolloutDeviceRow> targetRows = "fleet".equals(r.getStage()) ? rows : filter(rows, canary, true);
+
+        for (RolloutDeviceRow row : targetRows) {
+            if (RolloutProgress.versionMatches(r.getTargetVersion(), row.getAgentVersion())) {
+                continue;
+            }
+            enqueueInstall(r, row.getDeviceNumber());
+        }
+        return Response.OK(buildView(r));
+    }
+
+    // =================================================================================================================
     @ApiOperation(value = "Active rollout", notes = "The current canary/fleet rollout for this customer + progress, or null.")
     @GET
     @Path("/active")
@@ -415,7 +443,24 @@ public class RolloutResource {
             String status = statusByDevice.get(row.getDeviceNumber());
             Map<String, Object> d = new LinkedHashMap<>();
             d.put("deviceNumber", row.getDeviceNumber());
+            d.put("description", row.getDescription());
             d.put("status", RolloutProgress.classifyByCommand(row, status).name());
+            d.put("currentVersion", row.getAgentVersion());
+            out.add(d);
+        }
+        return out;
+    }
+
+    /** Per-device breakdown for a "version"-tracked rollout's progress view. */
+    private List<Map<String, Object>> perDeviceVersionStatus(String targetVersion, List<RolloutDeviceRow> rows, Set<String> pending) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (RolloutDeviceRow row : rows) {
+            boolean hasPending = pending != null && pending.contains(row.getDeviceNumber());
+            Map<String, Object> d = new LinkedHashMap<>();
+            d.put("deviceNumber", row.getDeviceNumber());
+            d.put("description", row.getDescription());
+            d.put("status", RolloutProgress.classify(targetVersion, row, hasPending).name());
+            d.put("currentVersion", row.getAgentVersion());
             out.add(d);
         }
         return out;
@@ -472,6 +517,8 @@ public class RolloutResource {
             Set<String> pending = new HashSet<>(rolloutDAO.listPendingInstallNumbers(cust));
             progress.put("canary", RolloutProgress.counts(r.getTargetVersion(), canaryRows, pending));
             progress.put("fleet", fleetStarted ? RolloutProgress.counts(r.getTargetVersion(), fleetRows, pending) : null);
+            progress.put("canaryDevices", perDeviceVersionStatus(r.getTargetVersion(), canaryRows, pending));
+            progress.put("fleetDevices", fleetStarted ? perDeviceVersionStatus(r.getTargetVersion(), fleetRows, pending) : null);
         }
 
         Map<String, Object> view = new LinkedHashMap<>();

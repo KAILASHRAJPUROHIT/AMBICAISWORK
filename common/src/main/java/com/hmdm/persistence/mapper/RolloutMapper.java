@@ -71,7 +71,7 @@ public interface RolloutMapper {
     @Select({"SELECT deviceNumber FROM agentRolloutCanary WHERE rolloutId = #{rolloutId}"})
     List<String> listCanaryNumbers(@Param("rolloutId") int rolloutId);
 
-    @Select({"SELECT d.number AS deviceNumber, s.agentVersion AS agentVersion, d.agentCapabilities AS capabilitiesJson " +
+    @Select({"SELECT d.number AS deviceNumber, d.description AS description, s.agentVersion AS agentVersion, d.agentCapabilities AS capabilitiesJson " +
             "FROM devices d LEFT JOIN device_state s ON s.deviceNumber = d.number WHERE d.customerId = #{customerId}"})
     List<RolloutDeviceRow> listCustomerDevices(@Param("customerId") int customerId);
 

@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getUpdateStatus, type UpdateStatus } from '../api/updates';
 import {
-  getActiveRollout, createRollout, promoteRollout, cancelRollout,
-  type ActiveRollout, type RolloutCounts,
+  getActiveRollout, createRollout, promoteRollout, cancelRollout, retryRollout,
+  type ActiveRollout, type RolloutCounts, type RolloutDeviceStatus,
 } from '../api/rollout';
 import { searchDevices, type DeviceView } from '../api/devices';
 
 const AGENT_PACKAGE = (import.meta.env.VITE_AGENT_PACKAGE as string) || 'com.mdmesh.agent';
 
-/** A labelled progress bar for one cohort (canary or fleet). */
-function CohortBar({ label, c }: { label: string; c: RolloutCounts }) {
+const STATUS_LABEL: Record<RolloutDeviceStatus['status'], string> = {
+  UPDATED: 'Updated',
+  PENDING: 'Installing…',
+  OUTSTANDING: 'Queued',
+  INELIGIBLE: 'Not eligible',
+};
+
+/** A labelled progress bar for one cohort (canary or fleet) with per-device breakdown. */
+function CohortBar({ label, c, devices }: { label: string; c: RolloutCounts; devices?: RolloutDeviceStatus[] }) {
   const denom = Math.max(c.total - c.ineligible, 1); // ineligible devices can't be updated — exclude
   const pct = Math.round((c.updated / denom) * 100);
   return (
@@ -24,6 +31,22 @@ function CohortBar({ label, c }: { label: string; c: RolloutCounts }) {
         {c.outstanding > 0 && <span>{c.outstanding} queued</span>}
         {c.ineligible > 0 && <span className="muted">{c.ineligible} too old</span>}
       </div>
+      {devices && devices.length > 0 && (
+        <div className="rollout-devicelist" style={{ marginTop: 6 }}>
+          {devices.map((d) => (
+            <div key={d.deviceNumber} className="rollout-device" style={{ justifyContent: 'space-between' }}>
+              <div>
+                <span className="mono">{d.description || d.deviceNumber}</span>
+                {d.description && <span className="muted" style={{ marginLeft: 8, fontSize: '0.85em' }}>({d.deviceNumber})</span>}
+                {d.currentVersion && <span className="muted" style={{ marginLeft: 8, fontSize: '0.85em' }}>· v{d.currentVersion}</span>}
+              </div>
+              <span className={d.status === 'PENDING' ? 'ub-warn' : d.status === 'INELIGIBLE' ? 'muted' : d.status === 'UPDATED' ? 'ub-ch' : ''}>
+                {STATUS_LABEL[d.status]}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -99,9 +122,25 @@ export function RolloutPanel() {
 
   const promote = async () => {
     if (!rollout) return;
-    if (!window.confirm('Promote this update to the rest of the fleet?')) return;
+    const canary = rollout.progress.canary;
+    const pendingCount = canary.total - canary.ineligible - canary.updated;
+    if (pendingCount > 0) {
+      if (!window.confirm(`Only ${canary.updated}/${canary.total - canary.ineligible} canary devices have updated. Force promote to fleet anyway?`)) {
+        return;
+      }
+    } else {
+      if (!window.confirm('Promote this update to the rest of the fleet?')) return;
+    }
     setBusy(true); setErr(null);
     try { setRollout(await promoteRollout(rollout.id)); void refresh(); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  const retry = async () => {
+    if (!rollout) return;
+    setBusy(true); setErr(null);
+    try { setRollout(await retryRollout(rollout.id)); void refresh(); }
     catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   };
@@ -130,18 +169,23 @@ export function RolloutPanel() {
               v{rollout.targetVersion} · <span className="ub-ch">{rollout.stage}</span>
             </span>
           </div>
-          <CohortBar label="Canary" c={rollout.progress.canary} />
-          {rollout.progress.fleet && <CohortBar label="Fleet" c={rollout.progress.fleet} />}
+          <CohortBar label="Canary" c={rollout.progress.canary} devices={rollout.progress.canaryDevices} />
+          {rollout.progress.fleet && <CohortBar label="Fleet" c={rollout.progress.fleet} devices={rollout.progress.fleetDevices ?? undefined} />}
           <div className="set-row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+            <button
+              className="btn btn-sm"
+              onClick={() => void retry()}
+              disabled={busy}
+              title="Re-enqueue update commands and wake non-updated devices"
+            >
+              {busy ? 'Waking…' : 'Retry / Wake devices'}
+            </button>
             {rollout.stage === 'canary' && (
               <button
                 className="btn btn-sm btn-primary"
                 onClick={() => void promote()}
-                disabled={busy
-                  || rollout.progress.canary.pending > 0
-                  || rollout.progress.canary.outstanding > 0
-                  || rollout.progress.canary.updated < 1}
-                title="Enabled once every canary device has updated"
+                disabled={busy}
+                title={rollout.progress.canary.updated < 1 ? 'Force promote to fleet' : 'Promote to fleet'}
               >
                 Promote to fleet
               </button>
@@ -177,8 +221,8 @@ export function RolloutPanel() {
             {devices.map((d) => (
               <label key={d.id} className="rollout-device">
                 <input type="checkbox" checked={selected.has(d.number)} onChange={() => toggle(d.number)} />
-                <span className="mono">{d.number}</span>
-                {d.description && <span className="muted">{d.description}</span>}
+                <span className="mono">{d.description || d.number}</span>
+                {d.description && <span className="muted" style={{ marginLeft: 6 }}>({d.number})</span>}
               </label>
             ))}
             {devices.length === 0 && <span className="muted">No devices.</span>}
