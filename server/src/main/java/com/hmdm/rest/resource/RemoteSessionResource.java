@@ -106,6 +106,64 @@ public class RemoteSessionResource {
         public void setKinds(List<String> v) { this.kinds = v; }
     }
 
+    public static class InputRequest {
+        private String action; // "tap", "swipe", "key"
+        private Float x;
+        private Float y;
+        private Float endX;
+        private Float endY;
+        private Long durationMs;
+        private String key;
+
+        public String getAction() { return action; }
+        public void setAction(String action) { this.action = action; }
+        public Float getX() { return x; }
+        public void setX(Float x) { this.x = x; }
+        public Float getY() { return y; }
+        public void setY(Float y) { this.y = y; }
+        public Float getEndX() { return endX; }
+        public void setEndX(Float endX) { this.endX = endX; }
+        public Float getEndY() { return endY; }
+        public void setEndY(Float endY) { this.endY = endY; }
+        public Long getDurationMs() { return durationMs; }
+        public void setDurationMs(Long durationMs) { this.durationMs = durationMs; }
+        public String getKey() { return key; }
+        public void setKey(String key) { this.key = key; }
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "Inject touch or key input", notes = "Injects a tap, swipe, or navigation key into the device screen.")
+    @POST
+    @Path("/input")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response injectInput(@PathParam("deviceId") String deviceId, InputRequest body) {
+        Device device = requireOwnedDevice(deviceId);
+        if (device == null) return Response.PERMISSION_DENIED();
+        if (body == null || isBlank(body.getAction())) return Response.ERROR("error.input.invalid");
+
+        ObjectNode payload = MAPPER.createObjectNode();
+        payload.put("action", body.getAction());
+        if (body.getX() != null) payload.put("x", body.getX());
+        if (body.getY() != null) payload.put("y", body.getY());
+        if (body.getEndX() != null) payload.put("endX", body.getEndX());
+        if (body.getEndY() != null) payload.put("endY", body.getEndY());
+        if (body.getDurationMs() != null) payload.put("durationMs", body.getDurationMs());
+        if (body.getKey() != null) payload.put("key", body.getKey());
+
+        AgentCommand command = new AgentCommand();
+        command.setDeviceNumber(deviceId);
+        command.setType("device.remoteInput");
+        command.setPayload(payload.toString());
+        command.setRequiresCapability("device.remoteSession");
+        command.setStatus("pending");
+        command.setCreatedAt(System.currentTimeMillis());
+        commandDAO.insert(command);
+        wakeHub.wake(deviceId, "interactive");
+
+        return Response.OK();
+    }
+
     // =================================================================================================================
     @ApiOperation(value = "Start remote view session", notes = "Begins periodic screen/camera/mic " +
             "capture on the device for a bounded duration (default 5 minutes).")
@@ -225,5 +283,9 @@ public class RemoteSessionResource {
 
     private static int clamp(int v, int min, int max) {
         return Math.max(min, Math.min(max, v));
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
     }
 }

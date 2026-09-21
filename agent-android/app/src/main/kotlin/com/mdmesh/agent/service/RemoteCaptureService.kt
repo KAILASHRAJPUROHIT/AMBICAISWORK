@@ -43,7 +43,7 @@ class RemoteCaptureService : LifecycleService() {
         captureJob?.cancel()
         captureJob = lifecycleScope.launch {
             val until = System.currentTimeMillis() + session.durationSec.coerceIn(30, 1800) * 1000L
-            val interval = session.intervalSec.coerceIn(1, 60) * 1000L
+            val interval = if (session.intervalSec <= 1) 250L else session.intervalSec.coerceIn(1, 60) * 1000L
             while (System.currentTimeMillis() < until) {
                 session.kinds.forEach { kind ->
                     runCatching { captureAndUpload(kind) }

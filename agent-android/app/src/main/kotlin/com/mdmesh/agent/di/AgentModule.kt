@@ -32,6 +32,7 @@ import com.mdmesh.core.command.handlers.DevicePowerModeHandler
 import com.mdmesh.core.command.handlers.DeviceRingStopHandler
 import com.mdmesh.core.command.handlers.DeviceWallpaperHandler
 import com.mdmesh.core.command.handlers.DeviceWipeHandler
+import com.mdmesh.core.command.handlers.RemoteInputHandler
 import com.mdmesh.core.command.handlers.RemoteSessionStartHandler
 import com.mdmesh.core.command.handlers.RemoteSessionStopHandler
 import com.mdmesh.core.command.handlers.KioskThemeHandler
@@ -379,6 +380,11 @@ object AgentModule {
     @IntoSet
     fun provideRemoteSessionStopHandler(controller: RemoteCaptureController): CommandHandler =
         RemoteSessionStopHandler(controller)
+
+    @Provides
+    @IntoSet
+    fun provideRemoteInputHandler(): CommandHandler =
+        RemoteInputHandler()
 
     @Provides
     @IntoSet

@@ -38,3 +38,17 @@ export function getLatestSnapshots(deviceId: string): Promise<RemoteSnapshotMeta
 export function snapshotUrl(deviceId: string, kind: RemoteKind, capturedAt: number): string {
   return `${API_BASE}${base(deviceId)}/snapshot/${kind}?_=${capturedAt}`;
 }
+
+export interface RemoteInputRequest {
+  action: 'tap' | 'swipe' | 'key';
+  x?: number;
+  y?: number;
+  endX?: number;
+  endY?: number;
+  durationMs?: number;
+  key?: 'back' | 'home' | 'recents' | 'notifications' | 'lock';
+}
+
+export function sendRemoteInput(deviceId: string, request: RemoteInputRequest): Promise<void> {
+  return apiClient.post<void>(`${base(deviceId)}/input`, request);
+}

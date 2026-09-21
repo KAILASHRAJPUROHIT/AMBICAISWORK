@@ -66,6 +66,9 @@ object DeviceAction {
      *  elapse. No payload. Same capability gate as [REMOTE_SESSION_START]. */
     const val REMOTE_SESSION_STOP = "device.remoteSessionStop"
 
+    /** Inject a touch/swipe/key gesture into the screen. Payload: [RemoteInputPayload]. */
+    const val REMOTE_INPUT = "device.remoteInput"
+
     /** Capability token (after `device.` prefix) for [REMOTE_SESSION_START]/[REMOTE_SESSION_STOP] —
      *  advertised separately from [ADVERTISED_KEYS], only when Device Owner. */
     const val REMOTE_SESSION_CAPABILITY_KEY = "remoteSession"

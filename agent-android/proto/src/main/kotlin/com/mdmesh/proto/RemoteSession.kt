@@ -20,3 +20,17 @@ data class RemoteSessionStartPayload(
     val intervalSec: Int = 3,
     val kinds: List<String> = listOf("screen", "cameraFront", "cameraBack", "mic"),
 )
+
+/**
+ * Payload of `device.remoteInput` — inject touch gesture or navigation key.
+ */
+@Serializable
+data class RemoteInputPayload(
+    val action: String, // "tap", "swipe", "key"
+    val x: Float? = null,
+    val y: Float? = null,
+    val endX: Float? = null,
+    val endY: Float? = null,
+    val durationMs: Long? = null,
+    val key: String? = null,
+)

@@ -24,12 +24,12 @@ object ScreenCaptureAccessibilityPermission : PermissionCheck {
     override val verifiable = true
     override val skippable = true
 
-    private const val SERVICE_ID = "com.mdmesh.agent/com.mdmesh.core.remote.ScreenCaptureAccessibilityService"
-
     override fun isGranted(context: Context): Boolean {
+        if (com.mdmesh.core.remote.ScreenCaptureAccessibilityService.isConnected()) return true
         val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager ?: return false
+        val pkg = context.packageName
         return am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-            .any { it.id == SERVICE_ID }
+            .any { it.id.startsWith("$pkg/") && it.id.endsWith("ScreenCaptureAccessibilityService") }
     }
 
     override fun settingsIntent(context: Context): Intent =
