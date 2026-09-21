@@ -120,6 +120,13 @@ class KioskLauncherActivity : FragmentActivity() {
             }
         }
         lifecycleScope.launch {
+            val current = store.load()
+            if (current == null && dpmHandle.dpm.isDeviceOwnerApp(packageName)) {
+                val fallback = store.loadLastKnown() ?: defaultKioskPayload()
+                store.save(fallback)
+            }
+        }
+        lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 adminPasscodeStore.flow().distinctUntilChanged().collect { fleetPasscodeHash = it }
             }
@@ -132,12 +139,22 @@ class KioskLauncherActivity : FragmentActivity() {
         super.onDestroy()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        active?.let {
+            startLockTaskSafely()
+            applyState(it)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         // A single-app pin that returned us to HOME means the pinned app exited or crashed — re-pin
         // it (counting the bounce so a crash loop trips the guard). Enter/exit transitions are
         // handled by the flow collector, not here.
         val p = active ?: return
+        startLockTaskSafely()
         if (p.mode == "single") {
             crashGuard.registerFault()
             if (bailOnCrashLoop()) return
@@ -160,12 +177,8 @@ class KioskLauncherActivity : FragmentActivity() {
         }
         if (bailOnCrashLoop()) return
         promptDefaultHomeIfNeeded()
-        // Use controller.enter() instead of bare startLockTask() so that lock-task features
-        // (Recents, Home, notifications, etc.) are applied on every state restore — not just
-        // when a kiosk.enter command arrives. Without this, an APK update or reboot reverts
-        // features to LOCK_TASK_FEATURE_NONE (the framework default when only startLockTask()
-        // is called), which disables the Recents button even though the persisted payload has
-        // recents=true.
+        // Use controller.enter() to set DPM lock-task allowlist, features, and persistent HOME,
+        // and startLockTaskSafely() to actually place this Activity into lock task mode.
         val features = lockTaskFeatures(
             KioskToggles(
                 home = p.features.home,
@@ -178,6 +191,7 @@ class KioskLauncherActivity : FragmentActivity() {
         )
         val allowed = (p.allowedPackages + listOfNotNull(p.pinPackage)).distinct()
         controller.enter(ComponentName(this, HOME_ALIAS), allowed, features)
+        startLockTaskSafely()
         if (p.mode == "single" && p.pinPackage != null) {
             launchPinned(p)
         } else {
@@ -924,6 +938,33 @@ class KioskLauncherActivity : FragmentActivity() {
         value?.let { runCatching { Color.parseColor(it) }.getOrNull() } ?: fallback
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
+    private fun defaultKioskPayload(): KioskApplyPayload =
+        KioskApplyPayload(
+            mode = "launcher",
+            allowedPackages = listOf(
+                "com.ornate.nx",
+                "com.bis.bisapp",
+                "com.android.chrome",
+                "com.android.camera",
+                "com.miui.gallery",
+                "com.google.android.apps.photos",
+                "com.miui.calculator",
+                "com.android.contacts",
+            ),
+            exitMode = "visible",
+            password = "admin",
+            features = com.mdmesh.proto.KioskFeaturesDto(
+                home = true,
+                recents = true,
+                notifications = false,
+                systemInfo = true,
+                keyguard = false,
+                lockButtons = true,
+            ),
+            deviceLabel = "AMBIC MDM Kiosk",
+            orgName = "Aradhana Jewellers",
+        )
 
     private companion object {
         const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
