@@ -9,16 +9,17 @@ import java.io.ByteArrayOutputStream
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 
+import android.os.Bundle
+import android.util.Log
+import android.view.accessibility.AccessibilityNodeInfo
+
 /**
- * Exists solely for [takeScreenshot] (API 30+) — the one silent way to capture the screen for a
- * remote-view session (see [com.mdmesh.core.permission.ScreenCaptureAccessibilityPermission] for
- * why this needs a one-time manual enable, and why that's still the better trade-off than
- * MediaProjection's every-session consent dialog). Deliberately does nothing else: no
- * [onAccessibilityEvent] handling, matching this codebase's existing precedent
- * (`com.mdmesh.remote.InputInjectionService`'s "it injects, it does not snoop") of keeping each
- * accessibility service scoped to exactly the one capability it exists for.
+ * Exists for [takeScreenshot] (API 30+) remote-view sessions, input injection, and
+ * auto-uppercase text enforcement for enterprise apps (e.g. Ornate Buddy).
  */
 class ScreenCaptureAccessibilityService : AccessibilityService() {
+
+    @Volatile private var isTransformingText = false
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -30,7 +31,34 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent) {}
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event == null || event.eventType != AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) return
+        val pkg = event.packageName?.toString() ?: return
+        if (pkg != "com.ornate.nx") return
+        if (isTransformingText) return
+
+        val source = event.source ?: return
+        try {
+            val text = source.text?.toString() ?: return
+            val upper = text.uppercase()
+            if (upper != text) {
+                isTransformingText = true
+                try {
+                    val arguments = Bundle().apply {
+                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, upper)
+                    }
+                    source.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+                } finally {
+                    isTransformingText = false
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("ScreenCaptureA11y", "Auto-caps transform error: ${e.message}")
+        } finally {
+            source.recycle()
+        }
+    }
+
     override fun onInterrupt() {}
 
     companion object {
