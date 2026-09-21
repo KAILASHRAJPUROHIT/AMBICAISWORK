@@ -12,12 +12,14 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.appcompat.app.AlertDialog
 import androidx.biometric.BiometricManager
@@ -396,6 +398,7 @@ class KioskLauncherActivity : FragmentActivity() {
             "Browser settings",
             "Configure Wi-Fi",
             "Open system settings",
+            "Capital Keyboard settings",
             "Accessibility / Auto-Caps settings",
             "Uninstall AMBIC MDM",
             "About AMBIC MDM",
@@ -413,10 +416,60 @@ class KioskLauncherActivity : FragmentActivity() {
                     5 -> openBrowserSettings()
                     6 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS))
                     7 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_SETTINGS))
-                    8 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                    9 -> confirmUninstall()
-                    10 -> showAbout()
-                    11 -> doExit()
+                    8 -> showKeyboardSettingsDialog()
+                    9 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    10 -> confirmUninstall()
+                    11 -> showAbout()
+                    12 -> doExit()
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun showKeyboardSettingsDialog() {
+        val options = arrayOf(
+            "1. Enable AMBIC Keyboard (Settings)",
+            "2. Switch active keyboard to AMBIC",
+            "3. Lock to AMBIC Keyboard only (Device Owner)",
+            "4. Allow all keyboards (Unlock)",
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Capital Keyboard settings")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS))
+                    1 -> {
+                        val imm = getSystemService(InputMethodManager::class.java)
+                        imm?.showInputMethodPicker()
+                    }
+                    2 -> {
+                        if (dpmHandle.dpm.isDeviceOwnerApp(packageName)) {
+                            val success = runCatching {
+                                dpmHandle.dpm.setPermittedInputMethods(
+                                    dpmHandle.admin,
+                                    listOf(packageName)
+                                )
+                            }.isSuccess
+                            val msg = if (success) "Locked to AMBIC Keyboard only." else "Failed to lock input methods."
+                            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+                            val imm = getSystemService(InputMethodManager::class.java)
+                            imm?.showInputMethodPicker()
+                        } else {
+                            Toast.makeText(this, "Device Owner required to restrict keyboards.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    3 -> {
+                        if (dpmHandle.dpm.isDeviceOwnerApp(packageName)) {
+                            runCatching {
+                                dpmHandle.dpm.setPermittedInputMethods(
+                                    dpmHandle.admin,
+                                    null
+                                )
+                            }
+                            Toast.makeText(this, "All keyboards allowed.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 }
             }
             .setNegativeButton("Close", null)

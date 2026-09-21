@@ -5,4 +5,5 @@
     <string name="checkin_notification_channel">Device management</string>
     <string name="checkin_notification_title">Device management active</string>
     <string name="checkin_notification_text">Keeping this device in sync with your organisation.</string>
+    <string name="ime_caps_keyboard_name">AMBIC Capital Keyboard</string>
 </resources>
