@@ -96,8 +96,8 @@ export function RolloutPanel() {
   });
 
   const apk = targetPackage === 'com.mdmesh.agent.cn'
-    ? (status?.apkCn || status?.apk)
-    : (status?.apk || status?.apkCn);
+    ? status?.apkCn
+    : status?.apk;
 
   const start = async () => {
     if (!apk) return;
