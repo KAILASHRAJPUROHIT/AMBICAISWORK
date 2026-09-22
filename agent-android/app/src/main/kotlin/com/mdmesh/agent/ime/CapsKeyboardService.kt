@@ -68,14 +68,19 @@ class CapsKeyboardService : InputMethodService() {
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
-            val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
-            val bottomPadding = if (navBottom > 0) padV + navBottom else padV + fallbackNav
+            val navBottom = insets.getInsets(
+                WindowInsetsCompat.Type.navigationBars() or
+                WindowInsetsCompat.Type.systemBars() or
+                WindowInsetsCompat.Type.displayCutout()
+            ).bottom
+            val bottomPadding = padV + maxOf(navBottom, fallbackNav)
             v.setPadding(padH, padV, padH, bottomPadding)
             insets
         }
 
         rootLayout = root
         renderKeyboard()
+        root.requestApplyInsets()
         return root
     }
 
@@ -91,7 +96,8 @@ class CapsKeyboardService : InputMethodService() {
         val root = rootLayout ?: return
         root.removeAllViews()
 
-        val rowHeight = dp(52)
+        val isPhone = resources.configuration.smallestScreenWidthDp < 600
+        val rowHeight = if (isPhone) dp(46) else dp(52)
 
         // Row 0: Top Numbers Row (Permanent for fast jewellery/inventory billing)
         val numRow = createRow(rowHeight)
@@ -322,9 +328,10 @@ class CapsKeyboardService : InputMethodService() {
     }
 
     private fun createKeyButton(label: String, weight: Float, onClick: () -> Unit): Button {
+        val isPhone = resources.configuration.smallestScreenWidthDp < 600
         return Button(this).apply {
             text = label
-            textSize = 17f
+            textSize = if (isPhone) 16f else 18f
             setTextColor(Color.parseColor("#F3F5F8"))
             typeface = Typeface.DEFAULT_BOLD
             isAllCaps = false
@@ -339,9 +346,10 @@ class CapsKeyboardService : InputMethodService() {
     }
 
     private fun createControlKey(label: String, weight: Float, onClick: () -> Unit): Button {
+        val isPhone = resources.configuration.smallestScreenWidthDp < 600
         return Button(this).apply {
             text = label
-            textSize = 14f
+            textSize = if (isPhone) 12f else 14f
             setTextColor(Color.parseColor("#8992A0"))
             typeface = Typeface.DEFAULT_BOLD
             isAllCaps = false
@@ -356,9 +364,10 @@ class CapsKeyboardService : InputMethodService() {
     }
 
     private fun createShiftKey(weight: Float, isActive: Boolean, onClick: () -> Unit): Button {
+        val isPhone = resources.configuration.smallestScreenWidthDp < 600
         return Button(this).apply {
             text = "⇧"
-            textSize = 20f
+            textSize = if (isPhone) 18f else 20f
             setTextColor(if (isActive) Color.parseColor("#22D3C7") else Color.parseColor("#8992A0"))
             typeface = Typeface.DEFAULT_BOLD
             isAllCaps = false
@@ -376,9 +385,10 @@ class CapsKeyboardService : InputMethodService() {
     }
 
     private fun createActionKey(weight: Float): Button {
+        val isPhone = resources.configuration.smallestScreenWidthDp < 600
         return Button(this).apply {
             text = "ENTER"
-            textSize = 14f
+            textSize = if (isPhone) 12f else 14f
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
             isAllCaps = true
@@ -394,9 +404,10 @@ class CapsKeyboardService : InputMethodService() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun createBackspaceKey(weight: Float): Button {
+        val isPhone = resources.configuration.smallestScreenWidthDp < 600
         val btn = Button(this).apply {
             text = "⌫"
-            textSize = 18f
+            textSize = if (isPhone) 16f else 18f
             setTextColor(Color.parseColor("#FF6B6B"))
             typeface = Typeface.DEFAULT_BOLD
             background = ContextCompat.getDrawable(this@CapsKeyboardService, R.drawable.bg_keyboard_key_ctrl)
@@ -448,11 +459,8 @@ class CapsKeyboardService : InputMethodService() {
 
     private fun getSystemNavHeightFallback(): Int {
         val resId = resources.getIdentifier("navigation_bar_height", "dimen", "android")
-        return if (resId > 0) {
-            resources.getDimensionPixelSize(resId)
-        } else {
-            dp(48)
-        }
+        val h = if (resId > 0) resources.getDimensionPixelSize(resId) else dp(48)
+        return maxOf(h, dp(48))
     }
 
     override fun onDestroy() {

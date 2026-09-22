@@ -772,6 +772,7 @@ class KioskLauncherActivity : FragmentActivity() {
             v.setPadding(dp(24), bars.top + dp(48), dp(24), bars.bottom + dp(16))
             insets
         }
+        column.requestApplyInsets()
         column.addView(text(p.deviceLabel?.takeIf { it.isNotBlank() } ?: "AMBIC MDM Kiosk", 20f, fg, bold = true))
         p.orgName?.takeIf { it.isNotBlank() }?.let { column.addView(text(it, 14f, fg)) }
         column.addView(
