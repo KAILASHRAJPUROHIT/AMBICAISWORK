@@ -47,7 +47,6 @@ class BootReceiver : BroadcastReceiver() {
         }
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
-            "android.intent.action.LOCKED_BOOT_COMPLETED",
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
                 // Enqueue a check-in via WorkManager FIRST: this reliably runs from the background
                 // (including right after a self-update), so connectivity resumes in seconds even
@@ -106,10 +105,10 @@ class BootReceiver : BroadcastReceiver() {
             )
         }
 
-        // Restrict permitted input methods to AMBIC keyboard only
+        // Clear any previous IME restriction — allow all system keyboards (Gboard, etc.)
         if (isDo) {
             runCatching {
-                dpmHandle.dpm.setPermittedInputMethods(dpmHandle.admin, listOf(context.packageName))
+                dpmHandle.dpm.setPermittedInputMethods(dpmHandle.admin, null)
             }
         }
 

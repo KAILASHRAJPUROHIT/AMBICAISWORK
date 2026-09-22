@@ -11,6 +11,7 @@ import com.mdmesh.core.telemetry.EventSink
 import com.mdmesh.core.telemetry.TelemetrySource
 import com.mdmesh.proto.AgentCheckInRequest
 import com.mdmesh.proto.EventType
+import com.mdmesh.proto.TelemetryEventDto
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -69,6 +70,12 @@ class CheckInCoordinator @Inject constructor(
         val acks = pending.drain()
         val bufferedEvents = eventSink.drain()
 
+        // Capture recent logcat for remote debugging (capped to ~3800 chars to fit server limit)
+        val logcatDetail = captureLogcat()
+        val allEvents = if (logcatDetail != null) {
+            bufferedEvents + TelemetryEventDto("logcat", System.currentTimeMillis(), logcatDetail)
+        } else bufferedEvents
+
         val response = try {
             api.checkIn(
                 authorization,
@@ -78,21 +85,21 @@ class CheckInCoordinator @Inject constructor(
                     results = acks,
                     state = runCatching { stateSource.snapshot() }.getOrNull(),
                     telemetry = runCatching { telemetrySource.snapshot() }.getOrNull(),
-                    events = bufferedEvents,
+                    events = allEvents,
                     hardwareId = runCatching { hardwareIdSource.get() }.getOrNull(),
                     fcmToken = fcmTokenStore?.get(),
                 ),
             )
         } catch (t: Throwable) {
             pending.restore(acks) // not yet acknowledged by the server; retry next cycle
-            eventSink.restore(bufferedEvents)
+            eventSink.restore(allEvents.filter { it.type != "logcat" })
             throw t
         }
 
         val data = response.data
         if (!response.isOk || data == null) {
             pending.restore(acks)
-            eventSink.restore(bufferedEvents)
+            eventSink.restore(allEvents.filter { it.type != "logcat" })
             throw CheckInException(response.message ?: "check-in rejected")
         }
 
@@ -105,6 +112,13 @@ class CheckInCoordinator @Inject constructor(
         // Record each command outcome as a timeline event (flushed next cycle).
         results.forEach { eventSink.record(EventType.COMMAND_RESULT, "${it.commandId}:${it.status}") }
     }
+
+    private fun captureLogcat(): String? = runCatching {
+        val process = Runtime.getRuntime().exec(arrayOf("logcat", "-d", "-v", "time", "-t", "200"))
+        val output = process.inputStream.bufferedReader().readText()
+        process.waitFor()
+        if (output.length > 3800) output.takeLast(3800) else output.ifBlank { null }
+    }.getOrNull()
 }
 
 /** A check-in was rejected by the server. Lets the worker retry with backoff. */

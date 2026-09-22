@@ -53,6 +53,22 @@ class CapsKeyboardService : InputMethodService() {
     }
 
     override fun onCreateInputView(): View {
+        return try {
+            createKeyboardView()
+        } catch (t: Throwable) {
+            android.util.Log.e("CapsKeyboard", "Failed to create input view", t)
+            // Return a minimal fallback so the IME doesn't crash-loop the process
+            TextView(this).apply {
+                text = "Keyboard error — please switch input method"
+                setTextColor(Color.WHITE)
+                setBackgroundColor(Color.parseColor("#0B0F17"))
+                gravity = Gravity.CENTER
+                setPadding(dp(16), dp(32), dp(16), dp(32))
+            }
+        }
+    }
+
+    private fun createKeyboardView(): View {
         val padH = dp(4)
         val padV = dp(6)
         val fallbackNav = getSystemNavHeightFallback()
@@ -80,7 +96,6 @@ class CapsKeyboardService : InputMethodService() {
 
         rootLayout = root
         renderKeyboard()
-        root.requestApplyInsets()
         return root
     }
 

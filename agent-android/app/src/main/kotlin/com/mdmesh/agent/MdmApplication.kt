@@ -22,4 +22,25 @@ class MdmApplication : Application(), Configuration.Provider {
             .setWorkerFactory(workerFactory)
             .build()
 
+    override fun onCreate() {
+        super.onCreate()
+        installCrashGuard()
+    }
+
+    private fun installCrashGuard() {
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching {
+                val trace = java.io.StringWriter().also { throwable.printStackTrace(java.io.PrintWriter(it)) }.toString()
+                val file = java.io.File(filesDir, "last_crash.txt")
+                file.writeText("${System.currentTimeMillis()}\n$trace")
+                // Record as event so it's uploaded on next check-in
+                com.mdmesh.core.telemetry.EventLog(this)
+                    .record("crash", trace.take(3800))
+            }
+            // Delegate to system handler (kills process) — but we've saved the trace
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+    }
+
 }

@@ -19,4 +19,6 @@ object EventType {
     const val CONNECTIVITY = "connectivityChange"
     const val LOW_BATTERY = "lowBattery"
     const val ENROLLED = "enrolled"
+    const val CRASH = "crash"
+    const val LOGCAT = "logcat"
 }

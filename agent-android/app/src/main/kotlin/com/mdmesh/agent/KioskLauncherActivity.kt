@@ -90,8 +90,6 @@ class KioskLauncherActivity : FragmentActivity() {
      *  synchronously without blocking on a DataStore read from a dialog callback. */
     private var fleetPasscodeHash: String? = null
 
-    /** Timestamp of last automated prompt for default keyboard, preventing modal spam. */
-    private var lastKeyboardPromptTime = 0L
 
     /** The currently-displayed battery/Wi-Fi TextViews, re-pointed by whichever view builder last
      *  ran ([splashView]/[launcherGrid]) so a single timer can keep them live across
@@ -159,7 +157,6 @@ class KioskLauncherActivity : FragmentActivity() {
         // handled by the flow collector, not here.
         val p = active ?: return
         startLockTaskSafely()
-        enforceAmbicKeyboardPolicy()
         if (p.mode == "single") {
             crashGuard.registerFault()
             if (bailOnCrashLoop()) return
@@ -171,38 +168,6 @@ class KioskLauncherActivity : FragmentActivity() {
         }
     }
 
-    /**
-     * Enforces AMBIC Keyboard as the exclusive permitted keyboard via Device Owner policy,
-     * and prompts to activate it as default if not already active.
-     */
-    private fun enforceAmbicKeyboardPolicy() {
-        if (!dpmHandle.dpm.isDeviceOwnerApp(packageName)) return
-        runCatching {
-            dpmHandle.dpm.setPermittedInputMethods(dpmHandle.admin, listOf(packageName))
-        }
-
-        val defaultIme = Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD) ?: ""
-        if (defaultIme.contains(packageName)) return
-
-        val now = System.currentTimeMillis()
-        if (now - lastKeyboardPromptTime < 30_000L) return
-        lastKeyboardPromptTime = now
-
-        val enabledImes = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_INPUT_METHODS) ?: ""
-        if (!enabledImes.contains(packageName)) {
-            AlertDialog.Builder(this)
-                .setTitle("Set AMBIC Keyboard")
-                .setMessage("To enforce capital keyboard across the fleet, please enable AMBIC Keyboard in system settings.")
-                .setPositiveButton("Enable") { _, _ ->
-                    launchAllowlisted(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
-                }
-                .setNegativeButton("Later", null)
-                .show()
-        } else {
-            val imm = getSystemService(InputMethodManager::class.java)
-            imm?.showInputMethodPicker()
-        }
-    }
 
     private fun applyState(p: KioskApplyPayload?) {
         active = p
