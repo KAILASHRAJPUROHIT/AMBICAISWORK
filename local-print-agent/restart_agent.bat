@@ -2,7 +2,7 @@
 SETLOCAL
 
 echo ===================================================
-echo Aradhana Print Agent - Service Restart
+echo AMBIC DIGITAL Print Agent - Service Restart
 echo ===================================================
 echo.
 

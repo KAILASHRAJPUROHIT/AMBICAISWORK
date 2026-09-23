@@ -10,7 +10,7 @@ import agent
 
 class PrintAgentService(win32serviceutil.ServiceFramework):
     _svc_name_ = "AradhanaPrintAgent"
-    _svc_display_name_ = "Aradhana Print Agent"
+    _svc_display_name_ = "AMBIC DIGITAL Print Agent"
     _svc_description_ = "Background service that downloads and prints jobs for Aradhana Jewellers."
 
     def __init__(self, args):

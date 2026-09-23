@@ -1,4 +1,4 @@
-ARADHANA QR PRINT SERVER - FINAL
+AMBIC DIGITAL QR PRINT SERVER - FINAL
 
 1. Copy this folder to:
    C:\aradhana_qr_print_server_final

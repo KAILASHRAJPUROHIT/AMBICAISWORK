@@ -1,4 +1,4 @@
-# Aradhana Local Print Agent
+# AMBIC DIGITAL Local Print Agent
 
 This is the background daemon that runs on the Windows machine connected to the HP Laser MFP 330. It securely polls the cloud server, downloads jobs, mathematically generates the ID card layout (if requested), and pushes the final file to the spooler via SumatraPDF.
 

@@ -2,7 +2,7 @@
 SETLOCAL
 
 echo ===================================================
-echo Aradhana Print Agent - Status Check
+echo AMBIC DIGITAL Print Agent - Status Check
 echo ===================================================
 echo.
 

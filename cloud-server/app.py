@@ -524,7 +524,7 @@ def kyc_ocr_upload():
 
 @app.route("/api/kyc-ocr/pending", methods=["GET"])
 def kyc_ocr_pending():
-    """Polled by ARADHANA -- returns documents waiting for OCR."""
+    """Polled by AMBIC DIGITAL -- returns documents waiting for OCR."""
     docs = KYCDocument.query.filter_by(status="pending").order_by(KYCDocument.created_at.asc()).limit(5).all()
     response = [
         {
@@ -602,11 +602,11 @@ def kyc_media(doc_id, filename):
 
 
 # ── KYC-OCR model warm-up signal ─────────────────────────────────────────────
-# The local vision model that OCRs Aadhaar/PAN/bank documents (on ARADHANA,
+# The local vision model that OCRs Aadhaar/PAN/bank documents (on AMBIC DIGITAL,
 # not this cloud server) stays unloaded from GPU memory by default -- a cold
 # load takes ~80s, which a customer would feel as a frozen page. Rather than
 # keeping it warm all day (wasting GPU memory the rest of the system also
-# needs), ARADHANA polls this single timestamp at a fast interval and warms
+# needs), AMBIC DIGITAL polls this single timestamp at a fast interval and warms
 # the model the moment a customer reaches the print page, well before they've
 # actually selected/uploaded a document. Same row-1-only pattern as
 # PrinterConfig above, for the same reason (works correctly even if this
@@ -707,7 +707,7 @@ def _record_warmup_signal() -> None:
 
 @app.route("/api/kyc-ocr/warmup-signal", methods=["GET"])
 def get_kyc_ocr_warmup_signal():
-    """Polled by ARADHANA (not by browsers) to decide whether to warm the
+    """Polled by AMBIC DIGITAL (not by browsers) to decide whether to warm the
     local OCR model. Returns how many seconds ago a customer last reached
     /print, so the poller can apply its own freshness window without this
     endpoint needing to know that policy."""
@@ -937,7 +937,7 @@ def admin():
         </div>'''
 
     return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Aradhana Print Admin</title>
+<title>AMBIC DIGITAL Print Admin</title>
 <style>
 *{{box-sizing:border-box}}body{{font-family:Arial,sans-serif;background:#0a0a14;color:#ddd;padding:16px;margin:0;max-width:600px;margin:0 auto}}
 h1{{color:#D4AF37;font-family:Georgia,serif;font-size:22px;margin-bottom:16px}}
@@ -1193,7 +1193,7 @@ def admin_history():
         </div>'''
 
     return f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Aradhana Print History</title>
+<title>AMBIC DIGITAL Print History</title>
 <style>
 body{{font-family:Arial,sans-serif;background:#0a0a14;color:#ddd;padding:20px;margin:0}}
 h1{{color:#D4AF37;font-family:Georgia,serif;letter-spacing:2px}}

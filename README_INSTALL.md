@@ -1,6 +1,6 @@
-# Aradhana Print Agent Installation Guide
+# AMBIC DIGITAL Print Agent Installation Guide
 
-This guide provides instructions for installing and setting up the Aradhana Print Agent on a Windows PC/Server.
+This guide provides instructions for installing and setting up the AMBIC DIGITAL Print Agent on a Windows PC/Server.
 
 ## Prerequisites
 
@@ -32,7 +32,7 @@ Before you begin, ensure you have the following:
 
 ## Printer Setup
 
-The Aradhana Print Agent relies on a correctly configured default printer.
+The AMBIC DIGITAL Print Agent relies on a correctly configured default printer.
 
 ### How to Find Your Printer Name
 

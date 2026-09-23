@@ -14,7 +14,7 @@ temp/
 
 *.log
 
-# Aradhana Print Agent
+# AMBIC DIGITAL Print Agent
 /local-print-agent/AgentWorkspace/
 /local-print-agent/logs/
 /local-print-agent/*.db

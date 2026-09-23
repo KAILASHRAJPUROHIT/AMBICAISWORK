@@ -5,7 +5,7 @@ SET "SERVICE_NAME=AradhanaPrintAgent"
 SET "NSSM_EXE=%~dp0nssm.exe"
 
 echo ===================================================
-echo Aradhana Print Agent - NSSM Service Uninstaller
+echo AMBIC DIGITAL Print Agent - NSSM Service Uninstaller
 echo ===================================================
 echo.
 

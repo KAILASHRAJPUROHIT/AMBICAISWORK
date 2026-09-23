@@ -2,7 +2,7 @@
 SETLOCAL
 
 echo ===================================================
-echo Aradhana Print Agent - Task Scheduler Uninstaller
+echo AMBIC DIGITAL Print Agent - Task Scheduler Uninstaller
 echo ===================================================
 echo.
 

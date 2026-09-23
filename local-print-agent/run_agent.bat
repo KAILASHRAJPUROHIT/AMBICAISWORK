@@ -1,5 +1,5 @@
 @echo off
-:: Aradhana Print Agent - Background Execution Script
+:: AMBIC DIGITAL Print Agent - Background Execution Script
 :: This script is called by Windows Task Scheduler to run the print agent silently.
 
 :: 1. Change directory to ensure .env is loaded from the correct folder

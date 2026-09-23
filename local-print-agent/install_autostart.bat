@@ -2,7 +2,7 @@
 SETLOCAL EnableDelayedExpansion
 
 echo ===================================================
-echo Aradhana Print Agent - Task Scheduler Installer
+echo AMBIC DIGITAL Print Agent - Task Scheduler Installer
 echo ===================================================
 echo.
 

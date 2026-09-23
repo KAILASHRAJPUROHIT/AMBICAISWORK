@@ -50,7 +50,7 @@ def _notify(title, body=""):
              f"$t=[Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02);"
              f"$t.GetElementsByTagName('text')[0].AppendChild($t.CreateTextNode('{title}')) | Out-Null;"
              f"$t.GetElementsByTagName('text')[1].AppendChild($t.CreateTextNode('{body}')) | Out-Null;"
-             f"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Aradhana Print').Show([Windows.UI.Notifications.ToastNotification]::new($t))"],
+             f"[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('AMBIC DIGITAL Print').Show([Windows.UI.Notifications.ToastNotification]::new($t))"],
             creationflags=0x08000000
         )
     except Exception:

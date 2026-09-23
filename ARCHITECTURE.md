@@ -1,6 +1,6 @@
-# Aradhana QR Print Server - System Architecture (v3)
+# AMBIC DIGITAL QR Print Server - System Architecture (v3)
 
-This document outlines the technical architecture, workflows, and deployment standards for the Aradhana QR Print Server.
+This document outlines the technical architecture, workflows, and deployment standards for the AMBIC DIGITAL QR Print Server.
 
 ## 1. High-Level Architecture
 

@@ -21,10 +21,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
-RUN useradd --system --create-home --uid 10001 aradhana \
+RUN useradd --system --create-home --uid 10001 ambicdigital \
     && mkdir -p /var/lib/aradhana-print \
-    && chown -R aradhana:aradhana /app /var/lib/aradhana-print
-USER aradhana
+    && chown -R ambicdigital:ambicdigital /app /var/lib/aradhana-print
+USER ambicdigital
 
 EXPOSE 8000
 CMD ["gunicorn", "--workers", "2", "--threads", "4", "--timeout", "120", "--bind", "0.0.0.0:8000", "app:app"]

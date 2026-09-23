@@ -8,7 +8,7 @@ SET "AGENT_DIR=%~dp0"
 SET "PYTHON_EXE=python.exe"
 
 echo ===================================================
-echo Aradhana Print Agent - NSSM Service Installer
+echo AMBIC DIGITAL Print Agent - NSSM Service Installer
 echo ===================================================
 echo.
 
@@ -59,7 +59,7 @@ if not exist "%AGENT_DIR%logs" mkdir "%AGENT_DIR%logs"
 "%NSSM_EXE%" set "%SERVICE_NAME%" AppRotateBytes 5242880
 
 :: Set description
-"%NSSM_EXE%" set "%SERVICE_NAME%" Description "Background daemon for Aradhana Print Server. Polls cloud and prints automatically."
+"%NSSM_EXE%" set "%SERVICE_NAME%" Description "Background daemon for AMBIC DIGITAL Print Server. Polls cloud and prints automatically."
 
 echo.
 echo Starting the service...
