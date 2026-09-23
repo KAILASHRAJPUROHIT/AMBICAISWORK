@@ -1,6 +1,6 @@
-# Aradhana Payment Auditor
+# AMBIC DIGITAL Payment Auditor
 
-Financial auditing and reconciliation system for Aradhana.
+Financial auditing and reconciliation system for AMBIC DIGITAL.
 
 ## Setup
 1.  **Environment**: Python 3.11, Node.js.

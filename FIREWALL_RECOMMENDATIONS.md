@@ -1,6 +1,6 @@
 # Physical Firewall & Deployment Recommendations
 
-To ensure maximum financial integrity and security for the Aradhana Auditor, the following deployment strategy is recommended:
+To ensure maximum financial integrity and security for the AMBIC DIGITAL Auditor, the following deployment strategy is recommended:
 
 ## 1. Network Segmentation (LAN-Only)
 *   **Wired LAN Only**: All core components (Auditor Laptop, PC2 Billing Machine, App Server) MUST be connected via wired Ethernet. Disable Wi-Fi on these machines to prevent wireless intercept or unauthorized access.

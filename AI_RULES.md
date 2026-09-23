@@ -1,4 +1,4 @@
-# Aradhana Payment Auditor - AI Rules
+# AMBIC DIGITAL Payment Auditor - AI Rules
 
 AI may help write code, tests, documentation, and structure.
 

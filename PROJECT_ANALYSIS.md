@@ -100,7 +100,7 @@ The project is structured into several top-level directories, indicating a clear
 
 ## 3. Project Architecture Summary
 
-The Aradhana Payment Auditor project follows a client-server architecture, with a React-based frontend and a FastAPI-based Python backend.
+The AMBIC DIGITAL Payment Auditor project follows a client-server architecture, with a React-based frontend and a FastAPI-based Python backend.
 
 - **Frontend (React/TypeScript):** Provides the user interface, including dashboards for various operational aspects like escalations, reports, and reviews. It interacts with the backend through a dedicated API client. Mock API is available for development.
 - **Backend (FastAPI/Python):** Serves as the application's core logic. It handles:

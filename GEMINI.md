@@ -1,4 +1,4 @@
-# Aradhana Payment Auditor - Project Instructions
+# AMBIC DIGITAL Payment Auditor - Project Instructions
 
 ## 1. Prime Invoice Extraction Rules
 
