@@ -1,0 +1,8 @@
+# ── API Keys for Aradhana Catalogue Tool ──────────────────────────────────────
+# Copy this file to keys.py and fill in real values. keys.py itself is
+# gitignored and excluded from any distributed package — never commit or
+# share the real file, only this .example template.
+
+GEMINI_API_KEY  = ""   # https://aistudio.google.com/app/apikey — free tier works
+GEMINI_API_KEY2 = ""   # optional second key, used as a fallback under rate limits
+HF_TOKEN        = ""   # optional — HuggingFace, only needed for local RMBG-2.0 use

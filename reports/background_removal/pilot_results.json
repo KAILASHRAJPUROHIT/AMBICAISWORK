@@ -1,0 +1,74 @@
+[
+  {
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\16 GENTS RING 22\\GR22_1.jpg",
+    "destination": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\background_removed\\16 GENTS RING 22\\GR22_1.jpg",
+    "category": "gents_ring_22",
+    "engine": "sam3",
+    "expected_pieces": 1,
+    "boxes": [
+      [
+        964,
+        649,
+        1409,
+        890
+      ]
+    ],
+    "masks": 1,
+    "coverage": 0.022541,
+    "status": "written",
+    "reason": "ok",
+    "seconds": 19.267
+  },
+  {
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\6 BALI 22\\BL22_102.jpg",
+    "destination": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\background_removed\\6 BALI 22\\BL22_102.jpg",
+    "category": "bali_22",
+    "engine": "sam3",
+    "expected_pieces": 2,
+    "boxes": [
+      [
+        766,
+        2321,
+        1211,
+        3366
+      ],
+      [
+        4965,
+        2145,
+        5358,
+        3214
+      ]
+    ],
+    "masks": 2,
+    "coverage": 0.020094,
+    "status": "written",
+    "reason": "ok",
+    "seconds": 15.833
+  },
+  {
+    "source": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\capture_intake\\JHUMKA 22\\JB22_1.jpg",
+    "destination": "C:\\Users\\kaila\\Desktop\\JewelleryCatalogTool\\background_removed\\JHUMKA 22\\JB22_1.jpg",
+    "category": "jhumka_22",
+    "engine": "sam3",
+    "expected_pieces": 2,
+    "boxes": [
+      [
+        661,
+        1030,
+        1769,
+        3971
+      ],
+      [
+        4478,
+        822,
+        5626,
+        3664
+      ]
+    ],
+    "masks": 2,
+    "coverage": 0.080624,
+    "status": "written",
+    "reason": "ok",
+    "seconds": 15.967
+  }
+]

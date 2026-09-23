@@ -1,0 +1,128 @@
+{
+ "LR18_10": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260002.2963376
+ },
+ "LR22_104": {
+  "verdict": "rejected",
+  "reason": "pair_mismatch",
+  "note": null,
+  "reviewed_at": 1788260018.436945
+ },
+ "LR22_108": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260020.5126557
+ },
+ "LR22_128": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260021.5670288
+ },
+ "LR22_235": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260022.4562786
+ },
+ "LR22_238": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260023.113561
+ },
+ "LR22_25": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260023.5895126
+ },
+ "LR22_401": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260023.957182
+ },
+ "LR22_417": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260024.2654946
+ },
+ "LR22_419": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260024.7687955
+ },
+ "LR22_421": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260025.2324183
+ },
+ "LR22_428": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260025.5833802
+ },
+ "LR22_431": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260025.8650649
+ },
+ "LR22_434": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260026.2425013
+ },
+ "LR22_438": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260026.333518
+ },
+ "LR22_442": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260026.5951662
+ },
+ "LR22_47": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260026.9394655
+ },
+ "LR22_62": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260027.2792878
+ },
+ "LR22_76": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260027.883392
+ },
+ "LR22_95": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260029.2359731
+ },
+ "LR18_20": {
+  "verdict": "rejected",
+  "reason": "design_mismatch",
+  "note": null,
+  "reviewed_at": 1788260035.9852607
+ }
+}

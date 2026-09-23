@@ -1,0 +1,15 @@
+ARADHANA JEWELLERY CATALOGUE TOOL
+
+Catalogue Studio:
+http://aradhana:7654
+
+Capture Server:
+https://aradhana.local:7660/capture
+
+Fixed-IP fallbacks on the current shop network:
+http://192.168.0.7:7654
+https://192.168.0.7:7660/capture
+
+Ports are permanently assigned: catalogue 7654; capture 7660.
+Reserve 192.168.0.7 for computer ARADHANA in the router DHCP settings so the
+numeric fallback URLs never change.

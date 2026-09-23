@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Aradhana Catalogue Tool",
+      "runtimeExecutable": "py",
+      "runtimeArgs": ["-3.11", "app.py"],
+      "port": 7654
+    }
+  ]
+}

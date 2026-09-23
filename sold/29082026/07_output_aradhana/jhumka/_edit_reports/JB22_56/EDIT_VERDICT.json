@@ -1,0 +1,15 @@
+{
+  "run_id": "jhumka",
+  "generated_at": "2026-08-10T10:36:26.173653Z",
+  "total_items": 1,
+  "verdict_counts": {
+    "INFERENCE_FAILED": 1
+  },
+  "items": [
+    {
+      "category": "jhumka",
+      "verdict": "INFERENCE_FAILED",
+      "reason": "COMFY_LOCAL_NOT_RUNNING: ComfyUI Desktop is not reachable at http://127.0.0.1:8188 — start it and confirm the Klein GGUF/CLIP/VAE models are loaded"
+    }
+  ]
+}

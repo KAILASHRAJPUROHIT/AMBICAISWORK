@@ -1,0 +1,1604 @@
+"""
+capture_tool.py — the phone/tablet capture workflow: a staff member picks an
+ornament category, then repeatedly shoots a front jewellery photo, an
+optional studs photo, a close-up detail photo, and a tag photo.
+The tag photo's barcode/QR is decoded CLIENT-SIDE in the browser (see
+capture.html) — this module just receives the already-decoded code string
+alongside the two images.
+
+Kept as its own module rather than growing app.py further, matching the
+pattern already used for engine_cascade.py / verification.py.
+
+SAVE FORMAT: the front jewellery photo is kept as the primary deliverable,
+named directly from the confirmed tag code (e.g. tag "JB22/8" -> file
+"JB22_8.jpg" — "/" isn't legal in a Windows filename, so it's replaced with
+"_", matching the same substitution the main catalogue pipeline already uses
+when turning a resolved SKU into a filename, see engine_cascade.py's
+`re.sub(r'[/\\:*?"<>|]', "_", fin["sku"])`). Optional studs and detail
+close-ups are stored as sidecar images beside it, using the same stem with
+suffixes. The tag photo is used only to read the code; its decoded data is
+stamped into the saved front image metadata, and the raw tag shot is not kept
+as a separate archive.
+
+Since filenames are no longer sequential, "which item was captured most
+recently" (needed for Undo) is tracked via each dedup entry's timestamp
+instead of a pair number.
+
+Dedup today is SESSION/LIFETIME scoped (has this exact barcode value ever
+been captured by this tool before) via capture_dedup.json — a full cross-
+reference against the entire Ornate stock export requires the master Excel
+schema and drop-folder path, which aren't available yet. That step is a
+clearly-marked TODO (see check_master_stock) rather than silently skipped.
+"""
+import os
+import re
+import time
+import json
+import logging
+import shutil
+import threading
+import functools
+
+import cv2
+import numpy as np
+
+import capture_voids
+import category_orientation
+import sam_locate
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+CAPTURE_ROOT = os.path.join(BASE, "capture_intake")
+# Approving an item MOVES its raw master out of capture_intake into
+# processed/. The dedup guard must look there too, or approval silently
+# drops the tag out of duplicate protection (LR22_104, 2026-09-02).
+PROCESSED_ROOT = os.path.join(BASE, "processed")
+OUTPUT_ROOT = os.path.join(BASE, "output")
+# Roots that mean "this tag has already been shot". Presence in ANY of them
+# blocks a re-capture (owner's rule, 2026-09-02). To legitimately re-shoot a
+# tag, reset it first -- that removes it from these roots.
+CAPTURED_ROOTS = (CAPTURE_ROOT, PROCESSED_ROOT, OUTPUT_ROOT)
+DEDUP_PATH = os.path.join(BASE, "data", "capture_dedup.json")
+TAG_METADATA_PATH = os.path.join(BASE, "data", "capture_tag_metadata.json")
+VOID_REGISTRY_PATH = str(capture_voids.configured_void_registry_path())
+TAG_ARCHIVE_DIRNAME = "_tag_archive"
+
+# Laplacian-variance focus check on the jewellery photo — same technique
+# used elsewhere for image-quality gating (see model_postprocess.py's edge
+# detection), just applied here to catch an out-of-focus phone shot before
+# it's saved as the deliverable rather than after generation. The image is
+# downscaled to a fixed max dimension first because Laplacian variance scales
+# with resolution — without that, a sharp 4032x3024 phone photo and a blurry
+# one at the same resolution aren't comparable against one fixed threshold.
+# Threshold picked conservatively (favors false "looks blurry" warnings,
+# which just cost one confirm tap, over false negatives that let a genuinely
+# blurry catalogue photo through) — tune BLUR_VARIANCE_THRESHOLD up/down if
+# the team finds it's too trigger-happy or too lax in real use.
+# Raised from 60->80 on 2026-08-21: a backlog quality audit found real
+# soft/out-of-focus shots scoring in the 60-80 range that the old threshold
+# let through (confirmed by eye against the actual images, not just score).
+BLUR_MAX_DIM = 1000
+BLUR_VARIANCE_THRESHOLD = 80.0
+# A hanging/long chain is intentionally thin and split into many separate
+# gold components.  The generic compact-item gates below were calibrated on
+# rings/bangles and falsely reject valid three-angle long-item sets.
+# Kept in sync with the app's CaptureCompositionProfiles NECK_CURVE set
+# (MainActivity.isLongItemCategory). Drift here is silent and expensive:
+# 2026-08-30 audit found mss_short_20/mss_short_22 were long items in the
+# app but missing here, so the server judged them with compact-item gates
+# (blur 80 vs 25, visibility 0.002 vs 0.0002) and falsely rejected them.
+LONG_ITEM_CATEGORIES = {
+    "chain_22", "fancy_mala_18", "fancy_mala_22", "haar_chain_22",
+    "ms_long_22", "mss_short_20", "mss_short_22", "necklace_22",
+    "necklace_set_18", "necklace_set_22",
+}
+LONG_ITEM_BLUR_VARIANCE_THRESHOLD = 25.0
+# Side-profile angle shots cannot reach a threshold calibrated on the
+# face-on hero. _blur_variance measures the GOLD REGION only, and in a side
+# profile the piece is edge-on and small, so that region carries far less
+# high-frequency detail even when the shot is perfectly usable. Measured
+# live 2026-08-30 on LR22/248, one item, one session, all three accepted by
+# eye: main 268.7, angle1 153.5, angle2 55.6 -- angle2 alone failed the flat
+# 80.0 gate and took the whole set to needs_review. Applies to the angle
+# slots only; the hero keeps the full threshold.
+ANGLE_SLOT_BLUR_SCALE = 0.5
+
+
+def _is_long_item_category(category: str | None) -> bool:
+    return (category or "").strip().lower() in LONG_ITEM_CATEGORIES
+
+
+def _stock_write_guard(function):
+    """Serialize capture mutations against daily stock reconciliation."""
+    @functools.wraps(function)
+    def guarded(*args, **kwargs):
+        import stock_reconciliation
+        with stock_reconciliation.data_lock():
+            return function(*args, **kwargs)
+    return guarded
+
+
+def _embed_tag_metadata(jpeg_path: str, *, tag_code: str, category: str, staff_name: str) -> None:
+    """Best-effort metadata stamp for the saved front image.
+
+    Uses a JPEG comment marker so the image is not re-encoded.
+    """
+    try:
+        payload = {
+            "tag_code": str(tag_code),
+            "category": str(category),
+            "staff": str(staff_name or ""),
+            "embedded_at": time.time(),
+        }
+        comment = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if len(comment) > 65533:
+            return
+        with open(jpeg_path, "rb") as source:
+            data = source.read()
+        if not data.startswith(b"\xff\xd8"):
+            return
+        segment = b"\xff\xfe" + (len(comment) + 2).to_bytes(2, "big") + comment
+        temporary = f"{jpeg_path}.meta.tmp"
+        with open(temporary, "wb") as output:
+            output.write(data[:2])
+            output.write(segment)
+            output.write(data[2:])
+        os.replace(temporary, jpeg_path)
+    except Exception:
+        pass
+
+
+def _jewellery_clearly_visible(image_bytes: bytes, category: str | None = None) -> dict:
+    """Local gold-presence gate. No cloud model, account, or network call."""
+    try:
+        arr = np.frombuffer(image_bytes, dtype=np.uint8)
+        image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if image is None:
+            return {"ok": True, "reason": "Local check unavailable: image could not be decoded", "unverified": True}
+        image = cv2.resize(image, (640, max(1, int(image.shape[0] * 640 / image.shape[1]))))
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        gold = cv2.inRange(hsv, np.array([8, 65, 45]), np.array([38, 255, 255]))
+        gold = cv2.morphologyEx(gold, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+        contours, _ = cv2.findContours(gold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        # Sum of ALL contours, not just the largest single one (2026-08-29:
+        # a real, clearly-visible chain capture was rejected by this check).
+        # A thin beaded/serpentine chain's gold-hue mask breaks into many
+        # small disconnected blobs after MORPH_OPEN -- the decorative
+        # beads/links, not one solid connected shape -- so "largest single
+        # contour" badly undercounts a real chain even though a human
+        # looking at the photo can see it clearly. Total area across every
+        # contour reflects how much of the frame is actually gold-colored,
+        # which is what "clearly visible" should mean; a truly empty/no-
+        # gold frame still sums to 0 either way, so this can't make a
+        # legitimately-failing check start passing.
+        total = sum(cv2.contourArea(c) for c in contours)
+        ratio = total / float(image.shape[0] * image.shape[1])
+        # Long chains occupy much less coloured area than a compact ring, yet
+        # can be completely visible top-to-bottom.  Keep an empty-frame gate,
+        # but use a physically appropriate floor for this silhouette.
+        minimum_ratio = 0.0002 if _is_long_item_category(category) else 0.002
+        ok = ratio >= minimum_ratio
+        reason = f"Local gold region {ratio:.2%} of frame"
+        return {"ok": ok, "reason": reason, "unverified": False}
+    except Exception as e:
+        return {"ok": True, "reason": f"Local check unavailable: {type(e).__name__}: {e}", "unverified": True}
+
+
+def _gold_region_bbox(gray_or_color_bgr, aggregate: bool = False):
+    """Best-effort bounding box of the largest gold-hue blob, same detection
+    already used by _jewellery_clearly_visible. Returns None if nothing
+    passes a minimal size floor (silver/white-metal items, or detection
+    failure) so callers can fall back to whole-frame behavior instead of
+    measuring blur on a bogus tiny/empty region."""
+    try:
+        hsv = cv2.cvtColor(gray_or_color_bgr, cv2.COLOR_BGR2HSV)
+        gold = cv2.inRange(hsv, np.array([8, 65, 45]), np.array([38, 255, 255]))
+        gold = cv2.morphologyEx(gold, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+        contours, _ = cv2.findContours(gold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+        largest = max(contours, key=cv2.contourArea)
+        area = sum(cv2.contourArea(c) for c in contours) if aggregate else cv2.contourArea(largest)
+        h, w = gray_or_color_bgr.shape[:2]
+        floor = 0.0001 if aggregate else 0.001
+        if area < floor * h * w:
+            return None
+        if aggregate:
+            x0 = min(cv2.boundingRect(c)[0] for c in contours)
+            y0 = min(cv2.boundingRect(c)[1] for c in contours)
+            x1 = max(cv2.boundingRect(c)[0] + cv2.boundingRect(c)[2] for c in contours)
+            y1 = max(cv2.boundingRect(c)[1] + cv2.boundingRect(c)[3] for c in contours)
+            return x0, y0, x1 - x0, y1 - y0
+        return cv2.boundingRect(largest)  # x, y, w, h
+    except Exception:
+        return None
+
+
+def _blur_variance(image_bytes: bytes, category: str | None = None):
+    """Returns the Laplacian variance of the image (lower = blurrier), or
+    None if the bytes couldn't be decoded as an image — decode failures fail
+    OPEN (no blur warning) since save_pair separately validates the file is
+    a real image; this is purely a quality signal, not a correctness gate.
+
+    Measures the JEWELLERY REGION specifically, not the whole frame. Confirmed
+    live (2026-08-21, tag GR22/59): a photo can score well on whole-frame
+    Laplacian variance purely from sharp background detail (the acrylic
+    stand's rail edges/screws) while the actual jewellery is soft -- that
+    exact photo measured 79 within just the ring's own bounding box (barely
+    above BLUR_VARIANCE_THRESHOLD) but scored far higher over the full frame,
+    which is why it silently passed the gate despite visibly mushy engraving.
+    Falls back to the old whole-frame measurement when no gold region is
+    found (silver/white-metal items, or detection failure) -- this is a
+    refinement of an existing signal, not a new hard block, so failing open
+    to the prior behavior is the safe default rather than guessing a region.
+    """
+    try:
+        arr = np.frombuffer(image_bytes, dtype=np.uint8)
+        color = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if color is None:
+            return None
+        bbox = _gold_region_bbox(color, aggregate=_is_long_item_category(category))
+        img = cv2.cvtColor(color, cv2.COLOR_BGR2GRAY)
+        if bbox is not None:
+            x, y, bw, bh = bbox
+            pad = int(0.08 * max(bw, bh))
+            H, W = img.shape[:2]
+            x0, y0 = max(0, x - pad), max(0, y - pad)
+            x1, y1 = min(W, x + bw + pad), min(H, y + bh + pad)
+            img = img[y0:y1, x0:x1]
+        h, w = img.shape[:2]
+        scale = min(1.0, BLUR_MAX_DIM / max(h, w))
+        if scale < 1.0:
+            img = cv2.resize(img, (max(1, int(w * scale)), max(1, int(h * scale))))
+        return float(cv2.Laplacian(img, cv2.CV_64F).var())
+    except Exception:
+        return None
+
+os.makedirs(CAPTURE_ROOT, exist_ok=True)
+
+_lock = threading.RLock()
+
+
+def _atomic_write_json(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    # os.replace() has been observed to fail with PermissionError
+    # ([WinError 5]) on this machine (confirmed live 2026-08-03) -- almost
+    # certainly a transient external lock (AV/indexer briefly opening the
+    # target file) rather than a real conflict, since the write always
+    # succeeds a moment later. Left unhandled, this raised out of
+    # save_pair/save_multi and 500'd the whole request even though the
+    # jewel photos themselves were already safely on disk by this point --
+    # so the client saw "save failed" for an item that had, in fact, saved.
+    # Retry briefly before giving up for real.
+    last_err = None
+    for attempt in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as e:
+            last_err = e
+            time.sleep(0.1 * (attempt + 1))
+    raise last_err
+
+
+def _load_dedup() -> dict:
+    if os.path.exists(DEDUP_PATH):
+        try:
+            with open(DEDUP_PATH, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _load_tag_metadata() -> dict:
+    """Per-TAG-CODE facts that must outlive any individual capture --
+    deliberately a SEPARATE store from DEDUP_PATH (which tracks capture
+    STATE and gets cleared/rewritten on delete/retake) and separate from
+    the image files themselves. 2026-08-19, explicit request: a stud/
+    rhodium-accent flag set once for a tag must survive the operator
+    deleting the photos and recapturing that same item -- an AI edit
+    later needs to know "does this real piece actually have a diamond
+    stud" independent of whichever photo currently sits in capture_intake."""
+    if os.path.exists(TAG_METADATA_PATH):
+        try:
+            with open(TAG_METADATA_PATH, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def get_tag_metadata(tag_code: str) -> dict:
+    with _lock:
+        return dict(_load_tag_metadata().get(tag_code, {}))
+
+
+def set_stud_flag(tag_code: str, has_stud: bool, staff_name: str = "") -> dict:
+    with _lock:
+        meta = _load_tag_metadata()
+        entry = dict(meta.get(tag_code, {}))
+        entry["has_stud"] = bool(has_stud)
+        entry["stud_set_by"] = staff_name or entry.get("stud_set_by", "")
+        entry["stud_set_at"] = time.time()
+        meta[tag_code] = entry
+        _atomic_write_json(TAG_METADATA_PATH, meta)
+        return dict(entry)
+
+
+# The 57 real stock categories from \\Server2k22\D\01082026.xls (2814 real
+# tags, verified 2026-08-01 with zero mismatches against every real Label No
+# in that report — see ornament_code_map.py). Supersedes the earlier
+# 47-category stock_category_map.py list (a prior, less complete sheet);
+# capture itself never touches backgrounds/model assets, so all 57 are
+# immediately usable for accurate tagging regardless of processing readiness.
+import ornament_code_map as _ocm
+
+CATEGORY_LABELS = {c.key: c.label for c in _ocm.CATEGORIES}
+CATEGORY_LABELS.update({
+    # Not covered by the new sheet at all — a different concern (metal type,
+    # not ornament category) — kept as-is.
+    "silver": "Silver",
+    "diamond": "Diamond",
+    "test": "Test (practice — not real stock)",
+})
+
+# A dedicated practice category — deliberately NOT part of app.py's TYPES
+# list (which also drives the main catalogue tool's own category dropdown;
+# adding "test" there would surface it in real production processing, which
+# has no matching templates/backgrounds for it). Capture-only, added
+# separately by the /capture route. Every save under this category lands in
+# the SAME single fixed folder, never tray-numbered like real categories —
+# "Start new tray" is a no-op here — so staff can freely try the capture
+# flow (testing the read-status overlay, camera framing, etc.) without ever
+# creating "Test 1", "Test 2"... clutter or touching real stock folders.
+TEST_CATEGORY = "test"
+TEST_FOLDER_NAME = "_TEST"
+
+
+def category_list(types: list) -> list:
+    return [{"value": t, "label": CATEGORY_LABELS.get(t, t.replace("_", " ").title())} for t in types]
+
+
+MASTER_STOCK_DIR = os.path.join(BASE, "Stock")
+
+# Filename is DDMMYYYY.xls, a fresh drop each day (confirmed with the user
+# 2026-08-02: "C:\...\Stock\01082026.xls") — never hardcode a specific day's
+# filename, always resolve to whichever one is actually newest on disk.
+_STOCK_FILENAME_RE = re.compile(r"^(\d{2})(\d{2})(\d{4})\.xls$", re.IGNORECASE)
+
+_master_stock_lock = threading.Lock()
+_master_stock_cache = {"path": None, "mtime": None, "labels": {}}
+
+
+def _latest_stock_file() -> str | None:
+    """Newest DDMMYYYY.xls in MASTER_STOCK_DIR by the date encoded in its own
+    filename (not just mtime — a re-copied older file would otherwise win)."""
+    if not os.path.isdir(MASTER_STOCK_DIR):
+        return None
+    best_path, best_date = None, None
+    for fn in os.listdir(MASTER_STOCK_DIR):
+        m = _STOCK_FILENAME_RE.match(fn)
+        if not m:
+            continue
+        dd, mm, yyyy = m.groups()
+        try:
+            date_key = (int(yyyy), int(mm), int(dd))
+        except ValueError:
+            continue
+        if best_date is None or date_key > best_date:
+            best_date, best_path = date_key, os.path.join(MASTER_STOCK_DIR, fn)
+    return best_path
+
+
+_STOCK_SECTION_TITLE_RE = re.compile(
+    r"Label/Tags Closing Stock Report\s*\(([^)]+)\)", re.IGNORECASE
+)
+
+
+_STOCK_HEADER_COLS = ("Label No", "Old BarcodeNo", "Prefix", "Carat", "Variety Name",
+                      "Gross Wt", "Net Wt", "Pcs", "HUID")
+
+
+def _parse_master_stock(path: str) -> dict:
+    """Parse the "Label/Tags Closing Stock Report" export. The category name
+    is NOT always a per-row column — it appears in a title row
+    ("Label/Tags Closing Stock Report (BABY BRACLET 22) As On Date : ...")
+    that precedes each category's block, followed by that section's own
+    repeated header row. Two schemas have been seen from this daily export
+    (confirmed with the user 2026-08-02 — the reduced one arrived on
+    01/08, the full one on 31/07; which shows up on a given day isn't
+    predictable), so the header row itself is used to detect column layout
+    rather than assuming a fixed position:
+      - Full: Label No | Old BarcodeNo | Prefix | Carat | Variety Name |
+        Gross Wt | Net Wt | Pcs | HUID
+      - Reduced: ItemName | Label No  (only these two fields)
+    The sheet ends with a totals row (blank Label No, numeric sums) that
+    must be skipped, not mistaken for a stock item.
+    Returns {label_no: {item_name, old_barcode, prefix, carat, variety,
+    gross_wt, net_wt, pcs, huid}} — fields absent in the reduced schema are
+    None rather than missing, so callers don't need to branch on schema."""
+    # xlrd directly, NOT pandas: the service runs under Python 3.10, which has
+    # xlrd but no pandas, so the pandas import raised and check_master_stock
+    # fails open -- every scanned tag silently came back unknown (found
+    # 2026-09-01). xlrd alone reads this .xls fine and is already installed.
+    import xlrd
+
+    book = xlrd.open_workbook(path)
+    sheet = book.sheet_by_index(0)
+
+    class _Row:
+        __slots__ = ("_values",)
+
+        def __init__(self, values):
+            self._values = values
+
+        def __len__(self):
+            return len(self._values)
+
+        def get(self, index):
+            if index is None or index >= len(self._values):
+                return None
+            value = self._values[index]
+            return None if value == "" else value
+
+    labels = {}
+    current_category = None
+    label_col, item_col = None, None  # column layout for the CURRENT header row
+    for values in (sheet.row_values(r) for r in range(sheet.nrows)):
+        row = _Row(values)
+        col0 = row.get(0)
+        if isinstance(col0, str):
+            m = _STOCK_SECTION_TITLE_RE.search(col0)
+            if m:
+                current_category = m.group(1).strip()
+                continue
+            cells = [str(row.get(i)).strip() if row.get(i) is not None else ""
+                     for i in range(len(row))]
+            if "Label No" in cells:
+                label_col = cells.index("Label No")
+                item_col = cells.index("ItemName") if "ItemName" in cells else None
+                continue  # this row IS the header, not data
+
+        if label_col is None:
+            continue  # haven't seen a header row yet — nothing to parse against
+        label_no = row.get(label_col)
+        label_no = label_no.strip() if isinstance(label_no, str) else None
+        if not label_no or "/" not in label_no:
+            continue  # blank/title/totals row — a real Label No always has a "/"
+
+        # The category comes from the tag code's own prefix, never from the
+        # last section title seen. The full-schema export carries exactly ONE
+        # section title ("BABY BRACLET 22", row 4) followed by all 2795 rows
+        # in a single block, so every item inherited that first category --
+        # LR22/95 parsed as a baby bracelet while its own prefix said LR22.
+        # ornament_code_map maps all 57 prefixes 1:1 and is authoritative.
+        import ornament_code_map
+        resolved = ornament_code_map.category_from_tag_code(label_no)
+        tag_category = resolved.label if resolved else None
+
+        if item_col is None:
+            # Full schema: Label No is column 0, the rest follow in order.
+            labels[label_no] = {
+                "item_name": tag_category or current_category,
+                "old_barcode": row.get(1),
+                "prefix": row.get(2),
+                "carat": row.get(3),
+                "variety": row.get(4),
+                "gross_wt": row.get(5),
+                "net_wt": row.get(6),
+                "pcs": row.get(7),
+                "huid": row.get(8),
+            }
+        else:
+            # Reduced schema: only ItemName + Label No are present.
+            item_name = row.get(item_col)
+            item_name = item_name.strip() if isinstance(item_name, str) else None
+            item_name = item_name or tag_category or current_category
+            labels[label_no] = {
+                "item_name": item_name, "old_barcode": None, "prefix": None,
+                "carat": None, "variety": None, "gross_wt": None, "net_wt": None,
+                "pcs": None, "huid": None,
+            }
+    return labels
+
+
+def _load_master_stock_labels() -> dict:
+    """Lazy, cached by (path, mtime) — re-parses only when a newer day's file
+    has actually appeared, not on every single capture."""
+    path = _latest_stock_file()
+    if not path:
+        return {}
+    mtime = os.path.getmtime(path)
+    with _master_stock_lock:
+        if _master_stock_cache["path"] == path and _master_stock_cache["mtime"] == mtime:
+            return _master_stock_cache["labels"]
+        labels = _parse_master_stock(path)
+        _master_stock_cache.update(path=path, mtime=mtime, labels=labels)
+        return labels
+
+
+def check_master_stock(tag_code: str) -> dict:
+    """
+    Cross-reference tag_code against the master Ornate stock Excel (dropped
+    daily into `Stock/`, see _latest_stock_file). Confirms the scanned tag
+    corresponds to a real, currently-listed stock item and surfaces its
+    catalogued item name for a second confirmation on the capture screen.
+
+    Returns {"known": bool, "row": dict|None}. Fails open (known=False,
+    row=None) on any read/parse error — a malformed or missing daily export
+    must never block a live capture session, only skip this extra check.
+    """
+    try:
+        labels = _load_master_stock_labels()
+    except Exception:
+        return {"known": False, "row": None}
+    row = labels.get(tag_code)
+    if row is None:
+        return {"known": False, "row": None}
+    return {"known": True, "row": {"label_no": tag_code, **row}}
+
+
+TRAY_STATE_PATH = os.path.join(BASE, "data", "capture_current_tray.json")
+
+
+def _load_tray_state() -> dict:
+    if os.path.exists(TRAY_STATE_PATH):
+        try:
+            with open(TRAY_STATE_PATH, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_tray_state(state: dict):
+    _atomic_write_json(TRAY_STATE_PATH, state)
+
+
+_GLOBAL_TRAY_NUMBER_RE = re.compile(r"^(\d+)\s+\S.*$")
+
+
+def _tray_folder_name(category: str, n: int) -> str:
+    """'<N> <Label>' — number first, GLOBAL across every category, e.g.
+    '33 Ladies Rings'. Changed 2026-07-31 alongside the one-time global
+    renumbering (tray_sequence_migration.py) from the old '<Label> <N>'
+    per-category form: numbering used to restart at 1 for every category
+    independently, so folder #47 told you nothing about capture order
+    across categories. See _next_tray_number for the matching read side."""
+    label = CATEGORY_LABELS.get(category, category.replace("_", " ").title())
+    return f"{n} {label}"
+
+
+def _next_tray_number() -> int:
+    """GLOBAL, category-agnostic sequence: the next number is the highest
+    leading number across EVERY capture folder (any category) plus one, so
+    the sequence never resets just because a different category starts its
+    next tray — "1 ornament may have multiple folders based on capture
+    order but the number sequence never breaks" was the explicit
+    requirement. Deliberately takes no category argument any more: the
+    whole point is that the counter no longer belongs to one category.
+
+    A folder that doesn't match "<digits> <space> ..." (e.g. the fixed
+    '_TEST' practice folder) is ignored, not treated as 0 — it was never
+    part of any sequence.
+
+    Also considers every number already reserved in tray state, not just
+    what's materialized on disk — a tray is assigned to a category the
+    moment it becomes "current," but its folder is deliberately not created
+    until the first real capture (see start_new_tray). Two categories can
+    both be sitting on an uncaptured tray at once, and without this, both
+    would compute the same "next" number from disk (since neither folder
+    exists yet) and collide the moment either one is finally captured
+    into."""
+    nums = []
+    if os.path.isdir(CAPTURE_ROOT):
+        for name in os.listdir(CAPTURE_ROOT):
+            match = _GLOBAL_TRAY_NUMBER_RE.match(name)
+            if match:
+                nums.append(int(match.group(1)))
+    for folder in _load_tray_state().values():
+        match = _GLOBAL_TRAY_NUMBER_RE.match(folder or "")
+        if match:
+            nums.append(int(match.group(1)))
+    return (max(nums) + 1) if nums else 1
+
+
+def start_new_tray(category: str) -> dict:
+    """Allocates a brand-new tray folder NAME for this category and makes
+    it the 'current tray' every subsequent save for this category lands
+    in — until the next start_new_tray call.
+
+    Deliberately does NOT create the folder on disk. A folder that exists
+    with nothing captured in it is indistinguishable from a real, useful
+    tray to every downstream consumer (the capture-memory admin list, Auto
+    Mode, dashboards) — it was showing up as clutter the moment a category
+    was merely selected or an empty tray was Forgotten and immediately
+    reappeared. The one and only place a tray folder is created is
+    save_pair, at the moment a real item is actually captured into it
+    (see its os.makedirs call there).
+
+    For TEST_CATEGORY this is a no-op that always resolves to the same
+    fixed folder — practice captures never get their own numbered tray."""
+    with _lock:
+        if category == TEST_CATEGORY:
+            state = _load_tray_state()
+            state[category] = TEST_FOLDER_NAME
+            _save_tray_state(state)
+            return {"folder": TEST_FOLDER_NAME, "tray_number": None}
+
+        n = _next_tray_number()
+        folder = _tray_folder_name(category, n)
+        state = _load_tray_state()
+        state[category] = folder
+        _save_tray_state(state)
+        return {"folder": folder, "tray_number": n}
+
+
+def get_current_tray(category: str) -> dict:
+    """The tray currently being filled for this category — auto-assigns
+    tray #1 the first time a category is ever used, so staff don't have to
+    remember to click 'Start new tray' before their very first item.
+
+    Trusts the recorded assignment regardless of whether its folder has
+    been created on disk yet — it may not have been, since start_new_tray
+    no longer creates it eagerly. A category keeps its assigned tray until
+    something explicitly reassigns it (a real start_new_tray call, or
+    _advance_active_trays after that folder is Forgotten); merely being
+    unmaterialized is not a reason to hand out a new one."""
+    if category == TEST_CATEGORY:
+        state = _load_tray_state()
+        if state.get(category):
+            return {"folder": state[category], "tray_number": None}
+        return start_new_tray(category)  # always the same fixed folder
+
+    state = _load_tray_state()
+    folder = state.get(category)
+    if folder:
+        # Folders are "<N> <Label>" (leading number, global sequence) since
+        # the 2026-07-31 renumbering — a TRAILING-number match here was a
+        # leftover from the old "<Label> <N>" scheme and silently returned
+        # tray_number=None for every real tray ever since.
+        m = _GLOBAL_TRAY_NUMBER_RE.match(folder)
+        return {"folder": folder, "tray_number": int(m.group(1)) if m else None}
+    return start_new_tray(category)
+
+
+def _safe_filename_from_tag(tag_code: str) -> str:
+    """'JB22/8' -> 'JB22_8' — matches the same "/" -> "_" substitution the
+    main catalogue pipeline already uses for resolved SKUs, so filenames
+    stay consistent across both tools."""
+    return re.sub(r'[/\\:*?"<>|]', "_", tag_code).strip() or "untitled"
+
+
+DEDUP_SETTINGS_PATH = os.path.join(BASE, "data", "capture_dedup_settings.json")
+
+
+def dedup_enabled() -> bool:
+    """Master switch for duplicate blocking.
+
+    When OFF, captures are still RECORDED (so history and per-folder clearing
+    keep working) but a prior record never blocks a new capture. This is for
+    deliberate re-shoots of an existing tray, where every single item would
+    otherwise raise "already captured" and need individual overriding.
+    Defaults to ON — silently not checking for duplicates is a worse failure
+    than being asked to confirm one.
+    """
+    try:
+        if os.path.exists(DEDUP_SETTINGS_PATH):
+            with open(DEDUP_SETTINGS_PATH, encoding="utf-8") as f:
+                return bool(json.load(f).get("enabled", True))
+    except Exception:
+        pass
+    return True
+
+
+def set_dedup_enabled(enabled: bool) -> bool:
+    with _lock:
+        _atomic_write_json(DEDUP_SETTINGS_PATH, {"enabled": bool(enabled),
+                                                 "updated": time.time()})
+    return bool(enabled)
+
+
+def dedup_folders() -> list:
+    """Folders present in the dedup memory, with record counts.
+
+    Deliberately sourced from the dedup store rather than from disk: a tray
+    can be deleted off disk while its records linger, and that is exactly the
+    case where "already captured" blocks a re-shoot of something that is no
+    longer there. Listing from disk would make those folders unclearable.
+    """
+    counts = {}
+    for rec in _load_dedup().values():
+        if isinstance(rec, dict):
+            f = rec.get("folder") or "(unknown)"
+            counts[f] = counts.get(f, 0) + 1
+    return sorted(({"folder": k, "records": v} for k, v in counts.items()),
+                  key=lambda r: r["folder"].lower())
+
+
+@_stock_write_guard
+def clear_folder_memory(folder: str) -> dict:
+    """Forget every dedup record belonging to `folder` so its items can be
+    captured again.
+
+    Records only — images on disk are untouched. Forgetting and deleting are
+    separate decisions, and conflating them would make a routine "let me
+    re-shoot this tray" quietly destroy the existing photos.
+    """
+    if not folder:
+        return {"ok": False, "error": "no folder given", "removed": 0}
+    with _lock:
+        dedup = _load_dedup()
+        drop = [k for k, v in dedup.items()
+                if isinstance(v, dict) and (v.get("folder") or "(unknown)") == folder]
+        for k in drop:
+            del dedup[k]
+        if drop:
+            _atomic_write_json(DEDUP_PATH, dedup)
+    return {"ok": True, "folder": folder, "removed": len(drop),
+            "remaining": len(dedup)}
+
+
+
+def tag_already_in_system(tag_code: str) -> str | None:
+    """Path proving `tag_code` has already been captured, or None.
+
+    Presence-based, not record-based. The dedup store can lose an entry --
+    check_duplicate used to delete records whose file had moved, so approving
+    an item silently un-protected its own tag (LR22_104). Looking for the file
+    itself cannot be defeated that way.
+
+    Sidecars (_1/_2/_studs/_detail) collapse onto their item, and hidden
+    working folders (.multi_angle_sources, _superseded) are ignored.
+    """
+    safe = _safe_filename_from_tag(tag_code)
+    if not safe:
+        return None
+    for root in CAPTURED_ROOTS:
+        if not os.path.isdir(root):
+            continue
+        for entry in os.listdir(root):
+            if entry.startswith((".", "_")):
+                continue
+            candidate = os.path.join(root, entry, f"{safe}.jpg")
+            if os.path.isfile(candidate):
+                return candidate
+    return None
+
+
+def check_duplicate(tag_code: str) -> dict | None:
+    """Returns the prior capture record if tag_code was already captured
+    before (by anyone, any session), else None.
+
+    Returns None when the master switch is off, so callers that treat a
+    non-None result as "block this capture" stop blocking without needing to
+    know the switch exists.
+    """
+    if not tag_code or not dedup_enabled():
+        return None
+    dedup = _load_dedup()
+    prior = dedup.get(tag_code)
+    # The file on disk is the authority. A tag sitting in capture_intake,
+    # processed or output has been shot, whether or not a dedup record
+    # survived, so block on that alone.
+    existing = tag_already_in_system(tag_code)
+    if not isinstance(prior, dict):
+        if existing:
+            return {"folder": os.path.basename(os.path.dirname(existing)),
+                    "filename": os.path.basename(existing),
+                    "category": None, "staff": "", "ts": os.path.getmtime(existing),
+                    "source": "file-present"}
+        return prior
+    folder = prior.get("folder")
+    filename = prior.get("filename")
+    if folder and filename:
+        # Dedup is a guard over an actual saved deliverable, never a source
+        # of truth by itself. A prior manual delete/void can leave a stale
+        # record behind; blocking a genuine re-capture in that case strands
+        # a complete set in the tablet's needs_review queue as "duplicate".
+        # Remove only the exact stale key, atomically, then allow capture.
+        # A captured item's raw master legitimately lives in capture_intake
+        # (awaiting or rejected) OR processed (approved). Only a record whose
+        # file is in NEITHER is genuinely stale -- a manual delete or void.
+        # Checking capture_intake alone meant every approval un-protected its
+        # own tag, which is exactly backwards: approved pieces are the ones
+        # most certainly already shot.
+        candidates = [
+            os.path.join(CAPTURE_ROOT, folder, filename),
+            os.path.join(PROCESSED_ROOT, folder, filename),
+        ]
+        saved_path = next((c for c in candidates if os.path.isfile(c)), None)
+        if saved_path is None and existing:
+            saved_path = existing        # moved, not deleted -- keep blocking
+        if saved_path is None:
+            saved_path = candidates[0]
+            with _lock:
+                current = _load_dedup()
+                if current.get(tag_code) == prior:
+                    del current[tag_code]
+                    _atomic_write_json(DEDUP_PATH, current)
+                    logging.getLogger("capture_tool").warning(
+                        "Removed stale dedup record tag=%s missing=%s",
+                        tag_code, saved_path
+                    )
+            return None
+        try:
+            if capture_voids.is_voided(
+                os.path.join(folder, filename), VOID_REGISTRY_PATH
+            ):
+                return None
+        except capture_voids.VoidRegistryError:
+            # Duplicate blocking fails closed.  Pipeline intake also refuses
+            # to run while registry status is unknown.
+            return prior
+    return prior
+
+
+def _segment_paths_async(paths: list, category: str | None = None) -> None:
+    """Replace each of the given saved photos in-place with a SAM2/DINO
+    segmentation crop, off the request thread.
+
+    Runs after save_pair()/save_multi() has already written the file(s) and
+    is about to return its response to the phone -- segmentation is real GPU
+    inference (SAM2-large + Grounding DINO) and the save confirmation
+    shouldn't wait on it. tight_crop() is already fail-open (returns the
+    original path untouched on any error), so a slow/missing model never
+    blocks a capture, it just leaves the digital fill-crop from capture.html
+    as the final result for that piece.
+
+    All paths in one call share a single loaded predictor and release it
+    once at the end, rather than each image reloading SAM2/DINO from
+    scratch -- for save_multi's 3-image sets this is the difference between
+    one model load per item and three.
+    """
+    if not sam_locate.available():
+        logging.getLogger("capture_tool").warning(
+            "sam_locate.available() is False -- skipping segmentation for %s", paths
+        )
+        return
+
+    def _run():
+        log = logging.getLogger("capture_tool")
+        for path in paths:
+            _backup_raw(path)
+        try:
+            expect = _expect_for_category(category)
+            prefer_vertical = _prefer_vertical_for_category(category)
+            for path in paths:
+                try:
+                    result_path, angle = sam_locate.tight_crop(
+                        path, path, expect=expect, straighten=False, category=category,
+                        prefer_vertical=prefer_vertical
+                    )
+                    log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
+                except Exception:
+                    log.exception("sam_locate.tight_crop FAILED for %s", path)
+        finally:
+            sam_locate.release()
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+# Composite layout constants (matches the approved reference layout: full-
+# width MAIN VIEW on top, LEFT ANGLE / RIGHT ANGLE side-by-side below, bold
+# uppercase caption under each panel, thin light-grey dividers, white
+# background).
+# Explicit 60/20/20 split (2026-08-19, explicit request): MAIN VIEW is 60%
+# of the total photo AREA; LEFT ANGLE and RIGHT ANGLE each get 20% of that
+# same total area, sitting side by side in one bottom row. Since the two
+# side panels each span only half the canvas WIDTH, their combined ROW
+# HEIGHT is 40% of the total (20% area / 50% width = 40% height each,
+# and they share that row rather than stacking). MAIN_H stays at the
+# No fixed output dimensions: the previous 1200px/800px panel heights
+# destroyed detail from Sony's 6192x4128 originals. Panel areas are now
+# derived from the source pixels. No source panel is ever downscaled.
+_STITCH_PAD = 48
+_STITCH_LABEL_H = 90
+_STITCH_BG = (255, 255, 255)
+_STITCH_DIVIDER = (225, 225, 225)
+_STITCH_TEXT = (30, 30, 30)
+
+
+def _stitch_font(size):
+    from PIL import ImageFont
+    for candidate in ("arialbd.ttf", "Arial Bold.ttf", "DejaVuSans-Bold.ttf"):
+        try:
+            return ImageFont.truetype(candidate, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _stitch_scale_to_area(img, target_area):
+    """Scale a panel UP to target_area while preserving aspect ratio.
+
+    target_area is always at least the source area. This is the hardwall
+    that prevents the compositor from throwing away source pixels. The
+    hero receives 3x either side panel's displayed area, producing the
+    required 60/20/20 content split.
+    """
+    import math
+    from PIL import Image
+    source_area = img.width * img.height
+    if source_area <= 0:
+        raise ValueError("empty stitch panel")
+    scale = max(1.0, math.sqrt(float(target_area) / float(source_area)))
+    new_w = max(img.width, int(math.ceil(img.width * scale)))
+    new_h = max(img.height, int(math.ceil(img.height * scale)))
+    if (new_w, new_h) == img.size:
+        return img.copy()
+    return img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+
+# A side panel is capped here; MAIN gets three times this. Without a cap the
+# canvas is unbounded: _stitch_scale_to_area only ever UPSCALES (by design, so
+# no source detail is thrown away), and side_target_area is driven by the
+# LARGEST angle crop. LR22_163's angle2 tight_crop came back 7819x4808
+# (37.6MP), MAIN was scaled to 3x that, and the composite reached 310MP --
+# past PIL's 179MP decompression-bomb guard, so the verification re-open threw
+# and every retry failed identically (2026-09-01, live capture).
+#
+# 12MP per side panel is far above what anything downstream consumes: the
+# Azure guard prepares references at 10MP and delivery is 3200px. It also
+# stays well clear of the 4MP floor that reference detail needs (below that,
+# fine stone counts start being lost).
+MAX_STITCH_SIDE_PANEL_PIXELS = 12_000_000
+
+
+def _cap_panel_pixels(img, max_pixels: int):
+    """Downscale a panel that is larger than `max_pixels`, preserving aspect."""
+    import math
+    from PIL import Image
+    area = img.width * img.height
+    if area <= max_pixels or area <= 0:
+        return img
+    scale = math.sqrt(max_pixels / area)
+    return img.resize((max(1, int(img.width * scale)),
+                       max(1, int(img.height * scale))), Image.Resampling.LANCZOS)
+
+
+def stitch_angles(main_path: str, angle1_path: str, angle2_path: str, out_path: str) -> bool:
+    """Composes MAIN/ANGLE_1/ANGLE_2 into one labeled reference-style image:
+    full-width MAIN VIEW on top, LEFT ANGLE + RIGHT ANGLE side-by-side below.
+    angle1 -> LEFT ANGLE, angle2 -> RIGHT ANGLE, matching this tool's own
+    capture sequence naming (no independent left/right signal exists to
+    verify against; this is the documented convention going forward).
+    Fail-open by design (same convention as sam_locate.tight_crop): any
+    error here must never block or corrupt the underlying save_multi()
+    result, which has already succeeded by the time this runs.
+
+    The panel areas are 60/20/20 and no source panel is downscaled. The
+    final JPG is encoded once at quality=100 with 4:4:4 chroma, verified,
+    and atomically published so no watcher can see a partial composite.
+    """
+    from PIL import Image, ImageDraw
+    log = logging.getLogger("capture_tool")
+    try:
+        main_img = _cap_panel_pixels(
+            Image.open(main_path).convert("RGB"), MAX_STITCH_SIDE_PANEL_PIXELS * 3)
+        angle1_img = _cap_panel_pixels(
+            Image.open(angle1_path).convert("RGB"), MAX_STITCH_SIDE_PANEL_PIXELS)
+        angle2_img = _cap_panel_pixels(
+            Image.open(angle2_path).convert("RGB"), MAX_STITCH_SIDE_PANEL_PIXELS)
+
+        main_area = main_img.width * main_img.height
+        left_area = angle1_img.width * angle1_img.height
+        right_area = angle2_img.width * angle2_img.height
+        # Each side gets one area unit and MAIN gets three: 3/(3+1+1)=60%.
+        # Include main_area/3 in the floor so MAIN is never downscaled either.
+        side_target_area = max(left_area, right_area, (main_area + 2) // 3)
+        main_panel = _stitch_scale_to_area(main_img, side_target_area * 3)
+        left_panel = _stitch_scale_to_area(angle1_img, side_target_area)
+        right_panel = _stitch_scale_to_area(angle2_img, side_target_area)
+
+        assert main_panel.width >= main_img.width and main_panel.height >= main_img.height
+        assert left_panel.width >= angle1_img.width and left_panel.height >= angle1_img.height
+        assert right_panel.width >= angle2_img.width and right_panel.height >= angle2_img.height
+
+        side_row_w = left_panel.width + _STITCH_PAD + right_panel.width
+        content_w = max(main_panel.width, side_row_w)
+        canvas_w = content_w + _STITCH_PAD * 2
+        side_row_h = max(left_panel.height, right_panel.height)
+        canvas_h = (_STITCH_PAD * 3 + main_panel.height + _STITCH_LABEL_H
+                    + side_row_h + _STITCH_LABEL_H)
+        canvas = Image.new("RGB", (canvas_w, canvas_h), _STITCH_BG)
+        draw = ImageDraw.Draw(canvas)
+        label_font = _stitch_font(42)
+
+        def _panel_with_label(panel, x, y, box_w, row_h, label):
+            panel_y = y + (row_h - panel.height) // 2
+            canvas.paste(panel, (x + (box_w - panel.width) // 2, panel_y))
+            # Captions are deliberately NOT drawn (2026-08-31). FLUX.2 read
+            # this burned-in text and painted garbled copies of it into
+            # finished catalogue images ("MAIN SHNIN", "ADTISHM"). The label
+            # band's spacing is kept so panel geometry -- and sam_locate's
+            # assumptions about it -- are unchanged; only the ink is gone.
+            _ = (label, label_font, draw)
+
+        x0 = _STITCH_PAD
+        y0 = _STITCH_PAD
+        _panel_with_label(main_panel, x0, y0, content_w, main_panel.height, "MAIN VIEW")
+
+        divider_y = y0 + main_panel.height + _STITCH_LABEL_H
+        draw.line([(x0, divider_y), (x0 + content_w, divider_y)], fill=_STITCH_DIVIDER, width=2)
+
+        y1 = divider_y + _STITCH_PAD
+        row_x0 = x0 + (content_w - side_row_w) // 2
+        _panel_with_label(left_panel, row_x0, y1, left_panel.width, side_row_h, "LEFT ANGLE")
+        _panel_with_label(right_panel, row_x0 + left_panel.width + _STITCH_PAD, y1,
+                          right_panel.width, side_row_h, "RIGHT ANGLE")
+
+        temporary = f"{out_path}.composite.tmp.jpg"
+        canvas.save(temporary, format="JPEG", quality=100, subsampling=0, optimize=True)
+        with Image.open(temporary) as verified:
+            verified.load()
+            if verified.width != canvas.width or verified.height != canvas.height:
+                raise ValueError("composite verification dimensions changed")
+        os.replace(temporary, out_path)
+        log.info("stitch_angles wrote %s", out_path)
+        return True
+    except Exception:
+        log.exception("stitch_angles FAILED for %s/%s/%s -> %s",
+                       main_path, angle1_path, angle2_path, out_path)
+        try:
+            os.remove(f"{out_path}.composite.tmp.jpg")
+        except OSError:
+            pass
+        return False
+
+
+def _backup_raw(path: str) -> None:
+    """Copies the as-saved, unprocessed file into a hidden sibling folder
+    before any in-place crop/bg-removal mutation touches it.
+
+    Confirmed live (2026-08-19, tag BL22/135): a bad mask selection painted
+    the actual ring white and kept the black backdrop -- since tight_crop()
+    and _remove_background() both overwrite the SAME path they read from,
+    that was permanent, unrecoverable data loss with no original to fall
+    back to. Fails open (a backup failure must never block the real save,
+    which has already succeeded by the time this runs) and is best-effort:
+    if it can't write, processing still proceeds -- an occasional missing
+    backup is a far smaller problem than blocking real capture work over
+    it."""
+    try:
+        backup_dir = os.path.join(os.path.dirname(path), ".raw_backup")
+        os.makedirs(backup_dir, exist_ok=True)
+        shutil.copy2(path, os.path.join(backup_dir, os.path.basename(path)))
+    except Exception:
+        logging.getLogger("capture_tool").warning("_backup_raw failed for %s", path, exc_info=True)
+
+
+# Categories that are TWO separate physical pieces sold/worn as a matched
+# pair (both earrings shot together), as opposed to a single item that
+# merely has internal left/right symmetry (WATI's twin-bowl pendant is
+# still ONE object) or is genuinely worn singly (NATH/MOTI NATH -- one
+# nose ring; TIKKA -- one forehead ornament). Confirmed live (2026-08-19,
+# tag TP22/83): tight_crop() was called with expect=1 for every category
+# unconditionally, so a real matched pair correctly captured in frame
+# (both studs visible, verified against the raw backup) got cropped down
+# to just ONE of the two -- the second was silently discarded from the
+# final saved photo, in every panel. sam_locate.tight_crop already has a
+# working side-by-side expect>1 crop path; this was just never told to
+# use it. Keyed the same way category_orientation.py is.
+_PAIRED_ITEM_CATEGORIES = frozenset({
+    "bali_18", "bali_22", "tops_18", "tops_22", "dull_22",
+    "earring_22", "jhumka_22", "kaan_chain_22",
+})
+
+def _expect_for_category(category: str | None) -> int:
+    return 2 if category in _PAIRED_ITEM_CATEGORIES else 1
+
+
+def _prefer_vertical_for_category(category: str | None) -> bool:
+    """Whether this category needs its elongated axis forced vertical
+    (attachment point up, dangle end down) rather than just nudged to the
+    nearest right angle.
+
+    Reads category_orientation.py's OrientationGuide directly -- that
+    module is the documented, researched source of truth (see its own
+    docstring: "so sam_locate.py/capture_tool.py can act on it without
+    parsing markdown"), but this function used to instead check a
+    hand-duplicated frozenset kept here, which drifted out of sync: it force-
+    vertical'd bali/tops/dull (studs) while category_orientation.py's
+    researched guide classifies those FLAT_FACE_UP (a stud has no dangle
+    direction to force). Fixed 2026-08-21 by reading the one source
+    directly instead of maintaining a second copy.
+    """
+    if category is None:
+        return False
+    guide = category_orientation.orientation_for(category)
+    return guide.orientation == category_orientation.OrientationType.HANGS_VERTICAL
+
+
+def _segment_and_stitch(main_path: str, angle1_path: str, angle2_path: str, final_path: str,
+                        category: str | None = None) -> bool:
+    """Locally crop three hidden source poses and publish one composite.
+
+    Processing is synchronous and final publication is atomic. The API must
+    never report success while only a hero-only placeholder exists or while
+    the composite worker can still fail in the background. Source JPEGs are
+    preserved unchanged. SAM output uses temporary PNG files, avoiding an
+    extra lossy JPEG generation before the one required final JPG encoding.
+
+    RMBG-2.0 background removal used to run here as a second pass after
+    tight_crop -- removed 2026-08-19 (the RMBG re-processing was contributing
+    to a posterized/waxy look the owner flagged; sam_locate.tight_crop is now
+    the only background-removal pass, for both single and paired items).
+
+    Paired categories (_PAIRED_ITEM_CATEGORIES) crop with expect=2, which
+    routes into sam_locate.tight_crop's side-by-side mode -- that path
+    does NOT support straighten/fixed_angle (no single aligned mask exists
+    for two separate pieces), so main_tilt sharing is correctly skipped for
+    those without any extra branching here; tight_crop's own info dict
+    simply won't have a 'tilt' key for the pair path."""
+    log = logging.getLogger("capture_tool")
+    source_paths = (main_path, angle1_path, angle2_path)
+    work_paths = tuple(f"{path}.work.png" for path in source_paths)
+    selected_paths = list(source_paths)
+    segmentation_available = sam_locate.available()
+    if not segmentation_available:
+        log.warning("sam_locate unavailable -- stitching preserved full-resolution sources for %s",
+                    final_path)
+
+    try:
+        if segmentation_available:
+            try:
+                # MAIN establishes the shared straightening angle. Working
+                # PNGs preserve decoded pixels; raw Sony JPGs remain intact.
+                expect = _expect_for_category(category)
+                prefer_vertical = _prefer_vertical_for_category(category)
+                main_result, info = sam_locate.tight_crop(
+                    main_path, work_paths[0], expect=expect, straighten=True,
+                    margin=0.04, category=category, prefer_vertical=prefer_vertical
+                )
+                selected_paths[0] = main_result
+                log.info("sam_locate.tight_crop done for %s (info=%s)", main_path, info)
+                main_tilt = None
+                if info:
+                    main_tilt = info.get("tilt")
+                for index, path in enumerate((angle1_path, angle2_path), start=1):
+                    result_path, angle = sam_locate.tight_crop(
+                        path, work_paths[index], expect=expect, straighten=True,
+                        fixed_angle=main_tilt,
+                        category=category, prefer_vertical=prefer_vertical
+                    )
+                    selected_paths[index] = result_path
+                    log.info("sam_locate.tight_crop done for %s (angle=%s)", path, angle)
+            except Exception:
+                # Crop failure is fail-open: the unmodified, full-resolution
+                # Sony sources still make a valid composite.
+                log.exception("local segmentation failed; using preserved sources for %s", final_path)
+                selected_paths = list(source_paths)
+
+        return stitch_angles(selected_paths[0], selected_paths[1], selected_paths[2], final_path)
+    finally:
+        if segmentation_available:
+            sam_locate.release()
+        for path in work_paths:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+@_stock_write_guard
+def save_pair(category: str, jewel_bytes: bytes, tag_bytes: bytes, tag_code: str,
+             staff_name: str = "", override_duplicate: bool = False,
+             override_blur: bool = False, override_visibility: bool = False) -> dict:
+    """
+    Persist one item into the CURRENT tray for this category (auto-creates
+    tray #1 if none started yet). The jewellery photo (auto-captured, zoomed
+    to fill the frame) is saved into the tray as the primary deliverable,
+    named directly from tag_code (see _safe_filename_from_tag) — no sequence
+    numbers. The tag photo is used only to read the code; its decoded data is
+    stamped into the saved jewellery image metadata and the raw tag shot is
+    not archived separately. Returns:
+      {"ok": True, "folder": ..., "tray_number": N, "filename": ..., "tray_captured": N,
+       "blur_score": float|None}
+      or {"ok": False, "error": "duplicate", "prior": {...}} if tag_code was
+      already captured and override_duplicate is False, or
+      {"ok": False, "error": "blurry", "blur_score": float} if the jewellery
+      photo looks out of focus (see _blur_variance) and override_blur is False, or
+      {"ok": False, "error": "not_clearly_visible", "reason": str} if the
+      "jewel" photo doesn't clearly show the jewellery (see
+      _jewellery_clearly_visible) and override_visibility is False.
+    """
+    with _lock:
+        is_test = category == TEST_CATEGORY
+        if not is_test and not override_duplicate:
+            prior = check_duplicate(tag_code)
+            if prior:
+                return {"ok": False, "error": "duplicate", "prior": prior}
+
+        blur_score = _blur_variance(jewel_bytes, category)
+        threshold = LONG_ITEM_BLUR_VARIANCE_THRESHOLD if _is_long_item_category(category) else BLUR_VARIANCE_THRESHOLD
+        if not override_blur and blur_score is not None and blur_score < threshold:
+            return {"ok": False, "error": "blurry", "blur_score": round(blur_score, 1)}
+
+        if not override_visibility:
+            vis = _jewellery_clearly_visible(jewel_bytes, category)
+            if not vis["ok"]:
+                return {"ok": False, "error": "not_clearly_visible", "reason": vis["reason"],
+                        "unverified": vis["unverified"]}
+
+        tray = get_current_tray(category)
+        tray_dir = os.path.join(CAPTURE_ROOT, tray["folder"])
+        # Tray allocation is deliberately lazy. The first real capture is the
+        # operation that materialises the directory; without this, a newly
+        # assigned tray failed on its first image with FileNotFoundError.
+        os.makedirs(tray_dir, exist_ok=True)
+
+        safe_name = _safe_filename_from_tag(tag_code) if tag_code else f"untagged_{int(time.time())}"
+        if tag_code and get_tag_metadata(tag_code).get("has_stud"):
+            # See the matching comment in save_multi() -- same convention,
+            # both save paths need to agree on it.
+            safe_name = f"{safe_name}_stud"
+        jewel_path = os.path.join(tray_dir, f"{safe_name}.jpg")
+        # Guard against silently overwriting a different piece — happens if
+        # the same code is deliberately re-saved via override_duplicate, or
+        # (rarer) two untagged captures land in the same second.
+        n = 2
+        base_safe_name = safe_name
+        while os.path.exists(jewel_path):
+            safe_name = f"{base_safe_name}_{n}"
+            jewel_path = os.path.join(tray_dir, f"{safe_name}.jpg")
+            n += 1
+
+        with open(jewel_path, "wb") as f:
+            f.write(jewel_bytes)
+        _embed_tag_metadata(jewel_path, tag_code=tag_code, category=category, staff_name=staff_name)
+        _segment_paths_async([jewel_path], category=category)
+
+        # Test captures never touch the global dedup file — recording them
+        # there would risk a practice tag code later blocking (or being
+        # blocked by) an unrelated real production capture that happens to
+        # reuse the same code.
+        if tag_code and not is_test:
+            dedup = _load_dedup()
+            dedup[tag_code] = {
+                "folder": tray["folder"], "filename": f"{safe_name}.jpg",
+                "category": category, "staff": staff_name, "ts": time.time(),
+            }
+            _atomic_write_json(DEDUP_PATH, dedup)
+
+        tray_captured = _count_tray_items(tray_dir)
+        return {"ok": True, "folder": tray["folder"], "tray_number": tray["tray_number"],
+               "filename": f"{safe_name}.jpg", "tray_captured": tray_captured,
+               "blur_score": round(blur_score, 1) if blur_score is not None else None,
+               # kept for backward-compat with the current capture.html JS
+               "session_captured": tray_captured}
+
+
+@_stock_write_guard
+def save_multi(category: str, main_bytes: bytes, angle1_bytes: bytes, angle2_bytes: bytes,
+               tag_code: str, staff_name: str = "", override_duplicate: bool = False,
+               override_blur: bool = False, override_visibility: bool = False) -> dict:
+    """
+    Persist a 3-image multi-angle capture set (MAIN / ANGLE_1 / ANGLE_2) from
+    the RSC 2 workflow. The tag photo itself is never received here or
+    archived -- same as save_pair, only its already-decoded tag_code and
+    resolved category cross the wire; there is nothing server-side to
+    "delete after verification" because nothing tag-shaped was ever written.
+    (The phone-side staging/delete-after-verify described in the handover
+    spec is a client-side concern over the phone's own local temp files.)
+
+    The one visible deliverable is <tag>.jpg: a 60/20/20 MAIN/LEFT/RIGHT
+    composite. The three original Sony captures live only in the hidden
+    .multi_angle_sources archive for recovery. They are staged and decode-
+    verified first; the composite is then built locally and atomically
+    published. Nothing downstream can observe a hero-only or partial item.
+    """
+    with _lock:
+        is_test = category == TEST_CATEGORY
+        if not is_test and not override_duplicate:
+            prior = check_duplicate(tag_code)
+            if prior:
+                return {"ok": False, "error": "duplicate", "prior": prior}
+
+        images = {"main": main_bytes, "angle1": angle1_bytes, "angle2": angle2_bytes}
+        blur_scores = {}
+        for slot, data in images.items():
+            score = _blur_variance(data, category)
+            blur_scores[slot] = round(score, 1) if score is not None else None
+            threshold = LONG_ITEM_BLUR_VARIANCE_THRESHOLD if _is_long_item_category(category) else BLUR_VARIANCE_THRESHOLD
+            if slot != "main":
+                threshold *= ANGLE_SLOT_BLUR_SCALE
+            if not override_blur and score is not None and score < threshold:
+                return {"ok": False, "error": "blurry", "slot": slot, "blur_score": blur_scores[slot]}
+
+        if not override_visibility:
+            vis = _jewellery_clearly_visible(main_bytes, category)
+            if not vis["ok"]:
+                return {"ok": False, "error": "not_clearly_visible", "reason": vis["reason"],
+                        "unverified": vis["unverified"]}
+
+        tray = get_current_tray(category)
+        tray_dir = os.path.join(CAPTURE_ROOT, tray["folder"])
+        os.makedirs(tray_dir, exist_ok=True)
+
+        safe_name = _safe_filename_from_tag(tag_code) if tag_code else f"untagged_{int(time.time())}"
+        if tag_code and get_tag_metadata(tag_code).get("has_stud"):
+            # Explicit request (2026-08-19): a diamond/rhodium stud accent
+            # needs to be visible in the filename itself so the AI editing
+            # step (see tools/azure_flux2_guarded.py) can tell "genuinely
+            # has a stud" apart from "just a bright reflection" without
+            # re-running detection at edit time. Reads the flag set via
+            # set_stud_flag() -- persists per TAG, survives this exact
+            # recapture. app.py's own output-naming strips this suffix
+            # before any delivered catalogue file is ever named.
+            safe_name = f"{safe_name}_stud"
+        main_path = os.path.join(tray_dir, f"{safe_name}.jpg")
+
+        # Duplicate-tag protection (spec rule 8): if the final name already
+        # exists, this must NEVER silently create "(1)"/"_3" -- that breaks
+        # catalogue identity. Getting here at all means override_duplicate
+        # was explicitly set by the operator (confirmed replace) or the
+        # dedup record was missing while the file wasn't; either way this
+        # needs an explicit operator decision, never an auto-renamed sibling.
+        if os.path.exists(main_path) and not override_duplicate:
+            return {"ok": False, "error": "duplicate",
+                    "prior": {"folder": tray["folder"], "filename": f"{safe_name}.jpg"}}
+
+        capture_id = str(int(time.time() * 1000))
+        staging_dir = os.path.join(tray_dir, ".staging", f"{safe_name}_{capture_id}")
+        source_dir = os.path.join(tray_dir, ".multi_angle_sources", safe_name, capture_id)
+        os.makedirs(staging_dir, exist_ok=True)
+        staged = {
+            "main": os.path.join(staging_dir, "main.jpg"),
+            "angle1": os.path.join(staging_dir, "angle1.jpg"),
+            "angle2": os.path.join(staging_dir, "angle2.jpg"),
+        }
+        try:
+            for slot, path in staged.items():
+                with open(path, "wb") as f:
+                    f.write(images[slot])
+
+            # Decode-verify, not just File.exists() (spec rule 52) -- a
+            # truncated upload must not become a permanent catalogue file.
+            for slot, path in staged.items():
+                img = cv2.imread(path)
+                if img is None or img.size == 0:
+                    return {"ok": False, "error": "corrupt_capture", "slot": slot}
+
+            os.makedirs(source_dir, exist_ok=True)
+            source_paths = {
+                "main": os.path.join(source_dir, "main.jpg"),
+                "angle1": os.path.join(source_dir, "angle1.jpg"),
+                "angle2": os.path.join(source_dir, "angle2.jpg"),
+            }
+            os.replace(staged["main"], source_paths["main"])
+            os.replace(staged["angle1"], source_paths["angle1"])
+            os.replace(staged["angle2"], source_paths["angle2"])
+        finally:
+            for path in staged.values():
+                if os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+            try:
+                os.rmdir(staging_dir)
+            except OSError:
+                pass
+
+        # All three poses are processed locally from the preserved hidden
+        # originals. Only one final, tag-named composite becomes visible.
+        if not _segment_and_stitch(
+            source_paths["main"], source_paths["angle1"], source_paths["angle2"],
+            main_path, category=category
+        ):
+            return {"ok": False, "error": "composite_failed", "source_archive": source_dir}
+        _embed_tag_metadata(main_path, tag_code=tag_code, category=category, staff_name=staff_name)
+
+        if tag_code and not is_test:
+            dedup = _load_dedup()
+            dedup[tag_code] = {
+                "folder": tray["folder"], "filename": f"{safe_name}.jpg",
+                "category": category, "staff": staff_name, "ts": time.time(),
+            }
+            _atomic_write_json(DEDUP_PATH, dedup)
+
+        tray_captured = _count_tray_items(tray_dir)
+        return {
+            "ok": True, "folder": tray["folder"], "tray_number": tray["tray_number"],
+            "filename": f"{safe_name}.jpg",
+            "tray_captured": tray_captured,
+            "blur_scores": blur_scores,
+            "source_archive": source_dir,
+        }
+
+
+def _count_tray_items(tray_dir: str) -> int:
+    if not os.path.isdir(tray_dir):
+        return 0
+    # _1.jpg/_2.jpg remain legacy sidecars from captures made before the
+    # one-composite contract. New captures expose only <tag>.jpg.
+    sidecar_suffixes = ("_studs.jpg", "_detail.jpg", "_tag.jpg", "_1.jpg", "_2.jpg")
+    return len([
+        f for f in os.listdir(tray_dir)
+        if f.lower().endswith(".jpg")
+        and not f.lower().endswith(sidecar_suffixes)
+        and os.path.isfile(os.path.join(tray_dir, f))
+    ])
+
+
+def session_summary(category: str) -> dict:
+    """Current tray's folder name, number, and how many items are in it so
+    far — the live 'Tray N · X captured' display on the capture screen."""
+    tray = get_current_tray(category)
+    tray_dir = os.path.join(CAPTURE_ROOT, tray["folder"])
+    return {"captured": _count_tray_items(tray_dir), "folder": tray["folder"], "tray_number": tray["tray_number"]}
+
+
+def tray_items(folder: str) -> list:
+    """Every tag code captured so far in a given tray folder, oldest first —
+    the source of truth for the capture screen's live list (reads real
+    server state, not just this browser tab's in-memory session, so a page
+    reload or a second device on the same tray sees the same list)."""
+    dedup = _load_dedup()
+    items = [(rec.get("ts", 0), code) for code, rec in dedup.items() if rec.get("folder") == folder]
+    items.sort()
+    return [{"pair": i + 1, "code": code} for i, (_, code) in enumerate(items)]
+
+
+def find_item(tag_code: str) -> dict | None:
+    """Look up a single captured item by its exact tag code, for the search
+    UI that replaced whole-folder Forget — review one specific item before
+    deciding to delete it, rather than an entire tray's history at once."""
+    dedup = _load_dedup()
+    rec = dedup.get(tag_code)
+    if not isinstance(rec, dict):
+        return None
+    folder = rec.get("folder")
+    filename = rec.get("filename")
+    if not folder or not filename:
+        return None
+    jewel_path = os.path.join(CAPTURE_ROOT, folder, filename)
+    stem = os.path.splitext(filename)[0]
+    studs_path = os.path.join(CAPTURE_ROOT, folder, f"{stem}_studs.jpg")
+    detail_path = os.path.join(CAPTURE_ROOT, folder, f"{stem}_detail.jpg")
+    return {
+        "tag_code": tag_code,
+        "folder": folder,
+        "filename": filename,
+        "category": rec.get("category"),
+        "staff": rec.get("staff"),
+        "ts": rec.get("ts"),
+        "jewel_exists": os.path.isfile(jewel_path),
+        "studs_exists": os.path.isfile(studs_path),
+        "detail_exists": os.path.isfile(detail_path),
+        "tag_exists": False,
+        "tag_embedded": True,
+    }
+
+
+@_stock_write_guard
+def delete_item(tag_code: str) -> dict:
+    """Permanently delete ONE captured item's images and
+    remove its dedup record — scoped to exactly this tag, unlike the old
+    whole-folder Forget. Resets duplicate-blocking for this specific tag
+    only; every other item in the same folder is untouched."""
+    with _lock:
+        item = find_item(tag_code)
+        if item is None:
+            return {"ok": False, "error": f"no captured item found for tag {tag_code!r}"}
+
+        jewel_path = os.path.join(CAPTURE_ROOT, item["folder"], item["filename"])
+        stem = os.path.splitext(item["filename"])[0]
+
+        deleted = []
+        sidecar_paths = (
+            os.path.join(CAPTURE_ROOT, item["folder"], f"{stem}_studs.jpg"),
+            os.path.join(CAPTURE_ROOT, item["folder"], f"{stem}_detail.jpg"),
+            # save_multi()'s ANGLE_1/ANGLE_2 sidecars -- must be deleted
+            # together with the main image, never left orphaned.
+            os.path.join(CAPTURE_ROOT, item["folder"], f"{stem}_1.jpg"),
+            os.path.join(CAPTURE_ROOT, item["folder"], f"{stem}_2.jpg"),
+        )
+        for path in (jewel_path, *sidecar_paths):
+            try:
+                os.remove(path)
+                deleted.append(path)
+            except FileNotFoundError:
+                pass
+
+        dedup = _load_dedup()
+        dedup.pop(tag_code, None)
+        _atomic_write_json(DEDUP_PATH, dedup)
+
+        return {"ok": True, "tag_code": tag_code, "folder": item["folder"], "deleted_files": len(deleted)}
+
+
+@_stock_write_guard
+def undo_last(category: str) -> dict:
+    """Void the most-recent capture while preserving the complete raw pair.
+
+    Undo used to delete the jewellery and archived tag files.  The capture
+    tree is now an immutable master, so Undo atomically records a tombstone
+    and removes only the duplicate-blocking record.  A deliberate recapture
+    receives a new non-overwriting filename and the old bytes remain intact.
+
+    Filenames aren't sequential anymore (they're named from the tag code),
+    so 'most recent' is determined by each dedup entry's timestamp rather
+    than a pair number. The fast capture flow auto-saves on a clean barcode
+    read with no manual review step, so this is the safety net for 'wrong
+    item went through' — one tap to remove it and immediately try again."""
+    with _lock:
+        tray = get_current_tray(category)
+        tray_dir = os.path.join(CAPTURE_ROOT, tray["folder"])
+        if not os.path.isdir(tray_dir):
+            return {"ok": False, "error": "no tray to undo"}
+
+        dedup = _load_dedup()
+        candidates = [(rec.get("ts", 0), code, rec) for code, rec in dedup.items()
+                     if rec.get("folder") == tray["folder"]]
+        if not candidates:
+            return {"ok": False, "error": "nothing to undo"}
+        candidates.sort()
+        _, removed_code, rec = candidates[-1]
+
+        filename = rec.get("filename")
+        if not filename or os.path.basename(filename) != filename:
+            return {"ok": False, "error": "capture history has an unsafe filename"}
+        safe_stem = os.path.splitext(filename)[0]
+        jewel_path = os.path.join(tray_dir, filename)
+        studs_path = os.path.join(tray_dir, f"{safe_stem}_studs.jpg")
+        detail_path = os.path.join(tray_dir, f"{safe_stem}_detail.jpg")
+        if not os.path.isfile(jewel_path):
+            return {
+                "ok": False,
+                "error": "raw capture bundle is incomplete; nothing was voided",
+                "preserved": True,
+            }
+
+        primary_relative = os.path.join(tray["folder"], filename)
+        primary_size = os.path.getsize(jewel_path)
+        sidecar_sizes = 0
+        sidecar_files = 0
+        for sidecar in (studs_path, detail_path):
+            if os.path.isfile(sidecar):
+                sidecar_files += 1
+                sidecar_sizes += os.path.getsize(sidecar)
+        tombstone = capture_voids.record_void(
+            primary_path=primary_relative,
+            tag_path=os.path.join(tray["folder"], TAG_ARCHIVE_DIRNAME, f"{safe_stem}_tag.jpg"),
+            tag_code=removed_code,
+            category=category,
+            folder=tray["folder"],
+            primary_size=primary_size,
+            tag_size=0,
+            registry_path=VOID_REGISTRY_PATH,
+        )
+
+        del dedup[removed_code]
+        _atomic_write_json(DEDUP_PATH, dedup)
+
+        return {
+            "ok": True,
+            "action": "voided",
+            "voided": True,
+            "removed_code": removed_code,
+            "voided_primary_path": tombstone["primary_path"],
+            "voided_tag_path": tombstone["tag_path"],
+            "preserved": True,
+            "preserved_files": 1 + sidecar_files,
+            "preserved_bytes": primary_size + sidecar_sizes,
+            "dedup_removed": True,
+        }
+
+
+def all_sessions_summary() -> list:
+    """Every capture session folder that exists, newest first — the basis
+    for the 'captured vs pending' real-time view."""
+    if not os.path.isdir(CAPTURE_ROOT):
+        return []
+    rows = []
+    for name in os.listdir(CAPTURE_ROOT):
+        path = os.path.join(CAPTURE_ROOT, name)
+        if not os.path.isdir(path):
+            continue
+        rows.append({"folder": name, "captured": _count_tray_items(path), "mtime": os.path.getmtime(path)})
+    rows.sort(key=lambda r: r["mtime"], reverse=True)
+    return rows
