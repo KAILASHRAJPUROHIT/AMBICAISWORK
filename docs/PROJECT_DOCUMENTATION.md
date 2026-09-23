@@ -1,4 +1,4 @@
-# Aradhana Jewellers — Auto Catalogue Tool
+# AMBIC DIGITAL — Auto Catalogue Tool
 ## Complete Project Documentation
 
 ---

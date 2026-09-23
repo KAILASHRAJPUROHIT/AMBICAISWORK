@@ -1,4 +1,4 @@
-# Aradhana Catalogue — Photo Capture Checklist
+# AMBIC DIGITAL Catalogue — Photo Capture Checklist
 
 Goal: every photo so consistent that one automated edit makes a perfect branded tile.
 The #1 rule: **good capture = automatic clean result. Bad capture = manual fixing.**
@@ -41,4 +41,4 @@ The #1 rule: **good capture = automatic clean result. Bad capture = manual fixin
 - [ ] No blown-out glare hiding detail.
 - [ ] Next photo is the matching tag for this exact item.
 
-If all four are ticked, the automated tool will turn it into a finished Aradhana tile with no manual work.
+If all four are ticked, the automated tool will turn it into a finished AMBIC DIGITAL tile with no manual work.

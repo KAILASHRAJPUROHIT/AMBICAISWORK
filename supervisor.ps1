@@ -1,4 +1,4 @@
-# Aradhana Catalogue Tool - supervisor
+# AMBIC DIGITAL Catalogue Tool - supervisor
 # Runs on a schedule (Windows Task Scheduler) and does several jobs at once:
 #   1. Boot/logon autostart - the scheduled task's "At log on" trigger means
 #      this runs shortly after Windows starts, so the tool comes back after

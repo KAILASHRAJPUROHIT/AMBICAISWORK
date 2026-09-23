@@ -1,4 +1,4 @@
-# ── API Keys for Aradhana Catalogue Tool ──────────────────────────────────────
+# ── API Keys for AMBIC DIGITAL Catalogue Tool ──────────────────────────────────────
 # Copy this file to keys.py and fill in real values. keys.py itself is
 # gitignored and excluded from any distributed package — never commit or
 # share the real file, only this .example template.

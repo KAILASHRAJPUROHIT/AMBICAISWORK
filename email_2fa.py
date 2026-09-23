@@ -31,7 +31,7 @@ def store_app_password(app_password: str) -> None:
     SECRET_PATH.parent.mkdir(parents=True, exist_ok=True)
     protected = win32crypt.CryptProtectData(
         value.encode("utf-8"),
-        "Aradhana Catalogue email 2FA",
+        "AMBIC DIGITAL Catalogue email 2FA",
         None,
         None,
         None,

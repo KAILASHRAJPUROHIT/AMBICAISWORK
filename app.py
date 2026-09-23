@@ -1,4 +1,4 @@
-"""Aradhana Jewellery Catalogue V2: Azure-only catalogue production UI."""
+"""AMBIC DIGITAL Jewellery Catalogue V2: Azure-only catalogue production UI."""
 
 from __future__ import annotations
 
