@@ -1,0 +1,16 @@
+{
+  "product": "AIS Ornate Print Router",
+  "version": "2026.09.11.workflowsupervise",
+  "created_utc": "2026-09-11T06:01:52.1272280Z",
+  "signer_subject": "CN=Aradhana Jewellers Internal Tools",
+  "signer_thumbprint": "E3880C0CAAE350308C78CB0646260C13A35438E2",
+  "installer_requires": [
+    "Administrator PowerShell",
+    "Valid Authenticode signature",
+    "Approved Voucher Format reference"
+  ],
+  "notes": [
+    "No token, database, upload, log, or customer document is included.",
+    "Use only from an approved deployment share. Do not copy a freshly compiled EXE directly to a billing PC."
+  ]
+}

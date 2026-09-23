@@ -1,0 +1,17 @@
+{
+  "version": "2026.09.12.copycountsafety",
+  "notes": [
+    "No token, database, upload, log, or customer document is included.",
+    "Use only from an approved deployment share. Do not copy a freshly compiled EXE directly to a billing PC.",
+    "Fix in this build: the P1007 office-copy grant is now re-validated against the live copy count right before printing, instead of trusting the count read only once when the Voucher Print window first opened. A copy count edited after the window qualifies (e.g. down to 1) now safely falls back to P355 instead of incorrectly still using P1007."
+  ],
+  "product": "AIS Ornate Print Router",
+  "signer_subject": "CN=Aradhana Jewellers Internal Tools",
+  "signer_thumbprint": "E3880C0CAAE350308C78CB0646260C13A35438E2",
+  "created_utc": "2026-09-12T12:43:33.4862670Z",
+  "installer_requires": [
+    "Administrator PowerShell",
+    "Valid Authenticode signature",
+    "Approved Voucher Format reference"
+  ]
+}

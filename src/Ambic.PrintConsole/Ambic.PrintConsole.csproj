@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ambic.PrintCore\Ambic.PrintCore.csproj" />
+    <ProjectReference Include="..\Ambic.Print.Storage\Ambic.Print.Storage.csproj" />
+    <ProjectReference Include="..\Ambic.PrintAdapters.Thermal\Ambic.PrintAdapters.Thermal.csproj" />
+    <ProjectReference Include="..\Ambic.PrintAdapters.Ornate\Ambic.PrintAdapters.Ornate.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+</Project>

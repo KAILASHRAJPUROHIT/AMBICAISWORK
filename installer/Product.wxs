@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="Aradhana Ornate AutoPrint Router"
+      Manufacturer="Aradhana Jewellers"
+      Version="$(var.ProductVersion)"
+      UpgradeCode="7C3F2C0B-6E2E-4B6A-9C2A-3E7F1B2D9A41"
+      Language="1033"
+      Scope="perMachine"
+      InstallerVersion="500">
+
+    <SummaryInformation Description="Aradhana Ornate AutoPrint Router installer" Manufacturer="Aradhana Jewellers" />
+
+    <MajorUpgrade
+        DowngradeErrorMessage="A newer version of the Aradhana Ornate AutoPrint Router is already installed."
+        Schedule="afterInstallInitialize" />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Every prior release is uninstalled cleanly before this one lands, so
+         a stale EXE (and any mutex it's still holding) can never coexist
+         with the one this installer is about to place. -->
+    <Property Id="MSIFASTINSTALL" Value="1" />
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="AradhanaFolder" Name="Aradhana">
+        <Directory Id="INSTALLFOLDER" Name="OrnateAutoPrintTray" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="StartupFolder" />
+
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Component Id="MainExecutable" Guid="1B7B7C7A-9B4B-4A6E-8E5A-2C7F0B3E4A11">
+        <File Id="RouterExe" Source="$(var.RouterExePath)" KeyPath="yes" />
+      </Component>
+      <Component Id="VoucherReference" Guid="4D5A6B2C-1E3F-4A9C-8B2D-6F1A9C4E7B22">
+        <File Id="ReferencePng" Source="$(var.ReferencePngPath)" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- Autostart via a Startup-folder shortcut rather than a scheduled
+         task or service - this mirrors the existing HKCU Run-key approach
+         (per-user, no elevated background task) that was chosen specifically
+         because NPAV treats SYSTEM-level scheduled tasks that launch this
+         kind of process tree as a dropper pattern. -->
+    <Component Id="StartupShortcut" Directory="StartupFolder" Guid="9E2C6A7D-3B4F-4E8A-9D1C-5A7E2F6B8C33">
+      <Shortcut Id="RouterStartupShortcut"
+                Name="Aradhana Ornate AutoPrint"
+                Target="[INSTALLFOLDER]AradhanaOrnateAutoPrint.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RegistryValue Root="HKCU"
+                      Key="Software\Aradhana Jewellers\OrnateAutoPrintTray"
+                      Name="StartupShortcutInstalled"
+                      Type="integer"
+                      Value="1"
+                      KeyPath="yes" />
+    </Component>
+
+    <Component Id="StartMenuShortcut" Directory="INSTALLFOLDER" Guid="6A1F4E9B-7C2D-4A3E-8F6B-1D9C3A5E7F44">
+      <Shortcut Id="RouterStartMenuShortcut"
+                Name="Aradhana Ornate AutoPrint"
+                Directory="INSTALLFOLDER"
+                Target="[INSTALLFOLDER]AradhanaOrnateAutoPrint.exe"
+                WorkingDirectory="INSTALLFOLDER"
+                Advertise="no" />
+      <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+      <RegistryValue Root="HKLM"
+                      Key="Software\Aradhana Jewellers\OrnateAutoPrintTray"
+                      Name="Installed"
+                      Type="integer"
+                      Value="1"
+                      KeyPath="yes" />
+    </Component>
+
+    <Feature Id="MainFeature" Title="Aradhana Ornate AutoPrint Router" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartupShortcut" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <!-- End every install/upgrade/uninstall by making sure no old copy of
+         the router is left running and holding the single-instance mutex -
+         the exact failure mode that took production down today. -->
+    <CustomAction Id="KillRunningRouter"
+                  Directory="INSTALLFOLDER"
+                  ExeCommand="taskkill.exe /IM AradhanaOrnateAutoPrint.exe /F"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="ignore" />
+
+    <!-- Deliberately no "launch after install" custom action: MSI custom
+         actions run via the Windows Installer service in Session 0, not the
+         interactive user's desktop session, so a GUI app launched from one
+         never actually appears on screen even when it "succeeds". The
+         Startup-folder shortcut above is the real, reliable launch path -
+         it fires correctly at the next interactive login, same as the
+         previous HKCU Run-key approach did. -->
+    <InstallExecuteSequence>
+      <Custom Action="KillRunningRouter" Before="InstallFiles" Condition="NOT REMOVE" />
+    </InstallExecuteSequence>
+
+  </Package>
+</Wix>

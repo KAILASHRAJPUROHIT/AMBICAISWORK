@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Ambic.Print.Storage/Ambic.Print.Storage.csproj" />
+    <Project Path="src/Ambic.PrintAdapters.Ornate/Ambic.PrintAdapters.Ornate.csproj" />
+    <Project Path="src/Ambic.PrintAdapters.Pdf/Ambic.PrintAdapters.Pdf.csproj" />
+    <Project Path="src/Ambic.PrintAdapters.Thermal/Ambic.PrintAdapters.Thermal.csproj" />
+    <Project Path="src/Ambic.PrintConsole/Ambic.PrintConsole.csproj" />
+    <Project Path="src/Ambic.PrintCore/Ambic.PrintCore.csproj" />
+    <Project Path="src/Ambic.PrintInstaller/Ambic.PrintInstaller.csproj" />
+    <Project Path="src/Ambic.PrintNode/Ambic.PrintNode.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Ambic.PrintCore.Tests/Ambic.PrintCore.Tests.csproj" />
+  </Folder>
+</Solution>

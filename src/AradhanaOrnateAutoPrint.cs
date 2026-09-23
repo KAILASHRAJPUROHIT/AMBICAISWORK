@@ -511,6 +511,12 @@ namespace AradhanaOrnateAutoPrint
         private bool voucherBillSessionActive = false;
         private bool officeCopyHandledForVoucherBill = false;
         private bool pKeyWasDown = false;
+        // The window and required-copy-count this armed session was matched
+        // against, so the P1007 grant can be re-validated live (see
+        // ResolveCopyNumber) instead of trusting a copy count read only once
+        // when the window first appeared and possibly edited since.
+        private IntPtr activeVoucherWindow = IntPtr.Zero;
+        private int activeVoucherRequiredCopies = 0;
 
         private const string OfficeVoucherReferenceFileName = "office-sales-voucher-format-reference.png";
         private const int VoucherFormatFingerprintWidth = 256;
@@ -1111,6 +1117,8 @@ namespace AradhanaOrnateAutoPrint
                 lastHandledUtc = DateTime.MinValue;
                 activeVoucherCopy1Printer = "";
                 activeVoucherLaterPrinter = "";
+                activeVoucherWindow = IntPtr.Zero;
+                activeVoucherRequiredCopies = 0;
             }
 
             // Once this window has qualified, do not inspect it again. This
@@ -1151,6 +1159,8 @@ namespace AradhanaOrnateAutoPrint
             voucherBillSessionActive = true;
             officeCopyHandledForVoucherBill = false;
             voucherRoutesFinalized.Add(hWnd);
+            activeVoucherWindow = hWnd;
+            activeVoucherRequiredCopies = matchedRoute.RequiredCopies;
             activeVoucherCopy1Printer = string.IsNullOrWhiteSpace(matchedRoute.Copy1Printer)
                 ? config.Copy1Printer : matchedRoute.Copy1Printer;
             activeVoucherLaterPrinter = string.IsNullOrWhiteSpace(matchedRoute.LaterPrinter)
@@ -1536,6 +1546,26 @@ namespace AradhanaOrnateAutoPrint
                 lastHandledUtc = DateTime.UtcNow;
                 if (!officeCopyHandledForVoucherBill)
                 {
+                    // The copy count was only ever read once, when the window
+                    // first qualified - if the biller edits it afterward
+                    // (e.g. down to 1), that stale "armed" state would still
+                    // hand out the P1007 office copy for a print that no
+                    // longer matches the rule it was armed under. Re-read the
+                    // live count right before actually granting P1007, and
+                    // default to the safe P355 route (same as "no qualifying
+                    // window") if it no longer matches or can't be read.
+                    int liveCopies;
+                    bool liveOk = activeVoucherWindow != IntPtr.Zero &&
+                        TryReadVoucherCopyCount(activeVoucherWindow, out liveCopies) &&
+                        liveCopies == activeVoucherRequiredCopies;
+                    if (!liveOk)
+                    {
+                        voucherBillSessionActive = false;
+                        officeCopyHandledForVoucherBill = false;
+                        lastHandledUtc = DateTime.MinValue;
+                        Log("ROUTE SAFETY: copy count no longer matches the armed route at print time; P1007 blocked, routing P355.");
+                        return 2;
+                    }
                     officeCopyHandledForVoucherBill = true;
                     return 1;
                 }

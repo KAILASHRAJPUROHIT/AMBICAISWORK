@@ -2,3 +2,9 @@
 bin/
 obj/
 *.pdb
+
+# Built installer binaries exceed GitHub's 100MB limit
+PrintServer-Setup.exe
+dist/Ambic.PrintInstaller.exe
+publish/installer_out/Ambic.PrintInstaller.exe
+publish/PrintServer-Setup.exe
