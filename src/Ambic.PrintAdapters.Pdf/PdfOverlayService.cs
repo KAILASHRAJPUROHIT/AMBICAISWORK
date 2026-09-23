@@ -23,7 +23,7 @@ public class OverlayResult
 public class PdfOverlayService
 {
     private readonly PdfOverlayOptions _options;
-    private const string EmbeddedScript = @"# Aradhana 355sdnw letterhead overlay
+    private const string EmbeddedScript = @"# AMBIC DIGITAL 355sdnw letterhead overlay
 import re
 import sys
 import fitz

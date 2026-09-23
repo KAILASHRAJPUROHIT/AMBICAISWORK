@@ -1,5 +1,5 @@
 """
-Aradhana 355sdnw letterhead overlay.
+AMBIC DIGITAL 355sdnw letterhead overlay.
 
 Takes a single-page bill PDF captured from Ornate (copy 2, the customer
 copy) and produces a 2-page duplex-ready PDF:

@@ -858,8 +858,8 @@ Options:
             // Native Windows fallback: "Microsoft PS Class Driver" with standard TCP port 9100
             LogInfo("Bullzip not detected. Installing Native Windows PostScript capture printer '355 Letterhead Capture'...");
             RunCmd("powershell.exe", "-NoProfile -Command \"" +
-                "try { Add-PrinterPort -Name 'AradhanaPDFCapture9100' -PrinterHostAddress '127.0.0.1' -PortNumber 9100 -ErrorAction SilentlyContinue } catch {}; " +
-                "try { Add-Printer -Name '355 Letterhead Capture' -DriverName 'Microsoft PS Class Driver' -PortName 'AradhanaPDFCapture9100' -ErrorAction SilentlyContinue } catch {}" +
+                "try { Add-PrinterPort -Name 'AmbicDigitalPDFCapture9100' -PrinterHostAddress '127.0.0.1' -PortNumber 9100 -ErrorAction SilentlyContinue } catch {}; " +
+                "try { Add-Printer -Name '355 Letterhead Capture' -DriverName 'Microsoft PS Class Driver' -PortName 'AmbicDigitalPDFCapture9100' -ErrorAction SilentlyContinue } catch {}" +
             "\"");
             LogSuccess("Installed Native Windows PostScript '355 Letterhead Capture' printer on Port 9100.");
         }

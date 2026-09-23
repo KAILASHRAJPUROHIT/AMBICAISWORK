@@ -79,7 +79,7 @@ public class StorageAndModelsTests : IDisposable
         };
 
         _jobs.SaveJob(job);
-        _jobs.AddEvent(job.JobId, JobState.Received, "ARADHANA-BILL02", "Job received from Ornate adapter");
+        _jobs.AddEvent(job.JobId, JobState.Received, "AMBICDIGITAL-BILL02", "Job received from Ornate adapter");
 
         var retrieved = _jobs.GetJob(job.JobId);
         Assert.NotNull(retrieved);
