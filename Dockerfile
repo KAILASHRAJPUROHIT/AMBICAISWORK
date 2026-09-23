@@ -9,10 +9,10 @@ COPY package.json package-lock.json* .npmrc* ./
 RUN npm install --omit=dev
 COPY . .
 
-RUN useradd --system --create-home --uid 10002 aradhana \
+RUN useradd --system --create-home --uid 10002 ambicdigital \
     && mkdir -p /app/data /app/logs \
-    && chown -R aradhana:aradhana /app
-USER aradhana
+    && chown -R ambicdigital:ambicdigital /app
+USER ambicdigital
 
 EXPOSE 8080
 CMD ["node", "src/index.js", "--no-whatsapp"]

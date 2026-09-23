@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: aradhana-gold-monitor
+    name: ambicdigital-gold-monitor
     runtime: node
     plan: free
     buildCommand: npm install

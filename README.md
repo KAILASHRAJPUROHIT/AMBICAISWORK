@@ -101,7 +101,7 @@ This drives **your own WhatsApp account** via a linked device.
 
 ```json
 "whatsapp": {
-  "groupNames": ["Aradhana Staff"],
+  "groupNames": ["AMBIC DIGITAL Staff"],
   "numbers": ["9825012345", "919825067890"]
 }
 ```

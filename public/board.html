@@ -206,7 +206,7 @@ const inr = (n) => {
 const setRs = (el, value) => { el.innerHTML = '<span class="rs">₹</span>' + inr(value); };
 
 const VALID_LAYOUTS = ['fullbleed', 'diagonal', 'medallion', 'bands', 'waterfall'];
-const LAYOUT_KEY = 'aradhana-board-layout';
+const LAYOUT_KEY = 'ambicdigital-board-layout';
 const select = $('layoutSelect');
 const saved = localStorage.getItem(LAYOUT_KEY);
 if (saved && VALID_LAYOUTS.includes(saved)) {
