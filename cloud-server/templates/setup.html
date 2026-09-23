@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AMBIC SmartQR — Setup</title>
+<style>
+  :root { --gold:#D4AF37; --navy:#06142E; --bg:#f4f5f7; --err:#c0392b; --ok:#1e8e3e; }
+  * { box-sizing:border-box; }
+  body { font-family:Arial,Helvetica,sans-serif; background:var(--bg); margin:0; padding:0; color:#1a1a1a; }
+  header { background:var(--navy); color:#fff; padding:24px 32px; }
+  header h1 { margin:0; font-size:22px; letter-spacing:0.5px; }
+  header p { margin:6px 0 0; color:#cfd8e6; font-size:13px; }
+  .wrap { max-width:640px; margin:28px auto; padding:0 20px 60px; }
+  .card { background:#fff; border-radius:10px; padding:24px 28px; margin-bottom:20px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+  .card h2 { margin:0 0 14px; font-size:17px; color:var(--navy); }
+  label { display:block; font-size:13px; font-weight:bold; margin:14px 0 5px; color:#333; }
+  input[type=text] {
+    width:100%; padding:9px 10px; border:1px solid #ccc; border-radius:6px; font-size:14px;
+  }
+  input[type=color] { width:52px; height:34px; border:1px solid #ccc; border-radius:6px; padding:2px; }
+  .row { display:flex; gap:16px; }
+  .row > div { flex:1; }
+  .btn { display:inline-block; padding:9px 18px; border-radius:6px; border:none; cursor:pointer;
+         font-size:14px; font-weight:bold; }
+  .btn-primary { background:var(--gold); color:var(--navy); }
+  .btn-secondary { background:#eee; color:#333; margin-left:8px; }
+  .tenant-picker { font-size:13px; color:#555; margin-bottom:10px; }
+  .tenant-picker a { color:var(--navy); font-weight:bold; }
+  #saveStatus { margin-top:14px; font-size:13px; }
+  #saveStatus.ok { color:var(--ok); }
+  #saveStatus.err { color:var(--err); }
+  .preview { max-width:120px; max-height:120px; display:block; margin-top:8px; border:1px solid #ddd; border-radius:6px; }
+  .keybox { background:#f0f0f0; border-radius:6px; padding:10px 12px; font-family:monospace; font-size:13px; word-break:break-all; margin-top:6px; }
+  .hint { font-size:12px; color:#777; margin-top:2px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🖨 AMBIC SmartQR — Business Setup</h1>
+  <p>Set up your own branding and get the key your local print agent needs. No coding required.</p>
+</header>
+
+<div class="wrap">
+
+  {% if tenants %}
+  <div class="tenant-picker">
+    Existing businesses:
+    {% for t in tenants %}
+      <a href="/setup?tenant={{ t }}">{{ t }}</a>{% if not loop.last %} &middot; {% endif %}
+    {% endfor %}
+    &nbsp;|&nbsp; <a href="/setup">+ New business</a>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>1. Business Details</h2>
+    <label for="business_name">Business name</label>
+    <input type="text" id="business_name" placeholder="e.g. Sunrise Jewellers"
+           value="{{ edit_profile.business_name if edit_profile else '' }}">
+
+    <div class="row">
+      <div>
+        <label for="primary_color">Primary color</label>
+        <input type="color" id="primary_color"
+               value="{{ edit_profile.brand_colors.primary if edit_profile else '#06142E' }}">
+      </div>
+      <div>
+        <label for="accent_color">Accent color</label>
+        <input type="color" id="accent_color"
+               value="{{ edit_profile.brand_colors.accent if edit_profile else '#D4AF37' }}">
+      </div>
+    </div>
+
+    <label for="instagram_handle">Instagram handle <span class="hint">(optional — leave blank to skip the follow prompt)</span></label>
+    <input type="text" id="instagram_handle" placeholder="e.g. @sunrisejewellers"
+           value="{{ edit_profile.instagram_handle if edit_profile else '' }}">
+
+    <label for="facebook_page">Facebook page URL <span class="hint">(optional)</span></label>
+    <input type="text" id="facebook_page" placeholder="https://facebook.com/..."
+           value="{{ edit_profile.facebook_page if edit_profile else '' }}">
+
+    <label for="google_review_url">Google review link <span class="hint">(optional)</span></label>
+    <input type="text" id="google_review_url" placeholder="https://g.page/r/.../review"
+           value="{{ edit_profile.google_review_url if edit_profile else '' }}">
+
+    <label for="whatsapp_number">WhatsApp number <span class="hint">(optional, with country code, e.g. 9198...)</span></label>
+    <input type="text" id="whatsapp_number" placeholder="919812345678"
+           value="{{ edit_profile.whatsapp_number if edit_profile else '' }}">
+
+    <label for="phone_number">Phone number <span class="hint">(optional, shown in footer)</span></label>
+    <input type="text" id="phone_number" placeholder="9812345678"
+           value="{{ edit_profile.phone_number if edit_profile else '' }}">
+
+    <label>Logo <span class="hint">(optional)</span></label>
+    <input type="file" id="logo_file" accept=".png,.jpg,.jpeg">
+    {% if edit_profile and edit_profile.logo_path %}
+      <img class="preview" src="/setup/logo/{{ edit_profile.slug }}" alt="Current logo">
+    {% endif %}
+
+    <label>Welcome voice clip <span class="hint">(optional — plays when a customer opens the upload page)</span></label>
+    <input type="file" id="voice_clip_file" accept=".mp3,.wav,.ogg,.m4a">
+    {% if edit_profile and edit_profile.voice_clip_path %}
+      <audio class="preview" controls src="/setup/voice_clip/{{ edit_profile.slug }}"></audio>
+    {% endif %}
+  </div>
+
+  <button class="btn btn-primary" onclick="saveAll()">Save &amp; Continue →</button>
+  <div id="saveStatus"></div>
+
+  <div class="card" id="keysCard" style="display:{{ 'block' if edit_profile else 'none' }}">
+    <h2>2. Print Agent Setup</h2>
+    <p style="font-size:13px;color:#666;margin-top:0">
+      Paste these into your local print agent's <code>.env</code> file so it only ever sees
+      <b>your</b> print jobs, never another business's.
+    </p>
+    <label>Tenant slug</label>
+    <div class="keybox" id="show_slug">{{ edit_profile.slug if edit_profile else '' }}</div>
+    <label>Agent API key</label>
+    <div class="keybox" id="show_agent_key">{{ edit_profile.agent_api_key if edit_profile else '' }}</div>
+    <label>Admin secret <span class="hint">(protects your /admin actions)</span></label>
+    <div class="keybox" id="show_admin_secret">{{ edit_profile.admin_secret if edit_profile else '' }}</div>
+  </div>
+
+</div>
+
+<script>
+const EDIT_PROFILE = {{ (edit_profile | tojson) if edit_profile else 'null' }};
+let currentSlug = EDIT_PROFILE ? EDIT_PROFILE.slug : "";
+
+async function saveAll() {
+  const statusEl = document.getElementById("saveStatus");
+  const businessName = document.getElementById("business_name").value.trim();
+  if (!businessName) {
+    statusEl.textContent = "Business name is required.";
+    statusEl.className = "err";
+    return;
+  }
+
+  const payload = {
+    business_name: businessName,
+    slug: currentSlug || undefined,
+    brand_colors: {
+      primary: document.getElementById("primary_color").value,
+      accent: document.getElementById("accent_color").value,
+    },
+    instagram_handle: document.getElementById("instagram_handle").value.trim(),
+    facebook_page: document.getElementById("facebook_page").value.trim(),
+    google_review_url: document.getElementById("google_review_url").value.trim(),
+    whatsapp_number: document.getElementById("whatsapp_number").value.trim(),
+    phone_number: document.getElementById("phone_number").value.trim(),
+  };
+
+  statusEl.textContent = "Saving…";
+  statusEl.className = "";
+  try {
+    const resp = await fetch("/setup/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    if (!data.ok) {
+      statusEl.textContent = "✗ " + data.error;
+      statusEl.className = "err";
+      return;
+    }
+    currentSlug = data.slug;
+
+    const logoFile = document.getElementById("logo_file").files[0];
+    if (logoFile) {
+      const fd = new FormData();
+      fd.append("slug", currentSlug);
+      fd.append("logo", logoFile);
+      await fetch("/setup/logo", { method: "POST", body: fd });
+    }
+
+    const voiceFile = document.getElementById("voice_clip_file").files[0];
+    if (voiceFile) {
+      const fd = new FormData();
+      fd.append("slug", currentSlug);
+      fd.append("voice_clip", voiceFile);
+      await fetch("/setup/voice_clip", { method: "POST", body: fd });
+    }
+
+    document.getElementById("show_slug").textContent = data.slug;
+    document.getElementById("show_agent_key").textContent = data.agent_api_key;
+    document.getElementById("show_admin_secret").textContent = data.admin_secret;
+    document.getElementById("keysCard").style.display = "block";
+
+    statusEl.textContent = "✓ Saved!";
+    statusEl.className = "ok";
+  } catch (e) {
+    statusEl.textContent = "✗ Request failed: " + e;
+    statusEl.className = "err";
+  }
+}
+</script>
+</body>
+</html>
