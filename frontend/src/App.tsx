@@ -14,7 +14,7 @@ const TokenGate: React.FC<{ onUnlock: () => void }> = ({ onUnlock }) => {
         onSubmit={(e) => { e.preventDefault(); if (value.trim()) { setNotifierToken(value.trim()); onUnlock(); } }}
         className="w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-8 shadow-sm"
       >
-        <h1 className="mb-1 text-xl font-black text-gray-900">Aradhana Payment Notifier</h1>
+        <h1 className="mb-1 text-xl font-black text-gray-900">AMBIC DIGITAL Payment Notifier</h1>
         <p className="mb-6 text-sm text-gray-500">Enter the notifier token to continue.</p>
         <input
           type="password"

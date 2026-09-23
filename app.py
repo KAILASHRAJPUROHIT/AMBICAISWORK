@@ -1,4 +1,4 @@
-# Standalone service for the Aradhana bank-activity notifier (the always-on-
+# Standalone service for the AMBIC DIGITAL bank-activity notifier (the always-on-
 # top desktop popup). Extracted from payment-auditor/backend/review_api.py —
 # only the /api/bank-activity* routes and their direct dependencies. No
 # Bill/Payment/Cheque/Prime/reconciliation code exists in this service at all.
@@ -36,7 +36,7 @@ logger = logging.getLogger("payment-notifier")
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Aradhana Payment Notifier")
+app = FastAPI(title="AMBIC DIGITAL Payment Notifier")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -91,7 +91,7 @@ def status_page():
     last_error = email_status.get("last_error")
     error_html = f'<p class="err">Last email-poll error: {last_error}</p>' if last_error else ""
     return f"""<!doctype html>
-<html><head><meta charset="utf-8"><title>Aradhana Payment Notifier</title>
+<html><head><meta charset="utf-8"><title>AMBIC DIGITAL Payment Notifier</title>
 <style>
   body {{ font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 48px auto; padding: 0 16px; color: #10254A; }}
   h1 {{ color: #23519D; }}
@@ -101,7 +101,7 @@ def status_page():
   ul {{ line-height: 1.9; }}
 </style></head>
 <body>
-<h1>Aradhana Payment Notifier</h1>
+<h1>AMBIC DIGITAL Payment Notifier</h1>
 <p class="ok">&#9679; Service is up</p>
 <p>Email poller: {poller_state} &mdash; last sync: {last_sync}</p>
 {error_html}
@@ -248,7 +248,7 @@ async def send_bank_activity_test_popup(db: Session = Depends(get_db), _auth=Dep
     alert = {
         "id": test_id,
         "direction": "CREDIT",
-        "bank_name": "ARADHANA TEST",
+        "bank_name": "AMBIC DIGITAL TEST",
         "account": "TEST ONLY",
         "counterparty": "Popup verification",
         "amount": 1.00,

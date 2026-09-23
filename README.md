@@ -1,4 +1,4 @@
-# Aradhana Payment Notifier
+# AMBIC DIGITAL Payment Notifier
 
 Standalone backend for the bank-activity desktop popup (`AradhanaBankActivityNotifier`)
 and its Android SMS-relay companion. Extracted from `payment-auditor` on 2026-09-12 —
