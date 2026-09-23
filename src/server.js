@@ -18,6 +18,13 @@ export function createServer(cfg, store, ctx, log) {
 
   app.use(express.static(path.join(ctx.rootDir, 'public'), { maxAge: 0 }));
 
+  // Bare /board (no extension) has no route of its own -- only the static
+  // /board.html file is served -- so any bookmark/typed URL missing the
+  // extension hits Express's default "Cannot GET /board" 404. Confirmed live
+  // (2026-09-20): the store's iPad board display hit exactly this. Alias it
+  // rather than relying on every device's URL being typed exactly right.
+  app.get('/board', (req, res) => res.sendFile(path.join(ctx.rootDir, 'public', 'board.html')));
+
   /** Full state - what the live page renders. */
   app.get('/api/rate', (req, res) => res.json(store.publicState()));
 

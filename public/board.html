@@ -221,11 +221,16 @@ function applyLayout(layout) {
 }
 select.addEventListener('change', () => {
   applyLayout(select.value);
-  fetch('/api/board-control', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ layout: select.value }),
-  }).catch(() => {});
+  // XMLHttpRequest, not fetch() - the board runs on an original iPad 2
+  // (capped at iOS 9.3.5), whose Safari predates the Fetch API entirely
+  // (added iOS 10.3). fetch() there isn't a failed request, it's a
+  // ReferenceError that silently kills this whole handler.
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/board-control', true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.send(JSON.stringify({ layout: select.value }));
+  } catch (e) {}
 });
 
 let lastRefreshToken = null;
@@ -292,19 +297,31 @@ function zeroOut() {
 }
 
 let consecutiveFailures = 0;
+function pollFailed() {
+  consecutiveFailures++;
+  zeroOut();
+  $('dot').className = 'dot bad';
+  $('livetext').textContent = consecutiveFailures >= 3 ? 'Reconnecting…' : 'Offline';
+}
 function poll() {
-  fetch('/api/rate', { cache: 'no-store' })
-    .then((r) => r.json())
-    .then((s) => {
+  // XMLHttpRequest, not fetch() - see the note on the layout-control
+  // handler above. This is the one that actually matters: it's the board's
+  // only source of live rate data, polled every second.
+  const xhr = new XMLHttpRequest();
+  // Cache-busting query param instead of the fetch-only {cache:'no-store'}
+  // option, so this also works reliably on Safari versions whose HTTP
+  // cache doesn't fully honour no-store for XHR.
+  xhr.open('GET', '/api/rate?_=' + Date.now(), true);
+  xhr.onload = () => {
+    if (xhr.status < 200 || xhr.status >= 300) { pollFailed(); return; }
+    try {
+      const s = JSON.parse(xhr.responseText);
       consecutiveFailures = 0;
       render(s);
-    })
-    .catch(() => {
-      consecutiveFailures++;
-      zeroOut();
-      $('dot').className = 'dot bad';
-      $('livetext').textContent = consecutiveFailures >= 3 ? 'Reconnecting…' : 'Offline';
-    });
+    } catch (e) { pollFailed(); }
+  };
+  xhr.onerror = pollFailed;
+  xhr.send();
 }
 poll();
 setInterval(poll, 1000);
