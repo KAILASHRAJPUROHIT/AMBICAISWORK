@@ -1256,6 +1256,9 @@ class MainActivity : AppCompatActivity() {
         // real lock time with margin.
         private const val LONG_ITEM_DETAIL_FOCUS_MAX_CHECKS = 75
         private const val LONG_ITEM_DETAIL_FOCUS_POLL_MS = 200L
+        // Consecutive locked-and-sharp polls (200ms each) required before a
+        // design-detail shutter -- see waitForLongItemDetailFocus().
+        private const val LONG_ITEM_DETAIL_FOCUS_STABLE_TICKS = 3
         // Some ZV-E10 II PTP sessions ACK RemoteTouchOperation but never
         // publish a new AF indication after it.  This is a bounded physical
         // settle window, not an instant software "lock"; it prevents the
@@ -6494,9 +6497,13 @@ class MainActivity : AppCompatActivity() {
             }
             return
         }
+        // Design-detail shots use the camera's MAXIMUM zoom (owner request,
+        // 2026-09-25) rather than a fixed multiple of the MAIN zoom: the whole
+        // point of these frames is to show the design as large as possible.
+        // Safety is unchanged -- the post-zoom alignment step re-centres the
+        // target, and a terminal end that would be clipped still widens a step.
         val zoomRange = cameraZoomRange()
-        val target = (baseZoom * LONG_ITEM_DETAIL_ZOOM_MULTIPLIER)
-            .coerceAtMost(min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO))
+        val target = min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO)
         setStatus("Zooming in…", ready = false)
         smoothZoomToConfirmed(target) {
             handler.postDelayed({
@@ -6579,16 +6586,32 @@ class MainActivity : AppCompatActivity() {
             normalizedY = point.second,
             manualRequest = true
         )
-        waitForLongItemDetailFocus(0, onDone)
+        waitForLongItemDetailFocus(0, onDone, focusPoint = point)
     }
 
-    private fun waitForLongItemDetailFocus(elapsedChecks: Int, onDone: (ByteArray?) -> Unit) {
+    /** Non-blur gate for design-detail shots (max zoom magnifies any softness).
+     * The shutter fires only after AF has been locked AND sharp for
+     * [LONG_ITEM_DETAIL_FOCUS_STABLE_TICKS] consecutive polls -- one lucky
+     * "locked" reading while the lens is still hunting used to be enough.
+     * If focus hasn't held by the 1/3 and 2/3 marks, AF is re-issued at the
+     * target instead of waiting out the whole timeout. An AF timeout never
+     * turns into a soft production image: it returns null (operator retake). */
+    private fun waitForLongItemDetailFocus(
+        elapsedChecks: Int,
+        onDone: (ByteArray?) -> Unit,
+        stableStreak: Int = 0,
+        focusPoint: Pair<Float, Float>? = null
+    ) {
         val afState = cameraAfState()
         val focusLocked = isCameraFocusLocked(afState)
         val sharpEnough = latestSharpness >= SHARPNESS_THRESHOLD
-        if (focusLocked && sharpEnough) {
+        val streak = if (focusLocked && sharpEnough) stableStreak + 1 else 0
+        if (streak >= LONG_ITEM_DETAIL_FOCUS_STABLE_TICKS) {
             setStatus("Capturing…", ready = false)
-            captureFullRes { bytes -> onDone(bytes) }
+            captureFullRes { bytes ->
+                if (bytes != null) logSampledSharpness("detail shot", bytes)
+                onDone(bytes)
+            }
             return
         }
         if (elapsedChecks >= LONG_ITEM_DETAIL_FOCUS_MAX_CHECKS) {
@@ -6597,11 +6620,36 @@ class MainActivity : AppCompatActivity() {
             onDone(null)
             return
         }
-        setStatus("Focusing…", ready = false)
+        if (streak == 0 && focusPoint != null &&
+            (elapsedChecks == LONG_ITEM_DETAIL_FOCUS_MAX_CHECKS / 3 ||
+                elapsedChecks == LONG_ITEM_DETAIL_FOCUS_MAX_CHECKS * 2 / 3)
+        ) {
+            Log.i(TAG, "Detail focus not holding at check $elapsedChecks -- re-issuing AF at target")
+            triggerCameraAutoFocus(
+                physicalSony = activeCameraSource == ProductionCameraSource.SONY,
+                normalizedX = focusPoint.first,
+                normalizedY = focusPoint.second,
+                manualRequest = true
+            )
+        }
+        setStatus(if (focusLocked) "Holding focus…" else "Focusing…", ready = false)
         handler.postDelayed(
-            { waitForLongItemDetailFocus(elapsedChecks + 1, onDone) },
+            { waitForLongItemDetailFocus(elapsedChecks + 1, onDone, streak, focusPoint) },
             LONG_ITEM_DETAIL_FOCUS_POLL_MS
         )
+    }
+
+    /** Calibration-only sharpness log for a finished still (never a gate --
+     * an earlier absolute threshold on this raw scale failed every photo,
+     * because the value is content-dependent). Decoded off the main thread. */
+    private fun logSampledSharpness(label: String, bytes: ByteArray) {
+        lifecycleScope.launch(Dispatchers.Default) {
+            val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
+            val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
+            val raw = bmp?.let { SharpnessAnalyzer.scoreBitmapRaw(it) }
+            Log.i(TAG, "$label sampled sharpness raw=$raw zoom=${cameraZoomRatio()} liveSharp=$latestSharpness")
+            bmp?.recycle()
+        }
     }
 
     /** Gate before MAIN's auto-detect/hunt loop is allowed to run at all --

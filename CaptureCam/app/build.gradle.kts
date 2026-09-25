@@ -22,8 +22,8 @@ android {
         applicationId = "com.aradhana.capturecam"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1.0"
         // Machine-bound camera credential. Supplied by ignored
         // local.properties or -PSONY_SSH_PASSWORD; never committed.
         buildConfigField("String", "SONY_SSH_PASSWORD", "\"$sonySshPassword\"")
