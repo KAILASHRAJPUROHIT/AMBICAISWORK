@@ -491,6 +491,12 @@ def api_stock_status():
     return jsonify(stock_watcher.read_status())
 
 
+@app.get("/api/stock/file")
+def api_stock_file():
+    """Latest stock file received (drives the Operations dashboard's stock date)."""
+    return jsonify(stock_watcher.latest_file_info())
+
+
 def _clear_queue_session_if_empty() -> None:
     if _images(INPUT):
         return

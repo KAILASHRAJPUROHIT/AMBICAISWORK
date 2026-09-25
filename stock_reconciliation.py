@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import paths
+import shot_plans
 import stock_excel
 
 
@@ -36,6 +37,20 @@ _THREAD_LOCK = threading.RLock()
 _CURRENT_TAG_CACHE_LOCK = threading.Lock()
 _CURRENT_TAG_CACHE: dict[str, Any] = {"signature": None, "tags": frozenset()}
 _STOCK_TAG_RE = re.compile(r"^[A-Z][A-Z0-9-]*[0-9](?:_[0-9]+)+$")
+# Silver stock (added to the daily Ornate export from mid-Sept 2026): tags start
+# with the silver purity code -- 92CH/1, 92GR/4, 80PY/12, 65PY/141, 80BP/1 ...
+# (Carat column SIL / S925; items like PAYAL 65, CHAIN 925). The catalogue is
+# gold-only, so silver tags are out of scope and must not block reconciliation.
+_SILVER_TAG_RE = re.compile(r"^[0-9]{2}[A-Z]{1,3}/[0-9]+$")
+# Loose stones/gems in the same export (e.g. ERD/1 = EMERALD, carat "GMS"): a
+# letters-only prefix. Gold ornament tags always carry the karat in the prefix
+# (TP22, LR18, BL22), so a prefix with no digit can never be a gold ornament.
+_NON_ORNAMENT_TAG_RE = re.compile(r"^[A-Z]+/[0-9]+$")
+
+
+def _is_non_catalogue_tag(label: str) -> bool:
+    text = str(label or "").strip().upper()
+    return bool(_SILVER_TAG_RE.fullmatch(text) or _NON_ORNAMENT_TAG_RE.fullmatch(text))
 
 
 class StockReconciliationError(RuntimeError):
@@ -176,6 +191,10 @@ def _candidate_pair(stock_dir: Path) -> tuple[Path, Path]:
 def _safe_label_map(labels: Iterable[str], source: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for label in labels:
+        # Silver / loose-stone tags are not part of the gold catalogue -- skip,
+        # don't fail. Any OTHER malformed tag still fails closed below.
+        if _is_non_catalogue_tag(label):
+            continue
         safe = _normalise_tag(label)
         if not _is_stock_tag(safe):
             raise StockReconciliationError(
@@ -690,10 +709,17 @@ def status(*, reconcile: bool = True, **kwargs) -> dict[str, Any]:
             reconciled=False,
             signature=state.get("signature"),
         )
-    current_items = [
+    all_current_items = [
         item for item in state.get("current_items", [])
         if isinstance(item, dict) and _is_stock_tag(item.get("safe_tag", ""))
     ]
+    # "No shoot needed" categories (gold coins, HAAR CHAIN 22, ...) are removed
+    # from the shoot schedule automatically -- see shot_plans.py.
+    current_items = [
+        item for item in all_current_items
+        if not shot_plans.is_no_shoot_label(item.get("category"))
+    ]
+    no_shoot_excluded_count = len(all_current_items) - len(current_items)
     current_tags = {item["safe_tag"] for item in current_items}
     captured = _captured_tags(current_tags, base)
     pending = [
@@ -706,6 +732,7 @@ def status(*, reconcile: bool = True, **kwargs) -> dict[str, Any]:
         **result.as_dict(),
         "pending_capture_count": len(pending),
         "pending_capture": pending,
+        "no_shoot_excluded_count": no_shoot_excluded_count,
         "new_pending_capture_count": sum(
             item.get("safe_tag") in new_tags for item in pending
         ),

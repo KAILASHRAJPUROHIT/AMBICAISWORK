@@ -238,6 +238,12 @@ class BleDiagnosticsActivity : AppCompatActivity() {
         sonyLiveStreamButton = findViewById(R.id.sonyLiveStreamButton)
         sonyAutoTrackButton = findViewById(R.id.sonyAutoTrackButton)
         val ipInput = findViewById<EditText>(R.id.sonyIpInput)
+        // Always start from the REAL saved camera IP (the one the capture app
+        // uses) instead of the layout's hardcoded default, which kept going
+        // stale (.14 -> .20 -> .3 -> hotspot 10.80.x.x) and made this screen
+        // "authenticate" forever against an address nothing lives at.
+        getSharedPreferences("capturecam", MODE_PRIVATE).getString("sony_camera_ip", null)
+            ?.takeIf { it.isNotBlank() }?.let { ipInput.setText(it) }
         val sshUserInput = findViewById<EditText>(R.id.sonySshUserInput)
         val sshPasswordInput = findViewById<EditText>(R.id.sonySshPasswordInput)
 

@@ -5,8 +5,10 @@ import android.net.ConnectivityManager
 import android.net.LinkAddress
 import android.util.Log
 import com.jcraft.jsch.JSch
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.Socket
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -136,5 +138,135 @@ object SonyCameraDiscovery {
             Log.w(TAG, "Sony camera IP rediscovery: no host on the subnet accepted the camera's credentials")
         }
         return match
+    }
+
+    // ------------------------------------------------------------------
+    // Hotspot preflight (2026-09-25)
+    //
+    // The camera now joins the TABLET'S OWN hotspot instead of the shop
+    // Wi-Fi (shop Wi-Fi showed 25-86% packet loss to the camera; hotspot
+    // measured 0% loss and a steady 25fps live view). The tablet stays on
+    // the shop Wi-Fi at the same time (AP+STA). Everything below only ever
+    // looks at the tablet's hotspot subnet, where the camera is the only
+    // possible client -- so unlike the shop-LAN sweep (disabled in
+    // SonyProductionCamera) it cannot land on some other device that
+    // happens to accept the same login.
+    // ------------------------------------------------------------------
+
+    enum class PreflightState { OK, REDISCOVERED, HOTSPOT_OFF, CAMERA_NOT_FOUND }
+
+    data class PreflightResult(
+        val state: PreflightState,
+        val cameraIp: String?,
+        val rttMs: Long?,
+        val message: String
+    )
+
+    private val TETHER_IFACE_PREFIXES = listOf("wlan", "ap", "swlan", "softap")
+
+    /** IPv4 addresses the tablet itself owns on its hotspot (AP) interface:
+     * private-range addresses on a Wi-Fi/AP-style interface that is NOT the
+     * active client network. Mobile-data interfaces are excluded by name so
+     * a carrier 10.x address is never mistaken for the hotspot. */
+    fun hotspotSubnets(context: Context): List<Pair<Inet4Address, Int>> {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        val activeAddrs = cm?.activeNetwork?.let { cm.getLinkProperties(it) }
+            ?.linkAddresses?.mapNotNull { it.address.hostAddress }?.toSet() ?: emptySet()
+        val out = ArrayList<Pair<Inet4Address, Int>>()
+        try {
+            for (ni in NetworkInterface.getNetworkInterfaces()) {
+                if (!ni.isUp || ni.isLoopback) continue
+                val name = ni.name.lowercase()
+                if (TETHER_IFACE_PREFIXES.none { name.startsWith(it) }) continue
+                for (ia in ni.interfaceAddresses) {
+                    val a = ia.address as? Inet4Address ?: continue
+                    if (a.isLoopbackAddress || !a.isSiteLocalAddress) continue
+                    if (a.hostAddress in activeAddrs) continue
+                    out += a to ia.networkPrefixLength.toInt()
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "hotspotSubnets failed: ${e.message}")
+        }
+        return out
+    }
+
+    private fun ipToInt(b: ByteArray): Int =
+        ((b[0].toInt() and 0xFF) shl 24) or ((b[1].toInt() and 0xFF) shl 16) or
+            ((b[2].toInt() and 0xFF) shl 8) or (b[3].toInt() and 0xFF)
+
+    private fun isInSubnet(ip: String, self: Inet4Address, prefix: Int): Boolean = try {
+        val a = InetAddress.getByName(ip).address
+        val mask = 0xFFFFFFFF.toInt() shl (32 - prefix.coerceIn(8, 30))
+        a.size == 4 && (ipToInt(a) and mask) == (ipToInt(self.address) and mask)
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun probeRttMs(ip: String, attempts: Int = 2): Long? {
+        repeat(attempts) {
+            val t0 = System.nanoTime()
+            try {
+                Socket().use { it.connect(InetSocketAddress(InetAddress.getByName(ip), SSH_PORT), 1_500) }
+                return (System.nanoTime() - t0) / 1_000_000L
+            } catch (_: Exception) {
+            }
+        }
+        return null
+    }
+
+    private fun hostsOnSubnet(self: Inet4Address, prefix: Int): List<String> {
+        val hostBits = 32 - prefix.coerceIn(24, 30)
+        val count = (1 shl hostBits).coerceAtMost(MAX_HOSTS_SCANNED + 2)
+        val selfInt = ipToInt(self.address)
+        val net = selfInt and (0xFFFFFFFF.toInt() shl hostBits)
+        val list = ArrayList<String>(count)
+        for (h in 1 until count - 1) {
+            val ip = net or h
+            if (ip == selfInt) continue
+            list += "${ip ushr 24 and 0xFF}.${ip ushr 16 and 0xFF}.${ip ushr 8 and 0xFF}.${ip and 0xFF}"
+        }
+        return list
+    }
+
+    /** Blocking; call off the main thread. Safe: plain TCP probes, plus an
+     * SSH credential check ONLY against hosts on the hotspot subnet. */
+    fun hotspotPreflight(context: Context, configuredIp: String, user: String, password: String): PreflightResult {
+        val subnets = hotspotSubnets(context)
+        if (subnets.isEmpty()) {
+            return PreflightResult(
+                PreflightState.HOTSPOT_OFF, null, null,
+                "Tablet hotspot is OFF - turn it on and connect the camera to it"
+            )
+        }
+        if (subnets.any { (self, prefix) -> isInSubnet(configuredIp, self, prefix) }) {
+            probeRttMs(configuredIp)?.let {
+                return PreflightResult(
+                    PreflightState.OK, configuredIp, it,
+                    "Hotspot OK - camera $configuredIp reachable (${it}ms)"
+                )
+            }
+        }
+        for ((self, prefix) in subnets) {
+            val pool = Executors.newFixedThreadPool(SCAN_PARALLELISM)
+            val open = try {
+                hostsOnSubnet(self, prefix)
+                    .map { ip -> pool.submit<String?> { if (hasOpenSshPort(ip)) ip else null } }
+                    .mapNotNull { runCatching { it.get(PORT_PROBE_TIMEOUT_MS + 500L, TimeUnit.MILLISECONDS) }.getOrNull() }
+            } finally {
+                pool.shutdown()
+            }
+            val match = open.firstOrNull { authenticatesAsCamera(it, user, password) }
+            if (match != null) {
+                return PreflightResult(
+                    PreflightState.REDISCOVERED, match, probeRttMs(match),
+                    "Camera found on hotspot at $match (was $configuredIp)"
+                )
+            }
+        }
+        return PreflightResult(
+            PreflightState.CAMERA_NOT_FOUND, null, null,
+            "Camera NOT on tablet hotspot - connect the camera's Wi-Fi to the tablet hotspot"
+        )
     }
 }

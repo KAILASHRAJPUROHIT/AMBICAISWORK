@@ -467,7 +467,20 @@ class SonyProductionCamera(
             // the normal backoff retry -- if it finds the camera at a new
             // address before the next scheduled retry fires, switch to it
             // and retry immediately instead of waiting out the backoff.
-            if (reconnectAttempt == 2 && !discoveryInFlight) {
+            //
+            // Disabled (2026-09-24, explicit request, live-confirmed
+            // harmful): on this store's network .20 is a real device that
+            // still authenticates with the camera's own SSH credentials
+            // (confirmed -- this isn't a loose/false-positive match, a full
+            // SSH login succeeds), but it is NOT the camera the operator is
+            // actually using right now. Every drop-and-reconnect cycle was
+            // landing on .20 and getting stuck there, since .20 keeps
+            // passing the same credential check the real camera does.
+            // Kept disabled rather than deleted -- the underlying problem
+            // this existed for (DHCP lease changing under a live session)
+            // is real and documented above; re-enable only once whatever is
+            // squatting on .20 with these credentials is identified/removed.
+            if (false && reconnectAttempt == 2 && !discoveryInFlight) {
                 discoveryInFlight = true
                 thread(name = "SonyCameraRediscovery", isDaemon = true) {
                     try {

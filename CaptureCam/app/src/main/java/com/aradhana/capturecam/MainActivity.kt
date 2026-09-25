@@ -364,6 +364,8 @@ class MainActivity : AppCompatActivity() {
     private var huntCooldownUntil = 0L
 
     private val prefs by lazy { getSharedPreferences("capturecam", MODE_PRIVATE) }
+    // One hotspot/camera-link preflight per app launch -- see runHotspotPreflight().
+    private var hotspotPreflightDone = false
 
     private fun serverUrl(): String {
         val stored = prefs.getString("server_url", DEFAULT_SERVER_URL)
@@ -648,6 +650,16 @@ class MainActivity : AppCompatActivity() {
     private var longItemMainShotInFlight = false
     private var longItemMainShotDone = false
     private var longItemMainZoom = 1f
+    // Counts consecutive "framing drifted, remeasure before AF" cycles in
+    // finishLongItemMainShot() for the current item. Unbounded before this
+    // fix: measureAndFitLongItemMainShot() is always called with no
+    // arguments from that branch, so a piece whose own shape genuinely
+    // can't satisfy all four gap tolerances at minimum zoom (e.g. a long
+    // necklace pendant sitting right at the bottom edge) looped forever,
+    // re-measuring the same failing geometry with no escape (real bug
+    // found live, 2026-09-23). Reset in runLongItemMainShot() for each
+    // fresh item.
+    private var longItemMainPreAfRemeasureCount = 0
     private var lastLongItemMainAfRetryAt = 0L
     private var longItemMainPreShutterCorrectionDone = false
     // Bounds how many zoom-in steps centerThenCapture() will take chasing
@@ -679,6 +691,9 @@ class MainActivity : AppCompatActivity() {
     private var categoryResolutionCode: String? = null
     private var categoryResolutionError: String? = null
     private var invalidTagCode: String? = null
+    // Tag of a category whose shot plan is NO_SHOOT (gold coins, HAAR CHAIN 22):
+    // ignored like a known-bad decode until a different label is shown.
+    private var noShootTagCode: String? = null
     // A valid stock label that is already saved. Unlike an unknown label,
     // this must be impossible to tap through into the camera workflow.
     private var duplicateTagCode: String? = null
@@ -930,6 +945,10 @@ class MainActivity : AppCompatActivity() {
         // sits right at MIN_TRUSTED_GOLD_POINTS and flickers tick to tick,
         // so a single miss must not instantly drop the lock.
         private const val ROI_PRESENT_GRACE_TICKS = 4
+        // Same reasoning again, applied at the source (isTrustedMaterialTarget
+        // itself) instead of each caller re-implementing its own grace streak --
+        // see that function's doc comment.
+        private const val TRUSTED_TARGET_MISS_GRACE_TICKS = 4
         // Set FALSE (2026-08-18) per explicit request: gold colour
         // detection alone, no ML Kit object box. See its call site in
         // onFrame and bestObjectBox()'s short-circuit below.
@@ -1283,6 +1302,21 @@ class MainActivity : AppCompatActivity() {
         // added in waitForLongItemMainFocus for the other half of this fix).
         private const val LONG_ITEM_TOP_GAP_TOLERANCE = 0.16f
         private const val LONG_ITEM_BOTTOM_GAP_TOLERANCE = 0.10f
+        // Chains can be curved or laid diagonally.  Vertical fit alone can
+        // therefore accept a MAIN photo with a clasp or terminal link cut
+        // off at a side edge.  Keep a horizontal safety rail too; the final
+        // zoom is constrained by whichever of all four edges is tightest.
+        private const val LONG_ITEM_LEFT_GAP_TOLERANCE = 0.08f
+        private const val LONG_ITEM_RIGHT_GAP_TOLERANCE = 0.08f
+        // Cap on finishLongItemMainShot()'s pre-AF "framing drifted,
+        // remeasure" cycle. Beyond this many consecutive failures, fail
+        // open (proceed to AF/capture with whatever framing was last
+        // measured) rather than looping forever on a piece whose own shape
+        // can't satisfy every gap tolerance at minimum zoom.
+        private const val LONG_ITEM_MAIN_PRE_AF_REMEASURE_MAX = 3
+        // How far the item's full extents box may sit from frame centre before
+        // finishLongItemMainShot() nudges the gimbal to centre it (normalised).
+        private const val LONG_ITEM_EXTENTS_CENTER_DEADBAND = 0.08f
         // How many extra measure-zoom-verify cycles the long-item MAIN shot
         // gets before giving up and capturing at its best-effort zoom.
         private const val LONG_ITEM_MAIN_VERIFY_PASSES = 2
@@ -1961,6 +1995,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** Launch-time safety test of the tablet-hotspot camera link (2026-09-25).
+     * The camera lives on the tablet's own hotspot because the shop Wi-Fi
+     * dropped 25-86% of its packets. Before the Sony session starts, confirm
+     * (non-destructively -- plain TCP probe of the camera's SSH port) that the
+     * hotspot is up and the camera answers; if the camera's hotspot IP changed,
+     * re-find it on the hotspot subnet ONLY and save it. Never blocks startup:
+     * a failed check just tells the operator what to fix, then the normal
+     * connect/backoff loop runs as before. */
+    private fun runHotspotPreflight(password: String, then: () -> Unit) {
+        val user = prefs.getString("sony_ssh_user", SONY_SSH_USER) ?: SONY_SSH_USER
+        val configured = prefs.getString("sony_camera_ip", SONY_CAMERA_IP) ?: SONY_CAMERA_IP
+        setStatus("Checking hotspot / camera link…", ready = false)
+        kotlin.concurrent.thread(name = "HotspotPreflight", isDaemon = true) {
+            val r = try {
+                SonyCameraDiscovery.hotspotPreflight(applicationContext, configured, user, password)
+            } catch (e: Exception) {
+                Log.w(TAG, "Hotspot preflight crashed: ${e.message}", e)
+                null
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (r != null) {
+                    Log.i(TAG, "Hotspot preflight: ${r.state} ip=${r.cameraIp} rttMs=${r.rttMs} -- ${r.message}")
+                    if (r.state == SonyCameraDiscovery.PreflightState.REDISCOVERED && r.cameraIp != null) {
+                        prefs.edit().putString("sony_camera_ip", r.cameraIp).apply()
+                    }
+                    val warn = r.state == SonyCameraDiscovery.PreflightState.HOTSPOT_OFF ||
+                        r.state == SonyCameraDiscovery.PreflightState.CAMERA_NOT_FOUND
+                    Toast.makeText(this, r.message, if (warn) Toast.LENGTH_LONG else Toast.LENGTH_SHORT).show()
+                    if (warn) setStatus(r.message, ready = false)
+                }
+                then()
+            }
+        }
+    }
+
     private fun startSonyProduction() {
         if (requestedCameraMode() == RequestedCameraMode.SMARTPHONE) return
         val password = prefs.getString("sony_ssh_password", BuildConfig.SONY_SSH_PASSWORD)
@@ -1969,6 +2039,11 @@ class MainActivity : AppCompatActivity() {
         if (password.isBlank()) {
             Log.e(TAG, "Sony SSH password is not configured")
             setStatus("Sony camera credential missing", ready = false)
+            return
+        }
+        if (!hotspotPreflightDone) {
+            hotspotPreflightDone = true
+            runHotspotPreflight(password) { startSonyProduction() }
             return
         }
         val phaseFocusArea = if (phase == Phase.TAG) {
@@ -2284,10 +2359,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun acceptSonyTagBurst(outcome: TagBurstOutcome) {
         val code = outcome.winner?.trim()?.takeIf(String::isNotEmpty) ?: return
-        if (phase != Phase.TAG || stableTagCode != null || code == invalidTagCode || code == duplicateTagCode) return
+        if (phase != Phase.TAG || stableTagCode != null || code == invalidTagCode ||
+            code == duplicateTagCode || code == noShootTagCode
+        ) return
         duplicateTagCode = null
         confirmedTagEvidenceJpeg = outcome.evidenceJpeg
         invalidTagCode = null
+        noShootTagCode = null
         tagCodeHistory = mutableListOf(code)
         stableTagCode = code
         resolveCategoryForCurrentTag()
@@ -2359,6 +2437,7 @@ class MainActivity : AppCompatActivity() {
             excludeTopFraction = excludeTopFraction
         )
         latestMaterial = result
+        if (isLongItemCategory()) recordGoldExtents(result)
         // For paired jewellery, judge detail on one actual gold lobe. The old
         // union rectangle included the empty gap and could report a misleading
         // score unrelated to the surface Sony was supposed to focus.
@@ -2957,6 +3036,7 @@ class MainActivity : AppCompatActivity() {
                 // right behaviour again once actually tracking a candidate.
                 val result = MaterialDetector.analyse(imageProxy, fullFrame = !armed)
                 latestMaterial = result
+                if (isLongItemCategory()) recordGoldExtents(result)
                 latestSharpness = if (result.bounds != null) {
                     SharpnessAnalyzer.score(imageProxy, result.bounds)
                 } else 0f
@@ -3190,6 +3270,7 @@ class MainActivity : AppCompatActivity() {
         // Do not hammer the server every analysis frame for the same known-
         // bad decode. A different decoded value immediately releases it.
         if (trimmed == invalidTagCode) return
+        if (trimmed == noShootTagCode) return
         if (trimmed == duplicateTagCode) {
             setStatus("DUPLICATE TAG — choose another label", ready = false)
             return
@@ -3197,6 +3278,7 @@ class MainActivity : AppCompatActivity() {
         // A different physical label releases the previous duplicate lock.
         duplicateTagCode = null
         invalidTagCode = null
+        noShootTagCode = null
         // A strict stock-label-shaped decode can go directly to the
         // authoritative catalogue lookup. Requiring it twice made a real
         // label wait for a second rare glare-free frame. Non-standard values
@@ -3235,6 +3317,7 @@ class MainActivity : AppCompatActivity() {
             categoryResolutionCode = null
             val category = result.category
             if (category != null) {
+                if (handleNoShootTag(code, category.key, category.label)) return@launch
                 // Category correctness alone is not enough. Query the
                 // authoritative dedup registry before camera capture starts.
                 val duplicate = UploadClient.checkDuplicate(deliveryServerUrl(), code)
@@ -3289,6 +3372,23 @@ class MainActivity : AppCompatActivity() {
                 }, 1000L)
             }
         }
+    }
+
+    /** NO_SHOOT categories (gold coins, HAAR CHAIN 22) are never photographed:
+     * stop before any camera/gimbal work, tell the operator, and ignore this
+     * code until a different label is shown. Returns true if handled. */
+    private fun handleNoShootTag(code: String, categoryKey: String, categoryLabel: String): Boolean {
+        if (ShotPlans.forCategory(categoryKey) != ShotPlans.Plan.NO_SHOOT) return false
+        logCaptureEvent("tag_no_shoot_needed", mapOf("code" to code, "category" to categoryKey))
+        resolvedCategoryKey = null
+        noShootTagCode = code
+        stableTagCode = null
+        confirmedTagEvidenceJpeg = null
+        tagCodeHistory = mutableListOf()
+        autoFired = false
+        setStatus("No photo needed for $categoryLabel — show the next label", ready = false)
+        Toast.makeText(this, "No photo needed: $categoryLabel ($code)", Toast.LENGTH_LONG).show()
+        return true
     }
 
     /** Hard pre-capture duplicate gate. No category/phase transition is made
@@ -3507,6 +3607,7 @@ class MainActivity : AppCompatActivity() {
             validated -> "Tag: $stableTagCode · ${resolvedCategoryKey} · ready"
             stableTagCode != null -> "Tag: $stableTagCode · checking catalogue…"
             duplicateTagCode != null -> "DUPLICATE: $duplicateTagCode · choose other tag"
+            noShootTagCode != null -> "NO PHOTO NEEDED: $noShootTagCode · show next label"
             invalidTagCode != null -> "Unknown label: $invalidTagCode · show another label"
             else -> "Show the tag QR/barcode…"
         }
@@ -3516,6 +3617,7 @@ class MainActivity : AppCompatActivity() {
                 stableTagCode != null -> "Checking tag category…"
                 tagBurstActive -> "Confirming label $tagBurstProgress/$SONY_TAG_BURST_FRAMES…"
                 duplicateTagCode != null -> "DUPLICATE TAG — CHOOSE OTHER"
+                noShootTagCode != null -> "No photo needed for this item — show the next label"
                 invalidTagCode != null -> "Unknown stock label — show the correct label"
                 else -> "Scanning tag…"
             },
@@ -3757,7 +3859,14 @@ class MainActivity : AppCompatActivity() {
         if (isLongItemCategory()) {
             // Centre only before the measured sequence starts.  Once its
             // first zoom command is in flight, this servo must stay silent.
-            if (!longItemMainShotInFlight && rsc2.isReady && attemptCenteringCorrection(result)) {
+            // Once MAIN has been captured, this tick continues to run while
+            // its review/detail/upload continuation owns the same JEWEL
+            // phase.  Do not keep issuing fresh centering nudges then: that
+            // left a successfully captured chain permanently on
+            // "Centering full item…" and fought the next step.
+            if (!longItemMainShotInFlight && !longItemMainShotDone &&
+                rsc2.isReady && attemptCenteringCorrection(result)
+            ) {
                 setStatus("Centering full item…", ready = false)
                 return
             }
@@ -4602,8 +4711,23 @@ class MainActivity : AppCompatActivity() {
      * detection noise, not just a reading that occasionally misjudged
      * "centered enough". Smoothing before the nudge decision as well means
      * a one-tick flicker only nudges the EMA a little, not the camera a lot. */
-    private fun smoothedCenter(result: MaterialDetector.Result? = null): Pair<Float, Float>? {
-        val mlBox = bestObjectBox()
+    /**
+     * BUG FIX (2026-09-19, "chain centering gets stuck"): [explicitTarget] forces use of
+     * [result]'s bounds even when a live ML box exists. Without this, a caller centering on a
+     * SPECIFIC point via syntheticPointTarget() (the chain's terminal end / a side-detail anchor)
+     * had that point silently discarded here in favour of bestObjectBox()'s WHOLE-CHAIN bounding
+     * box centroid -- for a compact item (ring/stud) those two points are nearly the same, so the
+     * bug was invisible; for an elongated/curved chain they can be far apart, so the gimbal chased
+     * "center the whole object" forever while the caller's actual goal ("center the terminal end")
+     * could never be satisfied. Confirmed live: centering nudges kept firing indefinitely (dy
+     * oscillating ~0.06-0.07, never settling) with the chain's terminal never actually reaching the
+     * frame centre. Every syntheticPointTarget() call site must pass explicitTarget = true.
+     */
+    private fun smoothedCenter(
+        result: MaterialDetector.Result? = null,
+        explicitTarget: Boolean = false,
+    ): Pair<Float, Float>? {
+        val mlBox = if (explicitTarget) null else bestObjectBox()
         val cx: Float
         val cy: Float
         if (mlBox != null) {
@@ -4744,11 +4868,32 @@ class MainActivity : AppCompatActivity() {
      * already treats bounds as presence; keep the motion state machine in
      * agreement. Require several gold samples so one isolated warm pixel
      * cannot arm target-guided gimbal movement. Blind movement remains
-     * independently hard-disabled by AUTONOMOUS_BLIND_HUNT_ENABLED. */
+     * independently hard-disabled by AUTONOMOUS_BLIND_HUNT_ENABLED.
+     *
+     * HYSTERESIS (2026-09-19, "chain centering keeps getting stuck" follow-up):
+     * a fine chain's per-frame gold-point count sits right at
+     * MIN_TRUSTED_GOLD_POINTS, so this flickered true/false tick to tick on real
+     * sensor noise -- confirmed live via "Sony item presence=" log lines toggling
+     * every 50-80ms on a real draped chain. Every OTHER caller of this shared
+     * signal (ROI lock, material-loss backoff, centering's own "lost it" revert
+     * check) already has its own separate grace-streak workaround for the exact
+     * same flicker; building it in here once, at the source, means every current
+     * and future caller gets the fix instead of needing its own copy. Fast to
+     * trust (any real pass resets the streak immediately), slow to distrust
+     * (needs TRUSTED_TARGET_MISS_GRACE_TICKS CONSECUTIVE real misses before
+     * flipping false) -- single-frame noise no longer reads as "lost". */
+    @Volatile private var trustedTargetMissStreak = 0
     private fun isTrustedMaterialTarget(material: MaterialDetector.Result): Boolean {
-        val bounds = material.bounds ?: return false
-        return bounds.area() >= MIN_TRUSTED_TARGET_AREA &&
+        val bounds = material.bounds
+        val trustedNow = bounds != null &&
+            bounds.area() >= MIN_TRUSTED_TARGET_AREA &&
             material.points.count { it.gold } >= MIN_TRUSTED_GOLD_POINTS
+        if (trustedNow) {
+            trustedTargetMissStreak = 0
+            return true
+        }
+        trustedTargetMissStreak += 1
+        return trustedTargetMissStreak < TRUSTED_TARGET_MISS_GRACE_TICKS
     }
 
     private fun detectedNow(): Boolean {
@@ -4920,7 +5065,8 @@ class MainActivity : AppCompatActivity() {
      */
     private fun attemptCenteringCorrection(
         result: MaterialDetector.Result,
-        maxAttempts: Int = CENTERING_MAX_ATTEMPTS
+        maxAttempts: Int = CENTERING_MAX_ATTEMPTS,
+        explicitTarget: Boolean = false,
     ): Boolean {
         if (stillCaptureMotionLocked) return false
         if (centeringAttempts >= maxAttempts) return false
@@ -4978,7 +5124,7 @@ class MainActivity : AppCompatActivity() {
         // physical duration scales with abs(dx)/abs(dy), so feeding it a raw
         // single-tick reading let one noisy "detected only one stud, not
         // the pair" frame trigger a real, large gimbal move chasing it.
-        val (cx, cy) = smoothedCenter(result) ?: return false
+        val (cx, cy) = smoothedCenter(result, explicitTarget) ?: return false
         val dx = cx - 0.5f
         val dy = cy - 0.5f
         val needsPan = abs(dx) > CENTERING_DEADBAND
@@ -5102,6 +5248,7 @@ class MainActivity : AppCompatActivity() {
             lastCenterSign = sign
             lastCenterDurationMs = durMs.toInt()
             val panAxis = DumlProtocol.AXIS_CENTER + sign * CENTERING_DEFLECTION
+            goldExtentEpoch++
             Log.i(TAG, "centering nudge #$centeringAttempts (pan) dx=$dx dy=$dy pan=$panAxis durMs=$durMs")
             // +400 matches moveOut()'s default settleMs -- see
             // centeringSettledUntil's doc comment.
@@ -5117,6 +5264,7 @@ class MainActivity : AppCompatActivity() {
             lastCenterSign = sign
             lastCenterDurationMs = tiltDurMs.toInt()
             val tiltAxis = DumlProtocol.AXIS_CENTER + sign * CENTERING_DEFLECTION
+            goldExtentEpoch++
             Log.i(TAG, "centering nudge #$centeringAttempts (tilt) dx=$dx dy=$dy tilt=$tiltAxis durMs=$tiltDurMs")
             centeringSettledUntil = System.currentTimeMillis() + tiltDurMs + 400L
             rsc2.moveOut(axis1 = tiltAxis, durationMs = tiltDurMs) {}
@@ -5427,6 +5575,22 @@ class MainActivity : AppCompatActivity() {
         // a zoomed-in design-detail shot and a zoomed-in bottom/pendant
         // shot -- there is no "other side" to turn to for an item that
         // hangs flat and symmetric either way.
+        Log.i(
+            TAG,
+            "onMainCaptureAcceptedWithGimbal: resolvedCategoryKey=$resolvedCategoryKey " +
+                "silhouette=${CaptureCompositionProfiles.forCategory(resolvedCategoryKey)?.silhouette} " +
+                "isLongItemCategory=${isLongItemCategory()}"
+        )
+        // Shot plan MAIN_ONLY (baby bracelet, dull, gents bracelet): the MAIN
+        // photo is the whole set -- no angle shots at all.
+        if (ShotPlans.forCategory(resolvedCategoryKey) == ShotPlans.Plan.MAIN_ONLY) {
+            Log.i(TAG, "shot plan MAIN_ONLY: uploading MAIN without angle shots (category=$resolvedCategoryKey)")
+            angle1Jpeg = null
+            angle2Jpeg = null
+            inAngleSequence = false
+            uploadCapturedSet()
+            return
+        }
         if (isLongItemCategory()) {
             startLongItemDetailShots()
             return
@@ -5487,11 +5651,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Zoom out, measure the real gold top/bottom extent once, calculate
-     * the exact zoom to fit it with margin, apply it, then capture. See the
+    /** Zoom out, measure the real gold extent on all four frame edges,
+     * calculate the maximum safe zoom, apply it, then capture. See the
      * call site's doc comment for why this replaces the per-tick climb for
      * long items entirely rather than patching it again. */
     private fun runLongItemMainShot() {
+        longItemMainPreAfRemeasureCount = 0
+        goldExtentEpoch++
+        synchronized(goldExtentSamples) { goldExtentSamples.clear() }
         setStatus("Zooming out to measure the full item…", ready = false)
         val zoomRange = cameraZoomRange()
         smoothZoomToConfirmed(zoomRange.start) {
@@ -5499,12 +5666,88 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---- Long/thin item extents (2026-09-25) ------------------------------
+    // Chains, mangalsutras and necklaces are thin: the gold detector only
+    // lights up a sparse, flickering subset of the piece each frame, so the
+    // extents from any ONE frame routinely miss the true ends -- the fit then
+    // zooms too far and clips a clasp/pendant. Fix: union the extents over a
+    // short window of frames taken at the SAME zoom and gimbal pose, and pad
+    // outward when the point count is low (few points => the real ends are
+    // probably beyond what was seen).
+    private data class GoldExtentSample(
+        val atMs: Long, val zoom: Float, val epoch: Int,
+        val left: Float, val right: Float, val top: Float, val bottom: Float, val count: Int
+    )
+
+    private data class GoldExtents(
+        val left: Float, val right: Float, val top: Float, val bottom: Float, val count: Int
+    )
+
+    private val goldExtentSamples = ArrayList<GoldExtentSample>()
+    @Volatile private var goldExtentEpoch = 0
+    private val goldExtentWindowMs = 1500L
+    private val goldExtentKeepMs = 3000L
+
+    private fun recordGoldExtents(result: MaterialDetector.Result) {
+        val gold = result.points.filter { it.gold }
+        if (gold.size < MIN_TRUSTED_GOLD_POINTS) return
+        val sample = GoldExtentSample(
+            SystemClock.elapsedRealtime(), cameraZoomRatio(), goldExtentEpoch,
+            gold.minOf { it.x }, gold.maxOf { it.x }, gold.minOf { it.y }, gold.maxOf { it.y }, gold.size
+        )
+        synchronized(goldExtentSamples) {
+            goldExtentSamples.add(sample)
+            val cutoff = sample.atMs - goldExtentKeepMs
+            goldExtentSamples.removeAll { it.atMs < cutoff }
+        }
+    }
+
+    private fun robustGoldExtents(): GoldExtents? {
+        val now = SystemClock.elapsedRealtime()
+        val zoom = cameraZoomRatio()
+        val window = synchronized(goldExtentSamples) {
+            goldExtentSamples.filter {
+                now - it.atMs <= goldExtentWindowMs && it.epoch == goldExtentEpoch &&
+                    abs(it.zoom - zoom) <= zoom * 0.02f
+            }
+        }
+        val left: Float
+        val right: Float
+        val top: Float
+        val bottom: Float
+        val count: Int
+        if (window.isNotEmpty()) {
+            left = window.minOf { it.left }
+            right = window.maxOf { it.right }
+            top = window.minOf { it.top }
+            bottom = window.maxOf { it.bottom }
+            count = window.maxOf { it.count }
+        } else {
+            val gold = latestMaterial?.points?.filter { it.gold } ?: return null
+            if (gold.size < MIN_TRUSTED_GOLD_POINTS) return null
+            left = gold.minOf { it.x }
+            right = gold.maxOf { it.x }
+            top = gold.minOf { it.y }
+            bottom = gold.maxOf { it.y }
+            count = gold.size
+        }
+        val pad = when {
+            count < 20 -> 0.030f
+            count < 40 -> 0.020f
+            else -> 0.010f
+        }
+        return GoldExtents(
+            (left - pad).coerceAtLeast(0f), (right + pad).coerceAtMost(1f),
+            (top - pad).coerceAtLeast(0f), (bottom + pad).coerceAtMost(1f), count
+        )
+    }
+
     private fun measureAndFitLongItemMainShot(
         attemptsLeft: Int = LONG_ITEM_DETAIL_BOUNDS_WAIT_ATTEMPTS,
         verifyPassesLeft: Int = LONG_ITEM_MAIN_VERIFY_PASSES
     ) {
-        val gold = latestMaterial?.points?.filter { it.gold } ?: emptyList()
-        if (gold.size < MIN_TRUSTED_GOLD_POINTS) {
+        val extents = robustGoldExtents()
+        if (extents == null) {
             if (attemptsLeft > 0) {
                 handler.postDelayed(
                     { measureAndFitLongItemMainShot(attemptsLeft - 1, verifyPassesLeft) },
@@ -5517,8 +5760,10 @@ class MainActivity : AppCompatActivity() {
             finishLongItemMainShot()
             return
         }
-        val topY = gold.minOf { it.y }
-        val bottomY = gold.maxOf { it.y }
+        val leftX = extents.left
+        val rightX = extents.right
+        val topY = extents.top
+        val bottomY = extents.bottom
         // Simpler math (explicit request, 2026-08-29): no "fill X% of
         // frame" target to calibrate at all. Just keep a fixed gap
         // tolerance at the top and bottom edges, no matter what the item
@@ -5526,20 +5771,31 @@ class MainActivity : AppCompatActivity() {
         // respecting both, treating the item's own vertical centre as the
         // pivot rather than assuming a fixed frame-centre reference.
         val isVerifyPass = verifyPassesLeft < LONG_ITEM_MAIN_VERIFY_PASSES
-        if (isVerifyPass && topY >= LONG_ITEM_TOP_GAP_TOLERANCE - 0.01f &&
+        if (isVerifyPass && leftX >= LONG_ITEM_LEFT_GAP_TOLERANCE - 0.01f &&
+            rightX <= 1f - LONG_ITEM_RIGHT_GAP_TOLERANCE + 0.01f &&
+            topY >= LONG_ITEM_TOP_GAP_TOLERANCE - 0.01f &&
             bottomY <= 1f - LONG_ITEM_BOTTOM_GAP_TOLERANCE + 0.01f
         ) {
-            Log.i(TAG, "longItemMainShot verified topY=$topY bottomY=$bottomY -- gap tolerance satisfied")
+            Log.i(
+                TAG,
+                "longItemMainShot verified leftX=$leftX rightX=$rightX topY=$topY bottomY=$bottomY " +
+                    "-- four-edge gap tolerance satisfied"
+            )
             finishLongItemMainShot()
             return
         }
-        val centerY = (topY + bottomY) / 2f
-        val halfHeight = ((bottomY - topY) / 2f).coerceAtLeast(0.02f)
-        // How much further the item's half-height can grow (i.e. how much
-        // more zoom) before its top or bottom eats into the reserved gap --
-        // whichever edge is more constraining wins.
-        val maxZoomFromTop = (centerY - LONG_ITEM_TOP_GAP_TOLERANCE) / halfHeight
-        val maxZoomFromBottom = (1f - LONG_ITEM_BOTTOM_GAP_TOLERANCE - centerY) / halfHeight
+        // Optical zoom magnifies about the FRAME centre (0.5, 0.5), not about
+        // the item's own centre. The old math assumed an item-centre pivot,
+        // which over-zooms any off-centre piece and clips its far end. For
+        // each edge, the largest zoom z that keeps that edge inside its
+        // reserved gap after magnifying about the frame centre is:
+        //   edge on the far side of 0.5:  0.5 + (edge - 0.5) * z  stays within tolerance
+        // An edge on the near side of the centre never limits zoom-in.
+        val noLimit = 100f
+        val maxZoomFromLeft = if (leftX < 0.5f) (0.5f - LONG_ITEM_LEFT_GAP_TOLERANCE) / (0.5f - leftX) else noLimit
+        val maxZoomFromRight = if (rightX > 0.5f) (0.5f - LONG_ITEM_RIGHT_GAP_TOLERANCE) / (rightX - 0.5f) else noLimit
+        val maxZoomFromTop = if (topY < 0.5f) (0.5f - LONG_ITEM_TOP_GAP_TOLERANCE) / (0.5f - topY) else noLimit
+        val maxZoomFromBottom = if (bottomY > 0.5f) (0.5f - LONG_ITEM_BOTTOM_GAP_TOLERANCE) / (bottomY - 0.5f) else noLimit
         // Real bug found live (2026-08-29): coerceAtLeast(1f) here blocked
         // legitimate corrective zoom-OUT during a verify pass -- when the
         // gimbal's own concurrent re-centering shifted the frame between
@@ -5549,7 +5805,10 @@ class MainActivity : AppCompatActivity() {
         // the overshoot uncorrected. Only the very first pass (no zoom
         // applied yet) has any reason to never suggest zooming out below
         // the starting level; a verify pass must be free to go either way.
-        val zoomMultiplier = min(maxZoomFromTop, maxZoomFromBottom).let {
+        val zoomMultiplier = min(
+            min(maxZoomFromLeft, maxZoomFromRight),
+            min(maxZoomFromTop, maxZoomFromBottom)
+        ).let {
             if (isVerifyPass) it else it.coerceAtLeast(1f)
         }
         val currentZoom = cameraZoomRatio()
@@ -5558,7 +5817,8 @@ class MainActivity : AppCompatActivity() {
             .coerceIn(zoomRange.start, min(zoomRange.endInclusive, MAX_LIVE_ZOOM_RATIO))
         Log.i(
             TAG,
-            "longItemMainShot measured topY=$topY bottomY=$bottomY zoomMultiplier=$zoomMultiplier " +
+            "longItemMainShot measured leftX=$leftX rightX=$rightX topY=$topY bottomY=$bottomY " +
+                "zoomMultiplier=$zoomMultiplier " +
                 "currentZoom=$currentZoom targetZoom=$targetZoom verifyPassesLeft=$verifyPassesLeft"
         )
         setStatus("Zooming to fit the full item…", ready = false)
@@ -5584,11 +5844,80 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun finishLongItemMainShot(centeringChecksLeft: Int = LONG_ITEM_DETAIL_CENTERING_ATTEMPTS) {
-        if (centeringChecksLeft > 0 && !isRoughlyCenteredForZoom()) {
-            handler.postDelayed(
-                { finishLongItemMainShot(centeringChecksLeft - 1) },
-                CENTERING_TICK_MS + 200L
+        // Centre the item's full EXTENTS box (not the gold centroid): for a thin,
+        // sparse chain the centroid sits away from the middle of its span, and
+        // centring on it leaves one end nearer the frame edge than the other.
+        val fitExtents = robustGoldExtents()
+        val centeredOnExtents = fitExtents?.let {
+            abs((it.left + it.right) / 2f - 0.5f) <= LONG_ITEM_EXTENTS_CENTER_DEADBAND &&
+                abs((it.top + it.bottom) / 2f - 0.5f) <= LONG_ITEM_EXTENTS_CENTER_DEADBAND
+        } ?: isRoughlyCenteredForZoom()
+        if (centeringChecksLeft > 0 && !centeredOnExtents) {
+            val target = fitExtents?.let {
+                syntheticPointTarget((it.left + it.right) / 2f, (it.top + it.bottom) / 2f)
+            } ?: latestMaterial
+            if (target != null && rsc2.isReady &&
+                attemptCenteringCorrection(
+                    target,
+                    maxAttempts = LONG_ITEM_DETAIL_CENTERING_ATTEMPTS,
+                    explicitTarget = fitExtents != null
+                )
+            ) {
+                setStatus("Centering full item…", ready = false)
+                handler.postDelayed(
+                    { finishLongItemMainShot(centeringChecksLeft - 1) },
+                    CENTERING_TICK_MS + 200L
+                )
+                return
+            }
+        }
+        // A gimbal correction changes the measured extents. Re-run the
+        // bounded four-edge fit before AF so the largest safe zoom is based
+        // on the final centred pose, not on a pre-centering frame.
+        if (!longItemMainFramingStillOk()) {
+            longItemMainPreAfRemeasureCount++
+            if (longItemMainPreAfRemeasureCount <= LONG_ITEM_MAIN_PRE_AF_REMEASURE_MAX) {
+                Log.i(
+                    TAG,
+                    "longItemMainShot remeasuring after centering before AF " +
+                        "(attempt $longItemMainPreAfRemeasureCount/$LONG_ITEM_MAIN_PRE_AF_REMEASURE_MAX)"
+                )
+                measureAndFitLongItemMainShot()
+                return
+            }
+            Log.w(
+                TAG,
+                "longItemMainShot framing never settled within tolerance after " +
+                    "$LONG_ITEM_MAIN_PRE_AF_REMEASURE_MAX remeasures -- proceeding to AF anyway " +
+                    "(fail open; the item's own shape likely can't satisfy every gap tolerance " +
+                    "at minimum zoom, e.g. a long pendant near the bottom edge)"
             )
+            Toast.makeText(
+                this,
+                "Item may be clipped - move the camera back or reposition the piece",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+        // Same hardwall as the regular per-tick capture path (see the
+        // isCaptureQualityVerified check before AF there): the Sony quality
+        // profile changes focus mode/area by design and must finish before
+        // the AF-S transaction, never discovered for the first time on the
+        // capture worker after focus has already settled. The long-item path
+        // had been skipping this entirely -- it usually got lucky inheriting
+        // captureQualityVerified=true from whatever compact item was shot
+        // just before it in the same session, and only surfaced as a bug
+        // once the Sony control channel had reset in between (reconnect,
+        // idle timeout, session gap), silently blocking the shutter with
+        // "Sony capture blocked: quality profile was not ready before final
+        // focus" and leaving the UI stuck on live view with no error shown
+        // (real bug found live, 2026-09-23, on a necklace after a ~3 hour
+        // gap since the previous capture).
+        if (activeCameraSource == ProductionCameraSource.SONY && !sonyProduction.isCaptureQualityVerified) {
+            setStatus("Preparing camera settings…", ready = false)
+            sonyProduction.prepareCaptureQuality { ok ->
+                Log.i(TAG, "Sony pre-focus quality prepared (long item)=$ok")
+                finishLongItemMainShot(centeringChecksLeft)
+            }
             return
         }
         // Extra settle beyond each step's own shorter ZOOM_SETTLE_MS
@@ -5605,18 +5934,21 @@ class MainActivity : AppCompatActivity() {
         }, LONG_ITEM_MAIN_PRE_CAPTURE_SETTLE_MS)
     }
 
-    /** Cheap re-check of the SAME gap-tolerance condition
+    /** Cheap re-check of the SAME four-edge gap-tolerance condition
      * measureAndFitLongItemMainShot() computes zoom from, using whatever
      * latestMaterial reads right now -- used only to decide whether one
      * final correction pass is warranted immediately before the shutter
      * fires. Fails open (true) when there isn't enough signal to judge,
      * matching this sequence's fail-open posture everywhere else. */
     private fun longItemMainFramingStillOk(): Boolean {
-        val gold = latestMaterial?.points?.filter { it.gold } ?: return true
-        if (gold.size < MIN_TRUSTED_GOLD_POINTS) return true
-        val topY = gold.minOf { it.y }
-        val bottomY = gold.maxOf { it.y }
-        return topY >= LONG_ITEM_TOP_GAP_TOLERANCE - 0.02f &&
+        val extents = robustGoldExtents() ?: return true
+        val leftX = extents.left
+        val rightX = extents.right
+        val topY = extents.top
+        val bottomY = extents.bottom
+        return leftX >= LONG_ITEM_LEFT_GAP_TOLERANCE - 0.02f &&
+            rightX <= 1f - LONG_ITEM_RIGHT_GAP_TOLERANCE + 0.02f &&
+            topY >= LONG_ITEM_TOP_GAP_TOLERANCE - 0.02f &&
             bottomY <= 1f - LONG_ITEM_BOTTOM_GAP_TOLERANCE + 0.02f
     }
 
@@ -5774,9 +6106,17 @@ class MainActivity : AppCompatActivity() {
         return zoom.coerceAtMost(min(cameraZoomRange().endInclusive, MAX_LIVE_ZOOM_RATIO))
     }
 
-    private fun isLongItemCategory(): Boolean =
-        CaptureCompositionProfiles.forCategory(resolvedCategoryKey)?.silhouette ==
+    private fun isLongItemCategory(): Boolean {
+        // The owner's shot plan decides which categories use the long-item
+        // sequence (necklace SETS are PENDANT_SET-shaped but shot like chains).
+        when (ShotPlans.forCategory(resolvedCategoryKey)) {
+            ShotPlans.Plan.CHAIN_TWO_DESIGN_ZOOMS,
+            ShotPlans.Plan.CHAIN_DESIGN_PLUS_PENDANT -> return true
+            else -> Unit
+        }
+        return CaptureCompositionProfiles.forCategory(resolvedCategoryKey)?.silhouette ==
             CaptureCompositionProfiles.Silhouette.NECK_CURVE
+    }
 
     /** Purpose-built long-item detail sequence (explicit request,
      * 2026-08-29). Deliberately does NOT reuse centerThenCapture()'s
@@ -5830,10 +6170,40 @@ class MainActivity : AppCompatActivity() {
             ((terminalPoint.first - mainBounds.x0) / (mainBounds.x1 - mainBounds.x0).coerceAtLeast(0.01f)).coerceIn(0f, 1f),
             ((terminalPoint.second - mainBounds.y0) / (mainBounds.y1 - mainBounds.y0).coerceAtLeast(0.01f)).coerceIn(0f, 1f)
         )
+        longItemDesignAnchor2 = longItemSecondDesignAnchor(wideGold, mainBounds, sideAnchor)
         captureLongItemAngle1(sideAnchor, terminalAnchor)
     }
 
-    private enum class LongItemDetailPose { SIDE_DETAIL, TERMINAL_END }
+    private enum class LongItemDetailPose { SIDE_DETAIL, TERMINAL_END, DESIGN_DETAIL_2 }
+
+    /** Second chain-design area for shot 3 when there is no pendant (or the
+     * plan is two design zooms): aims at the lower-front of the drape, which
+     * is a different part of the design from the side arm shot 2 used; if
+     * shot 2 already sits there, uses the opposite arm instead. */
+    private var longItemDesignAnchor2: LongItemAnchor? = null
+
+    private fun longItemSecondDesignAnchor(
+        points: List<MaterialDetector.Point>,
+        bounds: MaterialDetector.Bounds,
+        first: LongItemAnchor
+    ): LongItemAnchor {
+        val width = (bounds.x1 - bounds.x0).coerceAtLeast(0.01f)
+        val height = (bounds.y1 - bounds.y0).coerceAtLeast(0.01f)
+        var relX = 0.5f
+        var relY = 0.70f
+        if (kotlin.math.hypot(first.relativeX - relX, first.relativeY - relY) < 0.22f) {
+            relX = if (first.relativeX >= 0.5f) 0.25f else 0.75f
+            relY = 0.45f
+        }
+        val x = bounds.x0 + width * relX
+        val y = bounds.y0 + height * relY
+        val nearest = points.minByOrNull { (it.x - x) * (it.x - x) + (it.y - y) * (it.y - y) }
+            ?: MaterialDetector.Point(x, y, true)
+        return LongItemAnchor(
+            ((nearest.x - bounds.x0) / width).coerceIn(0f, 1f),
+            ((nearest.y - bounds.y0) / height).coerceIn(0f, 1f)
+        )
+    }
 
     /** Stores a point relative to the full gold bounds, not a stale screen
      * coordinate. Each centering pass resolves it again from fresh detector
@@ -5873,6 +6243,7 @@ class MainActivity : AppCompatActivity() {
         if (gold.isEmpty()) return null
         return when (pose) {
             LongItemDetailPose.TERMINAL_END,
+            LongItemDetailPose.DESIGN_DETAIL_2,
             LongItemDetailPose.SIDE_DETAIL -> {
                 val resolvedAnchor = anchor ?: return if (pose == LongItemDetailPose.TERMINAL_END) {
                     longItemTerminalTarget(gold, bounds, (bounds.x0 + bounds.x1) / 2f)
@@ -5947,6 +6318,10 @@ class MainActivity : AppCompatActivity() {
     private fun captureLongItemAngle1(sideAnchor: LongItemAnchor, terminalAnchor: LongItemAnchor) {
         markCaptureSection("ANGLE1")
         centeringAttempts = 0
+        // Fresh explicit-target phase: don't let the EMA drag in the whole-object centroid
+        // reading left over from MAIN's own centering (see smoothedCenter()'s explicitTarget doc).
+        centerEmaCx = null
+        centerEmaCy = null
         setStatus("Capturing design detail…", ready = false)
         captureLongItemDetailAt(LongItemDetailPose.SIDE_DETAIL, sideAnchor, longItemMainZoom) { bytes ->
             if (bytes == null) {
@@ -5964,7 +6339,7 @@ class MainActivity : AppCompatActivity() {
                 bytes,
                 onProceed = {
                     angle1Jpeg = bytes
-                    captureLongItemAngle2(terminalAnchor)
+                    proceedToLongItemThirdShot(terminalAnchor)
                 },
                 onRetake = { captureLongItemAngle1(sideAnchor, terminalAnchor) },
                 onCancel = { cancelItem() }
@@ -5972,14 +6347,47 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun captureLongItemAngle2(terminalAnchor: LongItemAnchor) {
+    /** Shot 3 of the owner's shot plan. Two design zooms for chains/malas;
+     * for necklaces the operator says whether a pendant is present (pendant
+     * zoom if yes, otherwise a second chain-design zoom). */
+    private fun proceedToLongItemThirdShot(terminalAnchor: LongItemAnchor) {
+        val designAnchor = longItemDesignAnchor2 ?: terminalAnchor
+        if (ShotPlans.forCategory(resolvedCategoryKey) != ShotPlans.Plan.CHAIN_DESIGN_PLUS_PENDANT) {
+            captureLongItemAngle2(designAnchor, LongItemDetailPose.DESIGN_DETAIL_2)
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Pendant on this piece?")
+            .setMessage(
+                "Shot 3 zooms on the pendant if there is one; otherwise it is a second chain-design zoom."
+            )
+            .setCancelable(false)
+            .setPositiveButton("Yes — zoom pendant") { _, _ ->
+                captureLongItemAngle2(terminalAnchor, LongItemDetailPose.TERMINAL_END)
+            }
+            .setNegativeButton("No — chain design") { _, _ ->
+                captureLongItemAngle2(designAnchor, LongItemDetailPose.DESIGN_DETAIL_2)
+            }
+            .show()
+    }
+
+    private fun captureLongItemAngle2(
+        anchor: LongItemAnchor,
+        pose: LongItemDetailPose = LongItemDetailPose.TERMINAL_END
+    ) {
         markCaptureSection("ANGLE2")
         centeringAttempts = 0
-        setStatus("Capturing bottom / pendant area…", ready = false)
-        captureLongItemDetailAt(LongItemDetailPose.TERMINAL_END, terminalAnchor, longItemMainZoom) { bytes2 ->
+        centerEmaCx = null
+        centerEmaCy = null
+        setStatus(
+            if (pose == LongItemDetailPose.TERMINAL_END) "Capturing bottom / pendant area…"
+            else "Capturing second design detail…",
+            ready = false
+        )
+        captureLongItemDetailAt(pose, anchor, longItemMainZoom) { bytes2 ->
             if (bytes2 == null) {
-                setStatus("Bottom end did not focus — reposition, then tap READY", ready = false)
-                showReadyButton { captureLongItemAngle2(terminalAnchor) }
+                setStatus("Detail shot did not focus — reposition, then tap READY", ready = false)
+                showReadyButton { captureLongItemAngle2(anchor, pose) }
                 return@captureLongItemDetailAt
             }
             showCapturePreview(
@@ -5992,7 +6400,7 @@ class MainActivity : AppCompatActivity() {
                         refocusNearestVisibleItemAfterCenter { uploadCapturedSet() }
                     }
                 },
-                onRetake = { captureLongItemAngle2(terminalAnchor) },
+                onRetake = { captureLongItemAngle2(anchor, pose) },
                 onCancel = { cancelItem() }
             )
         }
@@ -6061,7 +6469,11 @@ class MainActivity : AppCompatActivity() {
             return
         }
         if (attemptsLeft > 0 &&
-            attemptCenteringCorrection(syntheticPointTarget(targetPoint.first, targetPoint.second), LONG_ITEM_DETAIL_CENTERING_ATTEMPTS - attemptsLeft + 1)
+            attemptCenteringCorrection(
+                syntheticPointTarget(targetPoint.first, targetPoint.second),
+                LONG_ITEM_DETAIL_CENTERING_ATTEMPTS - attemptsLeft + 1,
+                explicitTarget = true,
+            )
         ) {
             handler.postDelayed(
                 { captureLongItemDetailAt(pose, sideAnchor, baseZoom, attemptsLeft - 1, onDone) },
@@ -6093,6 +6505,8 @@ class MainActivity : AppCompatActivity() {
                 // CH22/21 terminal was correctly found before zoom, then
                 // pushed below the saved frame by the zoom crop.
                 centeringAttempts = 0
+                centerEmaCx = null
+                centerEmaCy = null
                 alignLongItemDetailAfterZoom(pose, sideAnchor, onDone = onDone)
             }, ZOOM_SETTLE_MS)
         }
@@ -6130,7 +6544,8 @@ class MainActivity : AppCompatActivity() {
         if (attemptsLeft > 0 && (terminalNeedsMargin || offCentre) &&
             attemptCenteringCorrection(
                 syntheticPointTarget(point.first, point.second),
-                LONG_ITEM_DETAIL_CENTERING_ATTEMPTS - attemptsLeft + 1
+                LONG_ITEM_DETAIL_CENTERING_ATTEMPTS - attemptsLeft + 1,
+                explicitTarget = true,
             )
         ) {
             handler.postDelayed(
@@ -6735,6 +7150,15 @@ class MainActivity : AppCompatActivity() {
                     lifecycleScope.launch {
                         val result = UploadClient.resolveCategory(deliveryServerUrl(), code)
                         val category = result.category
+                        if (category != null && ShotPlans.forCategory(category.key) == ShotPlans.Plan.NO_SHOOT) {
+                            logCaptureEvent("tag_no_shoot_needed", mapOf("code" to code, "category" to category.key))
+                            Toast.makeText(
+                                this@MainActivity,
+                                "No photo needed for ${category.label}", Toast.LENGTH_LONG
+                            ).show()
+                            dismiss()
+                            return@launch
+                        }
                         if (category != null) {
                             stableTagCode = code
                             resolvedCategoryKey = category.key
@@ -7608,6 +8032,7 @@ class MainActivity : AppCompatActivity() {
         categoryResolutionCode = null
         categoryResolutionError = null
         invalidTagCode = null
+        noShootTagCode = null
         duplicateTagCode = null
         duplicateTagWarningShowing = false
         studFlagPersisted = null
@@ -7734,15 +8159,37 @@ class MainActivity : AppCompatActivity() {
         // clause that used to sit here cancelled the shutter on clean frames
         // (a 155.8-raw capture measured 27.0 live, under the 40 threshold),
         // producing the endless "Focus changed - refocusing" loop.
-        if (captureSource == ProductionCameraSource.SONY &&
-            !isCameraFocusLocked(cameraAfState())
-        ) {
+        val afState = cameraAfState()
+        if (captureSource == ProductionCameraSource.SONY && !isCameraFocusLocked(afState)) {
+            // The decisive Sony AF-S command was accepted, but the shutter
+            // worker can reach this final guard a fraction before the
+            // acknowledged-AF settle window expires.  Cancelling here made
+            // Image 1 silently fail despite a healthy camera and gimbal.
+            // Keep the motion lock, wait only the remaining bounded time,
+            // then re-check. An explicit AF failure still fails normally.
+            val ackAgeMs = System.currentTimeMillis() - sonyAfRequestedAt
+            val settleRemainingMs = SONY_AF_ACK_SETTLE_MS - ackAgeMs
+            if (sonyAfCommandAcknowledged && !isCameraFocusFailed(afState) &&
+                settleRemainingMs > 0L
+            ) {
+                Log.i(
+                    TAG,
+                    "Sony shutter waiting ${settleRemainingMs}ms for acknowledged AF settle " +
+                        "afState=$afState"
+                )
+                setStatus("Final focus settling…", ready = false)
+                handler.postDelayed(
+                    { fireFullResAfterMotionLock(onShutterAccepted, onResult) },
+                    settleRemainingMs + 50L
+                )
+                return
+            }
             stillCaptureMotionLocked = false
             readyStreak = 0
             // Report only what this guard actually tests. The old line
             // printed finalDetail/threshold from the sharpness clause that
             // no longer gates here, which sent debugging down the wrong path.
-            Log.w(TAG, "Sony shutter cancelled: AF not locked afState=${cameraAfState()}")
+            Log.w(TAG, "Sony shutter cancelled: AF not locked afState=$afState")
             setStatus("Focus changed — refocusing…", ready = false)
             onResult(null)
             return
@@ -8146,6 +8593,7 @@ class MainActivity : AppCompatActivity() {
             categoryResolutionCode = null
             categoryResolutionError = null
             invalidTagCode = null
+            noShootTagCode = null
             duplicateTagCode = null
             duplicateTagWarningShowing = false
             studFlagPersisted = null

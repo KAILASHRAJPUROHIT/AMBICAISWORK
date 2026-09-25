@@ -1,0 +1,5 @@
+{
+  "_comment": "Categories listed here are NOT photographed: they are removed from the shoot schedule (pending capture, recommendations, coverage table, missing-tag downloads) automatically. Source: ornament_shot_plan.xlsx ('no shoot needed'), 2026-09-25. The Android app has its own copy in ShotPlans.kt.",
+  "no_shoot_prefixes": ["gold_coin_"],
+  "no_shoot_keys": ["haar_chain_22"]
+}

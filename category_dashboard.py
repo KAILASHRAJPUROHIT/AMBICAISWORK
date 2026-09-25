@@ -7,6 +7,7 @@ from pathlib import Path
 
 import coverage_baseline
 import ornament_code_map as ocm
+import shot_plans
 
 _IMG_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 _LEADING_NUM = re.compile(r"^\d+\s+(.+)$")
@@ -89,6 +90,9 @@ def category_breakdown(capture_root: str, processed_root: str,
 
     rows = []
     for cat in ocm.CATEGORIES:
+        # "No shoot needed" categories are not part of the shoot schedule.
+        if shot_plans.is_no_shoot_key(cat.key) or shot_plans.is_no_shoot_label(cat.label):
+            continue
         folders = sorted(capture_folders.get(cat.key, ()))
         processed = processed_by_key.get(cat.key, 0)
         # Approved raws leave capture_intake/ and move to processed/. Coverage
@@ -129,6 +133,9 @@ def missing_labels(category_key: str, capture_root: str, processed_root: str,
     rather than lexical order (LR22/9 before LR22/10).
     """
     import pipeline_counts
+
+    if shot_plans.is_no_shoot_key(category_key):
+        return []
 
     captured_safe = (
         pipeline_counts._labels(Path(capture_root))

@@ -31,6 +31,40 @@ def read_status() -> dict:
         return {}
 
 
+def latest_file_info(stock_dir: str | os.PathLike[str] = stock_excel.STOCK_DIR) -> dict:
+    """Date of the LATEST stock file received (newest dated workbook in the
+    Stock folder), independent of whether reconciliation has applied it yet.
+
+    The operations dashboard shows this instead of the active workbook's date:
+    when a new file arrives but reconciliation is blocked, the active date
+    stays old, which made the dashboard look like no stock had been received.
+    """
+    try:
+        files = stock_excel.discover_stock_workbooks(stock_dir)
+    except Exception as exc:  # noqa: BLE001 -- surfaced to the dashboard as text
+        return {"ok": False, "error": str(exc)}
+    if not files:
+        return {"ok": False, "error": "No dated stock workbook found"}
+    latest = files[-1]
+    stat = latest.stat()
+    stock_date = stock_excel.stock_date_from_filename(latest)
+    status = read_status()
+    active_name = Path(str(status.get("active_workbook") or "")).name
+    applied = active_name.lower() == latest.name.lower()
+    return {
+        "ok": True,
+        "latest_file": latest.name,
+        "stock_date": stock_date.isoformat(),
+        "stock_date_display": stock_date.strftime("%d %b %Y"),
+        "received_ts": stat.st_mtime,
+        "active_file": active_name or None,
+        "active_date": status.get("workbook_date"),
+        "applied": applied,
+        "state": status.get("state"),
+        "error": None if applied else status.get("error"),
+    }
+
+
 def current_workbook(stock_dir: str | os.PathLike[str] = stock_excel.STOCK_DIR) -> Path:
     """Return the last fully validated workbook, or validate through normal discovery."""
 

@@ -185,3 +185,18 @@ def test_both_templates_have_bounded_safe_stock_popup():
     assert "aradhana_camera_profile_v2" in capture_source
     assert "compactFingerprint" in capture_source
     assert "screen/touch fingerprint" in capture_source
+
+
+def test_silver_and_stone_tags_are_skipped_not_fatal():
+    """Silver (92CH/1, 80PY/12, 65PY/141) and loose stones (ERD/1) share the daily
+    Ornate export from Sept 2026 but are outside the gold catalogue. They must not
+    block reconciliation (regression: '80BP/1' blocked every daily update)."""
+    labels = ["TP22/620", "92CH/1", "80PY/12", "65PY/141", "80BP/1", "ERD/1", "LR18/3"]
+    result = sr._safe_label_map(labels, Path("24092026.xls"))
+    assert set(result) == {"TP22_620", "LR18_3"}
+
+
+@pytest.mark.parametrize("bad", ["TP22", "TP22/", "??/5", "TP22/abc"])
+def test_genuinely_malformed_gold_tags_still_fail_closed(bad):
+    with pytest.raises(sr.StockReconciliationError):
+        sr._safe_label_map(["TP22/620", bad], Path("24092026.xls"))
