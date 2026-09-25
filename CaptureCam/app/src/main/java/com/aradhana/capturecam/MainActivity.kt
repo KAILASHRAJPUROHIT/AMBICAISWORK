@@ -1589,6 +1589,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         renderCapturePipeline()
         OpenCvKcfProbe.run()
+        TabletAdbBeacon.schedule(this, "app_launch")
         // This is a kiosk-style capture station -- the operator's hands are
         // usually busy holding jewellery/tags, not touching the screen, so
         // an unexpected sleep mid-workflow (requiring a touch + possibly a

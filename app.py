@@ -497,6 +497,67 @@ def api_stock_file():
     return jsonify(stock_watcher.latest_file_info())
 
 
+# --- Live tablet screen (CaptureCam) -------------------------------------
+# tablet_feed_server.py runs in the logged-in user's session (it needs that
+# user's adb key) and listens on 127.0.0.1 only; these routes proxy it so the
+# dashboard login is the only way in.
+_TABLET_FEED = "http://127.0.0.1:7670"
+
+
+@app.get("/api/tablet/status")
+def api_tablet_status():
+    import requests
+    try:
+        upstream = requests.get(_TABLET_FEED + "/status", timeout=4)
+        return app.response_class(upstream.content, mimetype="application/json")
+    except Exception as exc:  # noqa: BLE001 -- feed process not running
+        return jsonify({"ok": False, "adb": False, "capturecam_running": False,
+                        "error": f"tablet feed offline: {exc}"})
+
+
+@app.get("/api/tablet/stream")
+def api_tablet_stream():
+    import requests
+    from flask import Response, stream_with_context
+    try:
+        upstream = requests.get(_TABLET_FEED + "/stream", stream=True, timeout=(3, 30))
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"tablet feed offline: {exc}"}), 503
+
+    def relay():
+        try:
+            for chunk in upstream.iter_content(chunk_size=None):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream.close()
+
+    return Response(stream_with_context(relay()), mimetype="application/octet-stream",
+                    headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/tablet/snapshot.png")
+def api_tablet_snapshot():
+    import requests
+    try:
+        upstream = requests.get(_TABLET_FEED + "/snapshot.png", timeout=15)
+        return app.response_class(upstream.content, status=upstream.status_code,
+                                  mimetype=upstream.headers.get("Content-Type", "image/png"),
+                                  headers={"Cache-Control": "no-store"})
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "error": str(exc)}), 503
+
+
+@app.post("/api/tablet/input")
+def api_tablet_input():
+    import requests
+    try:
+        upstream = requests.post(_TABLET_FEED + "/input", json=request.get_json(silent=True) or {}, timeout=10)
+        return app.response_class(upstream.content, status=upstream.status_code, mimetype="application/json")
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "error": str(exc)}), 503
+
+
 def _clear_queue_session_if_empty() -> None:
     if _images(INPUT):
         return

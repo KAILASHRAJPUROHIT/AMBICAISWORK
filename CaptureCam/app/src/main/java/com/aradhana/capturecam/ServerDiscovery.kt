@@ -40,7 +40,7 @@ object ServerDiscovery {
     private const val MAX_HOSTS_SCANNED = 254
     private const val SCAN_PARALLELISM = 32
 
-    private val trustAllSocketFactory by lazy {
+    val trustAllSocketFactory by lazy {
         val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
             override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}

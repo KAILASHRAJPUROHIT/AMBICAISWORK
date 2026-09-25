@@ -22,8 +22,12 @@ android {
         applicationId = "com.aradhana.capturecam"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 4
+        versionName = "1.1.2"
+        // The only device that runs this is the Redmi Pad 2 Pro (arm64-v8a
+        // only, no 32-bit ABI). Bundling x86/x86_64/armeabi-v7a copies of
+        // OpenCV + ML Kit made the APK ~260 MB for no benefit.
+        ndk { abiFilters += "arm64-v8a" }
         // Machine-bound camera credential. Supplied by ignored
         // local.properties or -PSONY_SSH_PASSWORD; never committed.
         buildConfigField("String", "SONY_SSH_PASSWORD", "\"$sonySshPassword\"")
@@ -44,6 +48,11 @@ android {
     buildFeatures {
         viewBinding = true
         buildConfig = true
+    }
+    packaging {
+        // Compress the native libraries inside the APK (smaller download /
+        // transfer); Android extracts them at install time.
+        jniLibs { useLegacyPackaging = true }
     }
 }
 

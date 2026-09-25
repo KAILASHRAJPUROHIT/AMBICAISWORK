@@ -8,6 +8,14 @@ tr.cov-gap td:first-child b{color:var(--coral)}tr.cov-bottleneck td:first-child 
 @media(max-width:900px){.metrics{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.health{grid-template-columns:1fr}} </style></head>
 <body><main class="shell"><header class="top"><h1>Operations</h1><a class="btn soft" href="/">Process</a><a class="btn soft" href="/capture">Capture</a><a class="btn soft" href="/review">Review</a><a class="btn" href="/azure-cost">Cost guard</a></header>
 <section class="card" id="stockFile" style="margin-top:0;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline"><strong>Stock list</strong><span id="stockFileMain" class="result">Checking latest stock file…</span><span id="stockFileNote" class="result"></span></section>
+<section class="card" id="tabletFeed" style="margin-top:0;margin-bottom:16px">
+<h2 style="display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline">Live tablet screen <small id="tabletState" class="result">connecting…</small> <small id="tabletAdb" class="result" title="Wireless ADB endpoint the tablet reported after its last boot"></small>
+<label class="result" style="margin-left:auto;font-weight:600"><input type="checkbox" id="tabletControl" checked> Touch control</label></h2>
+<div style="position:relative;background:#0b1620;border-radius:10px;overflow:hidden;line-height:0">
+<canvas id="tabletCanvas" width="1280" height="800" style="width:100%;height:auto;max-height:70vh;object-fit:contain;touch-action:none;cursor:pointer;display:block;background:#0b1620"></canvas>
+<div id="tabletOverlay" class="result" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:15px;line-height:1.4;text-align:center;padding:16px;pointer-events:none">Waiting for CaptureCam…</div></div>
+<div class="controls" style="margin-top:10px"><button class="btn soft" data-tkey="back">Back</button><button class="btn soft" data-tkey="home">Home</button><button class="btn soft" data-tkey="recents">Recents</button><button class="btn soft" id="tabletReload">Reconnect</button>
+<span class="result" id="tabletHint">Click = tap · drag = swipe. Streams automatically whenever CaptureCam is running on the tablet.</span></div></section>
 <section class="hero"><strong>Azure-only production control</strong><p>Live inventory, capture, lifecycle and recovery. No local model or provider router.</p></section>
 <section class="metrics"><div class="metric"><b id="captured">—</b><span>Captured</span></div><div class="metric"><b id="stock">—</b><span>Stock tags</span></div><div class="metric"><b id="ready">—</b><span>Ready</span></div><div class="metric"><b id="processed">—</b><span>Processed</span></div><div class="metric"><b id="review">—</b><span>Needs review</span></div><div class="metric"><b id="rejected">—</b><span>Rejected</span></div></section>
 <section class="grid"><div class="card"><h2>System health</h2><div class="health" id="health"></div></div><div class="card"><h2>Recent captures <small class="result">last 20, stitched composites only</small></h2><div id="recentCaptures" class="recent"></div></div>
@@ -48,4 +56,61 @@ const recv=d.received_ts?new Date(d.received_ts*1000).toLocaleString([],{day:'2-
 main.textContent=`Stock as of ${d.stock_date_display} · file ${d.latest_file}${recv?' · received '+recv:''}`;
 if(d.applied){note.textContent='Applied ✓';note.style.color='var(--teal)'}else{note.textContent=`Not applied yet — active list is ${d.active_file||'none'}${d.active_date?' ('+d.active_date+')':''}${d.error?' · '+d.error:''}`;note.style.color='var(--danger)'}}catch(e){if(e.message!=='Session expired')$('stockFileMain').textContent=e.message}}
 stockFileInfo();setInterval(stockFileInfo,30000);
+// ---- Live tablet screen (interactive) -----------------------------------
+// Streams the tablet's screen as H.264 (same technique scrcpy uses) and decodes it
+// with WebCodecs onto the canvas. Auto-connects whenever CaptureCam is running on
+// the tablet; taps/drags on the canvas are injected back into the tablet.
+(function(){
+const canvas=$('tabletCanvas'),ctx=canvas.getContext('2d'),stateEl=$('tabletState'),overlay=$('tabletOverlay');
+let running=false,abortCtl=null,decoder=null,gotKey=false,ts=0,snapTimer=null,snapMode=false,lastStatus=null;
+const hasCodec='VideoDecoder' in window&&'EncodedVideoChunk' in window;
+function setState(text,ok){stateEl.textContent=text;stateEl.style.color=ok?'var(--teal)':'var(--muted)'}
+function showOverlay(t){overlay.textContent=t||'';overlay.style.display=t?'flex':'none'}
+function codecFromSps(au){for(let i=0;i+4<au.length;i++){if(au[i]===0&&au[i+1]===0&&(au[i+2]===1||(au[i+2]===0&&au[i+3]===1))){const s=au[i+2]===1?i+3:i+4;if((au[s]&31)===7)return 'avc1.'+[au[s+1],au[s+2],au[s+3]].map(b=>b.toString(16).padStart(2,'0')).join('')}}return 'avc1.640028'}
+function resetDecoder(){try{if(decoder&&decoder.state!=='closed')decoder.close()}catch(e){}decoder=null;gotKey=false}
+async function makeDecoder(codec){
+ const cfg={codec,optimizeForLatency:true,avc:{format:'annexb'}};
+ const sup=await VideoDecoder.isConfigSupported(cfg).catch(()=>({supported:false}));
+ if(!sup.supported)return false;
+ decoder=new VideoDecoder({output:f=>{if(canvas.width!==f.displayWidth||canvas.height!==f.displayHeight){canvas.width=f.displayWidth;canvas.height=f.displayHeight}ctx.drawImage(f,0,0);f.close();window.__tabletFrames=(window.__tabletFrames||0)+1;showOverlay('')},error:e=>{console.error('tablet decoder error',e&&e.message);window.__tabletErr=String(e&&e.message);resetDecoder()}});
+ decoder.configure(cfg);return true}
+async function onMessage(type,payload){
+ if(type===3)return;
+ if(type===1){if(!decoder||decoder.state==='closed'){if(!await makeDecoder(codecFromSps(payload))){startSnapshots('This browser cannot decode H.264 — showing a 1 fps snapshot view (use Chrome or Edge for live video)');return}}gotKey=true;ts+=33333;decoder.decode(new EncodedVideoChunk({type:'key',timestamp:ts,data:payload}));return}
+ if(type===2&&gotKey&&decoder){if(decoder.decodeQueueSize>25){gotKey=false;return}ts+=33333;decoder.decode(new EncodedVideoChunk({type:'delta',timestamp:ts,data:payload}))}}
+function concat(a,b){const c=new Uint8Array(a.length+b.length);c.set(a);c.set(b,a.length);return c}
+async function startStream(){
+ if(running||snapMode)return;
+ if(!hasCodec){startSnapshots('Live video needs Chrome or Edge — showing a 1 fps snapshot view');return}
+ running=true;abortCtl=new AbortController();resetDecoder();setState('Live · CaptureCam running',true);showOverlay('Starting stream…');
+ try{
+  const resp=await fetch('/api/tablet/stream',{cache:'no-store',signal:abortCtl.signal});
+  if(!resp.ok)throw new Error('stream '+resp.status);
+  const reader=resp.body.getReader();let buf=new Uint8Array(0);
+  for(;;){const {value,done}=await reader.read();if(done)break;buf=buf.length?concat(buf,value):value;
+   while(buf.length>=5){const type=buf[0],len=((buf[1]<<24)|(buf[2]<<16)|(buf[3]<<8)|buf[4])>>>0;if(buf.length<5+len)break;await onMessage(type,buf.subarray(5,5+len));buf=buf.subarray(5+len)}}
+ }catch(e){if(e.name!=='AbortError')setState('Stream interrupted — reconnecting…',false)}
+ finally{running=false;resetDecoder()}}
+function stopStream(){if(abortCtl){abortCtl.abort();abortCtl=null}running=false;resetDecoder()}
+function startSnapshots(note){snapMode=true;stopStream();setState(note,false);showOverlay('');
+ if(snapTimer)return;const img=new Image();img.onload=()=>{canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;ctx.drawImage(img,0,0)};
+ snapTimer=setInterval(()=>{if(lastStatus&&lastStatus.capturecam_running)img.src='/api/tablet/snapshot.png?_='+Date.now()},1000)}
+async function pollStatus(){
+ try{const r=await fetch('/api/tablet/status',{cache:'no-store'});if(r.status===401){return}const d=await r.json();lastStatus=d;const ae=$('tabletAdb');if(ae)ae.textContent=d.serial?('ADB '+d.serial+(d.adb_endpoint?' · wireless debugging '+d.adb_endpoint.ip+':'+d.adb_endpoint.port:'')):'';
+  if(d.ok&&d.adb&&d.capturecam_running){if(!snapMode){setState(running?'Live · CaptureCam running':'Connecting…',running);if(!running)startStream()}}
+  else{stopStream();snapMode=snapMode&&d.ok;
+   const why=!d.ok?'Tablet feed service is not running on the server PC':(!d.adb?'Tablet not reachable over ADB — check wireless debugging / Wi-Fi':'CaptureCam is not running on the tablet');
+   setState(why,false);showOverlay(why+' — the live view starts automatically when CaptureCam opens')}
+ }catch(e){setState('Dashboard offline — retrying…',false)}}
+function send(payload){if(!$('tabletControl').checked)return;fetch('/api/tablet/input',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{})}
+let down=null;const clamp=v=>Math.min(1,Math.max(0,v));
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);down={x:e.offsetX,y:e.offsetY,t:performance.now()}});
+canvas.addEventListener('pointerup',e=>{if(!down)return;const r=canvas.getBoundingClientRect();const x1=down.x/r.width,y1=down.y/r.height,x2=e.offsetX/r.width,y2=e.offsetY/r.height;
+ const dist=Math.hypot((x2-x1)*r.width,(y2-y1)*r.height),ms=Math.round(performance.now()-down.t);down=null;
+ if(dist<12&&ms<700)send({action:'tap',x:clamp(x2),y:clamp(y2)});else send({action:'swipe',x1:clamp(x1),y1:clamp(y1),x2:clamp(x2),y2:clamp(y2),ms:Math.min(Math.max(ms,120),1500)})});
+canvas.addEventListener('pointercancel',()=>{down=null});
+document.querySelectorAll('[data-tkey]').forEach(b=>b.addEventListener('click',()=>send({action:'key',key:b.dataset.tkey})));
+$('tabletReload').addEventListener('click',()=>{snapMode=false;if(snapTimer){clearInterval(snapTimer);snapTimer=null}stopStream();pollStatus()});
+pollStatus();setInterval(pollStatus,3000);
+})();
 </script></body></html>

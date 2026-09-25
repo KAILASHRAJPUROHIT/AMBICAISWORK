@@ -246,6 +246,31 @@ def api_capture_stud_flag_get():
     return jsonify({"ok": True, "tag_code": tag_code, "has_stud": bool(meta.get("has_stud", False))})
 
 
+@app.route("/api/tablet/adb_endpoint", methods=["POST"])
+def api_tablet_adb_endpoint():
+    """CaptureCam reports its Wireless-debugging ip:port here after every boot
+    (and on every app launch). Android picks a new random TLS port each time
+    wireless debugging comes up, so the laptop's tablet watcher reads this file
+    instead of someone reading the port off the tablet's screen."""
+    body = request.get_json(silent=True) or {}
+    ip = str(body.get("ip") or request.remote_addr or "").strip()
+    try:
+        port = int(body.get("port") or 0)
+    except (TypeError, ValueError):
+        port = 0
+    if not ip or not (1024 <= port <= 65535):
+        return jsonify({"ok": False, "error": "ip/port required"}), 400
+    record = {"ip": ip, "port": port, "reported_at": int(time.time()),
+              "reason": str(body.get("reason") or "")[:40],
+              "device": str(body.get("device") or "")[:60]}
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "tablet_adb_endpoint.json")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump(record, handle)
+    os.replace(tmp, path)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/capture/stud_flag", methods=["POST"])
 def api_capture_stud_flag_set():
     """Staff correction from the live preview overlay (2026-08-19, explicit
