@@ -1414,6 +1414,26 @@ class SonyPtpIpController {
 
     /** Focus at a normalized Live View coordinate using Creators' App's
      * RemoteTouchOperation path (camera coordinate grid: 640x480). */
+    // ---- AF race instrumentation (2026-09-26, log-only) ----
+    // autofocusForStill()'s doc comment says AF-S selection and the touch must
+    // share one command lock, because "queueing them as two independent
+    // controls allowed a pending AF-C restore to run between them, so the
+    // camera acknowledged the touch but continued hunting". That function has
+    // no callers; the live path sends the touch alone. These timestamps let a
+    // real capture show whether that race is actually happening: every
+    // focus-mode write and every focus-indication change is stamped with how
+    // long it is since the last touch, so an AF-C restore landing just after a
+    // touch is visible in one log filter (AFTRACE).
+    @Volatile private var lastTouchFocusAtNanos = 0L
+    @Volatile private var lastFocusModeWritten: Int? = null
+
+    fun msSinceTouchFocus(): Long {
+        val at = lastTouchFocusAtNanos
+        return if (at == 0L) -1L else (System.nanoTime() - at) / 1_000_000L
+    }
+
+    fun lastFocusMode(): Int? = lastFocusModeWritten
+
     fun driveTouchFocus(normalizedX: Float, normalizedY: Float): Boolean {
         if (!isConnected || !remoteTouchFocusEnabled) return false
         val x = (normalizedX.coerceIn(0f, 1f) * 639f).toInt()
@@ -1425,10 +1445,16 @@ class SonyPtpIpController {
         // earlier no-wait failure was caused by leaving the PTP reply queued,
         // not by the independent HTTP channel existing at the same time.
         val focused = setControlDeviceB(CONTROL_RemoteTouchOperation, packed, 4)
+        lastTouchFocusAtNanos = System.nanoTime()
         Log.i(
             TAG,
             "Sony remote touch focus x=$x y=$y focused=$focused " +
                 "commandMs=${(System.nanoTime() - startedAt) / 1_000_000L}"
+        )
+        Log.i(
+            TAG,
+            "[AFTRACE] touch x=$x y=$y accepted=$focused " +
+                "focusModeAtTouch=${lastFocusModeWritten?.let { "0x" + it.toString(16) } ?: "unknown"}"
         )
         return focused
     }
@@ -1439,7 +1465,20 @@ class SonyPtpIpController {
     // every EV/ISO/WB/focus-area change created the visible preview gaps.
     fun setIso(value: Int): Boolean = setControlDeviceAStreamingSafe(PROP_ISO, value, 4)
     fun setWhiteBalance(value: Int): Boolean = setControlDeviceAStreamingSafe(PROP_WhiteBalance, value, 2)
-    fun setFocusMode(value: Int): Boolean = setControlDeviceAStreamingSafe(PROP_FocusMode, value, 2)
+    fun setFocusMode(value: Int): Boolean {
+        val since = msSinceTouchFocus()
+        val ok = setControlDeviceAStreamingSafe(PROP_FocusMode, value, 2)
+        lastFocusModeWritten = value
+        // A write of AFMODE_AFC (0x8004) landing a few hundred ms AFTER a
+        // touch is the race autofocusForStill() was written to prevent.
+        Log.i(
+            TAG,
+            "[AFTRACE] setFocusMode=0x${value.toString(16)}" +
+                (if (value == AFMODE_AFC) " (AF-C restore)" else if (value == AFMODE_AFS) " (AF-S)" else "") +
+                " ok=$ok msSinceTouch=$since"
+        )
+        return ok
+    }
     fun setFocusArea(value: Int): Boolean = setControlDeviceAStreamingSafe(PROP_FocusArea, value, 2)
     fun setExposureMode(value: Int): Boolean =
         setControlDeviceAStreamingSafe(PROP_ExposureMode, value, 4)
