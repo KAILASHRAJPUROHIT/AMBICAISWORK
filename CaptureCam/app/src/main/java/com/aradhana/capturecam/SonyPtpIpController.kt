@@ -211,6 +211,15 @@ class SonyPtpIpController {
         const val PROP_CreativeLook = 0xD0FA
         const val PROP_RawFileType = 0xD288
         const val PROP_StillImageTransferSize = 0xD268
+        // Remote AF-area control, from Creators' App v3.5.0's own
+        // EnumDevicePropCode (see docs/sony_af_area_protocol.md). Payload for
+        // AFAreaPosition is ONE UINT32 -- x in the high 16 bits, y in the low
+        // 16 -- over a fixed 640x480 space (x <= 639, y <= 479), per that
+        // app's ptpip.button.RangePosition. Whether this body actually
+        // accepts a write is what logSonyPropertyProbe() is for.
+        const val PROP_AFAreaPosition = 0xD232
+        const val PROP_OnePushAFExecutionState = 0xD265
+        const val PROP_FocusMagnifierPosition = 0xD230
         const val PROP_FunctionOfTouchOperation = 0xD283
         const val PROP_RemoteTouchOperationEnable = 0xD284
         const val PROP_CancelRemoteTouchOperationEnable = 0xD285
@@ -379,6 +388,8 @@ class SonyPtpIpController {
     @Volatile private var currentZoomScale: Int = 1_000
     @Volatile private var currentOpticalZoomPercent: Int = 0
     @Volatile private var currentLiveViewStatus: Long? = null
+    /** Keeps logSonyPropertyProbe()'s inventory to one dump per connection. */
+    @Volatile private var propertyProbeLogged = false
     @Volatile private var currentShootingFileInfo: Long? = null
 
     data class BurstTestResult(
@@ -2603,6 +2614,9 @@ class SonyPtpIpController {
             PROP_FocusMode,
             PROP_FocusIndication,
             PROP_FocusArea,
+            PROP_AFAreaPosition,
+            PROP_OnePushAFExecutionState,
+            PROP_FocusMagnifierPosition,
             PROP_FunctionOfTouchOperation,
             PROP_RemoteTouchOperationEnable,
             PROP_CancelRemoteTouchOperationEnable,
@@ -2626,7 +2640,43 @@ class SonyPtpIpController {
                 )
             }
         }
+        logSonyPropertyProbe(properties)
         return properties
+    }
+
+    /**
+     * One-shot inventory of EVERYTHING this body reports through 0x9209,
+     * logged once per connection at INFO so it survives a normal logcat
+     * filter. The curated list above only prints properties we already know
+     * to ask for; this answers the different question of what the camera
+     * will actually let us WRITE -- which is the only way to confirm a
+     * property read out of Sony's own app (such as PROP_AFAreaPosition,
+     * 0xD232) is supported on the ZV-E10 II rather than on some other body
+     * that app also ships for. Writable codes are listed separately because
+     * that list is the useful one; see docs/sony_af_area_protocol.md.
+     */
+    private fun logSonyPropertyProbe(properties: Map<Int, SonyPropertyState>) {
+        if (propertyProbeLogged || properties.isEmpty()) return
+        propertyProbeLogged = true
+        val hex = { c: Int -> "0x" + c.toString(16).uppercase() }
+        val writable = properties.values.filter { it.writable }.map { it.code }.sorted()
+        Log.i(TAG, "[PROBE] ${properties.size} properties reported, ${writable.size} writable")
+        Log.i(TAG, "[PROBE] writable: " + writable.joinToString(" ") { hex(it) })
+        for (code in intArrayOf(
+            PROP_AFAreaPosition, PROP_FocusArea, PROP_OnePushAFExecutionState,
+            PROP_FocusMagnifierPosition, PROP_FunctionOfTouchOperation,
+            PROP_RemoteTouchOperationEnable, PROP_CancelRemoteTouchOperationEnable
+        )) {
+            val p = properties[code]
+            Log.i(
+                TAG,
+                if (p == null) "[PROBE] ${hex(code)} NOT REPORTED by this body"
+                else "[PROBE] ${hex(code)} writable=${p.writable} enabled=${p.enabled} " +
+                    "type=0x${p.dataType.toString(16)} value=${p.currentValue} " +
+                    "range=${p.minimumValue}..${p.maximumValue}/${p.stepSize} " +
+                    "supported=${p.supportedValues.take(12)}"
+            )
+        }
     }
 
     /** Parse Sony's version-3 SDIDevicePropInfoDataset stream (0x9209). */
