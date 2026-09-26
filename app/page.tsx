@@ -437,8 +437,49 @@ function Toggle({
   );
 }
 
+interface LiveMetricsData {
+  timestamp: number;
+  serverTime: string;
+  host: {
+    cpuPercent: number;
+    memPercent: number;
+    totalMemGB: number;
+    usedMemGB: number;
+    freeMemGB: number;
+    uptimeSec: number;
+    uptimeStr: string;
+    cores: number;
+    model: string;
+  };
+  kpi: {
+    peakCleanUptime: string;
+    agentActivity: number;
+    tasksDueSoon: number;
+    operationalRisk: string;
+    operationalRiskReason: string;
+  };
+  goldMonitor: {
+    online: boolean;
+    status: string;
+    healthy: boolean;
+    uptimeSec: number;
+    uptimeStr: string;
+    ticks: number;
+    verified: number;
+  };
+  systemLiveStats: Record<string, {
+    cpu: string;
+    memory: string;
+    events: string;
+    uptime: string;
+    healthScore: number;
+  }>;
+}
+
 export default function Home() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [liveMetrics, setLiveMetrics] = useState<LiveMetricsData | null>(null);
+  const [lastSyncedSecondsAgo, setLastSyncedSecondsAgo] = useState(0);
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   const [controls, setControls] = useState(initialControls);
@@ -620,8 +661,49 @@ export default function Home() {
   useEffect(() => {
     if (!authenticated) return;
     loadControlSnapshot();
-    const timer = window.setInterval(loadControlSnapshot, 30_000);
+    const timer = window.setInterval(loadControlSnapshot, 5_000);
     return () => window.clearInterval(timer);
+  }, [authenticated]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    const fetchMetrics = async () => {
+      try {
+        const res = await fetch("/api/system/metrics", { cache: "no-store" });
+        if (res.ok) {
+          const data = (await res.json()) as LiveMetricsData;
+          setLiveMetrics(data);
+          setLastSyncedSecondsAgo(0);
+
+          if (data.systemLiveStats) {
+            setSystems((prev) => {
+              const updated = { ...prev };
+              for (const [sysId, stats] of Object.entries(data.systemLiveStats)) {
+                if (updated[sysId]) {
+                  updated[sysId] = {
+                    ...updated[sysId],
+                    cpu: stats.cpu,
+                    memory: stats.memory,
+                    events: stats.events,
+                    cleanUptime: stats.uptime,
+                    healthScore: stats.healthScore,
+                  };
+                }
+              }
+              return updated;
+            });
+          }
+        }
+      } catch {}
+    };
+
+    fetchMetrics();
+    const metricsTimer = window.setInterval(fetchMetrics, 2500);
+    const ticker = window.setInterval(() => setLastSyncedSecondsAgo((s) => s + 1), 1000);
+    return () => {
+      window.clearInterval(metricsTimer);
+      window.clearInterval(ticker);
+    };
   }, [authenticated]);
 
   useEffect(() => {
@@ -1283,6 +1365,12 @@ export default function Home() {
 
             {/* Status + Branding */}
             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", borderRadius: "999px", border: "1px solid rgba(36,217,255,.35)", background: "rgba(36,217,255,.08)" }}>
+                <span className="ais-ok" style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--obsidian-cyan)", boxShadow: "0 0 8px var(--obsidian-cyan)" }}></span>
+                <span style={{ fontFamily: "'Geist Mono',monospace", fontSize: "9.5px", letterSpacing: ".06em", color: "#AEEBFF" }}>
+                  LIVE 2.5s · {lastSyncedSecondsAgo}s ago
+                </span>
+              </div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 14px", borderRadius: "999px", border: "1px solid rgba(55,227,161,.3)", background: "rgba(55,227,161,.08)" }}>
                 <span className="ais-ok" style={{ width: "7px", height: "7px", borderRadius: "50%", background: "var(--obsidian-green)", boxShadow: "0 0 10px var(--obsidian-green)" }}></span>
                 <span style={{ fontFamily: "'Geist Mono',monospace", fontSize: "10.5px", letterSpacing: ".05em" }}>
@@ -1319,14 +1407,20 @@ export default function Home() {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
                     <div className="ais-panel slow" style={{ border: "1px solid rgba(55,227,161,.28)", borderRadius: "18px", background: "linear-gradient(160deg, rgba(55,227,161,.10), rgba(3,5,7,.94) 60%)", padding: "12px 16px", boxShadow: "0 0 24px rgba(55,227,161,.1)" }}>
                       <div style={{ fontSize: "8.5px", letterSpacing: ".2em", color: "#7FBFA4", fontWeight: 700 }}>PEAK CLEAN UPTIME</div>
-                      <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, marginTop: "6px", color: "var(--obsidian-green)", textShadow: "0 0 18px rgba(55,227,161,.6)" }}>18d 07h</div>
-                      <div style={{ fontSize: "10px", color: "#8CF2CB", marginTop: "2px" }}>QR Print Server</div>
+                      <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, marginTop: "6px", color: "var(--obsidian-green)", textShadow: "0 0 18px rgba(55,227,161,.6)" }}>
+                        {liveMetrics?.kpi?.peakCleanUptime || "3d 03h"}
+                      </div>
+                      <div style={{ fontSize: "10px", color: "#8CF2CB", marginTop: "2px" }}>
+                        {liveMetrics?.host?.model ? `${liveMetrics.host.model.split(" ")[0]} Host · ${liveMetrics.host.cores} cores` : "Host Online"}
+                      </div>
                     </div>
 
                     <div className="ais-panel slow" style={{ border: "1px solid rgba(36,217,255,.28)", borderRadius: "18px", background: "linear-gradient(160deg, rgba(36,217,255,.10), rgba(3,5,7,.94) 60%)", padding: "12px 16px", boxShadow: "0 0 24px rgba(36,217,255,.1)" }}>
                       <div style={{ fontSize: "8.5px", letterSpacing: ".2em", color: "#7FB9CE", fontWeight: 700 }}>AGENT ACTIVITY</div>
                       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: "6px" }}>
-                        <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, color: "var(--obsidian-cyan)", textShadow: "0 0 18px rgba(36,217,255,.6)" }}>41</div>
+                        <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, color: "var(--obsidian-cyan)", textShadow: "0 0 18px rgba(36,217,255,.6)" }}>
+                          {liveMetrics?.kpi?.agentActivity ?? 30}
+                        </div>
                         <div className="ais-eq" style={{ display: "flex", alignItems: "flex-end", gap: "2.5px", height: "24px" }}>
                           <span style={{ height: "24px", background: "#24D9FF", animationDelay: "-.1s" }}></span>
                           <span style={{ height: "24px", background: "#4D84FF", animationDelay: "-.5s" }}></span>
@@ -1336,19 +1430,40 @@ export default function Home() {
                           <span style={{ height: "24px", background: "#24D9FF", animationDelay: "-1.1s" }}></span>
                         </div>
                       </div>
-                      <div style={{ fontSize: "10px", color: "#9AECFF", marginTop: "2px" }}>last 24 hours</div>
+                      <div style={{ fontSize: "10px", color: "#9AECFF", marginTop: "2px" }}>
+                        {liveMetrics?.goldMonitor?.ticks ? `${liveMetrics.goldMonitor.ticks.toLocaleString()} live events` : "live operational events"}
+                      </div>
                     </div>
 
                     <div className="ais-panel slow" style={{ border: "1px solid rgba(255,196,91,.3)", borderRadius: "18px", background: "linear-gradient(160deg, rgba(255,196,91,.12), rgba(3,5,7,.94) 60%)", padding: "12px 16px", boxShadow: "0 0 24px rgba(255,196,91,.1)" }}>
                       <div style={{ fontSize: "8.5px", letterSpacing: ".2em", color: "#CBA868", fontWeight: 700 }}>TASKS DUE SOON</div>
-                      <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, marginTop: "6px", color: "var(--obsidian-amber)", textShadow: "0 0 18px rgba(255,196,91,.6)" }}>03</div>
-                      <div style={{ fontSize: "10px", color: "#FFD98C", marginTop: "2px" }}>within 48 hours</div>
+                      <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, marginTop: "6px", color: "var(--obsidian-amber)", textShadow: "0 0 18px rgba(255,196,91,.6)" }}>
+                        {(liveMetrics?.kpi?.tasksDueSoon ?? 1).toString().padStart(2, "0")}
+                      </div>
+                      <div style={{ fontSize: "10px", color: "#FFD98C", marginTop: "2px" }}>in active queue</div>
                     </div>
 
-                    <div className="ais-panel slow" style={{ border: "1px solid rgba(139,92,255,.3)", borderRadius: "18px", background: "linear-gradient(160deg, rgba(139,92,255,.12), rgba(3,5,7,.94) 60%)", padding: "12px 16px", boxShadow: "0 0 24px rgba(139,92,255,.12)" }}>
+                    <div className="ais-panel slow" style={{
+                      border: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "1px solid rgba(255,95,120,.35)" : liveMetrics?.kpi?.operationalRisk === "MODERATE" ? "1px solid rgba(255,196,91,.35)" : "1px solid rgba(55,227,161,.3)",
+                      borderRadius: "18px",
+                      background: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "linear-gradient(160deg, rgba(255,95,120,.12), rgba(3,5,7,.94) 60%)" : "linear-gradient(160deg, rgba(55,227,161,.12), rgba(3,5,7,.94) 60%)",
+                      padding: "12px 16px",
+                      boxShadow: "0 0 24px rgba(139,92,255,.12)"
+                    }}>
                       <div style={{ fontSize: "8.5px", letterSpacing: ".2em", color: "#A794D6", fontWeight: 700 }}>OPERATIONAL RISK</div>
-                      <div className="ais-num" style={{ fontSize: "26px", fontWeight: 800, marginTop: "6px", letterSpacing: ".02em", color: "var(--obsidian-green)", textShadow: "0 0 18px rgba(55,227,161,.55)" }}>LOW</div>
-                      <div style={{ fontSize: "10px", color: "#B9A5F5", marginTop: "2px" }}>No critical outage</div>
+                      <div className="ais-num" style={{
+                        fontSize: "26px",
+                        fontWeight: 800,
+                        marginTop: "6px",
+                        letterSpacing: ".02em",
+                        color: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "var(--obsidian-red)" : liveMetrics?.kpi?.operationalRisk === "MODERATE" ? "var(--obsidian-amber)" : "var(--obsidian-green)",
+                        textShadow: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "0 0 18px rgba(255,95,120,.6)" : "0 0 18px rgba(55,227,161,.55)"
+                      }}>
+                        {liveMetrics?.kpi?.operationalRisk || "LOW"}
+                      </div>
+                      <div style={{ fontSize: "10px", color: "#B9A5F5", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {liveMetrics?.kpi?.operationalRiskReason || "No critical outage"}
+                      </div>
                     </div>
                   </div>
 
