@@ -150,10 +150,21 @@ class FocusZoomController {
      * one-shot trigger) -- call once when tracking begins for an item, and
      * again after every triggerAutoFocus() lock is done with (retake, next
      * item), since a trigger/lock does not resume scanning on its own. */
-    fun startContinuousTracking() {
+    fun startContinuousTracking(clearRegions: Boolean = false) {
         afMode = CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE
         aeMode = CaptureRequest.CONTROL_AE_MODE_ON
         afTrigger = null
+        // [clearRegions] drops the AF/AE metering rectangles back to the
+        // full frame. updateTrackingRegion() pins them to a 20%-of-sensor
+        // box wherever the jewellery was, and those persist exactly like
+        // afMode does -- so a new item's TAG scan would otherwise meter on
+        // the last piece's position while the operator holds the label
+        // somewhere else entirely. Tracking callers keep the default
+        // (false) so an in-progress track never loses its region.
+        if (clearRegions) {
+            afRegions = null
+            aeRegions = null
+        }
         applyOptions()
     }
 

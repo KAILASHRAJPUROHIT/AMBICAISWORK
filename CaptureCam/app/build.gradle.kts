@@ -22,8 +22,8 @@ android {
         applicationId = "com.aradhana.capturecam"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.1.2"
+        versionCode = 5
+        versionName = "1.1.3"
         // The only device that runs this is the Redmi Pad 2 Pro (arm64-v8a
         // only, no 32-bit ABI). Bundling x86/x86_64/armeabi-v7a copies of
         // OpenCV + ML Kit made the APK ~260 MB for no benefit.

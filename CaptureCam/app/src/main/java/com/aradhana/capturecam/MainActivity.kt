@@ -2998,7 +2998,16 @@ class MainActivity : AppCompatActivity() {
             }
             throw e
         }
-        camera?.let { focusZoom.bind(it, getSystemService(android.hardware.camera2.CameraManager::class.java)) }
+        camera?.let {
+            focusZoom.bind(it, getSystemService(android.hardware.camera2.CameraManager::class.java))
+            // Establish continuous AF explicitly at every (re)bind rather
+            // than inheriting whatever CameraX's session defaults happen to
+            // be -- nothing else set an AF mode here, so the TAG scan's
+            // focus behaviour was undocumented and version-dependent. This
+            // also covers the hybrid handoff back to the tablet camera,
+            // which rebinds without going through resetForNewItem().
+            focusZoom.startContinuousTracking(clearRegions = true)
+        }
         configureExposureSlider()
     }
 
@@ -8572,6 +8581,22 @@ class MainActivity : AppCompatActivity() {
         syncHybridCameraForPhase()
         armed = next == Phase.TAG
         armedAt = System.currentTimeMillis()
+        // Hand the tablet camera back to continuous AF for the TAG scan.
+        // Without this the operator had to tap the preview to focus on most
+        // labels (root cause found 2026-09-26): focusZoom.afMode is sticky
+        // persistent state, triggerAutoFocus() sets CONTROL_AF_MODE_AUTO for
+        // the capture lock and nothing ever set it back, so every item after
+        // the first arrived here still in AUTO and still locked at the
+        // PREVIOUS piece's focus distance -- and AUTO, unlike
+        // CONTINUOUS_PICTURE, never re-scans on its own. Tapping worked only
+        // because it fires a fresh trigger. This is the "call it again after
+        // every triggerAutoFocus() lock is done with (retake, next item)"
+        // that startContinuousTracking()'s own doc comment asks for.
+        // Regions are cleared too: the label is rarely where the last
+        // jewel was.
+        if (next == Phase.TAG && activeCameraSource == ProductionCameraSource.PHONE) {
+            focusZoom.startContinuousTracking(clearRegions = true)
+        }
         stepFocusAttempts = 0
         resetSonyAutomaticAfBudget()
         maxUsableZoom = Float.MAX_VALUE
