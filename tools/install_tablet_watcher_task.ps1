@@ -13,6 +13,19 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal `
     -Description 'CaptureCam tablet: feed server + wireless ADB keep-alive + scrcpy on app start.' -Force | Out-Null
-Unregister-ScheduledTask -TaskName 'CaptureCam_AdbWirelessWatchdog' -Confirm:$false -ErrorAction SilentlyContinue
+# The obsolete watchdog was registered ELEVATED, so removing it needs an
+# elevated shell -- from a normal one this returns "Access is denied", and
+# -ErrorAction SilentlyContinue hid that, leaving the task in place
+# (found 2026-09-26). Report it instead of swallowing it; the removal itself
+# lives in remove_old_adb_watchdog.ps1, which must be run as administrator.
+if (Get-ScheduledTask -TaskName 'CaptureCam_AdbWirelessWatchdog' -ErrorAction SilentlyContinue) {
+    try {
+        Unregister-ScheduledTask -TaskName 'CaptureCam_AdbWirelessWatchdog' -Confirm:$false -ErrorAction Stop
+        Write-Host "Removed obsolete task CaptureCam_AdbWirelessWatchdog."
+    } catch {
+        Write-Warning ("CaptureCam_AdbWirelessWatchdog is still registered and could not be " +
+            "removed ($($_.Exception.Message)). Run tools\remove_old_adb_watchdog.ps1 as administrator.")
+    }
+}
 Start-ScheduledTask -TaskName $TaskName
 Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName, State
