@@ -6,12 +6,20 @@ $TaskName = 'CaptureCam_TabletWatcher'
 $Script   = Join-Path $PSScriptRoot 'tablet_watcher.ps1'
 $action   = New-ScheduledTaskAction -Execute 'powershell.exe' `
     -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$Script`""
-$trigger  = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+# Two triggers. AtLogOn starts it with the session; the repeating one re-arms
+# it if the loop ever exits (it died on 2026-09-25 and, being logon-only, never
+# came back while the machine stayed up). -MultipleInstances IgnoreNew means a
+# repeat that fires while it is already running is discarded, not stacked.
+$triggers = @(
+    (New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME),
+    (New-ScheduledTaskTrigger -Once -At (Get-Date).Date `
+        -RepetitionInterval (New-TimeSpan -Minutes 15))
+)
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
     -StartWhenAvailable -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
     -ExecutionTimeLimit (New-TimeSpan -Days 0) -MultipleInstances IgnoreNew
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal `
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $triggers -Settings $settings -Principal $principal `
     -Description 'CaptureCam tablet: feed server + wireless ADB keep-alive + scrcpy on app start.' -Force | Out-Null
 # The obsolete watchdog was registered ELEVATED, so removing it needs an
 # elevated shell -- from a normal one this returns "Access is denied", and

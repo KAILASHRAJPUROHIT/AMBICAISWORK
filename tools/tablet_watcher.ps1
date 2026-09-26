@@ -26,8 +26,18 @@ function Feed-Status {
     try { return Invoke-RestMethod -Uri 'http://127.0.0.1:7670/status' -TimeoutSec 6 } catch { return $null }
 }
 
+function Feed-Listening {
+    return [bool](Get-NetTCPConnection -State Listen -LocalPort 7670 -ErrorAction SilentlyContinue)
+}
+
 function Ensure-Feed {
     if (Feed-Status) { return }
+    # /status shells out to adb, so while the tablet is asleep or off the LAN
+    # it can blow its timeout even though the server is perfectly healthy.
+    # Treating that as "down" started a duplicate every cycle -- nine of them
+    # on 2026-09-25. A live listener on the port is the reliable signal, so
+    # only spawn when nothing is bound at all.
+    if (Feed-Listening) { Log 'feed slow to answer (tablet away?) but port is served - not starting another'; return }
     Log 'feed server down - starting'
     Start-Process -FilePath $Py -ArgumentList ('"{0}"' -f (Join-Path $Main 'tablet_feed_server.py')) `
         -WindowStyle Hidden -WorkingDirectory $Main
