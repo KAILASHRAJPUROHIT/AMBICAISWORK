@@ -87,7 +87,11 @@ def detect(bgr) -> dict:
     or detected=False if nothing crossed BOX_THRESHOLD or survives the
     size/aspect-ratio sanity filters."""
     h, w = bgr.shape[:2]
-    boxes = sam_locate._dino_boxes(bgr, expect=1, box_threshold=BOX_THRESHOLD)
+    # live=True: preview-sized processor + autocast fp16 (see
+    # sam_locate._DINO_LIVE_SIZE). 423ms -> 179ms median on the RTX 5070,
+    # which is what keeps a detection under VisionServoController's 300ms
+    # STALE_DISCARD_MS once the network hop is added. AJ_DINO_FAST=0 reverts.
+    boxes = sam_locate._dino_boxes(bgr, expect=1, box_threshold=BOX_THRESHOLD, live=True)
     if not boxes:
         return {"detected": False}
     x0, y0, x1, y1 = boxes[0]
@@ -175,8 +179,9 @@ async def main():
     log.info("Warming up Grounding DINO (first call downloads/loads weights)...")
     warm = np.zeros((640, 640, 3), dtype=np.uint8)
     t0 = time.time()
-    sam_locate._dino_boxes(warm, expect=1, box_threshold=BOX_THRESHOLD)
-    log.info(f"Warm-up done in {time.time()-t0:.1f}s")
+    sam_locate._dino_boxes(warm, expect=1, box_threshold=BOX_THRESHOLD, live=True)
+    log.info(f"Warm-up done in {time.time()-t0:.1f}s "
+             f"(fast preview profile: {sam_locate._dino_fast_enabled()})")
 
     log.info(f"Listening on ws://0.0.0.0:{PORT}")
     async with websockets.serve(handle_connection, "0.0.0.0", PORT, max_size=10 * 1024 * 1024):

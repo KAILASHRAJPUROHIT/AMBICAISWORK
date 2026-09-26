@@ -375,6 +375,38 @@ _DINO_PROMPT = "jewellery. ring. bracelet. necklace. pendant. earring. bangle."
 _DINO_MODEL_ID = "IDEA-Research/grounding-dino-base"
 _dino_model = None
 _dino_processor = None
+_dino_live_processor = None
+
+# LIVE-PREVIEW FAST PROFILE (2026-09-26) -- opt-in, used ONLY by
+# detector_server.py's real-time gimbal path, never by post-capture
+# segmentation.
+#
+# Why it exists: the tablet sends a 960px-long-edge JPEG
+# (MainActivity.DETECTOR_FRAME_LONG_EDGE), but the HuggingFace processor
+# defaults to shortest_edge=800 / longest_edge=1333, so it UPSCALES nearly
+# every preview frame -- roughly double the pixel area, manufactured before
+# the backbone runs, for no extra information. Combined with fp32 (which
+# never touches the tensor cores), measured median latency on this machine's
+# RTX 5070 was 423ms over 60 real frames -- past
+# VisionServoController.STALE_DISCARD_MS (300ms), i.e. every correction
+# would arrive too late to use. Matching the processor to the frame the
+# tablet actually sends and running the forward pass under autocast fp16
+# brings that to 179ms, with the box essentially unchanged (median IoU 0.97
+# against the fp32 default, over the same 60 frames).
+#
+# Deliberately NOT applied to _locate_sam2()'s post-capture call: that one
+# runs on full-resolution Sony masters, where 600/960 would DOWNSCALE the
+# image and could degrade the segmentation that feeds the catalogue edit
+# pipeline. Default behaviour is byte-identical to before this profile
+# existed -- same processor, same fp32 maths, same weights.
+#
+# Kill switch: set AJ_DINO_FAST=0 to force every caller back onto the
+# default path without a code change.
+_DINO_LIVE_SIZE = {"shortest_edge": 600, "longest_edge": 960}
+
+
+def _dino_fast_enabled() -> bool:
+    return os.environ.get("AJ_DINO_FAST", "1").strip().lower() not in {"0", "false", "no"}
 
 
 def _dino_available() -> bool:
@@ -385,23 +417,33 @@ def _dino_available() -> bool:
         return False
 
 
-def _dino_predictor():
+def _dino_predictor(live: bool = False):
     """Lazy-loaded, cached (same singleton style as _predictor() below).
     Weights download automatically from the HuggingFace Hub on first call
     and are cached locally afterward -- no manual checkpoint file needed,
-    unlike SAM2's."""
-    global _dino_model, _dino_processor
-    if _dino_model is not None:
+    unlike SAM2's.
+
+    ``live=True`` returns the same MODEL with a second processor configured
+    for the tablet's preview frames (see _DINO_LIVE_SIZE). Only the resize
+    config differs, so there is one set of weights in VRAM either way."""
+    global _dino_model, _dino_processor, _dino_live_processor
+    if _dino_model is None:
+        import torch
+        from transformers import AutoProcessor, GroundingDinoForObjectDetection
+        dev = "cuda" if torch.cuda.is_available() else "cpu"
+        _dino_processor = AutoProcessor.from_pretrained(_DINO_MODEL_ID)
+        _dino_model = GroundingDinoForObjectDetection.from_pretrained(_DINO_MODEL_ID).to(dev)
+    if not live:
         return _dino_processor, _dino_model
-    import torch
-    from transformers import AutoProcessor, GroundingDinoForObjectDetection
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
-    _dino_processor = AutoProcessor.from_pretrained(_DINO_MODEL_ID)
-    _dino_model = GroundingDinoForObjectDetection.from_pretrained(_DINO_MODEL_ID).to(dev)
-    return _dino_processor, _dino_model
+    if _dino_live_processor is None:
+        from transformers import AutoProcessor
+        _dino_live_processor = AutoProcessor.from_pretrained(
+            _DINO_MODEL_ID, size=_DINO_LIVE_SIZE)
+    return _dino_live_processor, _dino_model
 
 
-def _dino_boxes(bgr: np.ndarray, expect: int, box_threshold: float = 0.25) -> list:
+def _dino_boxes(bgr: np.ndarray, expect: int, box_threshold: float = 0.25,
+                live: bool = False) -> list:
     """Bounding boxes of the jewellery, found by TEXT-PROMPTED detection --
     used as SAM2 BOX prompts, and as the source for the seed points below.
 
@@ -414,14 +456,25 @@ def _dino_boxes(bgr: np.ndarray, expect: int, box_threshold: float = 0.25) -> li
     not by its colour, so it works the same for gold and silver alike and
     isn't confused by a colourful prop (e.g. a bright pink display clip)
     the way colour-threshold detection was.
+
+    ``live=True`` selects the fast preview profile (see _DINO_LIVE_SIZE):
+    for real-time callers sending tablet-sized frames, not for
+    full-resolution post-capture work. Default is unchanged behaviour.
     """
     import torch
     from PIL import Image
-    processor, model = _dino_predictor()
+    live = live and _dino_fast_enabled()
+    processor, model = _dino_predictor(live=live)
     rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
     image = Image.fromarray(rgb)
     inputs = processor(images=image, text=_DINO_PROMPT, return_tensors="pt").to(model.device)
-    with torch.no_grad():
+    # autocast only on the live path; the default path runs the identical
+    # fp32 maths it always has. NOTE: loading the weights as fp16 instead
+    # (torch_dtype=float16) raises "expected scalar type Half but found
+    # Float" inside GroundingDino -- an internal buffer stays fp32 -- so
+    # autocast is the working route to the tensor cores.
+    autocast = live and model.device.type == "cuda"
+    with torch.no_grad(), torch.autocast("cuda", dtype=torch.float16, enabled=autocast):
         outputs = model(**inputs)
     results = processor.post_process_grounded_object_detection(
         outputs, inputs["input_ids"], threshold=box_threshold,
