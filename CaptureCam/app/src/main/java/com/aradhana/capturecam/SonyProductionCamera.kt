@@ -296,6 +296,15 @@ class SonyProductionCamera(
                     latestFocusIndicationAtNanos = sample.receivedAtNanos
                     if (focus != lastLoggedFocusIndication) {
                         Log.i(TAG, "Sony AF indication=$focus frame=${sample.sequence}")
+                        // Stamped against the last touch so a capture's whole
+                        // focus timeline reads in one AFTRACE filter: touch ->
+                        // any focus-mode write -> where the indication settled.
+                        Log.i(
+                            TAG,
+                            "[AFTRACE] indication ${lastLoggedFocusIndication ?: "-"}->$focus " +
+                                "msSinceTouch=${camera.msSinceTouchFocus()} " +
+                                "mode=${camera.lastFocusMode()?.let { "0x" + it.toString(16) } ?: "unknown"}"
+                        )
                         lastLoggedFocusIndication = focus
                     }
                 }
