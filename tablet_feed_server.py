@@ -430,9 +430,27 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": ok, "message": message}, 200 if ok else 400)
 
 
+class _SingleInstanceServer(ThreadingHTTPServer):
+    # HTTPServer sets allow_reuse_address = 1. On Windows SO_REUSEADDR means
+    # "bind even though someone is already serving this port", not the POSIX
+    # "reuse a socket in TIME_WAIT" -- so a second copy of this script bound
+    # 7670 happily and ran alongside the first. That is how nine duplicate
+    # feed servers accumulated on 2026-09-25 (the watcher's /status probe was
+    # timing out against a sleeping tablet and starting another each cycle).
+    # Refusing reuse makes a duplicate fail fast at bind, which is the
+    # behaviour the watcher's start-if-down logic assumes.
+    allow_reuse_address = False
+
+
 def main() -> None:
+    try:
+        server = _SingleInstanceServer(("127.0.0.1", PORT), Handler)
+    except OSError as exc:
+        # Not an error: another instance owns the port. Exit quietly so a
+        # duplicate launch is a no-op rather than a second live server.
+        _log(f"port {PORT} is already served, exiting ({exc})")
+        return
     threading.Thread(target=producer_loop, daemon=True, name="producer").start()
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     server.daemon_threads = True
     _log(f"tablet feed listening on 127.0.0.1:{PORT} adb={ADB}")
     try:
