@@ -246,3 +246,95 @@ input:focus, textarea:focus, select:focus { border-color: var(--purple); box-sha
 .work-row span { grid-column:2; grid-row:1 / span 2; align-self:center; color:var(--purple); background:var(--purple-soft); padding:5px 7px; border-radius:999px; font-size:9px; font-weight:800; text-transform:uppercase; }
 @media (max-width: 1050px) { .owner-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }.quick-tool-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }.tool-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width: 560px) { .sidebar nav button { padding:8px; font-size:0; }.sidebar nav button b { font-size:14px; }.owner-summary,.owner-grid,.quick-tool-grid,.tool-grid { grid-template-columns:1fr; }.owner-summary article { padding:15px; }.owner-card,.tool-card { padding:16px; } }
+
+/* =========================================================================
+   AIS OBSIDIAN CONTROL PLANE THEME & MOTION VOCABULARY
+   ========================================================================= */
+:root {
+  --obsidian-black: #000000;
+  --obsidian-card: rgba(11, 16, 23, 0.95);
+  --obsidian-subtle: rgba(5, 7, 10, 0.92);
+  --obsidian-border: rgba(120, 170, 220, 0.15);
+  --obsidian-border-strong: rgba(120, 170, 220, 0.30);
+  --obsidian-cyan: #24D9FF;
+  --obsidian-blue: #4D84FF;
+  --obsidian-violet: #8B5CFF;
+  --obsidian-magenta: #FF4FD8;
+  --obsidian-green: #37E3A1;
+  --obsidian-amber: #FFC45B;
+  --obsidian-red: #FF5F78;
+  --obsidian-white: #F5F8FF;
+  --obsidian-muted: #8190A3;
+  --obsidian-dim: #5C6A7C;
+}
+
+@keyframes ais-spin { to { transform: rotate(360deg); } }
+@keyframes ais-spin-rev { to { transform: rotate(-360deg); } }
+@keyframes ais-dash { to { stroke-dashoffset: -260; } }
+@keyframes ais-packet { 0%{offset-distance:0%;opacity:0} 10%{opacity:1} 90%{opacity:1} 100%{offset-distance:100%;opacity:0} }
+@keyframes ais-ripple { 0%{transform:scale(.55);opacity:.75} 100%{transform:scale(2.1);opacity:0} }
+@keyframes ais-breathe { 0%,100%{opacity:.5;transform:scale(1)} 50%{opacity:1;transform:scale(1.15)} }
+@keyframes ais-warn { 0%,100%{opacity:.35;transform:scale(1)} 50%{opacity:1;transform:scale(1.3)} }
+@keyframes ais-fail { 0%,100%{opacity:.3;transform:scale(1)} 40%{opacity:1;transform:scale(1.45)} }
+@keyframes ais-core { 0%,100%{opacity:.45} 50%{opacity:.95} }
+@keyframes ais-grid { to { background-position: 60px 60px; } }
+@keyframes ais-aurora { 0%,100%{transform:translate3d(0,0,0) scale(1);opacity:.4} 50%{transform:translate3d(40px,-25px,0) scale(1.12);opacity:.8} }
+@keyframes ais-sweep { 0%{transform:translateX(-140%)} 100%{transform:translateX(350%)} }
+@keyframes ais-shimmer { 0%{transform:translateX(-100%);opacity:0} 10%{opacity:1} 50%{opacity:1} 100%{transform:translateX(900%);opacity:0} }
+@keyframes ais-bar { 0%,100%{transform:scaleY(.3)} 50%{transform:scaleY(1)} }
+@keyframes ais-border { to { transform: rotate(360deg); } }
+@keyframes ais-num { 0%,100%{opacity:.85;filter:brightness(1)} 50%{opacity:1;filter:brightness(1.4)} }
+@keyframes ais-fill { 0%{transform:scaleX(.2)} 100%{transform:scaleX(1)} }
+@keyframes ais-spectrum { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
+@keyframes ais-blink { 0%,100%{opacity:1} 50%{opacity:.25} }
+@keyframes ais-rise { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2px)} }
+
+.ais-ring { transform-origin:280px 280px; animation: ais-spin 58s linear infinite; }
+.ais-ring2 { transform-origin:280px 280px; animation: ais-spin-rev 84s linear infinite; }
+.ais-ring3 { transform-origin:280px 280px; animation: ais-spin 160s linear infinite; }
+.ais-link { animation: ais-dash 2.6s linear infinite; }
+.ais-pkt { offset-rotate:0deg; animation: ais-packet 3s linear infinite; }
+.ais-ok { animation: ais-breathe 4s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+.ais-warn { animation: ais-warn 1.8s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+.ais-fail { animation: ais-fail 1.15s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+.ais-coreg { animation: ais-core 3.2s ease-in-out infinite; transform-box:fill-box; transform-origin:center; }
+.ais-rip { transform-box:fill-box; transform-origin:center; animation: ais-ripple 4.4s ease-out infinite; }
+.ais-gridbg { animation: ais-grid 13s linear infinite; }
+.ais-aurora { animation: ais-aurora 20s ease-in-out infinite; }
+.ais-sweepx { animation: ais-sweep 4.2s ease-in-out infinite; }
+.ais-eq span { display:block; width:3px; border-radius:1px; transform-origin:bottom; animation: ais-bar 1.2s ease-in-out infinite; }
+.ais-num { animation: ais-num 3.4s ease-in-out infinite; }
+.ais-fillx { transform-origin:left; animation: ais-fill 2.2s cubic-bezier(.22,1,.36,1) infinite alternate; }
+.ais-spec { background-size:200% 100%; animation: ais-spectrum 9s linear infinite; }
+.ais-blink { animation: ais-blink 1.6s ease-in-out infinite; }
+.ais-radar { animation: ais-spin 7s linear infinite; }
+
+.ais-panel { position: relative; }
+.ais-panel::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px;
+  background: conic-gradient(from 0deg, transparent 0 48%, rgba(36,217,255,.65) 60%, rgba(139,92,255,.7) 72%, rgba(255,79,216,.55) 80%, transparent 90%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: ais-border 9s linear infinite; pointer-events: none;
+}
+.ais-panel.slow::before { animation-duration: 16s; }
+
+.ais-row { position: relative; overflow: hidden; cursor: pointer; transition: transform .2s ease, background .2s ease; }
+.ais-row:hover { transform: translateX(3px); background: rgba(36,217,255,0.06); }
+.ais-row.active { background: rgba(36,217,255,0.1) !important; border-left: 3px solid var(--obsidian-cyan) !important; }
+.ais-row .sh { position: absolute; top:0; bottom:0; width: 70px; pointer-events:none;
+  background: linear-gradient(90deg, transparent, rgba(36,217,255,.12), transparent);
+  animation: ais-shimmer 9s linear infinite; }
+
+.mesh-container { perspective: 1200px; }
+.mesh-card { transition: transform 0.15s ease-out; transform-style: preserve-3d; }
+
+.node-interactive { cursor: pointer; transition: transform .2s ease; }
+.node-interactive:hover { filter: brightness(1.3); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ais-ring,.ais-ring2,.ais-ring3,.ais-link,.ais-pkt,.ais-ok,.ais-warn,.ais-fail,.ais-coreg,.ais-rip,
+  .ais-gridbg,.ais-aurora,.ais-sweepx,.ais-eq span,.ais-num,.ais-fillx,.ais-spec,.ais-blink,.ais-rise,
+  .ais-radar,.ais-panel::before,.ais-row .sh { animation: none !important; }
+}
+

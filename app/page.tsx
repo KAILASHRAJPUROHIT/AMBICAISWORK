@@ -2,6 +2,229 @@
 
 import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { QuantumSystemMesh } from "./components/QuantumSystemMesh";
+import { SystemRegistry } from "./components/SystemRegistry";
+import { SelectedSystemPanel } from "./components/SelectedSystemPanel";
+import { DiagnosisModal } from "./components/DiagnosisModal";
+import { PipelineView } from "./components/PipelineView";
+import { AgentsView } from "./components/AgentsView";
+import { ActivityView } from "./components/ActivityView";
+import { SystemItem, PipelineTask, ActivityFeedItem } from "./components/types";
+
+const initialSystemsData: Record<string, SystemItem> = {
+  "print-server": {
+    id: "print-server",
+    name: "Print Server",
+    abbr: "PR",
+    health: "Warning",
+    healthScore: 74,
+    statusTone: "amber",
+    errorReason: "Queue latency above baseline",
+    host: "Dell Server",
+    lastWorkBy: "AIS Agent",
+    lastWorkTime: "26 Sep 2026 · 17:02",
+    lastWorkDesc: "Cleared 2 stale jobs and rechecked spooler",
+    cleanUptime: "03h 19m",
+    cpu: "61%",
+    memory: "57%",
+    events: "460/min",
+    dependencies: ["Windows Spooler", "SMB", "Printer Hosts", "Print Router"],
+    recentActivity: [
+      { time: "17:04", note: "Queue latency still elevated", tone: "amber" },
+      { time: "17:03", note: "Spooler checked", tone: "cyan" },
+      { time: "17:02", note: "Two stale jobs cleared", tone: "green" },
+      { time: "16:58", note: "Warning triggered", tone: "red" },
+    ],
+  },
+  "catalogue-tool": {
+    id: "catalogue-tool",
+    name: "Catalogue Tool",
+    abbr: "CT",
+    health: "Degraded",
+    healthScore: 68,
+    statusTone: "red",
+    errorReason: "Image processing queue backlog",
+    host: "HP Omen 16",
+    lastWorkBy: "AIS Agent",
+    lastWorkTime: "26 Sep 2026 · 17:11",
+    lastWorkDesc: "Retried 14 failed catalogue jobs and monitored worker threads.",
+    cleanUptime: "00h 49m",
+    cpu: "84%",
+    memory: "76%",
+    events: "320/min",
+    dependencies: ["DINO Detection", "Tablet Feed", "RSC2 Gimbal", "Camera Worker"],
+    recentActivity: [
+      { time: "17:11", note: "14 jobs re-enqueued", tone: "violet" },
+      { time: "17:08", note: "GPU VRAM pressure detected", tone: "amber" },
+      { time: "17:00", note: "Worker process heartbeat delayed", tone: "red" },
+    ],
+  },
+  "qr-print": {
+    id: "qr-print",
+    name: "QR Print Server",
+    abbr: "QR",
+    health: "Healthy",
+    healthScore: 99,
+    statusTone: "green",
+    errorReason: "No active issue",
+    host: "Billing PC1",
+    lastWorkBy: "AIS Agent",
+    lastWorkTime: "26 Sep 2026 · 16:42",
+    lastWorkDesc: "Restarted queue watcher and validated output path.",
+    cleanUptime: "18d 07h",
+    cpu: "14%",
+    memory: "28%",
+    events: "180/min",
+    dependencies: ["Barcode Engine", "Thermal Driver", "Spooler Watchdog"],
+    recentActivity: [
+      { time: "16:42", note: "Watcher checked", tone: "green" },
+      { time: "12:00", note: "Scheduled self-test passed", tone: "cyan" },
+    ],
+  },
+  "gold-rate": {
+    id: "gold-rate",
+    name: "Gold Rate Monitor",
+    abbr: "AU",
+    health: "Healthy",
+    healthScore: 98,
+    statusTone: "green",
+    errorReason: "No active issue",
+    host: "AIS Core",
+    lastWorkBy: "Kuldeep",
+    lastWorkTime: "26 Sep 2026 · 15:18",
+    lastWorkDesc: "Updated provider fallback order to prioritize local cache.",
+    cleanUptime: "11d 21h",
+    cpu: "08%",
+    memory: "22%",
+    events: "95/min",
+    dependencies: ["AWS Gateway", "Local Rate Cache", "WhatsApp Dispatcher"],
+    recentActivity: [
+      { time: "15:18", note: "Fallback priority applied", tone: "violet" },
+      { time: "14:30", note: "Multi-vendor quote refresh", tone: "cyan" },
+    ],
+  },
+  "payment-notifier": {
+    id: "payment-notifier",
+    name: "Payment Notifier",
+    abbr: "PN",
+    health: "Active",
+    healthScore: 97,
+    statusTone: "cyan",
+    errorReason: "Processing webhook queue",
+    host: "AIS Core",
+    lastWorkBy: "AIS Agent",
+    lastWorkTime: "26 Sep 2026 · 16:58",
+    lastWorkDesc: "Validated webhook delivery and retry queue.",
+    cleanUptime: "07d 04h",
+    cpu: "23%",
+    memory: "34%",
+    events: "510/min",
+    dependencies: ["HDFC Webhook", "Razorpay Ingest", "Telegram Gateway"],
+    recentActivity: [
+      { time: "16:58", note: "Delivery acknowledged", tone: "cyan" },
+      { time: "16:55", note: "Retry backoff drained", tone: "green" },
+    ],
+  },
+  "order-tracker": {
+    id: "order-tracker",
+    name: "Order Tracker",
+    abbr: "OT",
+    health: "Healthy",
+    healthScore: 95,
+    statusTone: "green",
+    errorReason: "No active issue",
+    host: "AIS Core",
+    lastWorkBy: "Kuldeep",
+    lastWorkTime: "26 Sep 2026 · 14:05",
+    lastWorkDesc: "Updated order stage mapping.",
+    cleanUptime: "06d 12h",
+    cpu: "19%",
+    memory: "41%",
+    events: "240/min",
+    dependencies: ["Ornate NX API", "MongoDB Sync", "Order Pipeline Worker"],
+    recentActivity: [
+      { time: "14:05", note: "Stages aligned", tone: "green" },
+      { time: "11:20", note: "Audit checkpoint verified", tone: "cyan" },
+    ],
+  },
+  "ambic-mdm": {
+    id: "ambic-mdm",
+    name: "AMBIC MDM",
+    abbr: "MDM",
+    health: "Healthy",
+    healthScore: 94,
+    statusTone: "green",
+    errorReason: "No active issue",
+    host: "AIS Core",
+    lastWorkBy: "Claude Agent",
+    lastWorkTime: "26 Sep 2026 · 13:40",
+    lastWorkDesc: "Checked device sync and policy delivery.",
+    cleanUptime: "09d 03h",
+    cpu: "12%",
+    memory: "38%",
+    events: "115/min",
+    dependencies: ["Kiosk Watchdog", "FCM Device Mesh", "Tablet Knox Policy"],
+    recentActivity: [
+      { time: "13:40", note: "Kiosk heartbeat received", tone: "green" },
+      { time: "10:15", note: "Security policy synced", tone: "violet" },
+    ],
+  },
+};
+
+const initialTasks: PipelineTask[] = [
+  {
+    id: "t-1",
+    title: "Stabilize Print Server latency",
+    system: "Print Server",
+    assignedTo: "AIS Infrastructure Agent",
+    priority: "HIGH",
+    status: "IN PROGRESS",
+    progress: 68,
+    due: "Today · 19:00",
+    nextAction: "Validate queue drain after remediation",
+  },
+  {
+    id: "t-2",
+    title: "Resolve Catalogue processing backlog",
+    system: "Catalogue Tool",
+    assignedTo: "Kuldeep + AIS Agent",
+    priority: "CRITICAL",
+    status: "BLOCKED",
+    progress: 34,
+    due: "Today · 20:30",
+    nextAction: "GPU worker load inspection on HP Omen 16",
+  },
+  {
+    id: "t-3",
+    title: "Gold Rate Monitor provider failover test",
+    system: "Gold Rate Monitor",
+    assignedTo: "Kuldeep",
+    priority: "MEDIUM",
+    status: "READY",
+    progress: 100,
+    due: "27 Sep · 10:00",
+    nextAction: "Run simulation test with mock AWS timeout",
+  },
+  {
+    id: "t-4",
+    title: "AMBIC MDM policy audit",
+    system: "AMBIC MDM",
+    assignedTo: "Claude Agent",
+    priority: "MEDIUM",
+    status: "READY",
+    progress: 85,
+    due: "27 Sep · 13:00",
+    nextAction: "Verify kiosk compliance logs across store tablets",
+  },
+];
+
+const initialActivities: ActivityFeedItem[] = [
+  { id: 1, time: "17:11", systemName: "Catalogue Tool", message: "AIS Agent retried 14 failed catalogue jobs on HP Omen 16", tag: "AGENT ACTION", tagColor: "var(--obsidian-violet)" },
+  { id: 2, time: "17:04", systemName: "Print Server", message: "Queue latency remained elevated above baseline (460 events/min)", tag: "WARNING", tagColor: "var(--obsidian-amber)" },
+  { id: 3, time: "16:58", systemName: "Payment Notifier", message: "Webhook delivery path validated and retry queue drained", tag: "ROUTINE OK", tagColor: "var(--obsidian-green)" },
+  { id: 4, time: "16:42", systemName: "QR Print Server", message: "Queue watcher restarted and output path verified on Billing PC1", tag: "AUTO RESTART", tagColor: "var(--obsidian-cyan)" },
+  { id: 5, time: "15:18", systemName: "Gold Rate Monitor", message: "Provider fallback order updated by Kuldeep to prioritize local verified cache", tag: "HUMAN CHANGE", tagColor: "var(--obsidian-violet)" },
+];
 
 type Control = {
   id: string;
@@ -257,9 +480,97 @@ export default function Home() {
   const [campaignError, setCampaignError] = useState("");
   const [researchBusy, setResearchBusy] = useState(false);
   const [view, setView] = useState<"home" | "tools" | "work" | "admin">("home");
+  const [obsidianTab, setObsidianTab] = useState<"command" | "pipeline" | "agents" | "activity" | "legacy">("command");
+  const [systems, setSystems] = useState<Record<string, SystemItem>>(initialSystemsData);
+  const [selectedSystemId, setSelectedSystemId] = useState<string>("print-server");
+  const [diagnosisModalOpen, setDiagnosisModalOpen] = useState<boolean>(false);
+  const [tasks, setTasks] = useState<PipelineTask[]>(initialTasks);
+  const [activities, setActivities] = useState<ActivityFeedItem[]>(initialActivities);
   const chatEnd = useRef<HTMLDivElement>(null);
 
   const masterOn = controls.every((control) => control.enabled);
+
+  useEffect(() => {
+    if (!controlSnapshot) return;
+    setSystems((prev) => {
+      const next = { ...prev };
+      controlSnapshot.projects?.forEach((proj) => {
+        if (proj.id === "smartqr-print-server" && next["qr-print"]) {
+          next["qr-print"] = {
+            ...next["qr-print"],
+            health: proj.health === "healthy" ? "Healthy" : proj.health === "warning" ? "Warning" : "Degraded",
+            healthScore: proj.health === "healthy" ? 99 : 78,
+            statusTone: proj.health === "healthy" ? "green" : proj.health === "warning" ? "amber" : "red",
+            lastWorkDesc: proj.git?.lastCommit ? proj.git.lastCommit.split("|")[1] || next["qr-print"].lastWorkDesc : next["qr-print"].lastWorkDesc,
+          };
+        }
+        if (proj.id === "gold-rate-monitor" && next["gold-rate"]) {
+          const hasLocalHealth = proj.endpoint?.checks?.some((c) => c.ok && c.name.toLowerCase().includes("laptop"));
+          next["gold-rate"] = {
+            ...next["gold-rate"],
+            health: hasLocalHealth ? "Healthy" : "Warning",
+            statusTone: hasLocalHealth ? "green" : "amber",
+            healthScore: hasLocalHealth ? 98 : 70,
+          };
+        }
+        if (proj.id === "catalogue-tool" && next["catalogue-tool"]) {
+          next["catalogue-tool"] = {
+            ...next["catalogue-tool"],
+            health: proj.health === "healthy" ? "Healthy" : "Degraded",
+            statusTone: proj.health === "healthy" ? "green" : "red",
+            healthScore: proj.health === "healthy" ? 96 : 68,
+          };
+        }
+      });
+      return next;
+    });
+
+    if (controlSnapshot.events && controlSnapshot.events.length > 0) {
+      const mappedEvents: ActivityFeedItem[] = controlSnapshot.events.slice(0, 10).map((ev) => {
+        const timeStr = ev.created_at ? new Date(ev.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "Live";
+        return {
+          id: ev.id,
+          time: timeStr,
+          systemName: ev.event_type || "AIS System",
+          message: ev.message,
+          tag: ev.severity.toUpperCase(),
+          tagColor: ev.severity === "error" ? "var(--obsidian-red)" : ev.severity === "warning" ? "var(--obsidian-amber)" : "var(--obsidian-cyan)",
+        };
+      });
+      setActivities((prev) => [...mappedEvents, ...prev.filter((p) => typeof p.id === "number")].slice(0, 15));
+    }
+  }, [controlSnapshot]);
+
+  const handleRemediationComplete = (systemId: string) => {
+    setSystems((prev) => {
+      if (!prev[systemId]) return prev;
+      return {
+        ...prev,
+        [systemId]: {
+          ...prev[systemId],
+          health: "Healthy",
+          healthScore: 98,
+          statusTone: "green",
+          errorReason: "No active issue (Remediated by AIS Agent)",
+          lastWorkDesc: "Cleared stale locks, flushed spool queue and restarted service worker.",
+          lastWorkTime: "Just now · Today",
+          cleanUptime: "00h 01m",
+        },
+      };
+    });
+
+    setActivities((prev) => [
+      {
+        id: Date.now(),
+        time: nowTime(),
+        systemName: systems[systemId]?.name || "System",
+        message: `AIS Agent completed approved remediation routine on ${systems[systemId]?.host || "host"}. Baseline restored.`,
+        tag: "AGENT FIX",
+        tagColor: "var(--obsidian-green)",
+      },
+      ...prev,
+    ]);
+  };
 
   useEffect(() => {
     fetch("/api/auth/status")
@@ -767,40 +1078,368 @@ export default function Home() {
   });
 
   if (authenticated === null) {
-    return <main className="loading-screen">Loading Aradhana Intelligence System…</main>;
+    return (
+      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#000000", color: "#F5F8FF", fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span className="ais-ok" style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--obsidian-cyan)" }}></span>
+          <span style={{ fontSize: "14px", letterSpacing: ".1em", fontWeight: 700 }}>INITIALIZING OBSIDIAN CONTROL PLANE…</span>
+        </div>
+      </main>
+    );
   }
 
   if (!authenticated) {
     return (
-      <main className="login-screen">
-        <div className="login-aura" />
-        <section className="login-card" aria-labelledby="login-title">
-          <Image src="/aradhana-logo-transparent.png" alt="Aradhana Jewellers" className="login-logo" width={1600} height={1600} priority />
-          <p className="eyebrow">ARADHANA INTELLIGENCE SYSTEM</p>
-          <h1 id="login-title">Company command centre</h1>
-          <p className="login-copy">Secure access to projects, production, AI workforce and approvals.</p>
-          <form onSubmit={login} className="login-form">
-            <label>
-              Login ID
-              <input name="username" autoComplete="username" required />
+      <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#000000", color: "#F5F8FF", position: "relative", overflow: "hidden", padding: "24px", fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}>
+        <div className="ais-gridbg" style={{ position: "absolute", inset: "-60px", backgroundImage: "linear-gradient(rgba(120,170,220,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(120,170,220,0.06) 1px, transparent 1px)", backgroundSize: "60px 60px", pointerEvents: "none" }} />
+        <div className="ais-aurora" style={{ position: "absolute", top: "-200px", left: "20%", width: "700px", height: "500px", background: "radial-gradient(ellipse at center, rgba(77,132,255,0.22), rgba(139,92,255,0.1) 45%, transparent 70%)", filter: "blur(40px)", pointerEvents: "none" }} />
+        <div className="ais-aurora" style={{ position: "absolute", bottom: "-200px", right: "20%", width: "700px", height: "500px", background: "radial-gradient(ellipse at center, rgba(255,79,216,0.15), rgba(36,217,255,0.1) 50%, transparent 72%)", filter: "blur(40px)", animationDelay: "-8s", pointerEvents: "none" }} />
+
+        <section className="ais-panel" style={{ position: "relative", width: "min(460px, 100%)", borderRadius: "28px", background: "linear-gradient(165deg, rgba(16,24,35,0.96), rgba(2,3,4,0.96))", border: "1px solid rgba(120,170,220,0.25)", color: "#F5F8FF", padding: "38px 32px", boxShadow: "0 0 60px rgba(36,217,255,0.15), 0 30px 60px rgba(0,0,0,0.8)", textAlign: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", marginBottom: "16px" }}>
+            <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg,#24D9FF,#4D84FF 40%,#8B5CFF 70%,#FF4FD8)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Geist Mono',monospace", fontSize: "11px", fontWeight: 800, color: "#04060A", boxShadow: "0 0 16px rgba(139,92,255,.45)" }}>AD</div>
+            <div style={{ textAlign: "left" }}>
+              <div style={{ fontSize: "8px", letterSpacing: ".2em", color: "var(--obsidian-dim)", fontWeight: 700 }}>POWERED BY</div>
+              <div className="ais-spec" style={{ fontSize: "12px", fontWeight: 800, letterSpacing: ".06em", backgroundImage: "linear-gradient(90deg,#24D9FF,#8B5CFF,#FF4FD8,#24D9FF)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>AMBIC DIGITAL</div>
+            </div>
+          </div>
+
+          <div style={{ fontSize: "11px", letterSpacing: ".22em", fontWeight: 800, color: "var(--obsidian-cyan)", marginBottom: "4px" }}>
+            AIS / OBSIDIAN CONTROL PLANE
+          </div>
+          <h1 style={{ margin: "4px 0 8px", fontSize: "24px", fontWeight: 800, letterSpacing: "-.02em" }}>Autonomous Operations Command</h1>
+          <p style={{ color: "var(--obsidian-muted)", fontSize: "12px", lineHeight: 1.5, margin: "0 auto 24px", maxWidth: "340px" }}>
+            Live infrastructure intelligence, execution memory and agent-controlled remediation.
+          </p>
+
+          <form onSubmit={login} style={{ textAlign: "left", display: "grid", gap: "16px" }}>
+            <label style={{ display: "grid", gap: "6px", color: "var(--obsidian-muted)", fontSize: "12px", fontWeight: 600 }}>
+              Operator ID
+              <input
+                name="username"
+                autoComplete="username"
+                required
+                style={{ width: "100%", borderRadius: "12px", padding: "12px 14px", background: "rgba(5,7,10,0.9)", border: "1px solid rgba(120,170,220,0.25)", color: "#fff", outline: "none" }}
+              />
             </label>
-            <label>
-              Password
-              <input name="password" type="password" autoComplete="current-password" required />
+            <label style={{ display: "grid", gap: "6px", color: "var(--obsidian-muted)", fontSize: "12px", fontWeight: 600 }}>
+              Security Key / Password
+              <input
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                style={{ width: "100%", borderRadius: "12px", padding: "12px 14px", background: "rgba(5,7,10,0.9)", border: "1px solid rgba(120,170,220,0.25)", color: "#fff", outline: "none" }}
+              />
             </label>
-            {loginError && <p className="form-error">{loginError}</p>}
-            <button className="primary-button" disabled={loginBusy}>
-              {loginBusy ? "Checking…" : "Enter command centre"}
+            {loginError && <p style={{ margin: 0, color: "var(--obsidian-red)", fontSize: "12px" }}>{loginError}</p>}
+            <button
+              disabled={loginBusy}
+              style={{
+                width: "100%",
+                padding: "13px",
+                borderRadius: "12px",
+                border: "1px solid rgba(36,217,255,0.6)",
+                background: "linear-gradient(135deg, rgba(36,217,255,0.3), rgba(77,132,255,0.3) 50%, rgba(139,92,255,0.3))",
+                color: "#fff",
+                fontWeight: 800,
+                fontSize: "13px",
+                letterSpacing: ".08em",
+                cursor: "pointer",
+                boxShadow: "0 0 24px rgba(36,217,255,0.25)",
+                marginTop: "4px",
+              }}
+            >
+              {loginBusy ? "Verifying Credentials…" : "ENTER OBSIDIAN CONTROL PLANE"}
             </button>
           </form>
-          <p className="secure-note"><span>●</span> Local administrator access</p>
+          <p style={{ color: "var(--obsidian-dim)", fontSize: "11px", marginTop: "20px" }}>
+            <span style={{ color: "var(--obsidian-green)" }}>●</span> Secured zero-trust session gateway
+          </p>
         </section>
       </main>
     );
   }
 
+  const currentSelectedSystem = systems[selectedSystemId] || systems["print-server"] || Object.values(systems)[0];
+
+  if (obsidianTab !== "legacy") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#000000", color: "#F5F8FF", position: "relative", overflowX: "hidden", fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}>
+        {/* Ambient background */}
+        <div className="ais-gridbg" style={{ position: "fixed", inset: "-60px", backgroundImage: "linear-gradient(rgba(120,170,220,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(120,170,220,0.05) 1px, transparent 1px)", backgroundSize: "60px 60px", pointerEvents: "none", zIndex: 0 }} />
+        <div className="ais-aurora" style={{ position: "fixed", top: "-240px", left: "60px", width: "820px", height: "600px", background: "radial-gradient(ellipse at center, rgba(77,132,255,0.20), rgba(139,92,255,0.08) 45%, transparent 70%)", filter: "blur(40px)", pointerEvents: "none", zIndex: 0 }} />
+        <div className="ais-aurora" style={{ position: "fixed", bottom: "-280px", right: "-40px", width: "860px", height: "620px", background: "radial-gradient(ellipse at center, rgba(255,79,216,0.12), rgba(36,217,255,0.08) 50%, transparent 72%)", filter: "blur(45px)", animationDelay: "-8s", pointerEvents: "none", zIndex: 0 }} />
+        <div className="ais-aurora" style={{ position: "fixed", top: "360px", left: "40%", width: "640px", height: "480px", background: "radial-gradient(ellipse at center, rgba(55,227,161,0.08), transparent 68%)", filter: "blur(45px)", animationDelay: "-14s", pointerEvents: "none", zIndex: 0 }} />
+
+        <div style={{ position: "relative", zIndex: 1, maxWidth: "1680px", margin: "0 auto", padding: "18px 24px", display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+          {/* ================= HEADER ================= */}
+          <header className="ais-panel" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "18px", padding: "14px 24px", border: "1px solid var(--obsidian-border)", borderRadius: "24px", background: "linear-gradient(180deg, rgba(13,20,29,0.95), rgba(5,7,10,0.92))" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+              <div style={{ width: "42px", height: "42px", flexShrink: 0, borderRadius: "12px", background: "linear-gradient(135deg,#24D9FF,#4D84FF 36%,#8B5CFF 68%,#FF4FD8)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 24px rgba(77,132,255,.55)" }}>
+                <span style={{ fontFamily: "'Geist Mono',monospace", fontSize: "14px", fontWeight: 800, color: "#04060A" }}>AIS</span>
+              </div>
+              <div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+                  <span style={{ fontSize: "14px", fontWeight: 800, letterSpacing: ".05em" }}>AIS</span>
+                  <span className="ais-spec" style={{ fontSize: "10px", fontWeight: 700, letterSpacing: ".22em", backgroundImage: "linear-gradient(90deg,#24D9FF,#8B5CFF,#FF4FD8,#24D9FF)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
+                    OBSIDIAN CONTROL PLANE
+                  </span>
+                </div>
+                <div style={{ fontSize: "18px", fontWeight: 700, letterSpacing: "-.015em", marginTop: "2px" }}>Autonomous Operations Command</div>
+                <div style={{ fontSize: "11.5px", color: "var(--obsidian-muted)", marginTop: "1px" }}>Live infrastructure intelligence, execution memory and agent-controlled remediation</div>
+              </div>
+            </div>
+
+            {/* Navigation Tabs */}
+            <nav style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <button
+                className={`nav-btn ${obsidianTab === "command" ? "active" : ""}`}
+                onClick={() => setObsidianTab("command")}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: obsidianTab === "command" ? 700 : 600,
+                  letterSpacing: ".14em",
+                  background: obsidianTab === "command" ? "linear-gradient(135deg, rgba(36,217,255,.22), rgba(77,132,255,.14))" : "transparent",
+                  border: obsidianTab === "command" ? "1px solid rgba(36,217,255,.55)" : "1px solid rgba(120,170,220,0.18)",
+                  color: obsidianTab === "command" ? "#BFF3FF" : "var(--obsidian-muted)",
+                  cursor: "pointer",
+                  boxShadow: obsidianTab === "command" ? "0 0 18px rgba(36,217,255,.25)" : "none",
+                }}
+              >
+                COMMAND
+              </button>
+              <button
+                className={`nav-btn ${obsidianTab === "pipeline" ? "active" : ""}`}
+                onClick={() => setObsidianTab("pipeline")}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: obsidianTab === "pipeline" ? 700 : 600,
+                  letterSpacing: ".14em",
+                  background: obsidianTab === "pipeline" ? "linear-gradient(135deg, rgba(139,92,255,.22), rgba(255,79,216,.14))" : "transparent",
+                  border: obsidianTab === "pipeline" ? "1px solid rgba(139,92,255,.55)" : "1px solid rgba(120,170,220,0.18)",
+                  color: obsidianTab === "pipeline" ? "#EAD4FF" : "var(--obsidian-muted)",
+                  cursor: "pointer",
+                }}
+              >
+                PIPELINE
+              </button>
+              <button
+                className={`nav-btn ${obsidianTab === "agents" ? "active" : ""}`}
+                onClick={() => setObsidianTab("agents")}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: obsidianTab === "agents" ? 700 : 600,
+                  letterSpacing: ".14em",
+                  background: obsidianTab === "agents" ? "linear-gradient(135deg, rgba(55,227,161,.22), rgba(36,217,255,.14))" : "transparent",
+                  border: obsidianTab === "agents" ? "1px solid rgba(55,227,161,.55)" : "1px solid rgba(120,170,220,0.18)",
+                  color: obsidianTab === "agents" ? "#C6FCE7" : "var(--obsidian-muted)",
+                  cursor: "pointer",
+                }}
+              >
+                AGENTS
+              </button>
+              <button
+                className={`nav-btn ${obsidianTab === "activity" ? "active" : ""}`}
+                onClick={() => setObsidianTab("activity")}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: obsidianTab === "activity" ? 700 : 600,
+                  letterSpacing: ".14em",
+                  background: obsidianTab === "activity" ? "linear-gradient(135deg, rgba(255,79,216,.22), rgba(139,92,255,.14))" : "transparent",
+                  border: obsidianTab === "activity" ? "1px solid rgba(255,79,216,.55)" : "1px solid rgba(120,170,220,0.18)",
+                  color: obsidianTab === "activity" ? "#FFD5F5" : "var(--obsidian-muted)",
+                  cursor: "pointer",
+                }}
+              >
+                ACTIVITY
+              </button>
+              <button
+                onClick={() => setObsidianTab("legacy")}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "10px",
+                  fontSize: "10px",
+                  fontWeight: 600,
+                  letterSpacing: ".1em",
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(120,170,220,0.15)",
+                  color: "var(--obsidian-dim)",
+                  cursor: "pointer",
+                  marginLeft: "4px",
+                }}
+              >
+                LEGACY ADMIN
+              </button>
+            </nav>
+
+            {/* Status + Branding */}
+            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 14px", borderRadius: "999px", border: "1px solid rgba(55,227,161,.3)", background: "rgba(55,227,161,.08)" }}>
+                <span className="ais-ok" style={{ width: "7px", height: "7px", borderRadius: "50%", background: "var(--obsidian-green)", boxShadow: "0 0 10px var(--obsidian-green)" }}></span>
+                <span style={{ fontFamily: "'Geist Mono',monospace", fontSize: "10.5px", letterSpacing: ".05em" }}>
+                  <span style={{ color: "var(--obsidian-green)" }}>5 OK</span> <span style={{ color: "var(--obsidian-dim)" }}>·</span> <span style={{ color: "var(--obsidian-amber)" }}>1 WARN</span> <span style={{ color: "var(--obsidian-dim)" }}>·</span> <span style={{ color: "var(--obsidian-red)" }}>1 DEG</span>
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingLeft: "14px", borderLeft: "1px solid var(--obsidian-border)" }}>
+                <div style={{ width: "30px", height: "30px", borderRadius: "9px", background: "linear-gradient(135deg,#24D9FF,#4D84FF 40%,#8B5CFF 70%,#FF4FD8)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Geist Mono',monospace", fontSize: "10.5px", fontWeight: 800, color: "#04060A", boxShadow: "0 0 18px rgba(255,79,216,.45)" }}>AD</div>
+                <div>
+                  <div style={{ fontSize: "8px", letterSpacing: ".22em", color: "var(--obsidian-dim)", fontWeight: 700 }}>POWERED BY</div>
+                  <div className="ais-spec" style={{ fontSize: "12px", fontWeight: 800, letterSpacing: ".06em", backgroundImage: "linear-gradient(90deg,#24D9FF,#8B5CFF,#FF4FD8,#24D9FF)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>AMBIC DIGITAL</div>
+                </div>
+              </div>
+              <button onClick={logout} style={{ background: "transparent", border: "1px solid rgba(120,170,220,0.2)", borderRadius: "8px", color: "var(--obsidian-muted)", padding: "5px 10px", fontSize: "10px", cursor: "pointer", marginLeft: "4px" }}>
+                Sign out
+              </button>
+            </div>
+          </header>
+
+          {/* Spectrum Divider */}
+          <div className="ais-spec" style={{ height: "2px", margin: "12px 2px 0", borderRadius: "2px", backgroundImage: "linear-gradient(90deg,#24D9FF,#4D84FF,#8B5CFF,#FF4FD8,#37E3A1,#FFC45B,#FF5F78,#24D9FF)", opacity: 0.55 }} />
+
+          {/* ================= TAB 1: COMMAND ================= */}
+          {obsidianTab === "command" && (
+            <main style={{ marginTop: "14px" }}>
+              <div style={{ display: "flex", gap: "16px", alignItems: "stretch", flexWrap: "wrap" }}>
+                <QuantumSystemMesh
+                  systems={systems}
+                  selectedSystemId={selectedSystemId}
+                  onSelectSystem={(id) => setSelectedSystemId(id)}
+                />
+
+                <section style={{ flex: 1, minWidth: "340px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
+                    <div className="ais-panel slow" style={{ border: "1px solid rgba(55,227,161,.28)", borderRadius: "18px", background: "linear-gradient(160deg, rgba(55,227,161,.10), rgba(3,5,7,.94) 60%)", padding: "12px 16px", boxShadow: "0 0 24px rgba(55,227,161,.1)" }}>
+                      <div style={{ fontSize: "8.5px", letterSpacing: ".2em", color: "#7FBFA4", fontWeight: 700 }}>PEAK CLEAN UPTIME</div>
+                      <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, marginTop: "6px", color: "var(--obsidian-green)", textShadow: "0 0 18px rgba(55,227,161,.6)" }}>18d 07h</div>
+                      <div style={{ fontSize: "10px", color: "#8CF2CB", marginTop: "2px" }}>QR Print Server</div>
+                    </div>
+
+                    <div className="ais-panel slow" style={{ border: "1px solid rgba(36,217,255,.28)", borderRadius: "18px", background: "linear-gradient(160deg, rgba(36,217,255,.10), rgba(3,5,7,.94) 60%)", padding: "12px 16px", boxShadow: "0 0 24px rgba(36,217,255,.1)" }}>
+                      <div style={{ fontSize: "8.5px", letterSpacing: ".2em", color: "#7FB9CE", fontWeight: 700 }}>AGENT ACTIVITY</div>
+                      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: "6px" }}>
+                        <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, color: "var(--obsidian-cyan)", textShadow: "0 0 18px rgba(36,217,255,.6)" }}>41</div>
+                        <div className="ais-eq" style={{ display: "flex", alignItems: "flex-end", gap: "2.5px", height: "24px" }}>
+                          <span style={{ height: "24px", background: "#24D9FF", animationDelay: "-.1s" }}></span>
+                          <span style={{ height: "24px", background: "#4D84FF", animationDelay: "-.5s" }}></span>
+                          <span style={{ height: "24px", background: "#8B5CFF", animationDelay: "-.9s" }}></span>
+                          <span style={{ height: "24px", background: "#FF4FD8", animationDelay: "-.3s" }}></span>
+                          <span style={{ height: "24px", background: "#8B5CFF", animationDelay: "-.7s" }}></span>
+                          <span style={{ height: "24px", background: "#24D9FF", animationDelay: "-1.1s" }}></span>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: "10px", color: "#9AECFF", marginTop: "2px" }}>last 24 hours</div>
+                    </div>
+
+                    <div className="ais-panel slow" style={{ border: "1px solid rgba(255,196,91,.3)", borderRadius: "18px", background: "linear-gradient(160deg, rgba(255,196,91,.12), rgba(3,5,7,.94) 60%)", padding: "12px 16px", boxShadow: "0 0 24px rgba(255,196,91,.1)" }}>
+                      <div style={{ fontSize: "8.5px", letterSpacing: ".2em", color: "#CBA868", fontWeight: 700 }}>TASKS DUE SOON</div>
+                      <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, marginTop: "6px", color: "var(--obsidian-amber)", textShadow: "0 0 18px rgba(255,196,91,.6)" }}>03</div>
+                      <div style={{ fontSize: "10px", color: "#FFD98C", marginTop: "2px" }}>within 48 hours</div>
+                    </div>
+
+                    <div className="ais-panel slow" style={{ border: "1px solid rgba(139,92,255,.3)", borderRadius: "18px", background: "linear-gradient(160deg, rgba(139,92,255,.12), rgba(3,5,7,.94) 60%)", padding: "12px 16px", boxShadow: "0 0 24px rgba(139,92,255,.12)" }}>
+                      <div style={{ fontSize: "8.5px", letterSpacing: ".2em", color: "#A794D6", fontWeight: 700 }}>OPERATIONAL RISK</div>
+                      <div className="ais-num" style={{ fontSize: "26px", fontWeight: 800, marginTop: "6px", letterSpacing: ".02em", color: "var(--obsidian-green)", textShadow: "0 0 18px rgba(55,227,161,.55)" }}>LOW</div>
+                      <div style={{ fontSize: "10px", color: "#B9A5F5", marginTop: "2px" }}>No critical outage</div>
+                    </div>
+                  </div>
+
+                  <SystemRegistry
+                    systems={systems}
+                    selectedSystemId={selectedSystemId}
+                    onSelectSystem={(id) => setSelectedSystemId(id)}
+                  />
+                </section>
+              </div>
+
+              <SelectedSystemPanel
+                system={currentSelectedSystem}
+                onDiagnoseAndFix={(sysId) => {
+                  setSelectedSystemId(sysId);
+                  setDiagnosisModalOpen(true);
+                }}
+              />
+            </main>
+          )}
+
+          {/* ================= TAB 2: PIPELINE ================= */}
+          {obsidianTab === "pipeline" && (
+            <main style={{ marginTop: "14px" }}>
+              <PipelineView tasks={tasks} />
+            </main>
+          )}
+
+          {/* ================= TAB 3: AGENTS ================= */}
+          {obsidianTab === "agents" && (
+            <main style={{ marginTop: "14px" }}>
+              <AgentsView />
+            </main>
+          )}
+
+          {/* ================= TAB 4: ACTIVITY ================= */}
+          {obsidianTab === "activity" && (
+            <main style={{ marginTop: "14px" }}>
+              <ActivityView activities={activities} />
+            </main>
+          )}
+
+          {/* Modal Overlay */}
+          <DiagnosisModal
+            isOpen={diagnosisModalOpen}
+            system={currentSelectedSystem}
+            onClose={() => setDiagnosisModalOpen(false)}
+            onRemediationComplete={handleRemediationComplete}
+          />
+
+          {/* Footer */}
+          <footer style={{ marginTop: "auto", padding: "18px 6px 8px", display: "flex", alignItems: "center", gap: "14px", borderTop: "1px solid var(--obsidian-border)" }}>
+            <div style={{ width: "26px", height: "26px", borderRadius: "8px", background: "linear-gradient(135deg,#24D9FF,#4D84FF 40%,#8B5CFF 70%,#FF4FD8)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Geist Mono',monospace", fontSize: "10px", fontWeight: 800, color: "#04060A", boxShadow: "0 0 16px rgba(139,92,255,.45)" }}>AD</div>
+            <div>
+              <div style={{ fontSize: "10px", fontWeight: 800, letterSpacing: ".15em" }}>AIS TECHNOLOGY PLATFORM</div>
+              <div className="ais-spec" style={{ fontSize: "9.5px", letterSpacing: ".14em", fontWeight: 700, marginTop: "1px", backgroundImage: "linear-gradient(90deg,#24D9FF,#8B5CFF,#FF4FD8,#24D9FF)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>POWERED BY AMBIC DIGITAL</div>
+            </div>
+            <div style={{ marginLeft: "auto", fontSize: "9px", letterSpacing: ".26em", color: "var(--obsidian-dim)", fontWeight: 700 }}>
+              <span style={{ color: "var(--obsidian-cyan)" }}>AUTOMATION</span> &nbsp;•&nbsp; <span style={{ color: "var(--obsidian-violet)" }}>INFRASTRUCTURE</span> &nbsp;•&nbsp; <span style={{ color: "var(--obsidian-magenta)" }}>INTELLIGENCE</span>
+            </div>
+          </footer>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <main className="app-shell">
+    <>
+      <div style={{ background: "#000000", borderBottom: "1px solid rgba(120,170,220,0.25)", padding: "10px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", color: "#F5F8FF", fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <span style={{ fontSize: "11px", letterSpacing: ".18em", color: "var(--obsidian-cyan)", fontWeight: 800 }}>AIS LEGACY WORKSPACE</span>
+          <span style={{ fontSize: "11px", color: "var(--obsidian-muted)" }}>Retained for internal project registries &amp; supervisor triage</span>
+        </div>
+        <button
+          onClick={() => setObsidianTab("command")}
+          style={{
+            padding: "7px 16px",
+            borderRadius: "10px",
+            border: "1px solid rgba(36,217,255,0.5)",
+            background: "linear-gradient(135deg, rgba(36,217,255,0.2), rgba(77,132,255,0.2))",
+            color: "#BFF3FF",
+            fontSize: "11.5px",
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          ← Return to Obsidian Control Plane
+        </button>
+      </div>
+      <main className="app-shell">
+
       <aside className="sidebar">
         <div className="brand-block">
           <Image src="/aradhana-logo-transparent.png" alt="Aradhana Jewellers" width={1600} height={1600} priority />
@@ -1211,5 +1850,6 @@ export default function Home() {
         </div>
       )}
     </main>
+    </>
   );
 }
