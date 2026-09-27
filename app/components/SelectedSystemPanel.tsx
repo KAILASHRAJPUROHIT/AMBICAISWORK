@@ -24,7 +24,13 @@ export const SelectedSystemPanel: React.FC<SelectedSystemPanelProps> = ({
     statusBadgeStyle = "border: 1px solid rgba(255,95,120,.45); color: var(--obsidian-red); box-shadow: 0 0 14px rgba(255,95,120,.22)";
     issueBg = "linear-gradient(100deg, rgba(255,95,120,.14), rgba(139,92,255,.08))";
     issueColor = "var(--obsidian-red)";
+  } else if (system.statusTone === "grey") {
+    statusBadgeStyle = "border: 1px solid rgba(120,144,163,.4); color: var(--obsidian-muted); box-shadow: none";
+    issueBg = "linear-gradient(100deg, rgba(120,144,163,.08), rgba(8,11,16,.4))";
+    issueColor = "var(--obsidian-muted)";
   }
+
+  const unregistered = system.health === "Unregistered";
 
   return (
     <section
@@ -41,15 +47,19 @@ export const SelectedSystemPanel: React.FC<SelectedSystemPanelProps> = ({
         alignItems: "stretch",
       }}
     >
-      {/* Left Column: Title & Telemetry Gauges */}
+      {/* Left Column: Title & status */}
       <div style={{ width: "310px", flexShrink: 0 }}>
         <div style={{ fontSize: "8.5px", letterSpacing: ".22em", color: "var(--obsidian-dim)", fontWeight: 700 }}>
           SELECTED SYSTEM
         </div>
-        <div style={{ fontSize: "10px", color: system.source === "live" ? "var(--obsidian-green)" : "var(--obsidian-muted)", marginTop: "4px" }}>
-          {system.source === "live"
-            ? "Health status is live. Host, scores, metrics and history below are sample values."
-            : "Sample data — this system is not connected to real monitoring yet."}
+        <div style={{ fontSize: "10px", color: system.source === "registry" ? "var(--obsidian-green)" : "var(--obsidian-muted)", marginTop: "4px" }}>
+          {system.source === "registry"
+            ? unregistered
+              ? "No system is registered under this key yet."
+              : system.manual
+                ? "Operator-declared status — no automated check exists for this system."
+                : "Live from the systems registry."
+            : "Waiting for the systems registry to answer…"}
         </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginTop: "5px" }}>
           <span style={{ fontSize: "22px", fontWeight: 800, letterSpacing: "-.01em" }}>{system.name}</span>
@@ -59,56 +69,34 @@ export const SelectedSystemPanel: React.FC<SelectedSystemPanelProps> = ({
               fontSize: "10.5px",
               borderRadius: "999px",
               padding: "2px 10px",
-              border: system.statusTone === "amber" ? "1px solid rgba(255,196,91,.45)" : system.statusTone === "red" ? "1px solid rgba(255,95,120,.45)" : "1px solid rgba(55,227,161,.45)",
-              color: system.statusTone === "amber" ? "var(--obsidian-amber)" : system.statusTone === "red" ? "var(--obsidian-red)" : "var(--obsidian-green)",
-              boxShadow: system.statusTone === "amber" ? "0 0 14px rgba(255,196,91,.22)" : system.statusTone === "red" ? "0 0 14px rgba(255,95,120,.22)" : "0 0 14px rgba(55,227,161,.22)",
+              border: system.statusTone === "amber" ? "1px solid rgba(255,196,91,.45)" : system.statusTone === "red" ? "1px solid rgba(255,95,120,.45)" : system.statusTone === "grey" ? "1px solid rgba(120,144,163,.4)" : "1px solid rgba(55,227,161,.45)",
+              color: system.statusTone === "amber" ? "var(--obsidian-amber)" : system.statusTone === "red" ? "var(--obsidian-red)" : system.statusTone === "grey" ? "var(--obsidian-muted)" : "var(--obsidian-green)",
+              boxShadow: system.statusTone === "amber" ? "0 0 14px rgba(255,196,91,.22)" : system.statusTone === "red" ? "0 0 14px rgba(255,95,120,.22)" : "none",
             }}
           >
-            {system.health.toUpperCase()}{system.source === "live" ? "" : ` · ${system.healthScore}%`}
+            {system.health.toUpperCase()}
           </span>
         </div>
-        <div style={{ fontFamily: "'Geist Mono',monospace", fontSize: "11px", color: "var(--obsidian-muted)", marginTop: "4px" }}>
-          {system.cleanUptime} clean uptime
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px", marginTop: "14px" }}>
-          <div style={{ border: "1px solid rgba(255,196,91,.25)", borderRadius: "14px", padding: "8px 12px", background: "linear-gradient(150deg, rgba(255,196,91,.08), rgba(8,11,16,.8))" }}>
-            <div style={{ fontSize: "8px", letterSpacing: ".16em", color: "#CBA868", fontWeight: 700 }}>CPU</div>
-            <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "18px", fontWeight: 700, color: "var(--obsidian-amber)", marginTop: "2px" }}>
-              {system.cpu}
-            </div>
-            <div style={{ height: "3px", borderRadius: "2px", background: "rgba(120,170,220,.15)", marginTop: "5px", overflow: "hidden" }}>
-              <div className="ais-fillx" style={{ width: system.cpu, height: "100%", borderRadius: "2px", background: "linear-gradient(90deg, var(--obsidian-amber), var(--obsidian-red))" }}></div>
-            </div>
+        {!unregistered && (
+          <div style={{ fontFamily: "'Geist Mono',monospace", fontSize: "11px", color: "var(--obsidian-muted)", marginTop: "4px" }}>
+            {system.cleanUptime === "—" ? "Clean uptime not yet established" : `${system.cleanUptime} clean uptime`}
           </div>
+        )}
 
-          <div style={{ border: "1px solid rgba(36,217,255,.25)", borderRadius: "14px", padding: "8px 12px", background: "linear-gradient(150deg, rgba(36,217,255,.08), rgba(8,11,16,.8))" }}>
-            <div style={{ fontSize: "8px", letterSpacing: ".16em", color: "#7FB9CE", fontWeight: 700 }}>MEMORY</div>
-            <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "18px", fontWeight: 700, color: "var(--obsidian-cyan)", marginTop: "2px" }}>
-              {system.memory}
-            </div>
-            <div style={{ height: "3px", borderRadius: "2px", background: "rgba(120,170,220,.15)", marginTop: "5px", overflow: "hidden" }}>
-              <div className="ais-fillx" style={{ width: system.memory, height: "100%", borderRadius: "2px", background: "linear-gradient(90deg, var(--obsidian-cyan), var(--obsidian-violet))", animationDelay: "-.6s" }}></div>
-            </div>
-          </div>
-
-          <div style={{ border: "1px solid rgba(139,92,255,.25)", borderRadius: "14px", padding: "8px 12px", background: "linear-gradient(150deg, rgba(139,92,255,.08), rgba(8,11,16,.8))" }}>
-            <div style={{ fontSize: "8px", letterSpacing: ".16em", color: "#A794D6", fontWeight: 700 }}>EVENTS</div>
-            <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "18px", fontWeight: 700, color: "var(--obsidian-violet)", marginTop: "2px" }}>
-              {system.events}
-            </div>
-          </div>
-
-          <div style={{ border: "1px solid rgba(255,79,216,.25)", borderRadius: "14px", padding: "8px 12px", background: "linear-gradient(150deg, rgba(255,79,216,.08), rgba(8,11,16,.8))" }}>
-            <div style={{ fontSize: "8px", letterSpacing: ".16em", color: "#C98BB4", fontWeight: 700 }}>HOST</div>
-            <div style={{ fontSize: "13.5px", fontWeight: 700, marginTop: "4px", color: "#F9B8E8" }}>
-              {system.host}
-            </div>
+        <div style={{ marginTop: "14px", border: "1px solid rgba(255,79,216,.25)", borderRadius: "14px", padding: "10px 12px", background: "linear-gradient(150deg, rgba(255,79,216,.08), rgba(8,11,16,.8))" }}>
+          <div style={{ fontSize: "8px", letterSpacing: ".16em", color: "#C98BB4", fontWeight: 700 }}>HOST</div>
+          <div style={{ fontSize: "13.5px", fontWeight: 700, marginTop: "4px", color: "#F9B8E8" }}>
+            {system.host}
           </div>
         </div>
+        {!unregistered && (
+          <div style={{ fontSize: "9.5px", color: "var(--obsidian-dim)", marginTop: "8px", lineHeight: 1.5 }}>
+            No per-system CPU, memory or event-rate telemetry exists yet — that needs a host agent on each machine, not built here. Showing what is real: health, host, and the last known change.
+          </div>
+        )}
       </div>
 
-      {/* Center Column: Current Issue, Last Work, Dependencies */}
+      {/* Center Column: Current Issue, Last Work */}
       <div style={{ flexGrow: 1, minWidth: "280px", display: "flex", flexDirection: "column", gap: "10px" }}>
         <div style={{ border: "1px solid rgba(120,170,220,.2)", borderRadius: "16px", background: issueBg, padding: "10px 14px" }}>
           <div style={{ fontSize: "8px", letterSpacing: ".18em", color: issueColor, fontWeight: 700 }}>CURRENT ISSUE / STATE</div>
@@ -116,57 +104,13 @@ export const SelectedSystemPanel: React.FC<SelectedSystemPanelProps> = ({
         </div>
 
         <div style={{ border: "1px solid var(--obsidian-border)", borderRadius: "16px", background: "rgba(8,11,16,.65)", padding: "10px 14px" }}>
-          <div style={{ fontSize: "8px", letterSpacing: ".18em", color: "var(--obsidian-dim)", fontWeight: 700 }}>LAST WORK DONE</div>
+          <div style={{ fontSize: "8px", letterSpacing: ".18em", color: "var(--obsidian-dim)", fontWeight: 700 }}>
+            {system.manual ? "OPERATOR NOTE" : "LAST KNOWN CHANGE (SOURCE CONTROL)"}
+          </div>
           <div style={{ fontSize: "12.5px", marginTop: "4px", color: "#C6D2E2" }}>{system.lastWorkDesc}</div>
           <div style={{ fontSize: "10.5px", color: "var(--obsidian-muted)", marginTop: "4px" }}>
             {system.lastWorkBy} &middot; {system.lastWorkTime}
           </div>
-        </div>
-
-        <div>
-          <div style={{ fontSize: "8px", letterSpacing: ".18em", color: "var(--obsidian-dim)", fontWeight: 700, marginBottom: "6px" }}>
-            DEPENDENCIES
-          </div>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            {system.dependencies.map((dep, idx) => (
-              <span
-                key={idx}
-                style={{
-                  fontSize: "10px",
-                  color: "#BFF3FF",
-                  border: "1px solid rgba(36,217,255,.35)",
-                  borderRadius: "999px",
-                  padding: "4px 10px",
-                  background: "rgba(36,217,255,.06)",
-                }}
-              >
-                {dep}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Right-Center Column: Recent Activity Timeline */}
-      <div style={{ width: "260px", flexShrink: 0, borderLeft: "1px solid var(--obsidian-border)", paddingLeft: "18px" }}>
-        <div style={{ fontSize: "8px", letterSpacing: ".18em", color: "var(--obsidian-dim)", fontWeight: 700, marginBottom: "9px" }}>
-          RECENT ACTIVITY
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {system.recentActivity.map((act, idx) => {
-            let actColor = "var(--obsidian-green)";
-            if (act.tone === "amber") actColor = "var(--obsidian-amber)";
-            if (act.tone === "red") actColor = "var(--obsidian-red)";
-            if (act.tone === "cyan") actColor = "var(--obsidian-cyan)";
-            if (act.tone === "violet") actColor = "var(--obsidian-violet)";
-            return (
-              <div key={idx} style={{ display: "flex", gap: "9px", alignItems: "center" }}>
-                <span style={{ width: "5px", height: "5px", borderRadius: "50%", background: actColor, boxShadow: `0 0 7px ${actColor}`, flexShrink: 0 }}></span>
-                <span style={{ fontFamily: "'Geist Mono',monospace", fontSize: "9.5px", color: "var(--obsidian-dim)", width: "32px", flexShrink: 0 }}>{act.time}</span>
-                <span style={{ fontSize: "11px", color: "#C6D2E2" }}>{act.note}</span>
-              </div>
-            );
-          })}
         </div>
       </div>
 
@@ -208,7 +152,7 @@ export const SelectedSystemPanel: React.FC<SelectedSystemPanelProps> = ({
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "9.5px", color: "var(--obsidian-muted)" }}>
           <span className="ais-blink" style={{ width: "5px", height: "5px", borderRadius: "50%", background: "var(--obsidian-violet)", boxShadow: "0 0 8px var(--obsidian-violet)" }}></span>
-          No state change without human sign-off
+          Not connected yet — no state change without human sign-off
         </div>
       </div>
     </section>

@@ -12,6 +12,28 @@ interface QuantumSystemMeshProps {
   agentsReadyCount?: string | number;
 }
 
+
+/** One row per statusTone -- drives every node's actual color/pulse/size, in
+ * place of the fixed per-node colors this SVG shipped with (which never
+ * looked at real health at all). "grey" (Disabled/Unregistered) gets no
+ * pulse and reduced opacity: a system that isn't really there should not
+ * pretend to be alive.
+ */
+const TONE_STYLE: Record<string, {
+  haloClass: string; haloFill: string; nodeFill: string; nodeStroke: string; strokeW: number;
+  r: number; haloR: number; textFill: string; labelFill: string; opacity: number;
+}> = {
+  green:  { haloClass: "ais-ok",   haloFill: "rgba(55,227,161,.18)",  nodeFill: "#031410", nodeStroke: "#37E3A1", strokeW: 1.6, r: 14, haloR: 21, textFill: "#8CF2CB", labelFill: "#8CF2CB", opacity: 1 },
+  cyan:   { haloClass: "ais-ok",   haloFill: "rgba(36,217,255,.24)",  nodeFill: "#031319", nodeStroke: "#24D9FF", strokeW: 1.8, r: 14, haloR: 22, textFill: "#BFF3FF", labelFill: "#9AECFF", opacity: 1 },
+  amber:  { haloClass: "ais-warn", haloFill: "rgba(255,196,91,.24)",  nodeFill: "#1A1104", nodeStroke: "#FFC45B", strokeW: 2.2, r: 15, haloR: 25, textFill: "#FFE0A0", labelFill: "#FFC45B", opacity: 1 },
+  red:    { haloClass: "ais-fail", haloFill: "rgba(255,95,120,.26)",  nodeFill: "#1A0609", nodeStroke: "#FF5F78", strokeW: 2.2, r: 15, haloR: 26, textFill: "#FFB3BF", labelFill: "#FF5F78", opacity: 1 },
+  violet: { haloClass: "ais-ok",   haloFill: "rgba(255,79,216,.2)",   nodeFill: "#170618", nodeStroke: "#FF4FD8", strokeW: 1.6, r: 14, haloR: 21, textFill: "#F9B8E8", labelFill: "#F3A8DF", opacity: 1 },
+  grey:   { haloClass: "",         haloFill: "rgba(120,144,163,.10)", nodeFill: "#0B0F14", nodeStroke: "#5C6A7C", strokeW: 1.3, r: 14, haloR: 19, textFill: "#8190A3", labelFill: "#5C6A7C", opacity: 0.55 },
+};
+function toneOf(systems: Record<string, SystemItem>, id: string) {
+  return TONE_STYLE[systems[id]?.statusTone ?? "grey"] ?? TONE_STYLE.grey;
+}
+
 export const QuantumSystemMesh: React.FC<QuantumSystemMeshProps> = ({
   systems,
   selectedSystemId,
@@ -24,7 +46,7 @@ export const QuantumSystemMesh: React.FC<QuantumSystemMeshProps> = ({
 }) => {
   const meshCardRef = useRef<HTMLDivElement>(null);
   const liveIncidents = Object.values(systems)
-    .filter((x) => x.source === "live" && x.health !== "Healthy" && x.health !== "Active")
+    .filter((x) => x.source === "registry" && x.health !== "Healthy" && x.health !== "Active" && x.health !== "Unregistered")
     .length.toString().padStart(2, "0");
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -197,66 +219,65 @@ export const QuantumSystemMesh: React.FC<QuantumSystemMeshProps> = ({
             {/* Clickable System Nodes */}
             {/* QR Print Server */}
             <g className="node-interactive" onClick={() => onSelectSystem("qr-print")}>
-              {selectedSystemId === "qr-print" && <circle cx="280" cy="170" r="27" fill="none" stroke="#24D9FF" strokeWidth="1.5" strokeDasharray="3 3" opacity=".9" />}
-              <circle className="ais-ok" cx="280" cy="170" r="21" fill="rgba(55,227,161,.18)" />
-              <circle cx="280" cy="170" r="14" fill="#031410" stroke="#37E3A1" strokeWidth="1.6" filter="url(#glowS)" />
-              <text x="280" y="174" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="700" fill="#8CF2CB">QR</text>
-              <text x="280" y="145" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill="#8CF2CB">QR Print</text>
+              {selectedSystemId === "qr-print" && <circle cx="280" cy="170" r="27" fill="none" stroke={toneOf(systems, "qr-print").nodeStroke} strokeWidth="1.6" strokeDasharray="3 3" opacity=".9" />}
+              <circle className={toneOf(systems, "qr-print").haloClass} cx="280" cy="170" r={toneOf(systems, "qr-print").haloR} fill={toneOf(systems, "qr-print").haloFill} opacity={toneOf(systems, "qr-print").opacity} />
+              <circle cx="280" cy="170" r={toneOf(systems, "qr-print").r} fill={toneOf(systems, "qr-print").nodeFill} stroke={toneOf(systems, "qr-print").nodeStroke} strokeWidth={toneOf(systems, "qr-print").strokeW} filter="url(#glowS)" opacity={toneOf(systems, "qr-print").opacity} />
+              <text x="280" y="174" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="700" fill={toneOf(systems, "qr-print").textFill} opacity={toneOf(systems, "qr-print").opacity}>QR</text>
+              <text x="280" y="145" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill={toneOf(systems, "qr-print").labelFill} opacity={toneOf(systems, "qr-print").opacity}>QR Print</text>
             </g>
 
             {/* Gold Rate Monitor */}
             <g className="node-interactive" onClick={() => onSelectSystem("gold-rate")}>
-              {selectedSystemId === "gold-rate" && <circle cx="375" cy="335" r="27" fill="none" stroke="#24D9FF" strokeWidth="1.5" strokeDasharray="3 3" opacity=".9" />}
-              <circle className="ais-ok" cx="375" cy="335" r="21" fill="rgba(55,227,161,.18)" style={{ animationDelay: "-1.4s" }} />
-              <circle cx="375" cy="335" r="14" fill="#031410" stroke="#37E3A1" strokeWidth="1.6" filter="url(#glowS)" />
-              <text x="375" y="339" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="700" fill="#8CF2CB">AU</text>
-              <text x="375" y="364" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill="#8CF2CB">Gold Rate</text>
+              {selectedSystemId === "gold-rate" && <circle cx="375" cy="335" r="27" fill="none" stroke={toneOf(systems, "gold-rate").nodeStroke} strokeWidth="1.6" strokeDasharray="3 3" opacity=".9" />}
+              <circle className={toneOf(systems, "gold-rate").haloClass} cx="375" cy="335" r={toneOf(systems, "gold-rate").haloR} fill={toneOf(systems, "gold-rate").haloFill} opacity={toneOf(systems, "gold-rate").opacity} />
+              <circle cx="375" cy="335" r={toneOf(systems, "gold-rate").r} fill={toneOf(systems, "gold-rate").nodeFill} stroke={toneOf(systems, "gold-rate").nodeStroke} strokeWidth={toneOf(systems, "gold-rate").strokeW} filter="url(#glowS)" opacity={toneOf(systems, "gold-rate").opacity} />
+              <text x="375" y="339" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="700" fill={toneOf(systems, "gold-rate").textFill} opacity={toneOf(systems, "gold-rate").opacity}>AU</text>
+              <text x="375" y="364" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill={toneOf(systems, "gold-rate").labelFill} opacity={toneOf(systems, "gold-rate").opacity}>Gold Rate</text>
             </g>
 
             {/* Print Server (Warning) */}
             <g className="node-interactive" onClick={() => onSelectSystem("print-server")}>
-              {selectedSystemId === "print-server" && <circle cx="185" cy="335" r="29" fill="none" stroke="#FFC45B" strokeWidth="1.8" strokeDasharray="3 3" opacity=".9" />}
-              <circle className="ais-warn" cx="185" cy="335" r="25" fill="rgba(255,196,91,.24)" />
-              <circle cx="185" cy="335" r="15" fill="#1A1104" stroke="#FFC45B" strokeWidth="2.2" filter="url(#glowS)" />
-              <text x="185" y="339" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="800" fill="#FFE0A0">PR</text>
-              <text x="185" y="366" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="700" fill="#FFC45B">Print Server</text>
+              {selectedSystemId === "print-server" && <circle cx="185" cy="335" r="29" fill="none" stroke={toneOf(systems, "print-server").nodeStroke} strokeWidth="1.6" strokeDasharray="3 3" opacity=".9" />}
+              <circle className={toneOf(systems, "print-server").haloClass} cx="185" cy="335" r={toneOf(systems, "print-server").haloR} fill={toneOf(systems, "print-server").haloFill} opacity={toneOf(systems, "print-server").opacity} />
+              <circle cx="185" cy="335" r={toneOf(systems, "print-server").r} fill={toneOf(systems, "print-server").nodeFill} stroke={toneOf(systems, "print-server").nodeStroke} strokeWidth={toneOf(systems, "print-server").strokeW} filter="url(#glowS)" opacity={toneOf(systems, "print-server").opacity} />
+              <text x="185" y="339" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="700" fill={toneOf(systems, "print-server").textFill} opacity={toneOf(systems, "print-server").opacity}>PR</text>
+              <text x="185" y="366" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill={toneOf(systems, "print-server").labelFill} opacity={toneOf(systems, "print-server").opacity}>Print Server</text>
             </g>
 
             {/* Payment Notifier */}
             <g className="node-interactive" onClick={() => onSelectSystem("payment-notifier")}>
-              {selectedSystemId === "payment-notifier" && <circle cx="432" cy="193" r="28" fill="none" stroke="#24D9FF" strokeWidth="1.5" strokeDasharray="3 3" opacity=".9" />}
-              <circle className="ais-ok" cx="432" cy="193" r="22" fill="rgba(36,217,255,.24)" style={{ animationDuration: "2s" }} />
-              <circle cx="432" cy="193" r="14" fill="#031319" stroke="#24D9FF" strokeWidth="1.8" filter="url(#glowS)" />
-              <text x="432" y="197" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="700" fill="#BFF3FF">PN</text>
-              <text x="432" y="168" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill="#9AECFF">Payment</text>
+              {selectedSystemId === "payment-notifier" && <circle cx="432" cy="193" r="28" fill="none" stroke={toneOf(systems, "payment-notifier").nodeStroke} strokeWidth="1.6" strokeDasharray="3 3" opacity=".9" />}
+              <circle className={toneOf(systems, "payment-notifier").haloClass} cx="432" cy="193" r={toneOf(systems, "payment-notifier").haloR} fill={toneOf(systems, "payment-notifier").haloFill} opacity={toneOf(systems, "payment-notifier").opacity} />
+              <circle cx="432" cy="193" r={toneOf(systems, "payment-notifier").r} fill={toneOf(systems, "payment-notifier").nodeFill} stroke={toneOf(systems, "payment-notifier").nodeStroke} strokeWidth={toneOf(systems, "payment-notifier").strokeW} filter="url(#glowS)" opacity={toneOf(systems, "payment-notifier").opacity} />
+              <text x="432" y="197" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="700" fill={toneOf(systems, "payment-notifier").textFill} opacity={toneOf(systems, "payment-notifier").opacity}>PN</text>
+              <text x="432" y="168" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill={toneOf(systems, "payment-notifier").labelFill} opacity={toneOf(systems, "payment-notifier").opacity}>Payment</text>
             </g>
 
             {/* Order Tracker */}
             <g className="node-interactive" onClick={() => onSelectSystem("order-tracker")}>
-              {selectedSystemId === "order-tracker" && <circle cx="280" cy="455" r="27" fill="none" stroke="#4D84FF" strokeWidth="1.5" strokeDasharray="3 3" opacity=".9" />}
-              <circle className="ais-ok" cx="280" cy="455" r="21" fill="rgba(77,132,255,.2)" style={{ animationDelay: "-2.6s" }} />
-              <circle cx="280" cy="455" r="14" fill="#03091A" stroke="#4D84FF" strokeWidth="1.6" filter="url(#glowS)" />
-              <text x="280" y="459" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="700" fill="#AEC6FF">OT</text>
-              <text x="280" y="484" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill="#AEC6FF">Order Tracker</text>
+              {selectedSystemId === "order-tracker" && <circle cx="280" cy="455" r="27" fill="none" stroke={toneOf(systems, "order-tracker").nodeStroke} strokeWidth="1.6" strokeDasharray="3 3" opacity=".9" />}
+              <circle className={toneOf(systems, "order-tracker").haloClass} cx="280" cy="455" r={toneOf(systems, "order-tracker").haloR} fill={toneOf(systems, "order-tracker").haloFill} opacity={toneOf(systems, "order-tracker").opacity} />
+              <circle cx="280" cy="455" r={toneOf(systems, "order-tracker").r} fill={toneOf(systems, "order-tracker").nodeFill} stroke={toneOf(systems, "order-tracker").nodeStroke} strokeWidth={toneOf(systems, "order-tracker").strokeW} filter="url(#glowS)" opacity={toneOf(systems, "order-tracker").opacity} />
+              <text x="280" y="459" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="700" fill={toneOf(systems, "order-tracker").textFill} opacity={toneOf(systems, "order-tracker").opacity}>OT</text>
+              <text x="280" y="484" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill={toneOf(systems, "order-tracker").labelFill} opacity={toneOf(systems, "order-tracker").opacity}>Order Tracker</text>
             </g>
 
             {/* Catalogue Tool */}
             <g className="node-interactive" onClick={() => onSelectSystem("catalogue-tool")}>
-              {selectedSystemId === "catalogue-tool" && <circle cx="72" cy="160" r="30" fill="none" stroke="#FF5F78" strokeWidth="1.8" strokeDasharray="3 3" opacity=".9" />}
-              <circle className="ais-fail" cx="72" cy="160" r="26" fill="rgba(255,95,120,.26)" />
-              <circle cx="72" cy="160" r="15" fill="#1A0609" stroke="#FF5F78" strokeWidth="2.2" filter="url(#glowS)" />
-              <text x="72" y="164" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="800" fill="#FFB3BF">CT</text>
-              <text x="72" y="133" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="700" fill="#FF5F78">Catalogue</text>
-              <text className="ais-blink" x="72" y="192" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="7.5" letterSpacing=".6" fontWeight="700" fill="#B9A5F5">AGENT ON IT</text>
+              {selectedSystemId === "catalogue-tool" && <circle cx="72" cy="160" r="30" fill="none" stroke={toneOf(systems, "catalogue-tool").nodeStroke} strokeWidth="1.6" strokeDasharray="3 3" opacity=".9" />}
+              <circle className={toneOf(systems, "catalogue-tool").haloClass} cx="72" cy="160" r={toneOf(systems, "catalogue-tool").haloR} fill={toneOf(systems, "catalogue-tool").haloFill} opacity={toneOf(systems, "catalogue-tool").opacity} />
+              <circle cx="72" cy="160" r={toneOf(systems, "catalogue-tool").r} fill={toneOf(systems, "catalogue-tool").nodeFill} stroke={toneOf(systems, "catalogue-tool").nodeStroke} strokeWidth={toneOf(systems, "catalogue-tool").strokeW} filter="url(#glowS)" opacity={toneOf(systems, "catalogue-tool").opacity} />
+              <text x="72" y="164" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="9" fontWeight="700" fill={toneOf(systems, "catalogue-tool").textFill} opacity={toneOf(systems, "catalogue-tool").opacity}>CT</text>
+              <text x="72" y="133" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill={toneOf(systems, "catalogue-tool").labelFill} opacity={toneOf(systems, "catalogue-tool").opacity}>Catalogue</text>
             </g>
 
             {/* AMBIC MDM */}
             <g className="node-interactive" onClick={() => onSelectSystem("ambic-mdm")}>
-              {selectedSystemId === "ambic-mdm" && <circle cx="450" cy="450" r="27" fill="none" stroke="#FF4FD8" strokeWidth="1.5" strokeDasharray="3 3" opacity=".9" />}
-              <circle className="ais-ok" cx="450" cy="450" r="21" fill="rgba(255,79,216,.2)" style={{ animationDelay: "-3.3s" }} />
-              <circle cx="450" cy="450" r="14" fill="#170618" stroke="#FF4FD8" strokeWidth="1.6" filter="url(#glowS)" />
-              <text x="450" y="454" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="8.5" fontWeight="800" fill="#F9B8E8">MDM</text>
-              <text x="450" y="479" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill="#F3A8DF">AMBIC MDM</text>
+              {selectedSystemId === "ambic-mdm" && <circle cx="450" cy="450" r="27" fill="none" stroke={toneOf(systems, "ambic-mdm").nodeStroke} strokeWidth="1.6" strokeDasharray="3 3" opacity=".9" />}
+              <circle className={toneOf(systems, "ambic-mdm").haloClass} cx="450" cy="450" r={toneOf(systems, "ambic-mdm").haloR} fill={toneOf(systems, "ambic-mdm").haloFill} opacity={toneOf(systems, "ambic-mdm").opacity} />
+              <circle cx="450" cy="450" r={toneOf(systems, "ambic-mdm").r} fill={toneOf(systems, "ambic-mdm").nodeFill} stroke={toneOf(systems, "ambic-mdm").nodeStroke} strokeWidth={toneOf(systems, "ambic-mdm").strokeW} filter="url(#glowS)" opacity={toneOf(systems, "ambic-mdm").opacity} />
+              <text x="450" y="454" textAnchor="middle" fontFamily="'Geist Mono',monospace" fontSize="8.5" fontWeight="700" fill={toneOf(systems, "ambic-mdm").textFill} opacity={toneOf(systems, "ambic-mdm").opacity}>MDM</text>
+              <text x="450" y="479" textAnchor="middle" fontFamily="'Geist',sans-serif" fontSize="8.5" fontWeight="600" fill={toneOf(systems, "ambic-mdm").labelFill} opacity={toneOf(systems, "ambic-mdm").opacity}>AMBIC MDM</text>
             </g>
           </svg>
         </div>

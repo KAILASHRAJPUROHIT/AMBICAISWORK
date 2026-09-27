@@ -1,16 +1,22 @@
-export type SystemHealthStatus = "Healthy" | "Active" | "Warning" | "Degraded" | "Failure";
+export type SystemHealthStatus = "Healthy" | "Active" | "Warning" | "Degraded" | "Disabled" | "Unregistered";
 
-export type SystemTone = "green" | "cyan" | "amber" | "red" | "violet";
+export type SystemTone = "green" | "cyan" | "amber" | "red" | "violet" | "grey";
 
 export interface SystemItem {
   id: string;
   name: string;
   abbr: string;
-  /** "live" = health state comes from a real control-plane check. Everything
-   *  else on the row (host, scores, metrics, history) is still sample data. Absent = sample. */
-  source?: "live" | "sample";
+  /**
+   * "registry" = every field below came from GET /api/systems just now.
+   * Absent = the registry hasn't answered yet (first paint / an outage);
+   * the row then falls back to its static identity only (id/name/abbr) and
+   * everything else renders as "—", never a stale or invented value.
+   */
+  source?: "registry";
   health: SystemHealthStatus;
-  healthScore: number;
+  /** Real device health has no numeric score (would need host agents this
+   *  system doesn't have). Absent, not defaulted -- render "—", never 0. */
+  healthScore?: number;
   statusTone: SystemTone;
   errorReason: string;
   host: string;
@@ -18,15 +24,7 @@ export interface SystemItem {
   lastWorkTime: string;
   lastWorkDesc: string;
   cleanUptime: string;
-  cpu: string;
-  memory: string;
-  events: string;
-  dependencies: string[];
-  recentActivity: Array<{
-    time: string;
-    note: string;
-    tone: SystemTone;
-  }>;
+  manual: boolean;
 }
 
 export interface PipelineTask {
@@ -48,4 +46,26 @@ export interface ActivityFeedItem {
   message: string;
   tag: string;
   tagColor: string;
+}
+
+/** GET /api/systems response shape, from control-plane's systemProjection(). */
+export interface RegistrySystem {
+  id: string;
+  name: string;
+  host: { id: string; name: string; kind: string } | null;
+  projectId: string | null;
+  health: "healthy" | "warning" | "error" | "disabled" | "unregistered" | "active";
+  errorReason: string | null;
+  manual: boolean;
+  manualSetBy: string | null;
+  manualSetAt: string | null;
+  lastWorkBy: string | null;
+  lastWorkAt: string | null;
+  lastWorkDescription: string | null;
+  healthySince: string | null;
+  lastFailureAt: string | null;
+  cleanUptimeSec: number | null;
+  cleanUptimeStr: string | null;
+  lastCheckedAt: string | null;
+  updatedAt: string;
 }

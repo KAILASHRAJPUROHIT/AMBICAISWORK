@@ -9,167 +9,72 @@ import { DiagnosisModal } from "./components/DiagnosisModal";
 import { PipelineView } from "./components/PipelineView";
 import { AgentsView } from "./components/AgentsView";
 import { ActivityView } from "./components/ActivityView";
-import { SystemItem, PipelineTask, ActivityFeedItem } from "./components/types";
+import { SystemItem, PipelineTask, ActivityFeedItem, RegistrySystem } from "./components/types";
 
-const initialSystemsData: Record<string, SystemItem> = {
-  "print-server": {
-    id: "print-server",
-    name: "Print Server",
-    abbr: "PR",
-    health: "Warning",
-    healthScore: 74,
-    statusTone: "amber",
-    errorReason: "Queue latency above baseline",
-    host: "Dell Server",
-    lastWorkBy: "AIS Agent",
-    lastWorkTime: "26 Sep 2026 · 17:02",
-    lastWorkDesc: "Cleared 2 stale jobs and rechecked spooler",
-    cleanUptime: "03h 19m",
-    cpu: "61%",
-    memory: "57%",
-    events: "460/min",
-    dependencies: ["Windows Spooler", "SMB", "Printer Hosts", "Print Router"],
-    recentActivity: [
-      { time: "17:04", note: "Queue latency still elevated", tone: "amber" },
-      { time: "17:03", note: "Spooler checked", tone: "cyan" },
-      { time: "17:02", note: "Two stale jobs cleared", tone: "green" },
-      { time: "16:58", note: "Warning triggered", tone: "red" },
-    ],
-  },
-  "catalogue-tool": {
-    id: "catalogue-tool",
-    name: "Catalogue Tool",
-    abbr: "CT",
-    health: "Degraded",
-    healthScore: 68,
-    statusTone: "red",
-    errorReason: "Image processing queue backlog",
-    host: "HP Omen 16",
-    lastWorkBy: "AIS Agent",
-    lastWorkTime: "26 Sep 2026 · 17:11",
-    lastWorkDesc: "Retried 14 failed catalogue jobs and monitored worker threads.",
-    cleanUptime: "00h 49m",
-    cpu: "84%",
-    memory: "76%",
-    events: "320/min",
-    dependencies: ["DINO Detection", "Tablet Feed", "RSC2 Gimbal", "Camera Worker"],
-    recentActivity: [
-      { time: "17:11", note: "14 jobs re-enqueued", tone: "violet" },
-      { time: "17:08", note: "GPU VRAM pressure detected", tone: "amber" },
-      { time: "17:00", note: "Worker process heartbeat delayed", tone: "red" },
-    ],
-  },
-  "qr-print": {
-    id: "qr-print",
-    name: "QR Print Server",
-    abbr: "QR",
-    health: "Healthy",
-    healthScore: 99,
-    statusTone: "green",
-    errorReason: "No active issue",
-    host: "Billing PC1",
-    lastWorkBy: "AIS Agent",
-    lastWorkTime: "26 Sep 2026 · 16:42",
-    lastWorkDesc: "Restarted queue watcher and validated output path.",
-    cleanUptime: "18d 07h",
-    cpu: "14%",
-    memory: "28%",
-    events: "180/min",
-    dependencies: ["Barcode Engine", "Thermal Driver", "Spooler Watchdog"],
-    recentActivity: [
-      { time: "16:42", note: "Watcher checked", tone: "green" },
-      { time: "12:00", note: "Scheduled self-test passed", tone: "cyan" },
-    ],
-  },
-  "gold-rate": {
-    id: "gold-rate",
-    name: "Gold Rate Monitor",
-    abbr: "AU",
-    health: "Healthy",
-    healthScore: 98,
-    statusTone: "green",
-    errorReason: "No active issue",
-    host: "AIS Core",
-    lastWorkBy: "Kuldeep",
-    lastWorkTime: "26 Sep 2026 · 15:18",
-    lastWorkDesc: "Updated provider fallback order to prioritize local cache.",
-    cleanUptime: "11d 21h",
-    cpu: "08%",
-    memory: "22%",
-    events: "95/min",
-    dependencies: ["AWS Gateway", "Local Rate Cache", "WhatsApp Dispatcher"],
-    recentActivity: [
-      { time: "15:18", note: "Fallback priority applied", tone: "violet" },
-      { time: "14:30", note: "Multi-vendor quote refresh", tone: "cyan" },
-    ],
-  },
-  "payment-notifier": {
-    id: "payment-notifier",
-    name: "Payment Notifier",
-    abbr: "PN",
-    health: "Active",
-    healthScore: 97,
-    statusTone: "cyan",
-    errorReason: "Processing webhook queue",
-    host: "AIS Core",
-    lastWorkBy: "AIS Agent",
-    lastWorkTime: "26 Sep 2026 · 16:58",
-    lastWorkDesc: "Validated webhook delivery and retry queue.",
-    cleanUptime: "07d 04h",
-    cpu: "23%",
-    memory: "34%",
-    events: "510/min",
-    dependencies: ["HDFC Webhook", "Razorpay Ingest", "Telegram Gateway"],
-    recentActivity: [
-      { time: "16:58", note: "Delivery acknowledged", tone: "cyan" },
-      { time: "16:55", note: "Retry backoff drained", tone: "green" },
-    ],
-  },
-  "order-tracker": {
-    id: "order-tracker",
-    name: "Order Tracker",
-    abbr: "OT",
-    health: "Healthy",
-    healthScore: 95,
-    statusTone: "green",
-    errorReason: "No active issue",
-    host: "AIS Core",
-    lastWorkBy: "Kuldeep",
-    lastWorkTime: "26 Sep 2026 · 14:05",
-    lastWorkDesc: "Updated order stage mapping.",
-    cleanUptime: "06d 12h",
-    cpu: "19%",
-    memory: "41%",
-    events: "240/min",
-    dependencies: ["Ornate NX API", "MongoDB Sync", "Order Pipeline Worker"],
-    recentActivity: [
-      { time: "14:05", note: "Stages aligned", tone: "green" },
-      { time: "11:20", note: "Audit checkpoint verified", tone: "cyan" },
-    ],
-  },
-  "ambic-mdm": {
-    id: "ambic-mdm",
-    name: "AMBIC MDM",
-    abbr: "MDM",
-    health: "Healthy",
-    healthScore: 94,
-    statusTone: "green",
-    errorReason: "No active issue",
-    host: "AIS Core",
-    lastWorkBy: "Claude Agent",
-    lastWorkTime: "26 Sep 2026 · 13:40",
-    lastWorkDesc: "Checked device sync and policy delivery.",
-    cleanUptime: "09d 03h",
-    cpu: "12%",
-    memory: "38%",
-    events: "115/min",
-    dependencies: ["Kiosk Watchdog", "FCM Device Mesh", "Tablet Knox Policy"],
-    recentActivity: [
-      { time: "13:40", note: "Kiosk heartbeat received", tone: "green" },
-      { time: "10:15", note: "Security policy synced", tone: "violet" },
-    ],
-  },
-};
+/** Maps GET /api/systems' real, lowercase health enum to the display enum/tone.
+ * No numeric score: real device health here has no measured basis for one. */
+function applyRegistryRow(base: SystemItem, row: RegistrySystem): SystemItem {
+  const HEALTH_MAP: Record<RegistrySystem["health"], { health: SystemItem["health"]; tone: SystemItem["statusTone"] }> = {
+    healthy: { health: "Healthy", tone: "green" },
+    active: { health: "Active", tone: "cyan" },
+    warning: { health: "Warning", tone: "amber" },
+    error: { health: "Degraded", tone: "red" },
+    disabled: { health: "Disabled", tone: "grey" },
+    unregistered: { health: "Unregistered", tone: "grey" },
+  };
+  const mapped = HEALTH_MAP[row.health] ?? { health: "Unregistered" as const, tone: "grey" as const };
+  const lastWorkTime = row.lastWorkAt
+    ? new Date(row.lastWorkAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+    : "—";
+  return {
+    ...base,
+    source: "registry",
+    health: mapped.health,
+    statusTone: mapped.tone,
+    healthScore: undefined,
+    errorReason: row.errorReason || (row.health === "unregistered" ? "No endpoint registered" : "No active issue"),
+    host: row.host?.name || "—",
+    lastWorkBy: row.lastWorkBy || "—",
+    lastWorkTime,
+    lastWorkDesc: row.lastWorkDescription || (row.health === "unregistered" ? "No system registered under this key yet." : "—"),
+    cleanUptime: row.cleanUptimeStr || "—",
+    manual: row.manual,
+  };
+}
+
+// Static visual identity only -- id/abbr key the mesh's SVG node positions and
+// must match GET /api/systems's row ids exactly. Every OTHER field (health,
+// host, error reason, last work, uptime) comes from that real registry via
+// applyRegistry() below; a system the registry hasn't reported on yet renders
+// its unregistered/dash defaults here, never a stale hardcoded value.
+const SYSTEM_IDENTITY: Array<{ id: string; name: string; abbr: string }> = [
+  { id: "qr-print", name: "QR Print Server", abbr: "QR" },
+  { id: "gold-rate", name: "Gold Rate Monitor", abbr: "AU" },
+  { id: "print-server", name: "Print Router", abbr: "PR" },
+  { id: "payment-notifier", name: "Payment Notifier", abbr: "PN" },
+  { id: "order-tracker", name: "Order Tracker", abbr: "OT" },
+  { id: "catalogue-tool", name: "Catalogue Tool", abbr: "CT" },
+  { id: "ambic-mdm", name: "AMBIC MDM", abbr: "MDM" },
+];
+const initialSystemsData: Record<string, SystemItem> = Object.fromEntries(
+  SYSTEM_IDENTITY.map(({ id, name, abbr }) => [
+    id,
+    {
+      id,
+      name,
+      abbr,
+      health: "Unregistered",
+      statusTone: "grey",
+      errorReason: "Awaiting registry data…",
+      host: "—",
+      lastWorkBy: "—",
+      lastWorkTime: "—",
+      lastWorkDesc: "Awaiting registry data…",
+      cleanUptime: "—",
+      manual: false,
+    } satisfies SystemItem,
+  ])
+);
 
 const initialTasks: PipelineTask[] = [
   {
@@ -460,20 +365,15 @@ interface LiveMetricsData {
   };
   goldMonitor: {
     online: boolean;
-    status: string;
+    // null when the monitor is unreachable -- "BLOCKED" is also a real status
+    // this monitor can genuinely report, so it must not double as the fallback.
+    status: string | null;
     healthy: boolean;
     uptimeSec: number;
     uptimeStr: string;
     ticks: number;
     verified: number;
   };
-  systemLiveStats: Record<string, {
-    cpu: string;
-    memory: string;
-    events: string;
-    uptime: string;
-    healthScore: number;
-  }>;
 }
 
 export default function Home() {
@@ -525,11 +425,13 @@ export default function Home() {
   const [systems, setSystems] = useState<Record<string, SystemItem>>(initialSystemsData);
   const [selectedSystemId, setSelectedSystemId] = useState<string>("print-server");
   const healthCounts = useMemo(() => {
-    const all = Object.values(systems).filter((x) => x.source === "live");
+    // Unregistered systems (e.g. Order Tracker, which doesn't exist yet) are
+    // excluded from all three buckets -- absent is neither healthy nor an incident.
+    const all = Object.values(systems).filter((x) => x.source === "registry" && x.health !== "Unregistered");
     return {
       ok: all.filter((x) => x.health === "Healthy" || x.health === "Active").length,
       warn: all.filter((x) => x.health === "Warning").length,
-      bad: all.filter((x) => x.health === "Degraded" || x.health === "Failure").length,
+      bad: all.filter((x) => x.health === "Degraded" || x.health === "Disabled").length,
     };
   }, [systems]);
   const [diagnosisModalOpen, setDiagnosisModalOpen] = useState<boolean>(false);
@@ -541,44 +443,6 @@ export default function Home() {
 
   useEffect(() => {
     if (!controlSnapshot) return;
-    setSystems((prev) => {
-      const next = { ...prev };
-      controlSnapshot.projects?.forEach((proj) => {
-        if (proj.id === "smartqr-print-server" && next["qr-print"]) {
-          next["qr-print"] = {
-            ...next["qr-print"],
-            source: "live",
-            errorReason: proj.health === "healthy" ? "No active issue" : `Control-plane check: ${proj.health}`,
-            health: proj.health === "healthy" ? "Healthy" : proj.health === "warning" ? "Warning" : "Degraded",
-            healthScore: proj.health === "healthy" ? 99 : 78,
-            statusTone: proj.health === "healthy" ? "green" : proj.health === "warning" ? "amber" : "red",
-            lastWorkDesc: proj.git?.lastCommit ? proj.git.lastCommit.split("|")[1] || next["qr-print"].lastWorkDesc : next["qr-print"].lastWorkDesc,
-          };
-        }
-        if (proj.id === "gold-rate-monitor" && next["gold-rate"]) {
-          const hasLocalHealth = proj.endpoint?.checks?.some((c) => c.ok && c.name.toLowerCase().includes("laptop"));
-          next["gold-rate"] = {
-            ...next["gold-rate"],
-            source: "live",
-            errorReason: hasLocalHealth ? "No active issue" : "Local health check not passing",
-            health: hasLocalHealth ? "Healthy" : "Warning",
-            statusTone: hasLocalHealth ? "green" : "amber",
-            healthScore: hasLocalHealth ? 98 : 70,
-          };
-        }
-        if (proj.id === "catalogue-tool" && next["catalogue-tool"]) {
-          next["catalogue-tool"] = {
-            ...next["catalogue-tool"],
-            source: "live",
-            errorReason: proj.health === "healthy" ? "No active issue" : `Control-plane check: ${proj.health}`,
-            health: proj.health === "healthy" ? "Healthy" : "Degraded",
-            statusTone: proj.health === "healthy" ? "green" : "red",
-            healthScore: proj.health === "healthy" ? 96 : 68,
-          };
-        }
-      });
-      return next;
-    });
 
     if (controlSnapshot.events && controlSnapshot.events.length > 0) {
       const mappedEvents: ActivityFeedItem[] = controlSnapshot.events.slice(0, 10).map((ev) => {
@@ -659,10 +523,6 @@ export default function Home() {
           const data = (await res.json()) as LiveMetricsData;
           setLiveMetrics(data);
           setLastSyncedSecondsAgo(0);
-
-          // NOTE: data.systemLiveStats is deliberately ignored. The control plane derives
-          // those per-system cpu/memory/events/score values from the laptop's own CPU (and
-          // hardcodes some outright), so they wiggle like telemetry but measure nothing.
         }
       } catch {}
     };
@@ -674,6 +534,33 @@ export default function Home() {
       window.clearInterval(metricsTimer);
       window.clearInterval(ticker);
     };
+  }, [authenticated]);
+
+  // The real systems registry (control-plane's `systems` table -- see
+  // GET /api/systems). This is the ONLY source for health/host/error
+  // reason/last work/uptime; a row this response doesn't include keeps its
+  // static Unregistered/dash defaults from SYSTEM_IDENTITY rather than any
+  // stale previous value.
+  useEffect(() => {
+    if (!authenticated) return;
+    const fetchRegistry = async () => {
+      try {
+        const res = await fetch("/api/systems", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as { systems?: RegistrySystem[] };
+        if (!data.systems) return;
+        setSystems((prev) => {
+          const next = { ...prev };
+          for (const row of data.systems!) {
+            if (next[row.id]) next[row.id] = applyRegistryRow(next[row.id], row);
+          }
+          return next;
+        });
+      } catch {}
+    };
+    fetchRegistry();
+    const registryTimer = window.setInterval(fetchRegistry, 10_000);
+    return () => window.clearInterval(registryTimer);
   }, [authenticated]);
 
   useEffect(() => {

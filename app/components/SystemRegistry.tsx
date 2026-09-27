@@ -105,6 +105,11 @@ export const SystemRegistry: React.FC<SystemRegistryProps> = ({
             colorHex = "var(--obsidian-cyan)";
             badgeColor = "#BFF3FF";
             scoreBorder = "rgba(36,217,255,.35)";
+          } else if (sys.statusTone === "grey") {
+            badgeClass = "";
+            colorHex = "var(--obsidian-muted)";
+            badgeColor = "var(--obsidian-dim)";
+            scoreBorder = "rgba(129,144,163,.4)";
           }
 
           let rowBg = "transparent";
@@ -116,6 +121,9 @@ export const SystemRegistry: React.FC<SystemRegistryProps> = ({
           } else if (sys.statusTone === "red") {
             rowBg = "linear-gradient(90deg, rgba(255,95,120,.12), rgba(139,92,255,.05) 45%, transparent)";
             borderLeftStyle = "2px solid #FF5F78";
+          } else if (sys.statusTone === "grey") {
+            rowBg = "linear-gradient(90deg, rgba(120,144,163,.08), transparent 55%)";
+            borderLeftStyle = "2px solid rgba(120,144,163,.5)";
           }
 
           return (
@@ -138,12 +146,22 @@ export const SystemRegistry: React.FC<SystemRegistryProps> = ({
               <div>
                 <div style={{ fontSize: "12.5px", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}>
                   {sys.name}
-                  <span
-                    title={sys.source === "live" ? "Health status is live; host, metrics and history on this row are sample values" : "Sample data — not connected to real monitoring yet"}
-                    style={{ fontSize: "7.5px", letterSpacing: ".14em", fontWeight: 800, padding: "1px 5px", borderRadius: "5px", border: sys.source === "live" ? "1px solid rgba(55,227,161,.5)" : "1px solid rgba(129,144,163,.45)", color: sys.source === "live" ? "var(--obsidian-green)" : "var(--obsidian-muted)" }}
-                  >
-                    {sys.source === "live" ? "HEALTH LIVE" : "SAMPLE"}
-                  </span>
+                  {sys.manual && (
+                    <span
+                      title="Operator-declared status — no automated check exists for this system"
+                      style={{ fontSize: "7.5px", letterSpacing: ".14em", fontWeight: 800, padding: "1px 5px", borderRadius: "5px", border: "1px solid rgba(255,196,91,.5)", color: "var(--obsidian-amber)" }}
+                    >
+                      MANUAL
+                    </span>
+                  )}
+                  {sys.health === "Unregistered" && (
+                    <span
+                      title="No project or endpoint linked to this system key yet"
+                      style={{ fontSize: "7.5px", letterSpacing: ".14em", fontWeight: 800, padding: "1px 5px", borderRadius: "5px", border: "1px solid rgba(129,144,163,.45)", color: "var(--obsidian-muted)" }}
+                    >
+                      UNREGISTERED
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: "9.5px", color: colorHex, marginTop: "1px" }}>{sys.errorReason}</div>
               </div>
@@ -170,7 +188,7 @@ export const SystemRegistry: React.FC<SystemRegistryProps> = ({
                     padding: "0 5px",
                   }}
                 >
-                  {sys.source === "live" ? "—" : sys.healthScore}
+                  —
                 </span>
               </div>
               <div
