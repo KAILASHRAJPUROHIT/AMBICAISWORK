@@ -52,6 +52,10 @@ import time
 
 MDNS_CONNECT_SERVICE = "_adb-tls-connect._tcp"
 
+# See appop-guardian.py's comment on this same constant: suppresses the flashing console
+# window adb.exe would otherwise pop per call when run under a windowless (pythonw) parent.
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
 
 def log(msg: str) -> None:
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -59,7 +63,7 @@ def log(msg: str) -> None:
 
 
 def adb(*args: str, timeout: int = 15) -> subprocess.CompletedProcess:
-    return subprocess.run(["adb", *args], capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(["adb", *args], capture_output=True, text=True, timeout=timeout, creationflags=_NO_WINDOW)
 
 
 def discovered_endpoints() -> dict[str, str]:

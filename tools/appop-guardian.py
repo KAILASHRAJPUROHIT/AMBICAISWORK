@@ -47,6 +47,12 @@ DEFAULT_PACKAGES = ("com.mdmesh.agent", "com.mdmesh.agent.cn")
 STATE_FILE = Path(__file__).with_name(".appop-guardian-state.json")
 APPOP = "WRITE_SETTINGS"
 
+# `adb.exe` is a console-subsystem app; launched under a windowless parent (pythonw, or
+# any Task Scheduler action) each subprocess.run() would otherwise pop a fresh flashing
+# console window per call -- several calls happen every poll. CREATE_NO_WINDOW suppresses
+# that. Windows-only flag; no-op (0) elsewhere so this stays portable to a Pi/Linux box.
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
 
 def log(msg: str) -> None:
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -58,7 +64,7 @@ def adb(*args: str, serial: str | None = None, timeout: int = 15) -> subprocess.
     if serial:
         cmd += ["-s", serial]
     cmd += list(args)
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, creationflags=_NO_WINDOW)
 
 
 def list_devices() -> list[str]:
