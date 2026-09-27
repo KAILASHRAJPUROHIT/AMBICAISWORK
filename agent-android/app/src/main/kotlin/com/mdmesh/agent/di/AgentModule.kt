@@ -24,6 +24,7 @@ import com.mdmesh.core.command.handlers.DeviceLockHandler
 import com.mdmesh.core.command.handlers.DeviceLockscreenMessageHandler
 import com.mdmesh.core.command.handlers.DevicePasscodeResetHandler
 import com.mdmesh.core.command.handlers.DevicePasswordQualityHandler
+import com.mdmesh.core.command.handlers.DeviceEnableWirelessAdbHandler
 import com.mdmesh.core.command.handlers.DeviceRebootHandler
 import com.mdmesh.core.command.handlers.DeviceWifiProfileHandler
 import com.mdmesh.core.command.handlers.DeviceRingHandler
@@ -296,6 +297,11 @@ object AgentModule {
     @IntoSet
     fun provideDeviceLockHandler(handle: DpmHandle): CommandHandler =
         DeviceLockHandler(handle)
+
+    @Provides
+    @IntoSet
+    fun provideDeviceEnableWirelessAdbHandler(handle: DpmHandle): CommandHandler =
+        DeviceEnableWirelessAdbHandler(handle)
 
     // --- Remote action handlers (multibound) ---
 

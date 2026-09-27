@@ -54,11 +54,11 @@ export function AppShell({
       />
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="sidebar-brand">
-          <span className="wordmark" aria-label="AMBIC Digital MDM">
+          <span className="wordmark" aria-label="AIS Device Fleet powered by AMBIC Digital">
             <span className="bullet" aria-hidden="true" />
             <span>
-              <span className="mdm">AMBIC</span>
-              <span className="esh"> Digital MDM</span>
+              <span className="mdm">AIS</span>
+              <span className="esh"> Device Fleet</span>
             </span>
           </span>
         </div>
@@ -105,7 +105,7 @@ export function AppShell({
           >
             <IconMenu />
           </button>
-          <span style={{ fontWeight: 600 }}>{title ?? 'AMBIC Digital MDM'}</span>
+          <span style={{ fontWeight: 600 }}>{title ?? 'AIS Device Fleet'}</span>
         </div>
         <main className="content route-enter"><ReloadPrompt /><UpdateBanner />{children}</main>
       </div>

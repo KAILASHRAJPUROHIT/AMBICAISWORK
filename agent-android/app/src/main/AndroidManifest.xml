@@ -33,9 +33,27 @@
     <!--
         Permissions-checklist screen (PermissionsChecklistActivity). All are user-granted
         special-access permissions requested via a Settings intent, not silently grantable even
-        via Device Owner — see PermissionsChecklistActivity's doc comment. PACKAGE_USAGE_STATS,
-        SYSTEM_ALERT_WINDOW and WRITE_SETTINGS are pure AppOps grants and need no manifest entry.
+        via Device Owner — see PermissionsChecklistActivity's doc comment. PACKAGE_USAGE_STATS and
+        SYSTEM_ALERT_WINDOW are pure AppOps grants and need no manifest entry.
     -->
+    <!--
+        WRITE_SETTINGS is NOT like the two above, despite looking identical — this line was
+        missing before 2026-09-27 on the strength of that same (wrong) assumption, and it silently
+        broke the whole one-time `adb shell appops set <pkg> WRITE_SETTINGS allow` provisioning
+        step (see provision-aosp-device.ps1 and AutoRotationSettingsPolicy). Confirmed against
+        AOSP's actual WriteSettingsDetails.java: the Settings toggle for this op is hard-disabled
+        unless the permission is declared (`mSwitchPref.setEnabled(state.permissionDeclared)`),
+        and — more importantly — AppOpsService periodically recomputes this specific op's mode
+        from the same `permissionDeclared` flag, so an `appops set ... allow` on an app that never
+        declared it doesn't just show as disabled in the UI, it gets silently reverted back to
+        `default` shortly after being set, with no error and no log line. This is what looked like
+        an MIUI-only restriction under real-device testing; it reproduces identically on stock
+        AOSP because it's `WriteSettingsDetails`/`AppOpsService` behavior, not an OEM patch.
+        Declaring it here does NOT expose a runtime prompt or change any UI — WRITE_SETTINGS has
+        no manifest-triggered dialog, it only unlocks the appop from being auto-reset, keeping the
+        provisioning-time ADB grant (never the on-device Settings screen) as the actual mechanism.
+    -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
