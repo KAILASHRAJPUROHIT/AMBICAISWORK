@@ -513,10 +513,12 @@ class KioskLauncherActivity : FragmentActivity() {
      * whole point is a real, working control that never puts the device user one tap from the
      * actual Settings app.
      *
-     * Shows nothing if not one of the four policies is supported on this device (e.g. the
-     * WRITE_SETTINGS appop was never granted -- see `tools/provision-aosp-device.ps1` -- or this
-     * is a pre-Android-9 device for flightMode): an absent capability means an absent button,
-     * not a dead one.
+     * Shows nothing if not one of the supported policies is available on this device (e.g. the
+     * WRITE_SETTINGS appop was never granted for rotation -- see
+     * `tools/provision-aosp-device.ps1`): an absent capability means an absent button, not a
+     * dead one. Flight mode is currently always absent -- see
+     * [com.mdmesh.policy.devicesettings.FlightModeSettingsPolicy]'s doc comment for why it was
+     * retracted before ever shipping.
      */
     private fun addQuickControlsAffordance(parent: ViewGroup) {
         if (!::capabilities.isInitialized) return

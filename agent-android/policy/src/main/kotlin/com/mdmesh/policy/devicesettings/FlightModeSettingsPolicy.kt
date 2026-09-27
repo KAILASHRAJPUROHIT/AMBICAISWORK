@@ -1,41 +1,47 @@
 package com.mdmesh.policy.devicesettings
 
-import android.os.Build
-import android.provider.Settings
 import com.mdmesh.policy.PolicyOutcome
 import com.mdmesh.policy.wifi.DpmHandle
 
 /**
- * `DevicePolicyManager.setGlobalSetting(AIRPLANE_MODE_ON)` strategy.
+ * RETRACTED 2026-09-27, before ever shipping to a real device.
  *
- * API 28 (P) gate: this is a real platform floor for airplane mode specifically (unlike the
- * `enable_freeform_support` key `LockTaskKioskController` writes via the same method on
- * the same API surface but a different key with its own history) -- an enrolled device on
- * Android 7/8 correctly reports `flightMode` as unsupported rather than silently no-op'ing.
- * No WRITE_SETTINGS appop needed: this goes through Device Owner's own DPM grant, not a
- * plain `Settings.Global` write, so it needs nothing done at provisioning time.
+ * The first version of this file called `DevicePolicyManager.setGlobalSetting(admin,
+ * Settings.Global.AIRPLANE_MODE_ON, ...)`, on the strength of secondary sources (a vendor blog,
+ * a generic API-wrapper doc) that described it as Device Owner's documented path for airplane
+ * mode. Checked afterward against the actual enforcing source --
+ * `DevicePolicyManagerService.GLOBAL_SETTINGS_ALLOWLIST` in AOSP master -- and `AIRPLANE_MODE_ON`
+ * is NOT in it. The real list is: `ADB_ENABLED`, `ADB_WIFI_ENABLED`, `AUTO_TIME`,
+ * `AUTO_TIME_ZONE`, `DATA_ROAMING`, `USB_MASS_STORAGE_ENABLED`, `WIFI_SLEEP_POLICY`,
+ * `STAY_ON_WHILE_PLUGGED_IN`, `WIFI_DEVICE_OWNER_CONFIGS_LOCKDOWN`, `PRIVATE_DNS_MODE`,
+ * `PRIVATE_DNS_SPECIFIER`. Calling `setGlobalSetting` with a key outside this list throws
+ * `SecurityException` at the framework level -- this would have failed on first real use, not
+ * degraded gracefully.
+ *
+ * A plain `Settings.Global.putInt(AIRPLANE_MODE_ON, ...)` doesn't work either: it only changes
+ * the stored value. Actually toggling the radios needs a follow-up
+ * `ACTION_AIRPLANE_MODE_CHANGED` broadcast, which is protected -- no non-system app, Device
+ * Owner included, may send it on modern Android.
+ *
+ * No known general, Device-Owner-reachable, non-root API achieves real airplane mode on stock
+ * Android. `isSupported()` returns false unconditionally so the capability is never advertised
+ * and the "Flight mode" row simply does not appear -- exactly the existing "absence == not
+ * advertised" contract, not a special case. If this is needed later: the honest paths are (a) an
+ * OEM-specific enterprise API for this fleet's specific hardware, if one exists, or (b) toggling
+ * Wi-Fi and Bluetooth off individually as a practical substitute -- NOT reusable as-is today:
+ * `ModernWifiPolicy.setEnabled()`'s own doc comment says its radio toggle isn't wired yet either
+ * (only the config-lock restriction is real), so that would need finishing first, not just
+ * composing.
  */
 internal class FlightModeSettingsPolicy(
-    private val handle: DpmHandle,
+    @Suppress("UNUSED_PARAMETER") private val handle: DpmHandle,
 ) : FlightModePolicy {
 
     override val capabilityKey: String = FlightModePolicy.CAPABILITY_KEY
 
-    override fun isSupported(): Boolean =
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
-            handle.dpm.isDeviceOwnerApp(handle.admin.packageName)
+    override fun isSupported(): Boolean = false
 
-    override fun setEnabled(enabled: Boolean): PolicyOutcome = runCatching {
-        handle.dpm.setGlobalSetting(
-            handle.admin,
-            Settings.Global.AIRPLANE_MODE_ON,
-            if (enabled) "1" else "0",
-        )
-        PolicyOutcome.Applied
-    }.getOrElse { PolicyOutcome.Failed(it.message ?: "flightMode setEnabled failed") }
+    override fun setEnabled(enabled: Boolean): PolicyOutcome = PolicyOutcome.Unsupported
 
-    // Readable regardless of write permission -- Settings.Global.getInt needs no appop.
-    override fun isEnabled(): Boolean? = runCatching {
-        Settings.Global.getInt(handle.context.contentResolver, Settings.Global.AIRPLANE_MODE_ON) == 1
-    }.getOrNull()
+    override fun isEnabled(): Boolean? = null
 }

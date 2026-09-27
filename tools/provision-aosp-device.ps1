@@ -36,15 +36,17 @@ if ($owners -match 'Device Owner:') {
     Invoke-Adb @('shell', 'dpm', 'set-device-owner', $Admin)
 }
 
-# One-time, silent grant of the WRITE_SETTINGS appop. This is what lets the on-device
-# quick-controls panel (auto-rotation, brightness) write Settings.System directly for the
-# rest of this device's life with ZERO Settings.ACTION_MANAGE_WRITE_SETTINGS prompt ever
-# shown -- the whole point being that the kiosked end user never sees a route into the
-# real Settings app. `pm grant` cannot touch this (WRITE_SETTINGS is an appop, not a
-# runtime permission); `appops set` is the correct tool, and must run now, at the same
-# ADB moment Device Owner itself is assigned, before the device reaches an end user.
-# Flight mode does NOT need this: it goes through DevicePolicyManager.setGlobalSetting(),
-# which Device Owner already holds without any extra grant.
+# One-time, silent grant of the WRITE_SETTINGS appop -- needed ONLY for auto-rotation
+# (Settings.System.ACCELEROMETER_ROTATION has no DevicePolicyManager allow-list entry, confirmed
+# against DevicePolicyManagerService.SYSTEM_SETTINGS_ALLOWLIST in AOSP master, so it's the one
+# quick-controls toggle still requiring a real Settings.System write). Brightness (both the
+# auto/manual mode and the level) goes through DevicePolicyManager.setSystemSetting() instead,
+# which IS on that allow-list -- no appop, no ADB step, works on every already-enrolled device
+# including ones with no ADB moment (QR/GMS provisioning) ever available.
+# `pm grant` cannot touch WRITE_SETTINGS (it's an appop, not a runtime permission); `appops set`
+# is the correct tool, and must run now, at the same ADB moment Device Owner itself is assigned,
+# before the device reaches an end user -- that's what keeps this out of
+# Settings.ACTION_MANAGE_WRITE_SETTINGS entirely.
 Invoke-Adb @('shell', 'appops', 'set', $Package, 'WRITE_SETTINGS', 'allow')
 
 $secureToken = Read-Host 'Paste a fresh single-use enrollment token' -AsSecureString
