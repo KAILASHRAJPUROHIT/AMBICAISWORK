@@ -1,0 +1,71 @@
+name: Manual signed test build (GMS)
+
+# Deliberately manual and artifact-only, mirroring china-inplace-replacement.yml's safety
+# properties: this must never create a GitHub Release, publish an image, update the server, or
+# enter a fleet rollout channel. It exists so an in-progress feature branch can be built with the
+# real production signing key -- the same key already on an enrolled Device Owner test device --
+# so it installs in place with `adb install -r`, with no re-provisioning and no keystore secret
+# ever leaving GitHub Actions. Dispatch it against whichever branch/tag you want to test (the
+# "Use workflow from" picker in the Actions UI, or `gh workflow run ... --ref <branch>`).
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Test build version name (cosmetic only)"
+        required: true
+        default: "0.2.56-test"
+      version_code:
+        description: "Must be HIGHER than the version currently installed on the test device"
+        required: true
+        default: "257"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10"
+      - name: Decode release keystore
+        env:
+          STORE_B64: ${{ secrets.MDM_RELEASE_STORE_B64 }}
+        run: printf '%s' "$STORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Decode google-services.json
+        env:
+          GOOGLE_SERVICES_B64: ${{ secrets.MDM_GOOGLE_SERVICES_B64 }}
+        run: printf '%s' "$GOOGLE_SERVICES_B64" | base64 -d > agent-android/app/google-services.json
+      - name: Build signed GMS release (test build, not a fleet release)
+        working-directory: agent-android
+        env:
+          MDM_RELEASE_STORE_FILE: ${{ runner.temp }}/release.jks
+          MDM_RELEASE_STORE_PASSWORD: ${{ secrets.MDM_RELEASE_STORE_PASSWORD }}
+          MDM_RELEASE_KEY_ALIAS: ${{ secrets.MDM_RELEASE_KEY_ALIAS }}
+          MDM_RELEASE_KEY_PASSWORD: ${{ secrets.MDM_RELEASE_KEY_PASSWORD }}
+        run: |
+          gradle --no-daemon :proto:test :core:test :app:assembleGmsRelease \
+            -PmdmBaseUrl=https://mdm.ambicdigital.in/ \
+            -PversionName="${{ inputs.version_name }}" \
+            -PversionCode="${{ inputs.version_code }}"
+      - name: Verify signing identity
+        run: |
+          APK=agent-android/app/build/outputs/apk/gms/release/app-gms-release.apk
+          ACTUAL=$(release/apk-checksum.sh "$APK")
+          EXPECTED=$(cat release/expected-signing-checksum.txt)
+          [ "$ACTUAL" = "$EXPECTED" ] || { echo "Signing certificate mismatch"; exit 1; }
+      - name: Upload signed test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ambic-mdm-agent-gms-test-build
+          path: agent-android/app/build/outputs/apk/gms/release/app-gms-release.apk
+          retention-days: 1
