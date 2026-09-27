@@ -561,7 +561,7 @@ class KioskLauncherActivity : FragmentActivity() {
                 setPadding(0, dp(10), 0, dp(10))
             }
             row.addView(
-                text(label, 15f, TEXT).apply {
+                text(label, 15f, DIALOG_TEXT).apply {
                     layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 },
             )
@@ -586,7 +586,7 @@ class KioskLauncherActivity : FragmentActivity() {
 
         capabilities.brightnessLevelPolicy()?.let { brightness ->
             val level = brightness.getLevel()
-            body.addView(text("Brightness", 15f, TEXT).apply { setPadding(0, dp(10), 0, 0) })
+            body.addView(text("Brightness", 15f, DIALOG_TEXT).apply { setPadding(0, dp(10), 0, 0) })
             body.addView(
                 SeekBar(this).apply {
                     max = 100
@@ -1100,6 +1100,11 @@ class KioskLauncherActivity : FragmentActivity() {
         val INK = Color.parseColor("#0E1117")
         val TEXT = Color.parseColor("#E8EEF4")
         val MUTED = Color.parseColor("#8693A4")
+        // TEXT/MUTED are tuned for content drawn over the app's own dark (INK) screens.
+        // Any custom view placed inside a plain system AlertDialog (white background) needs a
+        // dark color instead, or it renders as near-invisible pale text on white — this is what
+        // showQuickControlsDialog's row labels used to do before this constant existed.
+        val DIALOG_TEXT = Color.parseColor("#1B2733")
         val SIGNAL = Color.parseColor("#F4B942")
         val ALERT = Color.parseColor("#F2545B")
     }
