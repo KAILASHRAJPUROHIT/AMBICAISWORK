@@ -6,6 +6,9 @@ export interface SystemItem {
   id: string;
   name: string;
   abbr: string;
+  /** "live" = health state comes from a real control-plane check. Everything
+   *  else on the row (host, scores, metrics, history) is still sample data. Absent = sample. */
+  source?: "live" | "sample";
   health: SystemHealthStatus;
   healthScore: number;
   statusTone: SystemTone;

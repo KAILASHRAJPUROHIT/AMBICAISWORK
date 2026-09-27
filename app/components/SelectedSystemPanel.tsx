@@ -46,6 +46,11 @@ export const SelectedSystemPanel: React.FC<SelectedSystemPanelProps> = ({
         <div style={{ fontSize: "8.5px", letterSpacing: ".22em", color: "var(--obsidian-dim)", fontWeight: 700 }}>
           SELECTED SYSTEM
         </div>
+        <div style={{ fontSize: "10px", color: system.source === "live" ? "var(--obsidian-green)" : "var(--obsidian-muted)", marginTop: "4px" }}>
+          {system.source === "live"
+            ? "Health status is live. Host, scores, metrics and history below are sample values."
+            : "Sample data — this system is not connected to real monitoring yet."}
+        </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginTop: "5px" }}>
           <span style={{ fontSize: "22px", fontWeight: 800, letterSpacing: "-.01em" }}>{system.name}</span>
           <span
@@ -59,7 +64,7 @@ export const SelectedSystemPanel: React.FC<SelectedSystemPanelProps> = ({
               boxShadow: system.statusTone === "amber" ? "0 0 14px rgba(255,196,91,.22)" : system.statusTone === "red" ? "0 0 14px rgba(255,95,120,.22)" : "0 0 14px rgba(55,227,161,.22)",
             }}
           >
-            {system.health.toUpperCase()} · {system.healthScore}%
+            {system.health.toUpperCase()}{system.source === "live" ? "" : ` · ${system.healthScore}%`}
           </span>
         </div>
         <div style={{ fontFamily: "'Geist Mono',monospace", fontSize: "11px", color: "var(--obsidian-muted)", marginTop: "4px" }}>

@@ -16,11 +16,16 @@ export const QuantumSystemMesh: React.FC<QuantumSystemMeshProps> = ({
   systems,
   selectedSystemId,
   onSelectSystem,
-  fleetHealth = "93.4%",
-  incidentsCount = "02",
-  agentsReadyCount = "06",
+  // Defaults used to be "93.4%" / "02" / "06" -- invented. Health scoring and agent
+  // status are not built, so show a dash. Incidents is derived from live checks below.
+  fleetHealth = "—",
+  incidentsCount,
+  agentsReadyCount = "—",
 }) => {
   const meshCardRef = useRef<HTMLDivElement>(null);
+  const liveIncidents = Object.values(systems)
+    .filter((x) => x.source === "live" && x.health !== "Healthy" && x.health !== "Active")
+    .length.toString().padStart(2, "0");
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!meshCardRef.current) return;
@@ -264,7 +269,7 @@ export const QuantumSystemMesh: React.FC<QuantumSystemMeshProps> = ({
           </div>
           <div style={{ background: "rgba(255,255,255,.02)", borderRadius: "12px", padding: "8px 10px", border: "1px solid rgba(120,170,220,.08)" }}>
             <div style={{ fontSize: "7.5px", letterSpacing: ".16em", color: "var(--obsidian-dim)", fontWeight: 700 }}>INCIDENTS</div>
-            <div style={{ fontFamily: "'Geist Mono',monospace", fontSize: "16px", fontWeight: 700, color: "var(--obsidian-amber)", marginTop: "2px" }}>{incidentsCount}</div>
+            <div style={{ fontFamily: "'Geist Mono',monospace", fontSize: "16px", fontWeight: 700, color: "var(--obsidian-amber)", marginTop: "2px" }}>{incidentsCount ?? liveIncidents}</div>
           </div>
           <div style={{ background: "rgba(255,255,255,.02)", borderRadius: "12px", padding: "8px 10px", border: "1px solid rgba(120,170,220,.08)" }}>
             <div style={{ fontSize: "7.5px", letterSpacing: ".16em", color: "var(--obsidian-dim)", fontWeight: 700 }}>AGENTS READY</div>

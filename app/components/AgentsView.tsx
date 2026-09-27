@@ -5,6 +5,10 @@ import React from "react";
 export const AgentsView: React.FC = () => {
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "18px" }}>
+      <div role="note" style={{ gridColumn: "1 / -1", padding: "8px 12px", borderRadius: "12px", border: "1px solid rgba(255,196,91,.3)", background: "rgba(255,196,91,.06)", fontSize: "11px", color: "#E9D9B4" }}>
+        <b style={{ color: "var(--obsidian-amber)", letterSpacing: ".14em", fontSize: "9px", marginRight: "8px" }}>CONCEPT</b>
+        These are the planned agent roles. The ONLINE and CONTROLLED badges are design placeholders, not live agent status.
+      </div>
       {/* Infrastructure Agent */}
       <div
         className="ais-panel"

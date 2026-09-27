@@ -18,6 +18,9 @@ export const PipelineView: React.FC<PipelineViewProps> = ({ tasks }) => {
         padding: "22px 26px",
       }}
     >
+      <div role="note" style={{ marginBottom: "14px", padding: "8px 12px", borderRadius: "12px", border: "1px solid rgba(255,196,91,.3)", background: "rgba(255,196,91,.06)", fontSize: "11px", color: "#E9D9B4" }}>
+        <b style={{ color: "var(--obsidian-amber)", letterSpacing: ".14em", fontSize: "9px", marginRight: "8px" }}>SAMPLE DATA</b>Tasks, assignees, due dates and progress are illustrative. The task database is not built yet.
+      </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "14px", marginBottom: "18px" }}>
         <div>
           <div

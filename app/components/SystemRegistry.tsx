@@ -136,7 +136,15 @@ export const SystemRegistry: React.FC<SystemRegistryProps> = ({
             >
               <span className="sh" />
               <div>
-                <div style={{ fontSize: "12.5px", fontWeight: 700 }}>{sys.name}</div>
+                <div style={{ fontSize: "12.5px", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}>
+                  {sys.name}
+                  <span
+                    title={sys.source === "live" ? "Health status is live; host, metrics and history on this row are sample values" : "Sample data — not connected to real monitoring yet"}
+                    style={{ fontSize: "7.5px", letterSpacing: ".14em", fontWeight: 800, padding: "1px 5px", borderRadius: "5px", border: sys.source === "live" ? "1px solid rgba(55,227,161,.5)" : "1px solid rgba(129,144,163,.45)", color: sys.source === "live" ? "var(--obsidian-green)" : "var(--obsidian-muted)" }}
+                  >
+                    {sys.source === "live" ? "HEALTH LIVE" : "SAMPLE"}
+                  </span>
+                </div>
                 <div style={{ fontSize: "9.5px", color: colorHex, marginTop: "1px" }}>{sys.errorReason}</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -162,7 +170,7 @@ export const SystemRegistry: React.FC<SystemRegistryProps> = ({
                     padding: "0 5px",
                   }}
                 >
-                  {sys.healthScore}
+                  {sys.source === "live" ? "—" : sys.healthScore}
                 </span>
               </div>
               <div

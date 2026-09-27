@@ -219,11 +219,11 @@ const initialTasks: PipelineTask[] = [
 ];
 
 const initialActivities: ActivityFeedItem[] = [
-  { id: 1, time: "17:11", systemName: "Catalogue Tool", message: "AIS Agent retried 14 failed catalogue jobs on HP Omen 16", tag: "AGENT ACTION", tagColor: "var(--obsidian-violet)" },
-  { id: 2, time: "17:04", systemName: "Print Server", message: "Queue latency remained elevated above baseline (460 events/min)", tag: "WARNING", tagColor: "var(--obsidian-amber)" },
-  { id: 3, time: "16:58", systemName: "Payment Notifier", message: "Webhook delivery path validated and retry queue drained", tag: "ROUTINE OK", tagColor: "var(--obsidian-green)" },
-  { id: 4, time: "16:42", systemName: "QR Print Server", message: "Queue watcher restarted and output path verified on Billing PC1", tag: "AUTO RESTART", tagColor: "var(--obsidian-cyan)" },
-  { id: 5, time: "15:18", systemName: "Gold Rate Monitor", message: "Provider fallback order updated by Kuldeep to prioritize local verified cache", tag: "HUMAN CHANGE", tagColor: "var(--obsidian-violet)" },
+  { id: 1, time: "17:11", systemName: "Catalogue Tool", message: "AIS Agent retried 14 failed catalogue jobs on HP Omen 16", tag: "SAMPLE", tagColor: "var(--obsidian-dim)" },
+  { id: 2, time: "17:04", systemName: "Print Server", message: "Queue latency remained elevated above baseline (460 events/min)", tag: "SAMPLE", tagColor: "var(--obsidian-dim)" },
+  { id: 3, time: "16:58", systemName: "Payment Notifier", message: "Webhook delivery path validated and retry queue drained", tag: "SAMPLE", tagColor: "var(--obsidian-dim)" },
+  { id: 4, time: "16:42", systemName: "QR Print Server", message: "Queue watcher restarted and output path verified on Billing PC1", tag: "SAMPLE", tagColor: "var(--obsidian-dim)" },
+  { id: 5, time: "15:18", systemName: "Gold Rate Monitor", message: "Provider fallback order updated by Kuldeep to prioritize local verified cache", tag: "SAMPLE", tagColor: "var(--obsidian-dim)" },
 ];
 
 type Control = {
@@ -524,6 +524,14 @@ export default function Home() {
   const [obsidianTab, setObsidianTab] = useState<"command" | "pipeline" | "agents" | "activity" | "legacy">("command");
   const [systems, setSystems] = useState<Record<string, SystemItem>>(initialSystemsData);
   const [selectedSystemId, setSelectedSystemId] = useState<string>("print-server");
+  const healthCounts = useMemo(() => {
+    const all = Object.values(systems).filter((x) => x.source === "live");
+    return {
+      ok: all.filter((x) => x.health === "Healthy" || x.health === "Active").length,
+      warn: all.filter((x) => x.health === "Warning").length,
+      bad: all.filter((x) => x.health === "Degraded" || x.health === "Failure").length,
+    };
+  }, [systems]);
   const [diagnosisModalOpen, setDiagnosisModalOpen] = useState<boolean>(false);
   const [tasks, setTasks] = useState<PipelineTask[]>(initialTasks);
   const [activities, setActivities] = useState<ActivityFeedItem[]>(initialActivities);
@@ -539,6 +547,8 @@ export default function Home() {
         if (proj.id === "smartqr-print-server" && next["qr-print"]) {
           next["qr-print"] = {
             ...next["qr-print"],
+            source: "live",
+            errorReason: proj.health === "healthy" ? "No active issue" : `Control-plane check: ${proj.health}`,
             health: proj.health === "healthy" ? "Healthy" : proj.health === "warning" ? "Warning" : "Degraded",
             healthScore: proj.health === "healthy" ? 99 : 78,
             statusTone: proj.health === "healthy" ? "green" : proj.health === "warning" ? "amber" : "red",
@@ -549,6 +559,8 @@ export default function Home() {
           const hasLocalHealth = proj.endpoint?.checks?.some((c) => c.ok && c.name.toLowerCase().includes("laptop"));
           next["gold-rate"] = {
             ...next["gold-rate"],
+            source: "live",
+            errorReason: hasLocalHealth ? "No active issue" : "Local health check not passing",
             health: hasLocalHealth ? "Healthy" : "Warning",
             statusTone: hasLocalHealth ? "green" : "amber",
             healthScore: hasLocalHealth ? 98 : 70,
@@ -557,6 +569,8 @@ export default function Home() {
         if (proj.id === "catalogue-tool" && next["catalogue-tool"]) {
           next["catalogue-tool"] = {
             ...next["catalogue-tool"],
+            source: "live",
+            errorReason: proj.health === "healthy" ? "No active issue" : `Control-plane check: ${proj.health}`,
             health: proj.health === "healthy" ? "Healthy" : "Degraded",
             statusTone: proj.health === "healthy" ? "green" : "red",
             healthScore: proj.health === "healthy" ? 96 : 68,
@@ -578,40 +592,11 @@ export default function Home() {
           tagColor: ev.severity === "error" ? "var(--obsidian-red)" : ev.severity === "warning" ? "var(--obsidian-amber)" : "var(--obsidian-cyan)",
         };
       });
-      setActivities((prev) => [...mappedEvents, ...prev.filter((p) => typeof p.id === "number")].slice(0, 15));
+      // Real events replace the sample feed outright (merging re-added the same events on every 5s poll).
+      setActivities(mappedEvents);
     }
   }, [controlSnapshot]);
 
-  const handleRemediationComplete = (systemId: string) => {
-    setSystems((prev) => {
-      if (!prev[systemId]) return prev;
-      return {
-        ...prev,
-        [systemId]: {
-          ...prev[systemId],
-          health: "Healthy",
-          healthScore: 98,
-          statusTone: "green",
-          errorReason: "No active issue (Remediated by AIS Agent)",
-          lastWorkDesc: "Cleared stale locks, flushed spool queue and restarted service worker.",
-          lastWorkTime: "Just now · Today",
-          cleanUptime: "00h 01m",
-        },
-      };
-    });
-
-    setActivities((prev) => [
-      {
-        id: Date.now(),
-        time: nowTime(),
-        systemName: systems[systemId]?.name || "System",
-        message: `AIS Agent completed approved remediation routine on ${systems[systemId]?.host || "host"}. Baseline restored.`,
-        tag: "AGENT FIX",
-        tagColor: "var(--obsidian-green)",
-      },
-      ...prev,
-    ]);
-  };
 
   useEffect(() => {
     fetch("/api/auth/status")
@@ -675,24 +660,9 @@ export default function Home() {
           setLiveMetrics(data);
           setLastSyncedSecondsAgo(0);
 
-          if (data.systemLiveStats) {
-            setSystems((prev) => {
-              const updated = { ...prev };
-              for (const [sysId, stats] of Object.entries(data.systemLiveStats)) {
-                if (updated[sysId]) {
-                  updated[sysId] = {
-                    ...updated[sysId],
-                    cpu: stats.cpu,
-                    memory: stats.memory,
-                    events: stats.events,
-                    cleanUptime: stats.uptime,
-                    healthScore: stats.healthScore,
-                  };
-                }
-              }
-              return updated;
-            });
-          }
+          // NOTE: data.systemLiveStats is deliberately ignored. The control plane derives
+          // those per-system cpu/memory/events/score values from the laptop's own CPU (and
+          // hardcodes some outright), so they wiggle like telemetry but measure nothing.
         }
       } catch {}
     };
@@ -1374,7 +1344,7 @@ export default function Home() {
               <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 14px", borderRadius: "999px", border: "1px solid rgba(55,227,161,.3)", background: "rgba(55,227,161,.08)" }}>
                 <span className="ais-ok" style={{ width: "7px", height: "7px", borderRadius: "50%", background: "var(--obsidian-green)", boxShadow: "0 0 10px var(--obsidian-green)" }}></span>
                 <span style={{ fontFamily: "'Geist Mono',monospace", fontSize: "10.5px", letterSpacing: ".05em" }}>
-                  <span style={{ color: "var(--obsidian-green)" }}>5 OK</span> <span style={{ color: "var(--obsidian-dim)" }}>·</span> <span style={{ color: "var(--obsidian-amber)" }}>1 WARN</span> <span style={{ color: "var(--obsidian-dim)" }}>·</span> <span style={{ color: "var(--obsidian-red)" }}>1 DEG</span>
+                  <span style={{ color: "var(--obsidian-green)" }}>{healthCounts.ok} OK</span> <span style={{ color: "var(--obsidian-dim)" }}>·</span> <span style={{ color: "var(--obsidian-amber)" }}>{healthCounts.warn} WARN</span> <span style={{ color: "var(--obsidian-dim)" }}>·</span> <span style={{ color: "var(--obsidian-red)" }}>{healthCounts.bad} DEG</span> <span style={{ color: "var(--obsidian-dim)" }}>· live checks</span>
                 </span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", paddingLeft: "14px", borderLeft: "1px solid var(--obsidian-border)" }}>
@@ -1393,6 +1363,18 @@ export default function Home() {
           {/* Spectrum Divider */}
           <div className="ais-spec" style={{ height: "2px", margin: "12px 2px 0", borderRadius: "2px", backgroundImage: "linear-gradient(90deg,#24D9FF,#4D84FF,#8B5CFF,#FF4FD8,#37E3A1,#FFC45B,#FF5F78,#24D9FF)", opacity: 0.55 }} />
 
+          {/* Honesty ribbon: this build mixes a few live signals with sample data. */}
+          <div
+            role="note"
+            style={{ margin: "10px 2px 0", padding: "8px 14px", borderRadius: "12px", border: "1px solid rgba(255,196,91,.35)", background: "rgba(255,196,91,.07)", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}
+          >
+            <span style={{ fontSize: "9px", letterSpacing: ".2em", fontWeight: 800, color: "var(--obsidian-amber)" }}>PREVIEW BUILD</span>
+            <span style={{ fontSize: "11.5px", color: "#E9D9B4" }}>
+              Live: health of QR Print Server, Gold Rate Monitor and Catalogue Tool, plus laptop CPU/RAM and the event feed.
+              Everything else here (hosts, scores, metrics, tasks, history) is <b>sample data</b> until the systems registry is connected.
+            </span>
+          </div>
+
           {/* ================= TAB 1: COMMAND ================= */}
           {obsidianTab === "command" && (
             <main style={{ marginTop: "14px" }}>
@@ -1408,7 +1390,7 @@ export default function Home() {
                     <div className="ais-panel slow" style={{ border: "1px solid rgba(55,227,161,.28)", borderRadius: "18px", background: "linear-gradient(160deg, rgba(55,227,161,.10), rgba(3,5,7,.94) 60%)", padding: "12px 16px", boxShadow: "0 0 24px rgba(55,227,161,.1)" }}>
                       <div style={{ fontSize: "8.5px", letterSpacing: ".2em", color: "#7FBFA4", fontWeight: 700 }}>PEAK CLEAN UPTIME</div>
                       <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, marginTop: "6px", color: "var(--obsidian-green)", textShadow: "0 0 18px rgba(55,227,161,.6)" }}>
-                        {liveMetrics?.kpi?.peakCleanUptime || "3d 03h"}
+                        {liveMetrics?.kpi?.peakCleanUptime || "—"}
                       </div>
                       <div style={{ fontSize: "10px", color: "#8CF2CB", marginTop: "2px" }}>
                         {liveMetrics?.host?.model ? `${liveMetrics.host.model.split(" ")[0]} Host · ${liveMetrics.host.cores} cores` : "Host Online"}
@@ -1419,7 +1401,7 @@ export default function Home() {
                       <div style={{ fontSize: "8.5px", letterSpacing: ".2em", color: "#7FB9CE", fontWeight: 700 }}>AGENT ACTIVITY</div>
                       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginTop: "6px" }}>
                         <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, color: "var(--obsidian-cyan)", textShadow: "0 0 18px rgba(36,217,255,.6)" }}>
-                          {liveMetrics?.kpi?.agentActivity ?? 30}
+                          {liveMetrics?.kpi?.agentActivity ?? "—"}
                         </div>
                         <div className="ais-eq" style={{ display: "flex", alignItems: "flex-end", gap: "2.5px", height: "24px" }}>
                           <span style={{ height: "24px", background: "#24D9FF", animationDelay: "-.1s" }}></span>
@@ -1438,7 +1420,7 @@ export default function Home() {
                     <div className="ais-panel slow" style={{ border: "1px solid rgba(255,196,91,.3)", borderRadius: "18px", background: "linear-gradient(160deg, rgba(255,196,91,.12), rgba(3,5,7,.94) 60%)", padding: "12px 16px", boxShadow: "0 0 24px rgba(255,196,91,.1)" }}>
                       <div style={{ fontSize: "8.5px", letterSpacing: ".2em", color: "#CBA868", fontWeight: 700 }}>TASKS DUE SOON</div>
                       <div className="ais-num" style={{ fontFamily: "'Geist Mono',monospace", fontSize: "26px", fontWeight: 700, marginTop: "6px", color: "var(--obsidian-amber)", textShadow: "0 0 18px rgba(255,196,91,.6)" }}>
-                        {(liveMetrics?.kpi?.tasksDueSoon ?? 1).toString().padStart(2, "0")}
+                        {liveMetrics?.kpi?.tasksDueSoon != null ? liveMetrics.kpi.tasksDueSoon.toString().padStart(2, "0") : "—"}
                       </div>
                       <div style={{ fontSize: "10px", color: "#FFD98C", marginTop: "2px" }}>in active queue</div>
                     </div>
@@ -1459,10 +1441,10 @@ export default function Home() {
                         color: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "var(--obsidian-red)" : liveMetrics?.kpi?.operationalRisk === "MODERATE" ? "var(--obsidian-amber)" : "var(--obsidian-green)",
                         textShadow: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "0 0 18px rgba(255,95,120,.6)" : "0 0 18px rgba(55,227,161,.55)"
                       }}>
-                        {liveMetrics?.kpi?.operationalRisk || "LOW"}
+                        {liveMetrics?.kpi?.operationalRisk || "—"}
                       </div>
                       <div style={{ fontSize: "10px", color: "#B9A5F5", marginTop: "2px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {liveMetrics?.kpi?.operationalRiskReason || "No critical outage"}
+                        {liveMetrics?.kpi?.operationalRiskReason || "Awaiting data"}
                       </div>
                     </div>
                   </div>
@@ -1511,7 +1493,6 @@ export default function Home() {
             isOpen={diagnosisModalOpen}
             system={currentSelectedSystem}
             onClose={() => setDiagnosisModalOpen(false)}
-            onRemediationComplete={handleRemediationComplete}
           />
 
           {/* Footer */}
