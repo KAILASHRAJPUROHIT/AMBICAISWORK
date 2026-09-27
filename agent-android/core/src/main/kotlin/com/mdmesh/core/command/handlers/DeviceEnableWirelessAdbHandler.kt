@@ -1,10 +1,10 @@
 package com.mdmesh.core.command.handlers
 
 import android.os.Build
-import android.provider.Settings
 import com.mdmesh.core.command.CommandHandler
 import com.mdmesh.core.command.CommandResults
 import com.mdmesh.policy.wifi.DpmHandle
+import com.mdmesh.policy.wifi.WirelessAdbEnabler
 import com.mdmesh.proto.CommandEnvelope
 import com.mdmesh.proto.CommandResult
 
@@ -50,13 +50,10 @@ class DeviceEnableWirelessAdbHandler(
         if (!handle.dpm.isDeviceOwnerApp(handle.admin.packageName)) {
             return CommandResults.unsupported(command, "enableWirelessAdb requires Device Owner")
         }
-        return runCatching {
-            handle.dpm.setGlobalSetting(handle.admin, Settings.Global.ADB_ENABLED, "1")
-            // Settings.Global.ADB_WIFI_ENABLED isn't a public SDK constant (added API 30, hidden) --
-            // the literal key is what DevicePolicyManagerService's allow-list and Settings.Global
-            // itself both key on, confirmed against AOSP master alongside ADB_ENABLED.
-            handle.dpm.setGlobalSetting(handle.admin, "adb_wifi_enabled", "1")
+        return if (WirelessAdbEnabler.tryEnable(handle)) {
             CommandResults.done(command, "wireless debugging listener enabled; pair/connect over the LAN")
-        }.getOrElse { CommandResults.failed(command, it.message ?: "enableWirelessAdb failed") }
+        } else {
+            CommandResults.failed(command, "enableWirelessAdb failed")
+        }
     }
 }
