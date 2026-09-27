@@ -41,3 +41,22 @@ bump that changed zero manifest/code lines.
    `WRITE_SETTINGS` at all. This requires an actual business/vendor relationship with
    Xiaomi; it's not something buildable from this codebase. Pursue it separately if
    wanted; it does not block shipping rotation today via the guardian script.
+
+## Going USB-free: `tools/wireless-adb-reconnect.py`
+
+Since this fleet's devices never leave the shop, a one-time *manual* wireless-debugging
+pairing per device (Settings > Developer options > Wireless debugging -- a real human
+tapping the toggle, not a programmatic write) is a different code path from the
+`adb_wifi_enabled` programmatic-write attempts that got reverted earlier in this
+investigation, and is exactly the mechanism every consumer phone relies on daily. This
+fleet already has live proof it persists: one tablet has stayed reachable over wireless
+ADB (via mDNS) across this entire investigation, through however many reboots, with zero
+programmatic intervention.
+
+The one thing that doesn't survive on its own is the *connection* -- modern wireless
+debugging advertises a new ephemeral port per session via mDNS, so `adb connect` needs
+re-running after every reboot. `tools/wireless-adb-reconnect.py` watches for the mDNS
+advertisement and reconnects automatically the moment a device reappears. Run it
+alongside `appop-guardian.py` and, once every device has done the one-time pairing in
+the script's own docstring, the whole fleet needs zero USB and zero manual touch from
+then on.
