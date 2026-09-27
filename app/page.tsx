@@ -454,7 +454,7 @@ interface LiveMetricsData {
   kpi: {
     peakCleanUptime: string;
     agentActivity: number;
-    tasksDueSoon: number;
+    tasksDueSoon: number | null;
     operationalRisk: string;
     operationalRiskReason: string;
   };
@@ -1426,9 +1426,9 @@ export default function Home() {
                     </div>
 
                     <div className="ais-panel slow" style={{
-                      border: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "1px solid rgba(255,95,120,.35)" : liveMetrics?.kpi?.operationalRisk === "MODERATE" ? "1px solid rgba(255,196,91,.35)" : "1px solid rgba(55,227,161,.3)",
+                      border: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "1px solid rgba(255,95,120,.35)" : liveMetrics?.kpi?.operationalRisk === "MODERATE" ? "1px solid rgba(255,196,91,.35)" : liveMetrics?.kpi?.operationalRisk === "UNKNOWN" ? "1px solid rgba(129,144,163,.35)" : "1px solid rgba(55,227,161,.3)",
                       borderRadius: "18px",
-                      background: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "linear-gradient(160deg, rgba(255,95,120,.12), rgba(3,5,7,.94) 60%)" : "linear-gradient(160deg, rgba(55,227,161,.12), rgba(3,5,7,.94) 60%)",
+                      background: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "linear-gradient(160deg, rgba(255,95,120,.12), rgba(3,5,7,.94) 60%)" : liveMetrics?.kpi?.operationalRisk === "UNKNOWN" ? "linear-gradient(160deg, rgba(129,144,163,.10), rgba(3,5,7,.94) 60%)" : "linear-gradient(160deg, rgba(55,227,161,.12), rgba(3,5,7,.94) 60%)",
                       padding: "12px 16px",
                       boxShadow: "0 0 24px rgba(139,92,255,.12)"
                     }}>
@@ -1438,8 +1438,8 @@ export default function Home() {
                         fontWeight: 800,
                         marginTop: "6px",
                         letterSpacing: ".02em",
-                        color: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "var(--obsidian-red)" : liveMetrics?.kpi?.operationalRisk === "MODERATE" ? "var(--obsidian-amber)" : "var(--obsidian-green)",
-                        textShadow: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "0 0 18px rgba(255,95,120,.6)" : "0 0 18px rgba(55,227,161,.55)"
+                        color: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "var(--obsidian-red)" : liveMetrics?.kpi?.operationalRisk === "MODERATE" ? "var(--obsidian-amber)" : liveMetrics?.kpi?.operationalRisk === "UNKNOWN" ? "var(--obsidian-dim)" : "var(--obsidian-green)",
+                        textShadow: liveMetrics?.kpi?.operationalRisk === "ELEVATED" ? "0 0 18px rgba(255,95,120,.6)" : liveMetrics?.kpi?.operationalRisk === "UNKNOWN" ? "none" : "0 0 18px rgba(55,227,161,.55)"
                       }}>
                         {liveMetrics?.kpi?.operationalRisk || "—"}
                       </div>
