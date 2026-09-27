@@ -2926,3 +2926,98 @@ a {
 .rollout-device { display:flex; align-items:center; gap:10px; padding:6px 8px; border-radius:8px; font-size:13px; }
 .rollout-device:hover { background:var(--panel-2); }
 .rollout-device .muted { color:var(--muted); }
+
+/* =============================================================================
+   AIS OBSIDIAN CONTROL PLANE SKIN
+   Presentation only. Component structure, routes, API calls and device actions
+   remain unchanged. The MDM console inherits the same visual system as AIS.
+   ========================================================================== */
+:root,
+[data-theme='dark'] {
+  --app: #05070a;
+  --surface: #0d141d;
+  --surface-2: #131c28;
+  --border: rgba(120, 170, 220, .20);
+  --border-hover: rgba(36, 217, 255, .48);
+  --line: rgba(120, 170, 220, .18);
+  --line-soft: rgba(120, 170, 220, .12);
+  --hairline: rgba(120, 170, 220, .08);
+  --ink: #eaf6ff;
+  --text: #f5f8ff;
+  --text-2: #c8d6e8;
+  --secondary: #a7b7cc;
+  --muted: #7890ad;
+  --faint: #58708d;
+  --online: #37e3a1;
+  --offline: #64748b;
+  --warn: #ffc45b;
+  --alert: #ff5e78;
+  --danger: #ff7187;
+  --panel: #0d141d;
+  --panel-2: #131c28;
+  --signal: #24d9ff;
+  --signal-ink: #04060a;
+  --signal-dim: rgba(36, 217, 255, .16);
+  --ok: #37e3a1;
+  --idle: #64748b;
+  --on-ink: #04060a;
+  --ink-hover: #c7efff;
+  --danger-soft-bg: rgba(255, 94, 120, .12);
+  --danger-soft-border: rgba(255, 94, 120, .35);
+  --danger-soft-border-hover: rgba(255, 94, 120, .60);
+  --ring: rgba(36, 217, 255, .22);
+  --backdrop: rgba(0, 0, 0, .78);
+  --shadow-card: 0 18px 38px -28px rgba(0, 0, 0, .95), 0 0 22px rgba(36, 217, 255, .05);
+  --shadow-pop: 0 24px 60px -28px rgba(0, 0, 0, .95), 0 0 32px rgba(139, 92, 255, .12);
+  color-scheme: dark;
+}
+
+body {
+  background-color: var(--app);
+  background-image:
+    linear-gradient(rgba(120,170,220,.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120,170,220,.045) 1px, transparent 1px),
+    radial-gradient(ellipse at 70% -20%, rgba(77,132,255,.15), transparent 42%),
+    radial-gradient(ellipse at 5% 105%, rgba(139,92,255,.12), transparent 44%);
+  background-size: 60px 60px, 60px 60px, auto, auto;
+}
+
+.shell { min-height: 100%; background: transparent; }
+.sidebar {
+  background: linear-gradient(180deg, rgba(13,20,29,.97), rgba(5,7,10,.98));
+  border-right: 1px solid var(--border);
+  box-shadow: 16px 0 48px -36px rgba(36,217,255,.45);
+}
+.sidebar-brand { border-bottom: 1px solid var(--line); background: linear-gradient(135deg, rgba(36,217,255,.10), rgba(139,92,255,.09), transparent); }
+.wordmark .bullet { background: linear-gradient(135deg, #24d9ff, #4d84ff 40%, #8b5cff 70%, #ff4fd8); box-shadow: 0 0 20px rgba(77,132,255,.70); }
+.wordmark .mdm { color: #f5f8ff; letter-spacing: .10em; }
+.wordmark .esh { color: #aebfd6; }
+.nav-item { color: var(--secondary); border: 1px solid transparent; border-radius: 10px; margin: 3px 10px; }
+.nav-item:hover { color: #c6fce7; background: rgba(55,227,161,.08); border-color: rgba(55,227,161,.22); }
+.nav-item.active { color: #bff3ff; background: linear-gradient(90deg, rgba(36,217,255,.17), rgba(77,132,255,.08)); border-color: rgba(36,217,255,.38); box-shadow: inset 3px 0 0 #24d9ff, 0 0 18px rgba(36,217,255,.07); }
+.sidebar-foot { border-top: 1px solid var(--line); }
+.sidebar-user .who { color: #c8d6e8; }
+.main { background: transparent; }
+.rail-mobilebar { background: rgba(13,20,29,.96); border-bottom: 1px solid var(--line); color: #f5f8ff; }
+.content { position: relative; }
+.panel, .dev, .vital, .info-cell, .detail-rail, .modal, .toast {
+  background: linear-gradient(145deg, rgba(19,28,40,.96), rgba(13,20,29,.96));
+  border-color: var(--border);
+  box-shadow: var(--shadow-card);
+}
+.panel:hover, .dev:hover { border-color: rgba(36,217,255,.34); }
+.panel-title, h1, h2, h3 { color: #f5f8ff; }
+.label { color: #7890ad; letter-spacing: .10em; }
+.btn { background: rgba(19,28,40,.86); border-color: var(--border); color: #dbeaff; }
+.btn:hover:not(:disabled) { background: rgba(36,217,255,.10); border-color: rgba(36,217,255,.45); color: #bff3ff; }
+.btn-primary, .btn-dark { background: linear-gradient(135deg, #24d9ff, #4d84ff); border-color: #24d9ff; color: #04060a; box-shadow: 0 0 18px rgba(36,217,255,.20); }
+.btn-primary:hover:not(:disabled), .btn-dark:hover:not(:disabled) { background: linear-gradient(135deg, #68e8ff, #8b5cff); border-color: #68e8ff; }
+.btn-ghost { background: transparent; color: var(--secondary); }
+.input, .sel, .dv-search, input, select, textarea { background: rgba(5,7,10,.70); border-color: var(--border); color: #f5f8ff; }
+.input:focus, .sel:focus, .dv-search:focus, input:focus, select:focus, textarea:focus { border-color: #24d9ff; box-shadow: 0 0 0 3px rgba(36,217,255,.12); }
+.table th { background: rgba(5,7,10,.62); color: #7890ad; border-color: var(--line); }
+.table td { border-color: var(--line-soft); }
+.table tr:hover td { background: rgba(36,217,255,.055); }
+.route-enter { animation: ais-mdm-enter .42s ease-out both; }
+@keyframes ais-mdm-enter { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .route-enter { animation: none; } }
