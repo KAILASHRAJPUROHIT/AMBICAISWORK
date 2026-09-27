@@ -18,6 +18,8 @@ import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import android.provider.Settings
@@ -49,6 +51,12 @@ import com.mdmesh.kiosk.KioskEscapeOverlay
 import com.mdmesh.kiosk.KioskResult
 import com.mdmesh.kiosk.KioskToggles
 import com.mdmesh.kiosk.lockTaskFeatures
+import com.mdmesh.policy.CapabilityRegistry
+import com.mdmesh.policy.PolicyOutcome
+import com.mdmesh.policy.ReadableTogglePolicy
+import com.mdmesh.policy.devicesettings.AutoBrightnessPolicy
+import com.mdmesh.policy.devicesettings.AutoRotationPolicy
+import com.mdmesh.policy.devicesettings.FlightModePolicy
 import com.mdmesh.policy.wifi.DpmHandle
 import com.mdmesh.proto.KioskApplyPayload
 import com.mdmesh.proto.PasscodeHash
@@ -82,6 +90,7 @@ class KioskLauncherActivity : FragmentActivity() {
     @Inject lateinit var adminPasscodeStore: AdminPasscodeStore
     @Inject lateinit var dpmHandle: DpmHandle
     @Inject lateinit var resetTokenStore: ResetPasswordTokenStore
+    @Inject lateinit var capabilities: CapabilityRegistry
 
     /** Last applied non-null kiosk state, so [onResume] can recover a bounced single-app pin. */
     private var active: KioskApplyPayload? = null
@@ -493,6 +502,114 @@ class KioskLauncherActivity : FragmentActivity() {
             .show()
     }
 
+    /**
+     * Persistent, ungated corner button (bottom-end -- battery/wifi own top-start/top-end, the
+     * kebab menu or gesture target owns top-end too) opening [showQuickControlsDialog] directly.
+     *
+     * Deliberately separate from [showAdminMenu]: that menu is passcode/biometric-gated for IT
+     * ("Reset passcode", "Uninstall AMBIC MDM", "Open system settings" ...) and is the wrong home
+     * for four harmless, everyday device-comfort toggles a kiosk operator needs constantly. This
+     * button needs no passcode and its dialog never calls `Intent(Settings.ACTION_*)` -- the
+     * whole point is a real, working control that never puts the device user one tap from the
+     * actual Settings app.
+     *
+     * Shows nothing if not one of the four policies is supported on this device (e.g. the
+     * WRITE_SETTINGS appop was never granted -- see `tools/provision-aosp-device.ps1` -- or this
+     * is a pre-Android-9 device for flightMode): an absent capability means an absent button,
+     * not a dead one.
+     */
+    private fun addQuickControlsAffordance(parent: ViewGroup) {
+        if (!::capabilities.isInitialized) return
+        val anySupported = capabilities.togglePolicies().keys.any {
+            it in setOf(
+                AutoRotationPolicy.CAPABILITY_KEY,
+                AutoBrightnessPolicy.CAPABILITY_KEY,
+                FlightModePolicy.CAPABILITY_KEY,
+            )
+        } || capabilities.brightnessLevelPolicy() != null
+        if (!anySupported) return
+
+        val button = TextView(this).apply {
+            text = "Quick Controls"
+            setTextColor(MUTED)
+            textSize = 11f
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setBackgroundColor(Color.argb(90, 0, 0, 0))
+            setOnClickListener { showQuickControlsDialog() }
+        }
+        parent.addView(
+            FrameWrap(this, button, Gravity.BOTTOM or Gravity.END, dp(16), avoidSystemBars = true),
+        )
+    }
+
+    /** One row per supported policy; unsupported ones are simply absent, not disabled. */
+    private fun showQuickControlsDialog() {
+        val toggles = capabilities.togglePolicies()
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(12), dp(24), dp(4))
+        }
+
+        fun toggleRow(key: String, label: String) {
+            val policy = toggles[key] as? ReadableTogglePolicy ?: return
+            val current = policy.isEnabled()
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(0, dp(10), 0, dp(10))
+            }
+            row.addView(
+                text(label, 15f, TEXT).apply {
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                },
+            )
+            row.addView(
+                Switch(this).apply {
+                    isChecked = current ?: false
+                    isEnabled = current != null
+                    setOnCheckedChangeListener { _, checked ->
+                        val outcome = policy.setEnabled(checked)
+                        if (outcome !is PolicyOutcome.Applied) {
+                            isChecked = !checked // revert on failure rather than show a stuck wrong state
+                            Toast.makeText(this@KioskLauncherActivity, "Could not change $label.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                },
+            )
+            body.addView(row)
+        }
+
+        toggleRow(AutoRotationPolicy.CAPABILITY_KEY, "Auto-rotate screen")
+        toggleRow(AutoBrightnessPolicy.CAPABILITY_KEY, "Adaptive brightness")
+
+        capabilities.brightnessLevelPolicy()?.let { brightness ->
+            val level = brightness.getLevel()
+            body.addView(text("Brightness", 15f, TEXT).apply { setPadding(0, dp(10), 0, 0) })
+            body.addView(
+                SeekBar(this).apply {
+                    max = 100
+                    progress = level ?: 50
+                    isEnabled = level != null
+                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                        override fun onProgressChanged(sb: SeekBar?, value: Int, fromUser: Boolean) {
+                            if (fromUser) brightness.setLevel(value)
+                        }
+                        override fun onStartTrackingTouch(sb: SeekBar?) = Unit
+                        override fun onStopTrackingTouch(sb: SeekBar?) = Unit
+                    })
+                },
+            )
+        }
+
+        toggleRow(FlightModePolicy.CAPABILITY_KEY, "Flight mode")
+
+        AlertDialog.Builder(this)
+            .setTitle("Quick Controls")
+            .setView(body)
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
     /** Extend the lock-task allowlist (additive) to include whatever package [intent] actually
      *  resolves to, then start it. No-op (silently) if nothing on-device can handle it. */
     private fun launchAllowlisted(intent: Intent) {
@@ -763,6 +880,7 @@ class KioskLauncherActivity : FragmentActivity() {
         )
         addExitAffordance(p, root)
         addStatusBar(p, root)
+        addQuickControlsAffordance(root)
         return root
     }
 
@@ -819,6 +937,7 @@ class KioskLauncherActivity : FragmentActivity() {
         col.addView(centeredText("AMBIC MDM", 28f, SIGNAL, bold = true))
         col.addView(centeredText("Managed device", 14f, MUTED))
         addView(col)
+        addQuickControlsAffordance(this)
     }
 
     private fun recoveryView(): View = frame(INK).apply {

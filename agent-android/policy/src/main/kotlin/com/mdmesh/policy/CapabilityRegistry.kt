@@ -6,6 +6,14 @@ import com.mdmesh.policy.bluetooth.BluetoothPolicy
 import com.mdmesh.policy.bluetooth.BluetoothPolicyFactory
 import com.mdmesh.policy.camera.CameraPolicy
 import com.mdmesh.policy.camera.CameraPolicyFactory
+import com.mdmesh.policy.devicesettings.AutoBrightnessPolicy
+import com.mdmesh.policy.devicesettings.AutoBrightnessPolicyFactory
+import com.mdmesh.policy.devicesettings.AutoRotationPolicy
+import com.mdmesh.policy.devicesettings.AutoRotationPolicyFactory
+import com.mdmesh.policy.devicesettings.BrightnessLevelPolicy
+import com.mdmesh.policy.devicesettings.BrightnessLevelPolicyFactory
+import com.mdmesh.policy.devicesettings.FlightModePolicy
+import com.mdmesh.policy.devicesettings.FlightModePolicyFactory
 import com.mdmesh.policy.encryption.EncryptionPolicy
 import com.mdmesh.policy.encryption.EncryptionPolicyFactory
 import com.mdmesh.policy.frp.FrpPolicy
@@ -51,10 +59,20 @@ class CapabilityRegistry(
         AntiTamperPolicyFactory.create(handle)?.let { put(AntiTamperPolicy.CAPABILITY_KEY, it) }
         FrpPolicyFactory.create(handle)?.let { put(FrpPolicy.CAPABILITY_KEY, it) }
         EncryptionPolicyFactory.create(handle)?.let { put(EncryptionPolicy.CAPABILITY_KEY, it) }
+        AutoRotationPolicyFactory.create(handle)?.let { put(AutoRotationPolicy.CAPABILITY_KEY, it) }
+        AutoBrightnessPolicyFactory.create(handle)?.let { put(AutoBrightnessPolicy.CAPABILITY_KEY, it) }
+        FlightModePolicyFactory.create(handle)?.let { put(FlightModePolicy.CAPABILITY_KEY, it) }
         // Each factory probe returns null on an unsupported device, so a key only
         // appears here when a usable strategy exists.
         // Absence == "not advertised" == "never commanded".
     }
+
+    /**
+     * [BrightnessLevelPolicy] is level-shaped, not boolean, so it lives outside
+     * [togglePolicies]'s `Map<String, TogglePolicy>` -- see that interface's own doc
+     * comment. `null` on a device without the WRITE_SETTINGS appop granted.
+     */
+    fun brightnessLevelPolicy(): BrightnessLevelPolicy? = BrightnessLevelPolicyFactory.create(handle)
 
     /**
      * The set of policy keys with a working strategy on this device — derived from the

@@ -36,6 +36,17 @@ if ($owners -match 'Device Owner:') {
     Invoke-Adb @('shell', 'dpm', 'set-device-owner', $Admin)
 }
 
+# One-time, silent grant of the WRITE_SETTINGS appop. This is what lets the on-device
+# quick-controls panel (auto-rotation, brightness) write Settings.System directly for the
+# rest of this device's life with ZERO Settings.ACTION_MANAGE_WRITE_SETTINGS prompt ever
+# shown -- the whole point being that the kiosked end user never sees a route into the
+# real Settings app. `pm grant` cannot touch this (WRITE_SETTINGS is an appop, not a
+# runtime permission); `appops set` is the correct tool, and must run now, at the same
+# ADB moment Device Owner itself is assigned, before the device reaches an end user.
+# Flight mode does NOT need this: it goes through DevicePolicyManager.setGlobalSetting(),
+# which Device Owner already holds without any extra grant.
+Invoke-Adb @('shell', 'appops', 'set', $Package, 'WRITE_SETTINGS', 'allow')
+
 $secureToken = Read-Host 'Paste a fresh single-use enrollment token' -AsSecureString
 $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
 try {
