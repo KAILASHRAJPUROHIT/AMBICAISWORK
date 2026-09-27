@@ -176,6 +176,15 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     request: { type: 'device.ringStop', requiresCapability: 'device.ringStop' },
   },
   {
+    key: 'enable-wireless-adb', label: 'Enable wireless debugging', group: 'safe',
+    requiresDeviceOwner: true,
+    description: 'Turn on the wireless-debugging (ADB over Wi-Fi) listener — no on-device visit. '
+      + 'Use with the device’s reported IP (Devices → detail) and adb pair/connect from a '
+      + 'machine on the same LAN; the fixed listener port and first-trust prompt are not guaranteed '
+      + 'silent on every OEM build, so confirm on one device before pushing to the whole fleet.',
+    request: { type: 'device.enableWirelessAdb', requiresCapability: 'device.enableWirelessAdb' },
+  },
+  {
     key: 'lock', label: 'Lock device', group: 'disruptive', danger: true,
     description: 'Lock the device screen immediately.',
     request: { type: 'device.lock', requiresCapability: 'device.lock' },
