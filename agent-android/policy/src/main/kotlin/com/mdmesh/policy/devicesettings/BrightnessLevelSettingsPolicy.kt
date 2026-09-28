@@ -22,12 +22,15 @@ internal class BrightnessLevelSettingsPolicy(
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
             handle.dpm.isDeviceOwnerApp(handle.admin.packageName)
 
-    override fun setLevel(percent: Int): PolicyOutcome = runCatching {
+    override fun setLevel(percent: Int): PolicyOutcome {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return PolicyOutcome.Unsupported
+        return runCatching {
         val clamped = percent.coerceIn(0, 100)
         val raw = (clamped * 255 / 100.0).roundToInt().coerceIn(1, 255) // 0 can leave the panel unreadable
         handle.dpm.setSystemSetting(handle.admin, Settings.System.SCREEN_BRIGHTNESS, raw.toString())
         PolicyOutcome.Applied
-    }.getOrElse { PolicyOutcome.Failed(it.message ?: "brightnessLevel setLevel failed") }
+        }.getOrElse { PolicyOutcome.Failed(it.message ?: "brightnessLevel setLevel failed") }
+    }
 
     override fun getLevel(): Int? = runCatching {
         val raw = Settings.System.getInt(handle.context.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
