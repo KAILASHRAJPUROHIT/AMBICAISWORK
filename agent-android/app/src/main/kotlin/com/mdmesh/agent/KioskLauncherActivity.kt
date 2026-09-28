@@ -61,6 +61,7 @@ import com.mdmesh.policy.ReadableTogglePolicy
 import com.mdmesh.policy.devicesettings.AutoBrightnessPolicy
 import com.mdmesh.policy.devicesettings.AutoRotationPolicy
 import com.mdmesh.policy.devicesettings.FlightModePolicy
+import com.mdmesh.policy.wifi.WifiRadioPolicy
 import com.mdmesh.policy.wifi.DpmHandle
 import com.mdmesh.proto.KioskApplyPayload
 import com.mdmesh.proto.PasscodeHash
@@ -559,6 +560,7 @@ class KioskLauncherActivity : FragmentActivity() {
                 AutoRotationPolicy.CAPABILITY_KEY,
                 AutoBrightnessPolicy.CAPABILITY_KEY,
                 FlightModePolicy.CAPABILITY_KEY,
+                WifiRadioPolicy.CAPABILITY_KEY,
             )
         } || capabilities.brightnessLevelPolicy() != null
         if (!anySupported) return
@@ -636,6 +638,15 @@ class KioskLauncherActivity : FragmentActivity() {
         }
 
         toggleRow(FlightModePolicy.CAPABILITY_KEY, "Flight mode")
+
+        if (toggles.containsKey(WifiRadioPolicy.CAPABILITY_KEY)) {
+            toggleRow(WifiRadioPolicy.CAPABILITY_KEY, "Wi-Fi")
+            // Tablets are Wi-Fi only; the policy re-enables Wi-Fi itself (WifiAutoRestore).
+            body.addView(
+                text("Wi-Fi turns back on automatically 3 minutes after being switched off.", 12f, DIALOG_TEXT)
+                    .apply { alpha = 0.7f; setPadding(0, 0, 0, dp(6)) },
+            )
+        }
 
         AlertDialog.Builder(this)
             .setTitle("Quick Controls")

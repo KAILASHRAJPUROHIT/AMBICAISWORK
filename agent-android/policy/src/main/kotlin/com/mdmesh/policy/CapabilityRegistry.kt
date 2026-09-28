@@ -62,6 +62,8 @@ class CapabilityRegistry(
         AutoRotationPolicyFactory.create(handle)?.let { put(AutoRotationPolicy.CAPABILITY_KEY, it) }
         AutoBrightnessPolicyFactory.create(handle)?.let { put(AutoBrightnessPolicy.CAPABILITY_KEY, it) }
         FlightModePolicyFactory.create(handle)?.let { put(FlightModePolicy.CAPABILITY_KEY, it) }
+        com.mdmesh.policy.wifi.WifiRadioPolicyFactory.create(handle)
+            ?.let { put(com.mdmesh.policy.wifi.WifiRadioPolicy.CAPABILITY_KEY, it) }
         // Each factory probe returns null on an unsupported device, so a key only
         // appears here when a usable strategy exists.
         // Absence == "not advertised" == "never commanded".

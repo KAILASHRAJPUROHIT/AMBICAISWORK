@@ -1,3 +1,8 @@
+# Enrolls a device WITHOUT Google Play (e.g. China-ROM Redmi) over USB, since those can't use
+# Android Enterprise QR provisioning. Since 2026-09-28 the global and China agents are unified:
+# pass the normal release-signed APK (mdmesh-agent.apk from the GitHub release) -- the same
+# package, signing key and console rollout as every other device. Requires a factory-reset device
+# with no accounts, USB debugging on, and a fresh single-use enrollment token from the console.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Serial,
@@ -6,7 +11,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Package = 'com.mdmesh.agent.cn'
+$Package = 'com.mdmesh.agent'
 $Admin = "$Package/.admin.AdminReceiver"
 $Bootstrap = "$Package/.provisioning.AospUsbBootstrapActivity"
 
@@ -30,13 +35,15 @@ if ($owners -match 'Device Owner:') {
     if ($owners -notmatch [regex]::Escape($Package)) {
         throw "Refusing: device already has another Device Owner. No changes made."
     }
-    Write-Host 'AMBIC China agent is already Device Owner; not reassigning it.'
+    Write-Host 'AMBIC agent is already Device Owner; not reassigning it.'
 } else {
     Invoke-Adb @('install', '-r', $ApkPath)
     Invoke-Adb @('shell', 'dpm', 'set-device-owner', $Admin)
 }
 
-# One-time, silent grant of the WRITE_SETTINGS appop -- needed ONLY for auto-rotation
+# Initial grant of the WRITE_SETTINGS appop -- needed ONLY for auto-rotation. Android resets it on
+# every agent update; the shop PC's tools/appop-guardian.py re-grants it automatically after that
+# (docs/WRITE_SETTINGS-PERSISTENCE.md). Original rationale:
 # (Settings.System.ACCELEROMETER_ROTATION has no DevicePolicyManager allow-list entry, confirmed
 # against DevicePolicyManagerService.SYSTEM_SETTINGS_ALLOWLIST in AOSP master, so it's the one
 # quick-controls toggle still requiring a real Settings.System write). Brightness (both the
@@ -63,3 +70,8 @@ try {
 Start-Sleep -Seconds 3
 Invoke-Adb @('shell', 'dpm', 'list-owners')
 Write-Host 'Bootstrap submitted. Verify the device appears in AMBIC MDM before disconnecting USB.'
+Write-Host ''
+Write-Host 'Last step (one time): on the device, Developer options > Wireless debugging > on, accept'
+Write-Host '"always allow on this network", then "Pair device with pairing code" and run on this PC:'
+Write-Host '    adb pair <ip>:<port> <code>'
+Write-Host 'That trusts the shop Wi-Fi so the agent keeps wireless debugging on by itself from then on.'

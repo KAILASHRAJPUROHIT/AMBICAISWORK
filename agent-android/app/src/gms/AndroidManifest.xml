@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Google Play Services-only components. This manifest is not merged into aosp builds. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- FcmBootstrap checks whether Play services is installed; without this entry Android 11+
+         package visibility would hide it and FCM would never start on GMS devices. -->
+    <queries>
+        <package android:name="com.google.android.gms" />
+    </queries>
     <application>
+        <!-- Firebase auto-init is off by default and switched on by FcmBootstrap only when Google
+             Play services is installed, so this same APK also runs cleanly on China ROMs without
+             GMS (unified global/China agent, 2026-09-28). -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
         <service
             android:name=".service.AmbicFirebaseMessagingService"
             android:exported="false">

@@ -66,6 +66,9 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Quick Controls Wi-Fi toggle (WifiRadioPolicy). Normal permission; Device Owner is exempt
+         from the Android 10+ setWifiEnabled block. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <!-- Report location while parked/backgrounded (Android 10+); DO auto-grants it at provisioning. -->
@@ -289,6 +292,23 @@
                 android:value="androidx.startup"
                 tools:node="remove" />
         </provider>
+
+        <!-- Turns Wi-Fi back on 3 minutes after a manual/remote "off" (WifiRadioPolicy). -->
+        <receiver
+            android:name="com.mdmesh.policy.wifi.WifiAutoRestoreReceiver"
+            android:exported="false" />
+
+        <!-- USB first-enrollment bridge for devices without Google Play (no QR provisioning),
+             run by tools/provision-aosp-device.ps1 after `dpm set-device-owner`. Shared by every
+             build since the global/China agents were unified (2026-09-28). Refuses in code unless
+             Device Owner and not yet enrolled; android.permission.DUMP additionally limits who can
+             launch it to the ADB shell (normal apps cannot hold DUMP). -->
+        <activity
+            android:name=".provisioning.AospUsbBootstrapActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:permission="android.permission.DUMP"
+            android:theme="@style/Theme.MdmAgent" />
 
     </application>
 

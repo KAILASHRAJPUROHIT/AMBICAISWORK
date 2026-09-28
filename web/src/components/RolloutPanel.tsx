@@ -53,7 +53,10 @@ function CohortBar({ label, c, devices }: { label: string; c: RolloutCounts; dev
 export function RolloutPanel() {
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [rollout, setRollout] = useState<ActiveRollout | null>(null);
-  const [targetPackage, setTargetPackage] = useState<'com.mdmesh.agent' | 'com.mdmesh.agent.cn'>('com.mdmesh.agent');
+  // Global and China-ROM devices run one unified agent (com.mdmesh.agent) since 2026-09-28, so a
+  // rollout always targets that package and covers the whole fleet. The legacy .cn APK that
+  // releases still publish (status.apkCn) is not offered here: no enrolled device runs it.
+  const targetPackage = 'com.mdmesh.agent';
   const [picking, setPicking] = useState(false);
   const [devices, setDevices] = useState<DeviceView[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -95,9 +98,7 @@ export function RolloutPanel() {
     return next;
   });
 
-  const apk = targetPackage === 'com.mdmesh.agent.cn'
-    ? status?.apkCn
-    : status?.apk;
+  const apk = status?.apk;
 
   const start = async () => {
     if (!apk) return;
@@ -156,7 +157,7 @@ export function RolloutPanel() {
 
   // Nothing to show: no active rollout and no mirrored APK to offer.
   const active = rollout && (rollout.stage === 'canary' || rollout.stage === 'fleet');
-  const apkAvailable = (status?.apk && status.apk.available) || (status?.apkCn && status.apkCn.available);
+  const apkAvailable = !!(status?.apk && status.apk.available);
   if (!active && !apkAvailable) return null;
 
   return (
@@ -168,7 +169,7 @@ export function RolloutPanel() {
           <div className="set-row">
             <span className="k">Rolling out</span>
             <span className="v mono">
-              v{rollout.targetVersion} ({rollout.packageName === 'com.mdmesh.agent.cn' ? 'China / AOSP' : 'Global / GMS'}) · <span className="ub-ch">{rollout.stage}</span>
+              v{rollout.targetVersion} ({rollout.packageName === 'com.mdmesh.agent.cn' ? 'legacy China / AOSP' : 'all devices'}) · <span className="ub-ch">{rollout.stage}</span>
             </span>
           </div>
           <CohortBar label="Canary" c={rollout.progress.canary} devices={rollout.progress.canaryDevices} />
@@ -206,14 +207,6 @@ export function RolloutPanel() {
             <small>Push the new agent APK to devices in stages.</small>
           </span>
           <span className="v" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select
-              value={targetPackage}
-              onChange={(e) => setTargetPackage(e.target.value as 'com.mdmesh.agent' | 'com.mdmesh.agent.cn')}
-              style={{ padding: '4px 8px', borderRadius: 4 }}
-            >
-              <option value="com.mdmesh.agent">Global / GMS (Samsung, etc.)</option>
-              <option value="com.mdmesh.agent.cn">China / AOSP (Redmi 14R)</option>
-            </select>
             <button className="btn btn-sm btn-primary" onClick={() => void openPicker()}>
               Roll out…
             </button>
@@ -223,33 +216,17 @@ export function RolloutPanel() {
 
       {!active && picking && (
         <>
-          <div style={{ marginBottom: 12, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ fontWeight: 600 }}>Target Fleet:</label>
-            <select
-              value={targetPackage}
-              onChange={(e) => setTargetPackage(e.target.value as 'com.mdmesh.agent' | 'com.mdmesh.agent.cn')}
-              style={{ padding: '4px 8px', borderRadius: 4 }}
-            >
-              <option value="com.mdmesh.agent">Global / GMS (com.mdmesh.agent)</option>
-              <option value="com.mdmesh.agent.cn">China / AOSP (com.mdmesh.agent.cn - Redmi 14R)</option>
-            </select>
-          </div>
-
           <p className="muted" style={{ margin: '0 0 8px' }}>
-            Select the <b>canary</b> devices to update first (v{apk?.version} · {targetPackage}). You'll promote to the
-            rest of the fleet once they're confirmed healthy.
+            Select the <b>canary</b> devices to update first (v{apk?.version}, all devices incl. China-ROM phones).
+            You'll promote to the rest of the fleet once they're confirmed healthy.
           </p>
           <div className="rollout-devicelist">
             {devices.map((d) => {
-              const desc = (d.description || '').toUpperCase();
-              const isRedmi = desc.includes('REDMI') || desc.includes('14R');
-              const match = targetPackage === 'com.mdmesh.agent.cn' ? isRedmi : !isRedmi;
               return (
-                <label key={d.id} className="rollout-device" style={{ opacity: match ? 1 : 0.6 }}>
+                <label key={d.id} className="rollout-device">
                   <input type="checkbox" checked={selected.has(d.number)} onChange={() => toggle(d.number)} />
                   <span className="mono">{d.description || d.number}</span>
                   {d.description && <span className="muted" style={{ marginLeft: 6 }}>({d.number})</span>}
-                  {match && <span className="ub-ch" style={{ marginLeft: 'auto', fontSize: '0.8em' }}>Recommended</span>}
                 </label>
               );
             })}

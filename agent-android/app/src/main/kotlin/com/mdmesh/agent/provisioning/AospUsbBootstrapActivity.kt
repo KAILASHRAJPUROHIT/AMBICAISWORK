@@ -17,9 +17,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * AOSP-only USB bootstrap endpoint used by the AMBIC provisioner after `dpm set-device-owner`.
+ * USB bootstrap endpoint used by the AMBIC provisioner after `dpm set-device-owner`, for devices
+ * without Google Play (China ROMs), which cannot use Android Enterprise QR provisioning.
  *
- * It is intentionally unavailable in the GMS APK. An adb caller must supply a tenant-minted,
+ * Shared by every build (global and China agents unified 2026-09-28); the manifest restricts launch
+ * to the ADB shell via android.permission.DUMP. The adb caller must also supply a tenant-minted,
  * single-use token; the endpoint refuses a non-DO or an already enrolled device, so it cannot
  * retarget a live managed device. It has no UI and finishes immediately after scheduling sync.
  */

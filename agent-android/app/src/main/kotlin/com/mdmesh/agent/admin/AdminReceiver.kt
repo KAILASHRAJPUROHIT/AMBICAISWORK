@@ -61,10 +61,17 @@ class AdminReceiver : DeviceAdminReceiver() {
         }
     }
 
-    /** Entering kiosk: block other apps/services from drawing toasts/dialogs over the kiosk. */
+    /**
+     * Entering kiosk: make sure overlays are ALLOWED. This used to set DISALLOW_CREATE_WINDOWS,
+     * which blocked every app's toasts and floating windows while in kiosk -- including approved
+     * apps (Aradhana Capture, Ornate Buddy, Chrome) and our own Quick Controls / "Relaunching…"
+     * messages. Lock task already stops any app launching outside the allowlist, so the
+     * restriction added little and interfered with approved apps; removed 2026-09-28. Clearing
+     * here also heals devices that still carry it from older builds.
+     */
     override fun onLockTaskModeEntering(context: Context, intent: Intent, pkg: String) {
         super.onLockTaskModeEntering(context, intent, pkg)
-        setCreateWindowsRestriction(context, restrict = true)
+        setCreateWindowsRestriction(context, restrict = false)
     }
 
     /** Leaving kiosk: allow overlays again. */

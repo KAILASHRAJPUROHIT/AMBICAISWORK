@@ -93,6 +93,14 @@ class CheckInService : LifecycleService() {
         ContextCompat.registerReceiver(this, powerReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         // Keep wireless debugging on across Wi-Fi drops and reboots -- see WirelessAdbKeeper.
         wirelessAdbKeeper = WirelessAdbKeeper(applicationContext, dpmHandle).also { it.start() }
+        // Older builds set DISALLOW_CREATE_WINDOWS while in kiosk, which blocked approved apps'
+        // toasts/overlays. Clear it once at startup so a device updated mid-kiosk is healed
+        // immediately, not only at its next kiosk entry (see AdminReceiver.onLockTaskModeEntering).
+        runCatching {
+            if (dpmHandle.dpm.isDeviceOwnerApp(packageName)) {
+                dpmHandle.dpm.clearUserRestriction(dpmHandle.admin, android.os.UserManager.DISALLOW_CREATE_WINDOWS)
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

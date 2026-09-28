@@ -1,5 +1,16 @@
 # AMBIC MDM China / AOSP edition
 
+> **Unified 2026-09-28 (v0.2.70).** Global and China-ROM devices now run the **same** APK:
+> `com.mdmesh.agent`, release-signed, delivered by the one console rollout. The global build
+> starts Firebase only when Google Play services is installed (`FcmBootstrap`), so on a GMS-free
+> ROM it behaves like the old aosp build (WebSocket + `WakeKeepAlive`, no FCM). The USB
+> enrollment bridge (`AospUsbBootstrapActivity`) is in every build, launchable only from the ADB
+> shell (`android.permission.DUMP`). To enroll a China-ROM device, run
+> `tools/provision-aosp-device.ps1` with the release `mdmesh-agent.apk`. The separate
+> `com.mdmesh.agent.cn` package and the `-cn-replace` debug builds below are **legacy**; the
+> release pipeline still publishes the .cn APK for compatibility, but no device should use it.
+> The rest of this page is kept for history.
+
 ## Purpose
 
 `aosp` is a separate Device Owner APK for China-ROM and GMS-free Android devices. It shares the

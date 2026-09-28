@@ -1,12 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application>
-        <!-- USB-only first-enrollment bridge. It refuses non-Device-Owner and already enrolled
-             devices in code. No equivalent component is present in the GMS flavor. -->
-        <activity
-            android:name=".provisioning.AospUsbBootstrapActivity"
-            android:exported="true"
-            android:excludeFromRecents="true"
-            android:theme="@style/Theme.MdmAgent" />
-    </application>
-</manifest>
+<!-- aosp flavor: no Firebase. The USB enrollment bridge that used to live here is now in the
+     main manifest, shared by every build since the global/China agents were unified. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" />

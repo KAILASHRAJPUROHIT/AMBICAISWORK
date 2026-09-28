@@ -25,6 +25,7 @@ class MdmApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         installCrashGuard()
+        com.mdmesh.agent.service.FcmBootstrap.start(this)
     }
 
     private fun installCrashGuard() {
