@@ -2,7 +2,7 @@ import { controlPlaneFetch } from "../../_lib/control-plane";
 import { requireSession } from "../../_lib/session";
 
 export async function GET(request: Request) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
   try {
     const upstream = await controlPlaneFetch("/api/print-router/nodes");
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
   try {
     const upstream = await controlPlaneFetch("/api/print-router/nodes/refresh", { method: "POST" });

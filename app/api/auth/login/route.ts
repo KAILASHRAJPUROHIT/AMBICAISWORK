@@ -1,5 +1,6 @@
 import { sessionValue } from "../../_lib/session";
 import { createLoginGrant, credentialCount, webauthnEnabled } from "../../_lib/webauthn";
+import { requireCloudflareAccess } from "../../_lib/cloudflare-access";
 
 async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
@@ -8,6 +9,8 @@ async function sha256(value: string) {
 }
 
 export async function POST(request: Request) {
+  const accessDenied = await requireCloudflareAccess(request);
+  if (accessDenied) return accessDenied;
   const expectedCredentialHash = process.env.AIS_CREDENTIAL_HASH || "";
   const session = sessionValue();
   if (!expectedCredentialHash || !session) {
@@ -35,7 +38,7 @@ export async function POST(request: Request) {
     { ok: true },
     {
       headers: {
-        "set-cookie": `ais_session=${session}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800`,
+        "set-cookie": `ais_session=${session}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=28800`,
       },
     },
   );

@@ -27,12 +27,14 @@ test("server-renders the Aradhana Intelligence System shell", async () => {
 });
 
 test("keeps live control-plane integrations in the dashboard", async () => {
-  const [page, layout, packageJson, loginRoute, webauthn] = await Promise.all([
+  const [page, layout, packageJson, loginRoute, webauthn, cloudflareAccess, supervisorRoute] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     readFile(new URL("../app/api/auth/login/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/_lib/webauthn.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/_lib/cloudflare-access.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/supervisor/health/route.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /\/api\/control\/snapshot/);
@@ -46,4 +48,10 @@ test("keeps live control-plane integrations in the dashboard", async () => {
   assert.match(webauthn, /MAX_CREDENTIALS = 2/);
   assert.match(webauthn, /requireUserVerification: true/);
   assert.doesNotMatch(webauthn, /face_image|biometric_template/i);
+  assert.match(cloudflareAccess, /jwtVerify\(/);
+  assert.match(cloudflareAccess, /createRemoteJWKSet/);
+  assert.match(cloudflareAccess, /cf-access-jwt-assertion/);
+  assert.match(cloudflareAccess, /AIS_ALLOWED_EMAILS/);
+  assert.match(loginRoute, /requireCloudflareAccess/);
+  assert.match(supervisorRoute, /await requireSession\(request\)/);
 });

@@ -4,7 +4,7 @@ import { controlPlaneFetch } from "../_lib/control-plane";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
 
   try {

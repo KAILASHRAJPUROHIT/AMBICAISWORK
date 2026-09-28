@@ -1,6 +1,9 @@
 import { authenticationOptions, clearChallengeCookie } from "../../../../_lib/webauthn";
+import { requireCloudflareAccess } from "../../../../_lib/cloudflare-access";
 
 export async function POST(request: Request) {
+  const accessDenied = await requireCloudflareAccess(request);
+  if (accessDenied) return accessDenied;
   try {
     const result = await authenticationOptions(request);
     return Response.json({ options: result.options }, { headers: { "set-cookie": result.cookie, "cache-control": "no-store" } });

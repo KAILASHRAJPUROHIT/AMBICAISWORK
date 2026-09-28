@@ -2,6 +2,7 @@ const endpoint = process.env.LOCAL_SUPERVISOR_URL || "http://127.0.0.1:11434";
 const preferredModel = process.env.LOCAL_SUPERVISOR_MODEL || "qwen3:8b";
 const scannerEndpoint = process.env.PROJECT_SCANNER_URL || "http://127.0.0.1:8787";
 import { controlPlaneJson } from "../../_lib/control-plane";
+import { requireSession } from "../../_lib/session";
 
 async function scannerStatus() {
   try {
@@ -31,7 +32,9 @@ async function scannerStatus() {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const unauthorized = await requireSession(request);
+  if (unauthorized) return unauthorized;
   const [scanner, controlPlane] = await Promise.all([
     scannerStatus(),
     controlPlaneJson<{ service?: { online?: boolean; uptimeSeconds?: number; pollSeconds?: number }; projects?: unknown[]; generatedAt?: string }>("/api/dashboard")

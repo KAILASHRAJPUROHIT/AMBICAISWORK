@@ -2,6 +2,7 @@ const endpoint = process.env.LOCAL_SUPERVISOR_URL || "http://127.0.0.1:11434";
 const preferredModel = process.env.LOCAL_SUPERVISOR_MODEL || "qwen3:8b";
 const scannerEndpoint = process.env.PROJECT_SCANNER_URL || "http://127.0.0.1:8787";
 import { controlPlaneJson } from "../../_lib/control-plane";
+import { requireSession } from "../../_lib/session";
 
 type Message = { role: "user" | "assistant"; content: string };
 type ScannedRepo = {
@@ -107,6 +108,8 @@ async function buildControlPlaneContext(): Promise<string> {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireSession(request);
+  if (unauthorized) return unauthorized;
   const body = (await request.json().catch(() => null)) as { message?: string; history?: Message[] } | null;
   if (!body?.message?.trim()) return Response.json({ error: "Message required" }, { status: 400 });
   const history = Array.isArray(body.history) ? body.history.slice(-10) : [];

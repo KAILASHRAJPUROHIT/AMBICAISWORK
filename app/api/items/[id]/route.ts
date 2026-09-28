@@ -6,7 +6,7 @@ import { requireSession } from "../../_lib/session";
 const VALID_STATUSES = new Set(["Queued", "In Progress", "Blocked", "Done"]);
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
 
   const { id } = await params;
@@ -49,7 +49,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
 
   const { id } = await params;

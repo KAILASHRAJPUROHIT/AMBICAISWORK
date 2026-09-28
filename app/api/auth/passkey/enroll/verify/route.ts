@@ -2,7 +2,7 @@ import { requireSession } from "../../../../_lib/session";
 import { clearChallengeCookie, verifyRegistration } from "../../../../_lib/webauthn";
 
 export async function POST(request: Request) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
   const body = await request.json().catch(() => null) as { response?: Parameters<typeof verifyRegistration>[1]; label?: string } | null;
   if (!body?.response) return Response.json({ error: "Missing passkey registration response." }, { status: 400 });

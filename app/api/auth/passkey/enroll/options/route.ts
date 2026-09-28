@@ -2,7 +2,7 @@ import { requireSession } from "../../../../_lib/session";
 import { registrationOptions } from "../../../../_lib/webauthn";
 
 export async function POST(request: Request) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
   try {
     const result = await registrationOptions();

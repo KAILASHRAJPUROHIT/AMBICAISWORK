@@ -2,7 +2,7 @@ import { controlPlaneFetch } from "../../../_lib/control-plane";
 import { requireSession } from "../../../_lib/session";
 
 export async function PUT(request: Request, context: { params: Promise<{ key: string }> }) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
   const { key } = await context.params;
   const body = await request.text();

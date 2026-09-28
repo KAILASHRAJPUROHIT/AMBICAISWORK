@@ -4,7 +4,7 @@ import { parkedIdeas } from "../../../db/schema";
 import { requireSession } from "../_lib/session";
 
 export async function GET(request: Request) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
 
   const db = await getReadyDb();
@@ -13,7 +13,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
 
   const body = (await request.json().catch(() => null)) as {

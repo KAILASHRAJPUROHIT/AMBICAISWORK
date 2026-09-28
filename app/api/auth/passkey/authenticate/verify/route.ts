@@ -1,7 +1,10 @@
 import { clearChallengeCookie, verifyAuthentication } from "../../../../_lib/webauthn";
 import { sessionValue } from "../../../../_lib/session";
+import { requireCloudflareAccess } from "../../../../_lib/cloudflare-access";
 
 export async function POST(request: Request) {
+  const accessDenied = await requireCloudflareAccess(request);
+  if (accessDenied) return accessDenied;
   const body = await request.json().catch(() => null) as { response?: Parameters<typeof verifyAuthentication>[1] } | null;
   if (!body?.response) return Response.json({ error: "Missing passkey assertion response." }, { status: 400 });
   try {

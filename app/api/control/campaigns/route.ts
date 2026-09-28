@@ -2,7 +2,7 @@ import { controlPlaneFetch } from "../../_lib/control-plane";
 import { requireSession } from "../../_lib/session";
 
 export async function POST(request: Request) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
   try {
     const upstream = await controlPlaneFetch("/api/campaigns", { method: "POST", body: await request.text() });

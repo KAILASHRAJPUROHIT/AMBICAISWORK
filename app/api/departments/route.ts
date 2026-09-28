@@ -4,7 +4,7 @@ import { departments } from "../../../db/schema";
 import { requireSession } from "../_lib/session";
 
 export async function GET(request: Request) {
-  const unauthorized = requireSession(request);
+  const unauthorized = await requireSession(request);
   if (unauthorized) return unauthorized;
 
   const db = await getReadyDb();
