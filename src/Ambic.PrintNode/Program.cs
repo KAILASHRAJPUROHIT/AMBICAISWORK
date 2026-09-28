@@ -8,6 +8,7 @@ using Ambic.PrintCore.Network;
 using Ambic.PrintCore.Spooler;
 using Ambic.PrintNode.Services;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Cryptography;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,6 +37,7 @@ builder.Services.AddSingleton(new DiskJobQueue(jobsDir));
 builder.Services.AddSingleton(new RulesCacheStore(configPath));
 builder.Services.AddHttpClient<NodeClient>();
 builder.Services.AddSingleton<PrintEngineService>();
+builder.Services.AddSingleton<AisControlAuthenticator>();
 
 builder.Services.AddSingleton<PdfOverlayService>();
 builder.Services.AddSingleton<ThermalReceiptFormatter>();
@@ -48,6 +50,17 @@ builder.WebHost.ConfigureKestrel(opts =>
 });
 
 var app = builder.Build();
+
+static IResult AisUnauthorized() => Results.Json(
+    new { error = "AIS node control is not configured or the bearer credential is invalid." },
+    statusCode: StatusCodes.Status401Unauthorized);
+
+static string HashFile(string path)
+{
+    if (!File.Exists(path)) return "missing";
+    using var stream = File.OpenRead(path);
+    return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+}
 
 // Endpoints
 app.MapGet("/health", ([FromServices] PrintEngineService engine, [FromServices] TopologyRepository topology, IConfiguration cfg) =>
@@ -63,6 +76,55 @@ app.MapGet("/health", ([FromServices] PrintEngineService engine, [FromServices] 
         EmergencyBypassActive = engine.EmergencyBypassActive,
         AvailablePrinters = localPrinters.Where(p => p.IsOnline).Select(p => p.Name).ToList()
     });
+});
+
+// AIS-only read model. This is the sole endpoint the dashboard may use for a
+// PC selector and printer/rule state. It requires a per-node secret and does
+// not expose any command or print operation.
+app.MapGet("/api/v1/ais/node-state", (
+    HttpRequest request,
+    [FromServices] AisControlAuthenticator auth,
+    [FromServices] PrintEngineService engine,
+    [FromServices] TopologyRepository topology,
+    [FromServices] RulesCacheStore rules,
+    IConfiguration cfg) =>
+{
+    if (!auth.IsAuthorized(request)) return AisUnauthorized();
+
+    var discovered = PrinterDiscovery.DiscoverLocalPrinters();
+    var configured = rules.LoadHubConfig();
+    var online = discovered.Count(p => p.IsOnline);
+    var status = engine.EmergencyBypassActive ? "DEGRADED" : "HEALTHY";
+
+    return Results.Ok(new
+    {
+        nodeId = cfg["NodeId"] ?? Environment.MachineName,
+        stationName = cfg["StationName"] ?? Environment.MachineName,
+        status,
+        observedAtUtc = DateTime.UtcNow,
+        serviceVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown",
+        uptimeSeconds = (long)(DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds,
+        emergencyBypassActive = engine.EmergencyBypassActive,
+        printerSummary = new { total = discovered.Count, online, offline = discovered.Count - online },
+        printers = discovered.Select(p => new { p.Name, p.IsOnline, status = p.Status, p.DriverName, p.PortName, observedAtUtc = DateTime.UtcNow }),
+        routing = new
+        {
+            configHash = HashFile(configPath),
+            ruleCount = configured.Rules.Count,
+            writesEnabled = auth.WritesEnabled
+        }
+    });
+});
+
+// Deliberate safe stop. The UI can display the selected PC and its current
+// rules, but cannot mutate a router until command signing, version checks and
+// a rollback record are deployed together.
+app.MapPost("/api/v1/ais/routing", (HttpRequest request, [FromServices] AisControlAuthenticator auth) =>
+{
+    if (!auth.IsAuthorized(request)) return AisUnauthorized();
+    return auth.WritesEnabled
+        ? Results.StatusCode(StatusCodes.Status501NotImplemented)
+        : Results.Json(new { error = "Routing writes are disabled until signed commands and rollback are configured." }, statusCode: StatusCodes.Status423Locked);
 });
 
 app.MapGet("/api/v1/printers", ([FromServices] TopologyRepository topology) =>
