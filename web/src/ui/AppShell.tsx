@@ -54,13 +54,9 @@ export function AppShell({
       />
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="sidebar-brand">
-          <span className="wordmark" aria-label="AMBIC Digital MDM">
-            <span className="bullet" aria-hidden="true" />
-            <span>
-              <span className="mdm">AMBIC</span>
-              <span className="esh"> Digital MDM</span>
-            </span>
-          </span>
+          <p className="ais-eyebrow">AIS · DEVICE OPERATIONS</p>
+          <span className="wordmark" aria-label="AMBIC Digital MDM"><span className="bullet" aria-hidden="true" /><span><span className="mdm">AMBIC DIGITAL</span><span className="esh"> MDM</span></span></span>
+          <small className="ais-brand-note">secure fleet command</small>
         </div>
         <nav className="nav">
           {NAV.map(({ to, label, Icon }) => (
@@ -97,6 +93,7 @@ export function AppShell({
       </aside>
 
       <div className="main">
+        <header className="ais-mdm-header"><div><span className="ais-eyebrow">OBSIDIAN CONTROL PLANE</span><strong>AMBIC DIGITAL MDM</strong></div><span className="ais-connection"><i /> EMBEDDED SECURE CONSOLE</span></header>
         <div className="rail-mobilebar">
           <button
             className="btn btn-ghost menu-btn"

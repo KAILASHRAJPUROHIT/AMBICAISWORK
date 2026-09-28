@@ -76,14 +76,14 @@
    reserved for status. Applied via [data-theme="dark"] on <html>.
    ------------------------------------------------------------------------- */
 [data-theme='dark'] {
-  --app: #0f1115;
-  --surface: #161922;
-  --surface-2: #1e222c;
-  --border: #272c37;
-  --border-hover: #39404e;
-  --line: #272c37;
-  --line-soft: #21262f;
-  --hairline: #1b1f28;
+  --app: #060911;
+  --surface: #0d1420;
+  --surface-2: #141d2c;
+  --border: rgba(91, 140, 190, .22);
+  --border-hover: rgba(64, 215, 255, .56);
+  --line: rgba(91, 140, 190, .22);
+  --line-soft: rgba(91, 140, 190, .14);
+  --hairline: rgba(23, 36, 57, .86);
 
   --ink: #f2f4f8;
   --text: #e7ebf1;
@@ -92,7 +92,7 @@
   --muted: #8b95a3;
   --faint: #6c7480;
 
-  --online: #2bb979;
+  --online: #37e3a1;
   --offline: #4a5260;
   --warn: #e0973a;
   --alert: #e25757;
@@ -118,6 +118,33 @@
 
   color-scheme: dark;
 }
+
+/* AIS Obsidian visual layer. Functional classes above remain deliberately intact. */
+[data-theme='dark'] body {
+  background-color: var(--app);
+  background-image: linear-gradient(rgba(61, 117, 162, .10) 1px, transparent 1px), linear-gradient(90deg, rgba(61, 117, 162, .10) 1px, transparent 1px), radial-gradient(circle at 75% -20%, rgba(18, 206, 255, .12), transparent 34%), radial-gradient(circle at 0 90%, rgba(173, 65, 255, .10), transparent 35%);
+  background-size: 36px 36px, 36px 36px, auto, auto;
+}
+[data-theme='dark'] .shell { min-height: calc(100vh - 64px); }
+[data-theme='dark'] .sidebar { background: rgba(8, 14, 25, .92); border-right-color: rgba(71, 209, 255, .18); backdrop-filter: blur(18px); }
+.ais-eyebrow { margin: 0 0 7px; color: #b24cff; font: 700 10px/1.2 var(--font-mono); letter-spacing: .18em; }
+.ais-brand-note { display: block; margin: 8px 0 0 22px; color: var(--muted); font: 500 11px var(--font-mono); letter-spacing: .04em; }
+[data-theme='dark'] .wordmark .mdm { color: #edf5ff; }
+[data-theme='dark'] .wordmark .esh { color: #5dceff; }
+[data-theme='dark'] .wordmark .bullet { background: linear-gradient(135deg, #35e3ff, #a64dff); box-shadow: 0 0 20px rgba(53, 227, 255, .68); }
+[data-theme='dark'] .nav-item { border: 1px solid transparent; color: #aab8c9; }
+[data-theme='dark'] .nav-item:hover { background: rgba(28, 65, 91, .42); color: #e9f7ff; border-color: rgba(80, 207, 255, .20); }
+[data-theme='dark'] .nav-item.active { background: linear-gradient(90deg, rgba(19, 204, 255, .18), rgba(163, 69, 255, .10)); color: #eaffff; border-color: rgba(64, 215, 255, .35); box-shadow: inset 3px 0 #37e3ff; }
+.ais-mdm-header { min-height: 64px; padding: 11px 30px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(75, 209, 255, .24); background: rgba(7, 12, 21, .82); backdrop-filter: blur(18px); }
+.ais-mdm-header strong { display:block; color:#f0f7ff; font-size:16px; letter-spacing:.04em; }
+.ais-mdm-header .ais-eyebrow { margin-bottom:3px; font-size:9px; }
+.ais-connection { color:#a8c8cf; font:700 10px var(--font-mono); letter-spacing:.08em; }
+.ais-connection i { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:7px; background:#37e3a1; box-shadow:0 0 12px #37e3a1; }
+[data-theme='dark'] .panel { background: linear-gradient(145deg, rgba(18, 29, 44, .96), rgba(9, 15, 25, .96)); border-color: rgba(85, 150, 200, .23); box-shadow: 0 16px 40px rgba(0, 0, 0, .22); }
+[data-theme='dark'] .content { padding-top: 24px; }
+@media (prefers-reduced-motion: no-preference) { .ais-connection i { animation: aisPulse 2s ease-in-out infinite; } .panel { animation: aisLift .36s ease-out both; } }
+@keyframes aisPulse { 50% { opacity:.48; box-shadow:0 0 4px #37e3a1; } }
+@keyframes aisLift { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:none; } }
 
 * {
   box-sizing: border-box;

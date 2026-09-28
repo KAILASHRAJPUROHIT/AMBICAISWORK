@@ -26,9 +26,9 @@ function readTheme(): Theme {
   try {
     const s = localStorage.getItem(THEME_KEY);
     if (s === 'light' || s === 'dark') return s;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return 'dark';
   } catch {
-    return 'light';
+    return 'dark';
   }
 }
 
