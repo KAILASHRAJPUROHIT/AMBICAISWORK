@@ -9,6 +9,8 @@ import { DiagnosisModal } from "./components/DiagnosisModal";
 import { PipelineView } from "./components/PipelineView";
 import { AgentsView } from "./components/AgentsView";
 import { ActivityView } from "./components/ActivityView";
+import { WorkTrackerView } from "./components/WorkTrackerView";
+import { PrintRouterView } from "./components/PrintRouterView";
 import { SystemItem, PipelineTask, ActivityFeedItem, RegistrySystem } from "./components/types";
 
 /** Maps GET /api/systems' real, lowercase health enum to the display enum/tone.
@@ -365,8 +367,6 @@ interface LiveMetricsData {
   };
   goldMonitor: {
     online: boolean;
-    // null when the monitor is unreachable -- "BLOCKED" is also a real status
-    // this monitor can genuinely report, so it must not double as the fallback.
     status: string | null;
     healthy: boolean;
     uptimeSec: number;
@@ -376,10 +376,29 @@ interface LiveMetricsData {
   };
 }
 
+function LiveSyncBadge({ lastUpdated }: { lastUpdated: number }) {
+  const [secondsAgo, setSecondsAgo] = useState(0);
+
+  useEffect(() => {
+    setSecondsAgo(0);
+    const ticker = window.setInterval(() => setSecondsAgo((s) => s + 1), 1000);
+    return () => window.clearInterval(ticker);
+  }, [lastUpdated]);
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", borderRadius: "999px", border: "1px solid rgba(36,217,255,.35)", background: "rgba(36,217,255,.08)" }}>
+      <span className="ais-ok" style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--obsidian-cyan)", boxShadow: "0 0 8px var(--obsidian-cyan)" }}></span>
+      <span style={{ fontFamily: "'Geist Mono',monospace", fontSize: "9.5px", letterSpacing: ".06em", color: "#AEEBFF" }}>
+        LIVE 2.5s · {secondsAgo}s ago
+      </span>
+    </div>
+  );
+}
+
 export default function Home() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [liveMetrics, setLiveMetrics] = useState<LiveMetricsData | null>(null);
-  const [lastSyncedSecondsAgo, setLastSyncedSecondsAgo] = useState(0);
+  const [lastMetricsTime, setLastMetricsTime] = useState<number>(Date.now());
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   const [controls, setControls] = useState(initialControls);
@@ -421,7 +440,7 @@ export default function Home() {
   const [campaignError, setCampaignError] = useState("");
   const [researchBusy, setResearchBusy] = useState(false);
   const [view, setView] = useState<"home" | "tools" | "work" | "admin">("home");
-  const [obsidianTab, setObsidianTab] = useState<"command" | "pipeline" | "agents" | "activity" | "legacy">("command");
+  const [obsidianTab, setObsidianTab] = useState<"command" | "pipeline" | "agents" | "activity" | "tracker" | "mdm" | "print" | "legacy">("command");
   const [systems, setSystems] = useState<Record<string, SystemItem>>(initialSystemsData);
   const [selectedSystemId, setSelectedSystemId] = useState<string>("print-server");
   const healthCounts = useMemo(() => {
@@ -522,17 +541,15 @@ export default function Home() {
         if (res.ok) {
           const data = (await res.json()) as LiveMetricsData;
           setLiveMetrics(data);
-          setLastSyncedSecondsAgo(0);
+          setLastMetricsTime(Date.now());
         }
       } catch {}
     };
 
     fetchMetrics();
     const metricsTimer = window.setInterval(fetchMetrics, 2500);
-    const ticker = window.setInterval(() => setLastSyncedSecondsAgo((s) => s + 1), 1000);
     return () => {
       window.clearInterval(metricsTimer);
-      window.clearInterval(ticker);
     };
   }, [authenticated]);
 
@@ -637,7 +654,12 @@ export default function Home() {
   }, [authenticated]);
 
   useEffect(() => {
-    chatEnd.current?.scrollIntoView({ behavior: "smooth" });
+    if (chatEnd.current) {
+      const stream = chatEnd.current.parentElement;
+      if (stream) {
+        stream.scrollTop = stream.scrollHeight;
+      }
+    }
   }, [messages]);
 
   const runningCount = useMemo(() => controls.filter((control) => control.enabled).length, [controls]);
@@ -1007,14 +1029,23 @@ export default function Home() {
     { name: "Documents", detail: "ID proofs waiting for billing or direct print", url: "https://print.aradhanajewellers.com", match: "document" },
     { name: "Print routing", detail: "Ornate bill and voucher routing", url: null, match: "print" },
     { name: "Gold rates", detail: "Live rate monitoring and verification", url: "http://192.168.0.12:8080", match: "gold" },
-    { name: "Catalogue", detail: "Jewellery catalogue and CaptureCam", url: null, match: "catalogue" },
+    { name: "Catalogue", detail: "Jewellery catalogue and CaptureCam", url: "https://catalogue.aradhanajewellers.com", match: "catalogue" },
     { name: "Stock intake", detail: "Inbound stock automation", url: null, match: "stock" },
-    { name: "Devices (MDM)", detail: "Screens, settings and enrollment across the device fleet", url: "http://localhost:8090", match: "fleet" },
+    { name: "Devices (MDM)", detail: "Provider-hosted device fleet, enrollment and kiosk controls", url: null, embedded: true, match: "ambic mdm" },
   ].map((tool) => {
     const project = liveProjects.find((item) => item.name.toLowerCase().includes(tool.match));
     const health = project?.health || "unconfigured";
     return { ...tool, health, status: health === "healthy" ? "Ready" : health === "warning" ? "Needs attention" : health === "error" ? "Problem" : "Not connected" };
   });
+
+  const openOperationalTool = (tool: (typeof operationalTools)[number]) => {
+    if (tool.embedded) {
+      setView("admin");
+      window.setTimeout(() => document.getElementById("devices")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+      return;
+    }
+    if (tool.url) window.open(tool.url, "_blank", "noopener,noreferrer");
+  };
 
   if (authenticated === null) {
     return (
@@ -1104,7 +1135,7 @@ export default function Home() {
 
   if (obsidianTab !== "legacy") {
     return (
-      <div style={{ minHeight: "100vh", background: "#000000", color: "#F5F8FF", position: "relative", overflowX: "hidden", fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}>
+      <div style={{ minHeight: "100vh", background: "#000000", color: "#F5F8FF", position: "relative", overflowX: "clip", fontFamily: "var(--font-geist-sans), Arial, sans-serif" }}>
         {/* Ambient background */}
         <div className="ais-gridbg" style={{ position: "fixed", inset: "-60px", backgroundImage: "linear-gradient(rgba(120,170,220,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(120,170,220,0.05) 1px, transparent 1px)", backgroundSize: "60px 60px", pointerEvents: "none", zIndex: 0 }} />
         <div className="ais-aurora" style={{ position: "fixed", top: "-240px", left: "60px", width: "820px", height: "600px", background: "radial-gradient(ellipse at center, rgba(77,132,255,0.20), rgba(139,92,255,0.08) 45%, transparent 70%)", filter: "blur(40px)", pointerEvents: "none", zIndex: 0 }} />
@@ -1202,32 +1233,65 @@ export default function Home() {
                 ACTIVITY
               </button>
               <button
-                onClick={() => setObsidianTab("legacy")}
+                className={`nav-btn ${obsidianTab === "tracker" ? "active" : ""}`}
+                onClick={() => setObsidianTab("tracker")}
                 style={{
-                  padding: "6px 12px",
+                  padding: "8px 18px",
+                  borderRadius: "12px",
+                  fontSize: "11px",
+                  fontWeight: obsidianTab === "tracker" ? 700 : 600,
+                  letterSpacing: ".14em",
+                  background: obsidianTab === "tracker" ? "linear-gradient(135deg, rgba(255,196,91,.25), rgba(215,170,58,.18))" : "transparent",
+                  border: obsidianTab === "tracker" ? "1px solid rgba(255,196,91,.6)" : "1px solid rgba(120,170,220,0.18)",
+                  color: obsidianTab === "tracker" ? "var(--obsidian-amber)" : "var(--obsidian-muted)",
+                  cursor: "pointer",
+                  boxShadow: obsidianTab === "tracker" ? "0 0 18px rgba(255,196,91,.25)" : "none",
+                }}
+              >
+                WORK TRACKER
+              </button>
+              <button
+                onClick={() => {
+                  setObsidianTab("mdm");
+                }}
+                style={{
+                  padding: "7px 13px",
                   borderRadius: "10px",
                   fontSize: "10px",
-                  fontWeight: 600,
+                  fontWeight: 700,
                   letterSpacing: ".1em",
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(120,170,220,0.15)",
-                  color: "var(--obsidian-dim)",
+                  background: "rgba(55,227,161,.10)",
+                  border: "1px solid rgba(55,227,161,.38)",
+                  color: "#C6FCE7",
                   cursor: "pointer",
                   marginLeft: "4px",
                 }}
+                title="Open the embedded AMBIC Digital MDM device fleet"
               >
-                LEGACY ADMIN
+                DEVICES (MDM)
+              </button>
+              <button
+                onClick={() => setObsidianTab("print")}
+                style={{
+                  padding: "7px 13px",
+                  borderRadius: "10px",
+                  fontSize: "10px",
+                  fontWeight: 700,
+                  letterSpacing: ".1em",
+                  background: obsidianTab === "print" ? "rgba(36,217,255,.18)" : "rgba(36,217,255,.08)",
+                  border: "1px solid rgba(36,217,255,.38)",
+                  color: "#BFF3FF",
+                  cursor: "pointer",
+                }}
+                title="Open authenticated Print Router workstation controls"
+              >
+                PRINT ROUTER
               </button>
             </nav>
 
             {/* Status + Branding */}
             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", borderRadius: "999px", border: "1px solid rgba(36,217,255,.35)", background: "rgba(36,217,255,.08)" }}>
-                <span className="ais-ok" style={{ width: "6px", height: "6px", borderRadius: "50%", background: "var(--obsidian-cyan)", boxShadow: "0 0 8px var(--obsidian-cyan)" }}></span>
-                <span style={{ fontFamily: "'Geist Mono',monospace", fontSize: "9.5px", letterSpacing: ".06em", color: "#AEEBFF" }}>
-                  LIVE 2.5s · {lastSyncedSecondsAgo}s ago
-                </span>
-              </div>
+              <LiveSyncBadge lastUpdated={lastMetricsTime} />
               <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "7px 14px", borderRadius: "999px", border: "1px solid rgba(55,227,161,.3)", background: "rgba(55,227,161,.08)" }}>
                 <span className="ais-ok" style={{ width: "7px", height: "7px", borderRadius: "50%", background: "var(--obsidian-green)", boxShadow: "0 0 10px var(--obsidian-green)" }}></span>
                 <span style={{ fontFamily: "'Geist Mono',monospace", fontSize: "10.5px", letterSpacing: ".05em" }}>
@@ -1375,6 +1439,31 @@ export default function Home() {
             </main>
           )}
 
+          {/* ================= TAB 5: WORK TRACKER ================= */}
+          {obsidianTab === "tracker" && (
+            <main style={{ marginTop: "14px" }}>
+              <WorkTrackerView />
+            </main>
+          )}
+
+          {obsidianTab === "mdm" && (
+            <main style={{ marginTop: "14px", minHeight: "calc(100vh - 230px)" }}>
+              <section className="ais-panel" style={{ overflow: "hidden", border: "1px solid rgba(55,227,161,.28)", borderRadius: "22px", background: "linear-gradient(145deg, rgba(13,20,29,.98), rgba(5,7,10,.96))", boxShadow: "0 0 36px rgba(55,227,161,.08)" }}>
+                <div style={{ display: "flex", gap: "18px", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", padding: "20px 24px", borderBottom: "1px solid rgba(120,170,220,.18)", background: "linear-gradient(90deg, rgba(55,227,161,.10), rgba(36,217,255,.06), transparent)" }}>
+                  <div>
+                    <div className="ais-spec" style={{ color: "var(--obsidian-green)", fontSize: "10px", fontWeight: 800, letterSpacing: ".20em" }}>DEVICE OPERATIONS</div>
+                    <h1 style={{ margin: "4px 0 0", fontSize: "25px", letterSpacing: "-.03em" }}>AMBIC Digital MDM</h1>
+                    <p style={{ margin: "5px 0 0", color: "var(--obsidian-muted)", fontSize: "12px" }}>Fleet, enrollment, kiosk policy and device controls. Live MDM functions are unchanged.</p>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#C6FCE7", fontFamily: "'Geist Mono', monospace", fontSize: "10px", letterSpacing: ".08em" }}><span className="ais-ok" style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--obsidian-green)", boxShadow: "0 0 12px var(--obsidian-green)" }} /> EMBEDDED SECURE CONSOLE</div>
+                </div>
+                <iframe title="AMBIC Digital MDM" src="/mdm/" style={{ display: "block", width: "100%", height: "calc(100vh - 330px)", minHeight: "680px", border: 0, background: "#0B0F17" }} />
+              </section>
+            </main>
+          )}
+
+          {obsidianTab === "print" && <PrintRouterView />}
+
           {/* Modal Overlay */}
           <DiagnosisModal
             isOpen={diagnosisModalOpen}
@@ -1477,10 +1566,10 @@ export default function Home() {
               {!controlSnapshot?.events?.length && <p className="empty-note">Activity will appear here as connected systems report in.</p>}
             </article>
           </section>
-          <section className="owner-card quick-tools"><div className="section-heading"><div><p className="eyebrow">QUICK ACCESS</p><h2>Your most-used tools</h2></div><button className="text-button" onClick={() => setView("tools")}>All tools →</button></div><div className="quick-tool-grid">{operationalTools.slice(0, 4).map((tool) => <button key={tool.name} onClick={() => tool.url ? window.open(tool.url, "_blank", "noopener,noreferrer") : setView("tools")}><span className={`tool-state ${tool.health}`} /> <b>{tool.name}</b><small>{tool.status}</small></button>)}</div></section>
+          <section className="owner-card quick-tools"><div className="section-heading"><div><p className="eyebrow">QUICK ACCESS</p><h2>Your most-used tools</h2></div><button className="text-button" onClick={() => setView("tools")}>All tools →</button></div><div className="quick-tool-grid">{operationalTools.slice(0, 4).map((tool) => <button key={tool.name} onClick={() => tool.embedded || tool.url ? openOperationalTool(tool) : setView("tools")}><span className={`tool-state ${tool.health}`} /> <b>{tool.name}</b><small>{tool.status}</small></button>)}</div></section>
         </>}
 
-        {view === "tools" && <section className="tool-grid">{operationalTools.map((tool) => <article className="tool-card" key={tool.name}><div className="tool-card-head"><span className={`tool-state ${tool.health}`} /><span>{tool.status}</span></div><h2>{tool.name}</h2><p>{tool.detail}</p>{tool.url ? <a className="primary-button compact" href={tool.url} target="_blank" rel="noreferrer">Open tool</a> : <button className="secondary-button" onClick={() => setView("work")}>View status</button>}</article>)}</section>}
+        {view === "tools" && <section className="tool-grid">{operationalTools.map((tool) => <article className="tool-card" key={tool.name}><div className="tool-card-head"><span className={`tool-state ${tool.health}`} /><span>{tool.status}</span></div><h2>{tool.name}</h2><p>{tool.detail}</p>{tool.embedded ? <button className="primary-button compact" onClick={() => openOperationalTool(tool)}>Open inside AIS</button> : tool.url ? <a className="primary-button compact" href={tool.url} target="_blank" rel="noreferrer">Open tool</a> : <button className="secondary-button" onClick={() => setView("work")}>View status</button>}</article>)}</section>}
 
         {view === "work" && <section className="owner-grid work-grid">
           <article className="owner-card"><div className="section-heading"><div><p className="eyebrow">APPROVALS</p><h2>Decisions waiting</h2></div><span className="alert-count">{approvals.length}</span></div>{approvals.length ? approvals.map((approval) => <div className="work-row" key={approval.id}><b>{approval.title}</b><small>{approval.description || approval.acceptance_criteria}</small><span>{approval.department}</span></div>) : <p className="empty-note">No decisions waiting for approval.</p>}</article>
@@ -1701,16 +1790,14 @@ export default function Home() {
 
         <section className="content-card" id="devices">
           <div className="section-heading">
-            <div><p className="eyebrow">DEVICE FLEET</p><h2>Screens, settings and enrollment (Fleet MDM)</h2></div>
-            <a className="text-button" href="http://localhost:8090" target="_blank" rel="noreferrer">Open in new tab ↗</a>
+            <div><p className="eyebrow">DEVICE FLEET</p><h2>Screens, settings and enrollment</h2></div>
           </div>
           <p className="command-copy">
-            Self-hosted Fleet, embedded directly. Covers the Windows machines, Android tablets/phones once enrolled.
-            The iPad Mini 2 stays out of scope (iOS 12 can&apos;t do the modern MDM screen-sharing protocol).
+            AMBIC Digital MDM is embedded inside AIS. It covers enrolled Windows machines and Android tablets/phones.
           </p>
           <iframe
-            src="http://localhost:8090"
-            title="Fleet MDM"
+            src="https://mdm.ambicdigital.in"
+            title="AMBIC Digital MDM"
             style={{ width: "100%", height: "80vh", border: "1px solid rgba(255,255,255,0.12)", borderRadius: "12px", background: "#fff" }}
           />
         </section>
