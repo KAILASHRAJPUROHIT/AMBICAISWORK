@@ -62,8 +62,8 @@ public class ClientBrandingImageResource {
     @Produces(MediaType.APPLICATION_JSON)
     @Path("/private/settings/clientBranding/image")
     public Response upload(@FormDataParam("file") InputStream in,
-                            @FormDataParam("file") FormDataContentDisposition detail,
-                            @FormDataParam("kind") String kind) {
+                           @FormDataParam("file") FormDataContentDisposition detail,
+                           @FormDataParam("kind") String kind) {
         if (!SecurityContext.get().hasPermission("settings")) {
             log.error("Unauthorized attempt to upload client branding image by user "
                     + SecurityContext.get().getCurrentUserName());
@@ -94,6 +94,16 @@ public class ClientBrandingImageResource {
             try (OutputStream out = new FileOutputStream(tmp)) {
                 out.write(bytes);
             }
+            // Replace atomically so a device never fetches a half-written image.
+            Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            log.info("Client branding '{}' image stored ({} bytes)", slot, bytes.length);
+            return Response.ok("{\"path\":\"" + publicPath(slot) + "\"}")
+                    .type(MediaType.APPLICATION_JSON).build();
+        } catch (Exception e) {
+            log.error("Unexpected error when storing client branding image", e);
+            return Response.INTERNAL_SERVER_ERROR();
+        }
+    }
 
     // ------------------------------------------------------------------ delivery
 
@@ -132,13 +142,17 @@ public class ClientBrandingImageResource {
     }
 
     private static String normaliseSlot(String kind) {
-        if (kind == null) return null;
+        if (kind == null) {
+            return null;
+        }
         String k = kind.trim().toLowerCase(Locale.ROOT);
         return ("logo".equals(k) || "mark".equals(k)) ? k : null;
     }
 
     private static String stripPng(String name) {
-        if (name == null) return null;
+        if (name == null) {
+            return null;
+        }
         String n = name.trim();
         return n.toLowerCase(Locale.ROOT).endsWith(".png")
                 ? n.substring(0, n.length() - 4) : n;
@@ -156,28 +170,23 @@ public class ClientBrandingImageResource {
         long total = 0;
         while ((read = in.read(chunk)) != -1) {
             total += read;
-            if (total > MAX_BYTES) return null;
+            if (total > MAX_BYTES) {
+                return null;
+            }
             buffer.write(chunk, 0, read);
         }
         return buffer.toByteArray();
     }
 
     private static boolean isPng(byte[] bytes) {
-        if (bytes.length < PNG_MAGIC.length) return false;
+        if (bytes.length < PNG_MAGIC.length) {
+            return false;
+        }
         for (int i = 0; i < PNG_MAGIC.length; i++) {
-            if (bytes[i] != PNG_MAGIC[i]) return false;
+            if (bytes[i] != PNG_MAGIC[i]) {
+                return false;
+            }
         }
         return true;
     }
 }
-
-            // Replace atomically so a device never fetches a half-written image.
-            Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            log.info("Client branding '{}' image stored ({} bytes)", slot, bytes.length);
-            return Response.ok("{\"path\":\"" + publicPath(slot) + "\"}")
-                    .type(MediaType.APPLICATION_JSON).build();
-        } catch (Exception e) {
-            log.error("Unexpected error when storing client branding image", e);
-            return Response.INTERNAL_ERROR();
-        }
-    }
