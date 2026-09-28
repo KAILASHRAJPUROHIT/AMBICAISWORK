@@ -68,6 +68,11 @@ class DynamicStateCollector @Inject constructor(
             lastBootAt = System.currentTimeMillis() - SystemClock.elapsedRealtime(),
             location = runCatching { locationCollector.collect() }.getOrNull(),
             dataUsage = runCatching { networkUsageCollector.collect() }.getOrNull(),
+            writeSettingsGranted = runCatching { android.provider.Settings.System.canWrite(context) }.getOrNull(),
+            wirelessDebuggingOn = runCatching {
+                // Hidden SDK constant Settings.Global.ADB_WIFI_ENABLED; literal key, see WirelessAdbEnabler.
+                android.provider.Settings.Global.getInt(context.contentResolver, "adb_wifi_enabled", 0) == 1
+            }.getOrNull(),
         )
     }
 

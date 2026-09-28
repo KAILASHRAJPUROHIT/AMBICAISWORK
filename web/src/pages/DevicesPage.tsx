@@ -552,6 +552,27 @@ function formatInternetStrength(tele?: TelemetrySnapshot | null): string {
   return '—';
 }
 
+/** Agent-reported boolean from telemetry.dynamic; null when the agent predates the field. */
+function dynFlag(tele: TelemetrySnapshot | null | undefined, key: 'writeSettingsGranted' | 'wirelessDebuggingOn'): boolean | null {
+  const v = tele?.dynamic?.[key];
+  return typeof v === 'boolean' ? v : null;
+}
+
+/** On/Off badge for a telemetry flag; "—" when the agent doesn't report it yet. */
+function FlagBadge({ value, onTitle, offTitle }: { value: boolean | null; onTitle: string; offTitle: string }) {
+  if (value == null) return <span title="Not reported by this agent version">—</span>;
+  return (
+    <span className={`kiosk-badge ${value ? 'on' : 'off'}`} title={value ? onTitle : offTitle}>
+      {value ? 'On' : 'Off'}
+    </span>
+  );
+}
+
+const WRITE_ON = 'WRITE_SETTINGS granted: Quick Controls auto-rotate works';
+const WRITE_OFF = 'WRITE_SETTINGS not granted: auto-rotate hidden until the shop PC re-grants it (resets on every agent update)';
+const ADB_ON = 'Wireless debugging on: the shop PC can reach this device over ADB';
+const ADB_OFF = 'Wireless debugging off: the shop PC cannot reach this device over ADB';
+
 function formatBattery(state?: DeviceState | null): string {
   if (!state || state.battery == null || state.battery < 0) return '—';
   return `${state.battery}%${state.charging ? ' ⚡' : ''}`;
@@ -626,6 +647,14 @@ function DeviceCard({
               {isKiosk ? 'On' : 'Off'}
             </span>
           </div>
+        </div>
+        <div>
+          <div className="k">Write access</div>
+          <div className="v"><FlagBadge value={dynFlag(tele, 'writeSettingsGranted')} onTitle={WRITE_ON} offTitle={WRITE_OFF} /></div>
+        </div>
+        <div>
+          <div className="k">ADB</div>
+          <div className="v"><FlagBadge value={dynFlag(tele, 'wirelessDebuggingOn')} onTitle={ADB_ON} offTitle={ADB_OFF} /></div>
         </div>
         <div>
           <div className="k">Agent</div>
@@ -711,6 +740,14 @@ function DeviceRow({
             {isKiosk ? 'On' : 'Off'}
           </span>
         </span>
+      </div>
+      <div className="lc">
+        <span className="lk">Write access</span>
+        <span className="lv"><FlagBadge value={dynFlag(tele, 'writeSettingsGranted')} onTitle={WRITE_ON} offTitle={WRITE_OFF} /></span>
+      </div>
+      <div className="lc">
+        <span className="lk">ADB</span>
+        <span className="lv"><FlagBadge value={dynFlag(tele, 'wirelessDebuggingOn')} onTitle={ADB_ON} offTitle={ADB_OFF} /></span>
       </div>
       <div className="lc">
         <span className="lk">Agent</span>

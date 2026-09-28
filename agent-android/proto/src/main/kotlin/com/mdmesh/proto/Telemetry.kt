@@ -68,6 +68,13 @@ data class DynamicState(
     val location: LocationDto? = null,
     /** Cumulative data usage for the current local day; null without the Usage-Access grant. */
     val dataUsage: DataUsageDto? = null,
+    /** WRITE_SETTINGS AppOp granted (Settings.System.canWrite) -- needed for Quick Controls
+     *  auto-rotate; Android resets it on every agent update, see docs/WRITE_SETTINGS-PERSISTENCE.md.
+     *  Null from agents that predate this field. */
+    val writeSettingsGranted: Boolean? = null,
+    /** Wireless debugging listener on (Settings.Global adb_wifi_enabled == 1), i.e. the shop PC's
+     *  appop-guardian can reach this device over ADB. Null from agents that predate this field. */
+    val wirelessDebuggingOn: Boolean? = null,
 )
 
 /** Cumulative cellular/Wi-Fi bytes for the window starting at [windowStart] (local midnight)

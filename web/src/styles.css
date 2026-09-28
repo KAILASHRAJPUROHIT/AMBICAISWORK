@@ -733,7 +733,8 @@ a {
 }
 .dev-row {
   display: grid;
-  grid-template-columns: minmax(170px, 1.2fr) 95px 130px 85px 100px 110px 85px;
+  /* id | battery | internet | kiosk | write access | adb | agent | config | seen */
+  grid-template-columns: minmax(170px, 1.2fr) 95px 130px 85px 95px 70px 100px 110px 85px;
   gap: 14px;
   align-items: center;
   background: var(--surface);
