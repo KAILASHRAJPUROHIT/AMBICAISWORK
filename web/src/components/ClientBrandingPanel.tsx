@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import {
   getClientBranding,
   saveClientBranding,
@@ -12,7 +12,7 @@ type SlotState = { fileName: string | null; url: string | null; uploading: boole
 const blank = (): SlotState => ({ fileName: null, url: null, uploading: false });
 
 /**
- * Client branding — the customer's own name and logo, shown on the devices MDMesh manages.
+ * Client branding â€” the customer's own name and logo, shown on the devices MDMesh manages.
  * AMBIC DIGITAL stays the product brand; this is the client's mark on their hardware.
  *
  * Images are stored by the server and delivered to every device on its next check-in, so a
@@ -20,7 +20,10 @@ const blank = (): SlotState => ({ fileName: null, url: null, uploading: false })
  * visual pattern as the wallpaper and kiosk-accent panel.
  */
 export function ClientBrandingPanel() {
-  const toast = useToast();
+  // `useToast()` returns a fresh wrapper object each render, so depend on the stable
+  // `push` callback instead - depending on the wrapper would re-run the load effect
+  // on every render and never settle.
+  const { push } = useToast();
   const logoRef = useRef<HTMLInputElement>(null);
   const markRef = useRef<HTMLInputElement>(null);
 
@@ -28,10 +31,15 @@ export function ClientBrandingPanel() {
   const [logo, setLogo] = useState<SlotState>(blank());
   const [mark, setMark] = useState<SlotState>(blank());
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    // Never let a stalled request hide the panel; fail to an editable state.
+    const timer = window.setTimeout(() => {
+      if (!cancelled) setLoadError('Could not load current branding.');
+    }, 10000);
     (async () => {
       try {
         const b = await getClientBranding();
@@ -41,14 +49,17 @@ export function ClientBrandingPanel() {
         setMark({ fileName: null, url: b.clientMarkUrl, uploading: false });
       } catch (e) {
         if (!cancelled) {
-          toast.push('err', 'Could not load branding', e instanceof Error ? e.message : '');
+          setLoadError(e instanceof Error ? e.message : 'Could not load current branding.');
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          window.clearTimeout(timer);
+          setLoading(false);
+        }
       }
     })();
-    return () => { cancelled = true; };
-  }, [toast]);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [push]);
 
   async function onPick(file: File | undefined, kind: BrandingSlot) {
     if (!file) return;
@@ -57,10 +68,10 @@ export function ClientBrandingPanel() {
     try {
       const url = await uploadClientBrandingImage(file, kind);
       set({ fileName: file.name, url, uploading: false });
-      toast.push('ok', 'Image uploaded', 'Save branding to publish it to the fleet.');
+      push('ok', 'Image uploaded', 'Save branding to publish it to the fleet.');
     } catch (e) {
       set(blank());
-      toast.push('err', 'Upload failed', e instanceof Error ? e.message : '');
+      push('err', 'Upload failed', e instanceof Error ? e.message : '');
     }
   }
 
@@ -75,9 +86,9 @@ export function ClientBrandingPanel() {
         logoUrl: logo.url ?? '',
         markUrl: mark.url ?? '',
       });
-      toast.push('ok', 'Branding saved', 'Devices pick it up on their next check-in.');
+      push('ok', 'Branding saved', 'Devices pick it up on their next check-in.');
     } catch (e) {
-      toast.push('err', 'Save failed', e instanceof Error ? e.message : '');
+      push('err', 'Save failed', e instanceof Error ? e.message : '');
     } finally {
       setSaving(false);
     }
@@ -89,8 +100,6 @@ export function ClientBrandingPanel() {
     setMark(blank());
   }
 
-  if (loading) return null;
-
   return (
     <section className="card" aria-labelledby="client-branding-heading">
       <h2 id="client-branding-heading">Client branding</h2>
@@ -99,6 +108,13 @@ export function ClientBrandingPanel() {
         mark, shown on the kiosk, idle screen and agent screen of every managed device.
         Delivered automatically on the next device check-in.
       </p>
+
+      {loadError && (
+        <p className="hint" role="status">
+          {loadError} You can still set the fields below and save.
+        </p>
+      )}
+      {loading && !loadError && <p className="hint">Loading current branding…</p>}
 
       <label className="field">
         <span>Client name</span>
@@ -130,7 +146,7 @@ export function ClientBrandingPanel() {
 
       <div className="row">
         <button type="button" onClick={save} disabled={saving || (logo.uploading || mark.uploading)}>
-          {saving ? 'Saving…' : 'Save branding'}
+          {saving ? 'Savingâ€¦' : 'Save branding'}
         </button>
         <button type="button" className="secondary" onClick={clearAll} disabled={saving}>
           Clear
@@ -171,7 +187,7 @@ function BrandingSlot({
           onChange={(e) => onPick(e.target.files?.[0])}
         />
         <span className="hint">
-          {state.uploading ? 'Uploading…' : state.fileName ?? 'PNG, up to 4 MB'}
+          {state.uploading ? 'Uploadingâ€¦' : state.fileName ?? 'PNG, up to 4 MB'}
         </span>
       </div>
     </div>
