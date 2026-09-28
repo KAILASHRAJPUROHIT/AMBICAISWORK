@@ -42,21 +42,35 @@ bump that changed zero manifest/code lines.
    Xiaomi; it's not something buildable from this codebase. Pursue it separately if
    wanted; it does not block shipping rotation today via the guardian script.
 
-## Going USB-free: `tools/wireless-adb-reconnect.py`
+## Keeping every tablet reachable: wireless debugging
 
-Since this fleet's devices never leave the shop, a one-time *manual* wireless-debugging
-pairing per device (Settings > Developer options > Wireless debugging -- a real human
-tapping the toggle, not a programmatic write) is a different code path from the
-`adb_wifi_enabled` programmatic-write attempts that got reverted earlier in this
-investigation, and is exactly the mechanism every consumer phone relies on daily. This
-fleet already has live proof it persists: one tablet has stayed reachable over wireless
-ADB (via mDNS) across this entire investigation, through however many reboots, with zero
-programmatic intervention.
+`appop-guardian.py` can only re-grant what it can reach, so every tablet has to stay reachable
+over wireless ADB. Three pieces make that hold:
 
-The one thing that doesn't survive on its own is the *connection* -- modern wireless
-debugging advertises a new ephemeral port per session via mDNS, so `adb connect` needs
-re-running after every reboot. `tools/wireless-adb-reconnect.py` watches for the mDNS
-advertisement and reconnects automatically the moment a device reappears. Run it
-alongside `appop-guardian.py` and, once every device has done the one-time pairing in
-the script's own docstring, the whole fleet needs zero USB and zero manual touch from
-then on.
+1. **One-time pairing per tablet** (by hand, since these tablets never leave the shop):
+   Developer options > Wireless debugging > Pair device with pairing code, then
+   `adb pair <ip>:<port> <code>` on the shop PC. Enabling wireless debugging by hand on the shop
+   Wi-Fi also marks that network *trusted*, which step 2 depends on. `tools/KNOWN-DEVICES.md`
+   lists which tabs are paired.
+
+2. **`WirelessAdbKeeper` in the agent (v0.2.66+)** keeps the listener on. Android turns
+   wireless debugging off on *every* Wi-Fi disconnect and on reboot. This is stock AOSP
+   (`AdbDebuggingManager`: "Network disconnected. Disabling adbwifi."), not Xiaomi. It only
+   honours an enable when the device is on Wi-Fi *and* the network is trusted
+   (`verifyWifiNetwork`). The keeper watches `adb_wifi_enabled` and Wi-Fi availability, and
+   re-enables it via Device Owner `setGlobalSetting` whenever it's off while on Wi-Fi (max 3
+   tries per connection, so an untrusted network can't loop). Verified 2026-09-28 on TAB2:
+   Wi-Fi off, then on, and the keeper re-enabled it on the first attempt about 3s after Wi-Fi
+   returned, with no touch.
+
+   An earlier "Xiaomi reverts it" theory (a remote enable on an *unpaired* device read back
+   0) was wrong. That device's network simply wasn't trusted yet.
+
+3. **The PC side** reconnects automatically. Recent adb auto-connects to paired devices it
+   sees over mDNS (they show up as `<name>._adb-tls-connect._tcp`).
+   `tools/wireless-adb-reconnect.py` is a fallback that dials the advertised address only
+   when that transport is missing. The address `adb mdns services` shows can be stale after
+   DHCP changes, so the script backs off instead of retrying every poll.
+
+Both watchers run as Windows scheduled tasks ("MDM AppOp Guardian", "MDM Wireless ADB
+Reconnect") and log to `tools/logs/`.

@@ -1041,13 +1041,15 @@ class KioskLauncherActivity : FragmentActivity() {
         val color = parseColor(p.theme.accentColor, parseColor(p.theme.textColor, TEXT))
         val s = KioskStatusSource.read(this@KioskLauncherActivity)
 
-        val battery = text("", 12f, color).apply { text = formatBattery(s) }
+        // All three status items share one 32dp row and are vertically centered in it, so the
+        // larger clock text lines up with battery/Wi-Fi instead of sitting lower than them.
+        val battery = text("", 12f, color).apply { text = formatBattery(s); gravity = Gravity.CENTER_VERTICAL }
         batteryText = battery
         parent.addView(
             FrameWrap(this, battery, Gravity.TOP or Gravity.START, dp(16), heightPx = dp(32), avoidSystemBars = true),
         )
 
-        val wifi = text("", 12f, color).apply { text = formatWifi(s) }
+        val wifi = text("", 12f, color).apply { text = formatWifi(s); gravity = Gravity.CENTER_VERTICAL }
         wifiText = wifi
         val endExtra = if (p.exitMode == "visible") dp(52) else 0
         parent.addView(

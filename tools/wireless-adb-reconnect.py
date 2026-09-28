@@ -107,12 +107,20 @@ def connected_addresses() -> set[str]:
     return addrs
 
 
+RETRY_BACKOFF_S = 120
+_last_failed: dict[str, float] = {}
+
+
 def poll_once(known_names: dict[str, str]) -> dict[str, str]:
     endpoints = discovered_endpoints()
     live = connected_addresses()
 
     for name, address in endpoints.items():
-        already_connected = address in live
+        # adb's own server auto-connects to paired devices it sees over mDNS and lists them as
+        # "<name>._adb-tls-connect._tcp". If that transport is up, there is nothing to do -- and
+        # the ip:port that `adb mdns services` reports can be stale after DHCP reshuffles IPs
+        # (seen 2026-09-28: two tabs swapped addresses), so dialing it would just fail.
+        already_connected = address in live or f"{name}.{MDNS_CONNECT_SERVICE}" in live
         is_new_name = name not in known_names
         address_changed = not is_new_name and known_names[name] != address
 
@@ -121,12 +129,21 @@ def poll_once(known_names: dict[str, str]) -> dict[str, str]:
         elif address_changed:
             log(f"{name} reappeared at a new address: {known_names[name]} -> {address} (reboot or reconnect)")
 
-        if not already_connected:
-            result = adb("connect", address)
-            ok = "connected" in result.stdout.lower()
-            log(f"  {'OK' if ok else '!!'} adb connect {address}: {result.stdout.strip() or result.stderr.strip()}")
-
         known_names[name] = address
+        if already_connected:
+            _last_failed.pop(name, None)
+            continue
+        if time.time() - _last_failed.get(name, 0) < RETRY_BACKOFF_S and not address_changed:
+            continue  # failed recently at this same address; don't hammer it every poll
+
+        result = adb("connect", address)
+        out = result.stdout.strip()
+        ok = out.startswith(("connected to", "already connected to"))
+        if ok:
+            _last_failed.pop(name, None)
+        else:
+            _last_failed[name] = time.time()
+        log(f"  {'OK' if ok else '!!'} adb connect {address}: {out or result.stderr.strip()}")
 
     # Nothing to do for names we've seen before whose address hasn't changed and are
     # already connected -- that's the steady state, and it should be silent.
