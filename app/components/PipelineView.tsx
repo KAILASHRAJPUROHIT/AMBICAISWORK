@@ -18,8 +18,8 @@ export const PipelineView: React.FC<PipelineViewProps> = ({ tasks }) => {
         padding: "22px 26px",
       }}
     >
-      <div role="note" style={{ marginBottom: "14px", padding: "8px 12px", borderRadius: "12px", border: "1px solid rgba(255,196,91,.3)", background: "rgba(255,196,91,.06)", fontSize: "11px", color: "#E9D9B4" }}>
-        <b style={{ color: "var(--obsidian-amber)", letterSpacing: ".14em", fontSize: "9px", marginRight: "8px" }}>SAMPLE DATA</b>Tasks, assignees, due dates and progress are illustrative. The task database is not built yet.
+      <div role="note" style={{ marginBottom: "14px", padding: "8px 12px", borderRadius: "12px", border: "1px solid rgba(36,217,255,.3)", background: "rgba(36,217,255,.06)", fontSize: "11px", color: "#C7F4FF" }}>
+        <b style={{ color: "var(--obsidian-cyan)", letterSpacing: ".14em", fontSize: "9px", marginRight: "8px" }}>EVIDENCE ONLY</b>Only tasks received from the connected control plane appear here. No local task records are currently registered.
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "14px", marginBottom: "18px" }}>
         <div>
@@ -51,7 +51,7 @@ export const PipelineView: React.FC<PipelineViewProps> = ({ tasks }) => {
             {tasks.filter((t) => t.status === "BLOCKED").length} BLOCKED
           </span>
           <span style={{ fontFamily: "'Geist Mono',monospace", fontSize: "11px", padding: "6px 12px", borderRadius: "10px", border: "1px solid rgba(55,227,161,.3)", background: "rgba(55,227,161,.08)", color: "var(--obsidian-green)" }}>
-            68% AVG PROGRESS
+            {tasks.length ? `${Math.round(tasks.reduce((sum, task) => sum + task.progress, 0) / tasks.length)}% AVG PROGRESS` : "NO TASK DATA"}
           </span>
         </div>
       </div>
@@ -71,6 +71,13 @@ export const PipelineView: React.FC<PipelineViewProps> = ({ tasks }) => {
             </tr>
           </thead>
           <tbody>
+            {tasks.length === 0 && (
+              <tr>
+                <td colSpan={8} style={{ padding: "28px 14px", color: "var(--obsidian-muted)", textAlign: "center" }}>
+                  No verified work items received from the control plane.
+                </td>
+              </tr>
+            )}
             {tasks.map((task) => {
               let priorityColor = "var(--obsidian-cyan)";
               if (task.priority === "HIGH") priorityColor = "var(--obsidian-amber)";

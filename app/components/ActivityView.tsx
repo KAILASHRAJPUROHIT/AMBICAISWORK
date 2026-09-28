@@ -40,23 +40,18 @@ export const ActivityView: React.FC<ActivityViewProps> = ({ activities }) => {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "10px" }}>
-          <div style={{ padding: "6px 12px", borderRadius: "10px", border: "1px solid rgba(36,217,255,.3)", background: "rgba(36,217,255,.08)", fontSize: "11px" }}>
-            <span style={{ color: "var(--obsidian-dim)" }}>TODAY: </span>
-            <span style={{ color: "var(--obsidian-cyan)", fontWeight: 700 }}>41 AGENT ACTIONS</span>
-          </div>
-          <div style={{ padding: "6px 12px", borderRadius: "10px", border: "1px solid rgba(139,92,255,.3)", background: "rgba(139,92,255,.08)", fontSize: "11px" }}>
-            <span style={{ color: "var(--obsidian-dim)" }}>HUMAN: </span>
-            <span style={{ color: "var(--obsidian-violet)", fontWeight: 700 }}>17 CHANGES</span>
-          </div>
-          <div style={{ padding: "6px 12px", borderRadius: "10px", border: "1px solid rgba(55,227,161,.3)", background: "rgba(55,227,161,.08)", fontSize: "11px" }}>
-            <span style={{ color: "var(--obsidian-dim)" }}>RECOVERIES: </span>
-            <span style={{ color: "var(--obsidian-green)", fontWeight: 700 }}>02 RESOLVED</span>
-          </div>
+        <div style={{ padding: "6px 12px", borderRadius: "10px", border: "1px solid rgba(36,217,255,.3)", background: "rgba(36,217,255,.08)", fontSize: "11px" }}>
+          <span style={{ color: "var(--obsidian-dim)" }}>VERIFIED EVENTS: </span>
+          <span style={{ color: "var(--obsidian-cyan)", fontWeight: 700 }}>{activities.length}</span>
         </div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {activities.length === 0 && (
+          <div style={{ padding: "28px 14px", color: "var(--obsidian-muted)", textAlign: "center", border: "1px dashed rgba(120,170,220,.22)", borderRadius: "14px" }}>
+            No verified events received from connected systems.
+          </div>
+        )}
         {activities.map((act) => (
           <div
             key={act.id}

@@ -77,60 +77,8 @@ const initialSystemsData: Record<string, SystemItem> = Object.fromEntries(
   ])
 );
 
-const initialTasks: PipelineTask[] = [
-  {
-    id: "t-1",
-    title: "Stabilize Print Server latency",
-    system: "Print Server",
-    assignedTo: "AIS Infrastructure Agent",
-    priority: "HIGH",
-    status: "IN PROGRESS",
-    progress: 68,
-    due: "Today · 19:00",
-    nextAction: "Validate queue drain after remediation",
-  },
-  {
-    id: "t-2",
-    title: "Resolve Catalogue processing backlog",
-    system: "Catalogue Tool",
-    assignedTo: "Kuldeep + AIS Agent",
-    priority: "CRITICAL",
-    status: "BLOCKED",
-    progress: 34,
-    due: "Today · 20:30",
-    nextAction: "GPU worker load inspection on HP Omen 16",
-  },
-  {
-    id: "t-3",
-    title: "Gold Rate Monitor provider failover test",
-    system: "Gold Rate Monitor",
-    assignedTo: "Kuldeep",
-    priority: "MEDIUM",
-    status: "READY",
-    progress: 100,
-    due: "27 Sep · 10:00",
-    nextAction: "Run simulation test with mock AWS timeout",
-  },
-  {
-    id: "t-4",
-    title: "AMBIC MDM policy audit",
-    system: "AMBIC MDM",
-    assignedTo: "Claude Agent",
-    priority: "MEDIUM",
-    status: "READY",
-    progress: 85,
-    due: "27 Sep · 13:00",
-    nextAction: "Verify kiosk compliance logs across store tablets",
-  },
-];
-
-const initialActivities: ActivityFeedItem[] = [
-  { id: 1, time: "17:11", systemName: "Catalogue Tool", message: "AIS Agent retried 14 failed catalogue jobs on HP Omen 16", tag: "SAMPLE", tagColor: "var(--obsidian-dim)" },
-  { id: 2, time: "17:04", systemName: "Print Server", message: "Queue latency remained elevated above baseline (460 events/min)", tag: "SAMPLE", tagColor: "var(--obsidian-dim)" },
-  { id: 3, time: "16:58", systemName: "Payment Notifier", message: "Webhook delivery path validated and retry queue drained", tag: "SAMPLE", tagColor: "var(--obsidian-dim)" },
-  { id: 4, time: "16:42", systemName: "QR Print Server", message: "Queue watcher restarted and output path verified on Billing PC1", tag: "SAMPLE", tagColor: "var(--obsidian-dim)" },
-  { id: 5, time: "15:18", systemName: "Gold Rate Monitor", message: "Provider fallback order updated by Kuldeep to prioritize local verified cache", tag: "SAMPLE", tagColor: "var(--obsidian-dim)" },
-];
+const initialTasks: PipelineTask[] = [];
+const initialActivities: ActivityFeedItem[] = [];
 
 type Control = {
   id: string;
@@ -1257,15 +1205,15 @@ export default function Home() {
           {/* Spectrum Divider */}
           <div className="ais-spec" style={{ height: "2px", margin: "12px 2px 0", borderRadius: "2px", backgroundImage: "linear-gradient(90deg,#24D9FF,#4D84FF,#8B5CFF,#FF4FD8,#37E3A1,#FFC45B,#FF5F78,#24D9FF)", opacity: 0.55 }} />
 
-          {/* Honesty ribbon: this build mixes a few live signals with sample data. */}
+          {/* Provenance ribbon: operational status must be traceable to a live probe or registry row. */}
           <div
             role="note"
             style={{ margin: "10px 2px 0", padding: "8px 14px", borderRadius: "12px", border: "1px solid rgba(255,196,91,.35)", background: "rgba(255,196,91,.07)", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}
           >
-            <span style={{ fontSize: "9px", letterSpacing: ".2em", fontWeight: 800, color: "var(--obsidian-amber)" }}>PREVIEW BUILD</span>
+            <span style={{ fontSize: "9px", letterSpacing: ".2em", fontWeight: 800, color: "var(--obsidian-amber)" }}>EVIDENCE MODE</span>
             <span style={{ fontSize: "11.5px", color: "#E9D9B4" }}>
-              Live: health of QR Print Server, Gold Rate Monitor and Catalogue Tool, plus laptop CPU/RAM and the event feed.
-              Everything else here (hosts, scores, metrics, tasks, history) is <b>sample data</b> until the systems registry is connected.
+              Health, host, incident reason, uptime and activity are shown only when verified by the systems registry or a direct probe.
+              Missing telemetry stays <b>unregistered</b> or <b>unavailable</b>; AIS does not fabricate a green state.
             </span>
           </div>
 
