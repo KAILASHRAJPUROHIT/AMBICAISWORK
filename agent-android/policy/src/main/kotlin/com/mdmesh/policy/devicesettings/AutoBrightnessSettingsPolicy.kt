@@ -35,7 +35,9 @@ internal class AutoBrightnessSettingsPolicy(
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
             handle.dpm.isDeviceOwnerApp(handle.admin.packageName)
 
-    override fun setEnabled(enabled: Boolean): PolicyOutcome = runCatching {
+    override fun setEnabled(enabled: Boolean): PolicyOutcome {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return PolicyOutcome.Unsupported
+        return runCatching {
         handle.dpm.setSystemSetting(
             handle.admin,
             Settings.System.SCREEN_BRIGHTNESS_MODE,
@@ -43,7 +45,8 @@ internal class AutoBrightnessSettingsPolicy(
             else Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL.toString(),
         )
         PolicyOutcome.Applied
-    }.getOrElse { PolicyOutcome.Failed(it.message ?: "autoBrightness setEnabled failed") }
+        }.getOrElse { PolicyOutcome.Failed(it.message ?: "autoBrightness setEnabled failed") }
+    }
 
     override fun isEnabled(): Boolean? = runCatching {
         Settings.System.getInt(handle.context.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE) ==
