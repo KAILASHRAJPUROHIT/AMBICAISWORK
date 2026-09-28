@@ -24,6 +24,7 @@ import com.mdmesh.core.sync.CheckInWorker
 import com.mdmesh.core.telemetry.EventLog
 import com.mdmesh.core.transport.TransportManager
 import com.mdmesh.core.transport.WakeSignal
+import com.mdmesh.policy.wifi.DpmHandle
 import com.mdmesh.proto.EventType
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Job
@@ -51,6 +52,9 @@ class CheckInService : LifecycleService() {
     @Inject lateinit var identity: DeviceIdentity
     @Inject lateinit var powerModeStore: PowerModeStore
     @Inject lateinit var eventLog: EventLog
+    @Inject lateinit var dpmHandle: DpmHandle
+
+    private var wirelessAdbKeeper: WirelessAdbKeeper? = null
 
     @Volatile private var started = false
     @Volatile private var interactiveUntil = 0L
@@ -87,6 +91,8 @@ class CheckInService : LifecycleService() {
             addAction(Intent.ACTION_BATTERY_LOW)
         }
         ContextCompat.registerReceiver(this, powerReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        // Keep wireless debugging on across Wi-Fi drops and reboots -- see WirelessAdbKeeper.
+        wirelessAdbKeeper = WirelessAdbKeeper(applicationContext, dpmHandle).also { it.start() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -185,6 +191,8 @@ class CheckInService : LifecycleService() {
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(powerReceiver) }
+        wirelessAdbKeeper?.stop()
+        wirelessAdbKeeper = null
         transport.stop()
         super.onDestroy()
     }

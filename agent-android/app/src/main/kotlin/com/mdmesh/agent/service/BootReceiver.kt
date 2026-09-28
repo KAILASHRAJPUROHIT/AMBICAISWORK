@@ -17,7 +17,6 @@ import com.mdmesh.kiosk.KioskController
 import com.mdmesh.kiosk.KioskToggles
 import com.mdmesh.kiosk.lockTaskFeatures
 import com.mdmesh.policy.wifi.DpmHandle
-import com.mdmesh.policy.wifi.WirelessAdbEnabler
 import com.mdmesh.proto.EventType
 import com.mdmesh.proto.KioskApplyPayload
 import com.mdmesh.proto.KioskFeaturesDto
@@ -66,26 +65,6 @@ class BootReceiver : BroadcastReceiver() {
                 }
                 // Re-arm the doze-proof heartbeat (AlarmManager alarms don't survive reboot).
                 runCatching { WakeKeepAlive.schedule(context) }
-
-                // Re-attempt the wireless-debugging enable on every boot/update. Real, confirmed
-                // finding (2026-09-27): this fleet's Xiaomi/HyperOS build turns "Wireless
-                // debugging" off across a reboot even after a real person enabled it -- unlike
-                // stock Android, where the toggle persists. Doing the same privileged
-                // setGlobalSetting write here, this early in the boot broadcast, is a genuine
-                // experiment in whether running it before whatever resets the setting runs is
-                // enough to win the race -- see WirelessAdbEnabler's doc comment. Log the outcome
-                // either way rather than assume; do not remove this comment until a real reboot
-                // has confirmed which way it goes.
-                if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-                    val enabled = runCatching { WirelessAdbEnabler.tryEnable(dpmHandle) }.getOrDefault(false)
-                    Log.i(TAG, "post-boot wireless-adb re-enable attempt: $enabled")
-                    runCatching {
-                        EventLog(context).record(
-                            "wirelessAdbBootRetry",
-                            detail = "post-boot wireless-adb re-enable attempted (dpm call succeeded=$enabled)",
-                        )
-                    }
-                }
 
                 // Restore kiosk mode and bring KioskLauncherActivity to foreground.
                 val pending = goAsync()
