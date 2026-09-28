@@ -49,6 +49,7 @@ class CheckInCoordinator @Inject constructor(
     private val syncStatus: SyncStatus = SyncStatus(),
     private val adminPasscodeStore: AdminPasscodeStore? = null,
     private val fcmTokenStore: FcmTokenStore? = null,
+    private val activityLogger: com.mdmesh.core.telemetry.ActivityLogger? = null,
 ) {
 
     private val mutex = Mutex()
@@ -68,10 +69,21 @@ class CheckInCoordinator @Inject constructor(
         val authorization = "Bearer ${identity.secret().orEmpty()}"
         val matrix = capabilitySource.matrix(deviceId)
         val acks = pending.drain()
-        val bufferedEvents = eventSink.drain()
+        // Turn Android's usage history since the last check-in into appUsage events (cheap read,
+        // no polling of our own) before draining, so they ride along with this check-in.
+        runCatching { activityLogger?.collect() }
+        val drained = eventSink.drain()
+        // The server ingests at most MAX_EVENTS_PER_CHECKIN events and silently drops the rest,
+        // so send the oldest batch now and put the remainder back for the next check-in.
+        val bufferedEvents = drained.take(MAX_EVENTS_PER_CHECKIN - 1)
+        drained.drop(MAX_EVENTS_PER_CHECKIN - 1).takeIf { it.isNotEmpty() }?.let { eventSink.restore(it) }
 
-        // Capture recent logcat for remote debugging (capped to ~3800 chars to fit server limit)
-        val logcatDetail = captureLogcat()
+        // Logcat only when this batch reports a crash -- it used to be captured and uploaded on
+        // EVERY check-in (every 2.5s while a device was open in the console), which cost battery
+        // and filled device_event with ~3.8KB blobs for no reason. (+1 slot reserved above.)
+        val logcatDetail = if (bufferedEvents.any { it.type == EventType.CRASH || it.type == "kioskCrashLoop" }) {
+            captureLogcat()
+        } else null
         val allEvents = if (logcatDetail != null) {
             bufferedEvents + TelemetryEventDto("logcat", System.currentTimeMillis(), logcatDetail)
         } else bufferedEvents
@@ -120,6 +132,9 @@ class CheckInCoordinator @Inject constructor(
         if (output.length > 3800) output.takeLast(3800) else output.ifBlank { null }
     }.getOrNull()
 }
+
+/** Server-side cap in AgentResource.MAX_EVENTS_PER_CHECKIN; keep in sync. */
+private const val MAX_EVENTS_PER_CHECKIN = 100
 
 /** A check-in was rejected by the server. Lets the worker retry with backoff. */
 class CheckInException(message: String) : Exception(message)

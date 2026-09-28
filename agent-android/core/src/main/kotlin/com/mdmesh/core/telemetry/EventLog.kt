@@ -32,6 +32,15 @@ class EventLog @Inject constructor(@ApplicationContext context: Context) : Event
         save(cap(list))
     }
 
+    /** Like [record] but with an explicit timestamp -- for events recorded after the fact
+     *  (e.g. an app session logged when it ends, stamped with when it started). */
+    @Synchronized
+    fun recordAt(type: String, ts: Long, detail: String?) {
+        val list = load().toMutableList()
+        list.add(TelemetryEventDto(type, ts, detail))
+        save(cap(list))
+    }
+
     @Synchronized
     override fun drain(): List<TelemetryEventDto> {
         val l = load()
@@ -51,7 +60,9 @@ class EventLog @Inject constructor(@ApplicationContext context: Context) : Event
 
     companion object {
         private const val KEY = "events"
-        private const val CAP = 500
+        // Raised from 500 with activity logging (app sessions, screen/Wi-Fi events): ~a day of
+        // busy use survives a long offline stretch. Check-ins drain it 99 at a time.
+        private const val CAP = 1500
         private val json = Json { ignoreUnknownKeys = true }
 
         /** Keep the most recent [CAP] events. */

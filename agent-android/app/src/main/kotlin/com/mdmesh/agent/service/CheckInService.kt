@@ -69,13 +69,45 @@ class CheckInService : LifecycleService() {
     @Suppress("DEPRECATION")
     private val powerReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            // Activity log: broadcasts this service already receives, so logging costs nothing extra.
             when (intent?.action) {
-                android.net.ConnectivityManager.CONNECTIVITY_ACTION ->
-                    runCatching { eventLog.record(EventType.CONNECTIVITY) }
+                android.net.ConnectivityManager.CONNECTIVITY_ACTION -> recordNetworkIfChanged()
                 Intent.ACTION_BATTERY_LOW ->
                     runCatching { eventLog.record(EventType.LOW_BATTERY) }
+                Intent.ACTION_SCREEN_ON -> runCatching { eventLog.record("screenOn") }
+                Intent.ACTION_SCREEN_OFF -> runCatching { eventLog.record("screenOff") }
+                Intent.ACTION_USER_PRESENT -> runCatching { eventLog.record("unlock") }
+                Intent.ACTION_POWER_CONNECTED -> runCatching { eventLog.record("powerConnected") }
+                Intent.ACTION_POWER_DISCONNECTED -> runCatching { eventLog.record("powerDisconnected") }
             }
             reevaluateSocket()
+        }
+    }
+
+    /** Last network state logged, so repeated CONNECTIVITY_ACTION broadcasts for the same state
+     *  don't flood the activity log. */
+    @Volatile private var lastNetworkState: String? = null
+
+    /** Logs a `connectivityChange` event ("wifi:<SSID>", "cellular" or "offline") only when the
+     *  state actually changes -- this is what shows when and how often a tablet drops Wi-Fi. */
+    @Suppress("DEPRECATION")
+    private fun recordNetworkIfChanged() = runCatching {
+        val cm = getSystemService(android.net.ConnectivityManager::class.java)
+        val caps = cm?.getNetworkCapabilities(cm.activeNetwork)
+        val state = when {
+            caps == null -> "offline"
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> {
+                val ssid = runCatching {
+                    getSystemService(android.net.wifi.WifiManager::class.java)?.connectionInfo?.ssid?.trim('"')
+                }.getOrNull()?.takeIf { it.isNotBlank() && it != "<unknown ssid>" }
+                "wifi:" + (ssid ?: "?")
+            }
+            caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+            else -> "other"
+        }
+        if (state != lastNetworkState) {
+            lastNetworkState = state
+            eventLog.record(EventType.CONNECTIVITY, state)
         }
     }
 
@@ -89,6 +121,7 @@ class CheckInService : LifecycleService() {
             addAction(Intent.ACTION_POWER_DISCONNECTED)
             addAction(android.net.ConnectivityManager.CONNECTIVITY_ACTION)
             addAction(Intent.ACTION_BATTERY_LOW)
+            addAction(Intent.ACTION_USER_PRESENT)
         }
         ContextCompat.registerReceiver(this, powerReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         // Keep wireless debugging on across Wi-Fi drops and reboots -- see WirelessAdbKeeper.

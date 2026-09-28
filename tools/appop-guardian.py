@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""appop-guardian.py -- keeps WRITE_SETTINGS granted on every connected agent device.
+"""appop-guardian.py -- keeps the agent's AppOps (WRITE_SETTINGS for auto-rotate, GET_USAGE_STATS
+for the activity log) granted on every connected agent device.
 
 Why this exists
 ----------------
@@ -45,7 +46,10 @@ from pathlib import Path
 
 DEFAULT_PACKAGES = ("com.mdmesh.agent", "com.mdmesh.agent.cn")
 STATE_FILE = Path(__file__).with_name(".appop-guardian-state.json")
-APPOP = "WRITE_SETTINGS"
+# AppOps the agent needs and Android resets on every agent update:
+#   WRITE_SETTINGS  -- Quick Controls auto-rotate
+#   GET_USAGE_STATS -- activity log app usage (ActivityLogger)
+APPOPS = ("WRITE_SETTINGS", "GET_USAGE_STATS")
 
 # `adb.exe` is a console-subsystem app; launched under a windowless parent (pythonw, or
 # any Task Scheduler action) each subprocess.run() would otherwise pop a fresh flashing
@@ -107,20 +111,24 @@ def get_version_code(serial: str, package: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def get_appop_mode(serial: str, package: str) -> str | None:
-    result = adb("shell", "dumpsys", "appops", "--package", package, serial=serial)
-    m = re.search(rf"{APPOP}\s*\(([a-z]+)\)", result.stdout)
-    return m.group(1) if m else None
+def get_appop_modes(serial: str, package: str) -> dict[str, str | None]:
+    """{appop: mode} for every entry in APPOPS, from a single dumpsys call."""
+    out = adb("shell", "dumpsys", "appops", "--package", package, serial=serial).stdout
+    modes = {}
+    for op in APPOPS:
+        m = re.search(r"\b" + re.escape(op) + r"\s*\(([a-z]+)\)", out)
+        modes[op] = m.group(1) if m else None
+    return modes
 
 
-def grant_write_settings(serial: str, package: str) -> bool:
-    result = adb("shell", "appops", "set", package, APPOP, "allow", serial=serial)
+def grant(serial: str, package: str, op: str) -> bool:
+    result = adb("shell", "appops", "set", package, op, "allow", serial=serial)
     if result.returncode != 0:
-        log(f"  ! appops set failed on {serial} ({package}): {result.stderr.strip() or result.stdout.strip()}")
+        log(f"  ! appops set {op} failed on {serial} ({package}): {result.stderr.strip() or result.stdout.strip()}")
         return False
-    mode = get_appop_mode(serial, package)
+    mode = get_appop_modes(serial, package)[op]
     ok = mode == "allow"
-    log(f"  {'OK' if ok else '!!'} {package} on {serial}: WRITE_SETTINGS now '{mode}'")
+    log(f"  {'OK' if ok else '!!'} {package} on {serial}: {op} now '{mode}'")
     return ok
 
 
@@ -154,21 +162,22 @@ def poll_once(packages: tuple[str, ...], state: dict) -> dict:
                 continue  # this package flavor isn't installed on this device
 
             last_seen = device_state.get(package, {}).get("versionCode")
-            mode = get_appop_mode(serial, package)
+            modes = get_appop_modes(serial, package)
             is_new_device = last_seen is None
             version_changed = last_seen is not None and last_seen != version
-            needs_grant = mode != "allow"
 
             if is_new_device:
-                log(f"{serial}: first sighting of {package} (versionCode={version}), mode={mode}")
+                log(f"{serial}: first sighting of {package} (versionCode={version}), modes={modes}")
             elif version_changed:
-                log(f"{serial}: {package} updated {last_seen} -> {version}, mode={mode}")
+                log(f"{serial}: {package} updated {last_seen} -> {version}, modes={modes}")
 
-            if needs_grant:
-                grant_write_settings(serial, package)
-                mode = get_appop_mode(serial, package)
+            for op, mode in modes.items():
+                if mode != "allow":
+                    grant(serial, package, op)
+            if any(m != "allow" for m in modes.values()):
+                modes = get_appop_modes(serial, package)
 
-            device_state[package] = {"versionCode": version, "mode": mode, "checkedAt": time.time()}
+            device_state[package] = {"versionCode": version, "modes": modes, "checkedAt": time.time()}
 
     return state
 

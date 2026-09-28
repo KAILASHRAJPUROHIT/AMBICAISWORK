@@ -117,6 +117,16 @@ public class AgentCommandDAO {
         eventMapper.insert(e);
     }
 
+    /** Retention: delete events of {@code type} older than {@code before}; returns rows removed. */
+    public int purgeEventsOfType(String type, long before) {
+        return eventMapper.deleteTypeOlderThan(type, before);
+    }
+
+    /** Retention: delete all events older than {@code before}; returns rows removed. */
+    public int purgeEventsOlderThan(long before) {
+        return eventMapper.deleteOlderThan(before);
+    }
+
     /** Event timeline for a device, newest first, at/after {@code since}. */
     public List<DeviceEvent> listEvents(String deviceNumber, long since, int limit) {
         return eventMapper.list(deviceNumber, since, limit);

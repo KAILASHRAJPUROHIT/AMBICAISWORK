@@ -605,6 +605,9 @@ class KioskLauncherActivity : FragmentActivity() {
                     isEnabled = current != null
                     setOnCheckedChangeListener { _, checked ->
                         val outcome = policy.setEnabled(checked)
+                        if (outcome is PolicyOutcome.Applied) {
+                            runCatching { events.record("quickControl", "$key=${if (checked) "on" else "off"}") }
+                        }
                         if (outcome !is PolicyOutcome.Applied) {
                             isChecked = !checked // revert on failure rather than show a stuck wrong state
                             Toast.makeText(this@KioskLauncherActivity, "Could not change $label.", Toast.LENGTH_SHORT).show()
@@ -631,7 +634,10 @@ class KioskLauncherActivity : FragmentActivity() {
                             if (fromUser) brightness.setLevel(value)
                         }
                         override fun onStartTrackingTouch(sb: SeekBar?) = Unit
-                        override fun onStopTrackingTouch(sb: SeekBar?) = Unit
+                        override fun onStopTrackingTouch(sb: SeekBar?) {
+                            // One log entry per drag, not per progress tick.
+                            runCatching { events.record("quickControl", "brightness=${sb?.progress}%") }
+                        }
                     })
                 },
             )

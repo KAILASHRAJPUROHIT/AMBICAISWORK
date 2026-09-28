@@ -72,6 +72,7 @@ class AdminReceiver : DeviceAdminReceiver() {
     override fun onLockTaskModeEntering(context: Context, intent: Intent, pkg: String) {
         super.onLockTaskModeEntering(context, intent, pkg)
         setCreateWindowsRestriction(context, restrict = false)
+        runCatching { com.mdmesh.core.telemetry.EventLog(context).record("kioskEnter", pkg) }
     }
 
     /** Leaving kiosk: allow overlays again. */

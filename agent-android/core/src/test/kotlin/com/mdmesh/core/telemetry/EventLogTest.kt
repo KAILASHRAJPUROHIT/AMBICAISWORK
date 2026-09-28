@@ -12,10 +12,10 @@ class EventLogTest {
     }
 
     @Test fun capKeepsMostRecent() {
-        val list = (1..600).map { TelemetryEventDto("e", it.toLong()) }
+        val list = (1..1600).map { TelemetryEventDto("e", it.toLong()) }
         val capped = EventLog.cap(list)
-        assertEquals(500, capped.size)
-        assertEquals(600L, capped.last().ts) // newest kept
+        assertEquals(1500, capped.size)
+        assertEquals(1600L, capped.last().ts) // newest kept
         assertEquals(101L, capped.first().ts) // oldest 100 dropped
     }
 

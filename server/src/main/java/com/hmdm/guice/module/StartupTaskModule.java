@@ -8,6 +8,7 @@ import com.hmdm.persistence.UnsecureDAO;
 import com.hmdm.persistence.domain.User;
 import com.hmdm.service.RsaKeyService;
 import com.hmdm.task.CustomerStatusTask;
+import com.hmdm.task.DeviceEventRetentionTask;
 import com.hmdm.task.FileCheckTask;
 import com.hmdm.task.FileMigrateTask;
 import com.hmdm.util.BackgroundTaskRunnerService;
@@ -35,6 +36,7 @@ public class StartupTaskModule {
     private CustomerStatusTask customerStatusTask;
     private FileCheckTask fileCheckTask;
     private FileMigrateTask fileMigrateTask;
+    private DeviceEventRetentionTask deviceEventRetentionTask;
     private boolean customerAutoStatus;
     private boolean transmitPassword;
     private RsaKeyService rsaKeyService;
@@ -49,6 +51,7 @@ public class StartupTaskModule {
                              CustomerStatusTask customerStatusTask,
                              FileCheckTask fileCheckTask,
                              FileMigrateTask fileMigrateTask,
+                             DeviceEventRetentionTask deviceEventRetentionTask,
                              RsaKeyService rsaKeyService,
                              @Named("device.fast.search.chars") int deviceFastSearchChars,
                              @Named("sql.init.script.path") String sqlInitScriptPath,
@@ -62,6 +65,7 @@ public class StartupTaskModule {
         this.customerStatusTask = customerStatusTask;
         this.fileCheckTask = fileCheckTask;
         this.fileMigrateTask = fileMigrateTask;
+        this.deviceEventRetentionTask = deviceEventRetentionTask;
         this.customerAutoStatus = customerAutoStatus;
         this.transmitPassword = transmitPassword;
         this.rsaKeyService = rsaKeyService;
@@ -80,6 +84,8 @@ public class StartupTaskModule {
         }
         // Shift a task to 5 min so they won't execute at the same time
         taskRunner.submitRepeatableTask(fileCheckTask, 5, 60, TimeUnit.MINUTES);
+        // device_event retention (logcat 7d, everything else 90d) -- first run 10 min after start.
+        taskRunner.submitRepeatableTask(deviceEventRetentionTask, 10, 24 * 60, TimeUnit.MINUTES);
         if (transmitPassword) {
             taskRunner.submitTask(new GenerateRsaKeysTask());
         }

@@ -5,6 +5,7 @@ import { useDevices } from '../data/useDevices';
 import { statusMeta, isOnline as isOnlineByRecency } from '../ui/status';
 import { fmtRelative, orDash } from '../ui/format';
 import { getEvents, type DeviceEvent } from '../api/events';
+import { ACTIVITY_NOISE } from '../components/EventTimeline';
 import type { DeviceView, ConfigurationLookup } from '../api/devices';
 
 type Bucket = 'online' | 'attention' | 'offline';
@@ -17,6 +18,12 @@ export const EVENT_VERBS: Record<string, string> = {
   connectivityChange: 'changed network',
   lowBattery: 'reported low battery',
   enrolled: 'enrolled',
+  kioskEnter: 'started kiosk',
+  kioskExit: 'exited kiosk',
+  quickControl: 'changed a Quick Control',
+  crash: 'agent crashed',
+  kioskCrashLoop: 'kiosk crash loop',
+  selfUninstall: 'started an uninstall',
 };
 
 function configName(
@@ -161,8 +168,12 @@ export function DashboardPage() {
       for (const r of results) {
         if (r.status !== 'fulfilled') continue;
         const { d, evs } = r.value;
-        for (const ev of evs ?? [])
+        for (const ev of evs ?? []) {
+          // Screen/app-usage/charging activity is per-device detail; keep the dashboard feed to
+          // events worth a glance (see ACTIVITY_NOISE).
+          if (ACTIVITY_NOISE.has(ev.type)) continue;
           items.push({ key: `${d.id}-${ev.id}`, device: d, ev });
+        }
       }
       items.sort((a, b) => b.ev.ts - a.ev.ts);
       setActivity(items.slice(0, 8));

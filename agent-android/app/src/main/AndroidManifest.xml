@@ -33,8 +33,9 @@
     <!--
         Permissions-checklist screen (PermissionsChecklistActivity). All are user-granted
         special-access permissions requested via a Settings intent, not silently grantable even
-        via Device Owner — see PermissionsChecklistActivity's doc comment. PACKAGE_USAGE_STATS and
-        SYSTEM_ALERT_WINDOW are pure AppOps grants and need no manifest entry.
+        via Device Owner — see PermissionsChecklistActivity's doc comment. SYSTEM_ALERT_WINDOW is a
+        pure AppOps grant and needs no manifest entry. (PACKAGE_USAGE_STATS and WRITE_SETTINGS DO,
+        see below.)
     -->
     <!--
         WRITE_SETTINGS is NOT like the two above, despite looking identical — this line was
@@ -54,6 +55,13 @@
         provisioning-time ADB grant (never the on-device Settings screen) as the actual mechanism.
     -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- Usage access for the activity log (ActivityLogger: which app was in the foreground and for
+         how long). AppOps-gated like WRITE_SETTINGS and declared for the same reason: undeclared
+         AppOp permissions are reset by PermissionPolicyService. It still resets on agent updates;
+         tools/appop-guardian.py re-grants it (appops set <pkg> GET_USAGE_STATS allow). -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
