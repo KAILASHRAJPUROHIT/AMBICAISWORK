@@ -290,12 +290,18 @@ public class SettingsResource {
         return t.length() > max ? t.substring(0, max) : t;
     }
 
-    /** Only http(s) image URLs are accepted; anything else is dropped. */
+    /**
+     * Accepts an absolute http(s) image URL, or a path this server serves itself
+     * ({@code /public/client-branding/...}). Anything else is dropped so a console
+     * mistake cannot point managed devices at an unexpected scheme.
+     */
     private static String httpUrlOrNull(String v) {
         String t = trimOrNull(v, 2000);
         if (t == null) return null;
         String lower = t.toLowerCase();
-        return lower.startsWith("https://") || lower.startsWith("http://") ? t : null;
+        if (lower.startsWith("https://") || lower.startsWith("http://")) return t;
+        if (lower.startsWith("/public/client-branding/")) return t;
+        return null;
     }
 
     /** Body of {@link #updateClientBranding}. */

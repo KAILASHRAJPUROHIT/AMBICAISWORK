@@ -10,6 +10,7 @@ import { getUpdateStatus, setAutoUpdate, checkForUpdates, applyUpdate, type Upda
 import { getFleetSettings, setAdminPasscode } from '../api/settings';
 import { RolloutPanel } from '../components/RolloutPanel';
 import { WallpaperPanel } from '../components/WallpaperPanel';
+import { ClientBrandingPanel } from '../components/ClientBrandingPanel';
 import { AlertRulesPanel } from '../components/AlertRulesPanel';
 import { GeofencePanel } from '../components/GeofencePanel';
 import { beginFrpRecoveryAccountConnection, listFrpRecoveryAccounts, removeFrpRecoveryAccount, type FrpRecoveryAccount } from '../api/frp';
@@ -324,6 +325,7 @@ export function SettingsPage() {
         </section>
 
         <WallpaperPanel />
+      <ClientBrandingPanel />
 
         {/* Updates */}
         {upd && (
