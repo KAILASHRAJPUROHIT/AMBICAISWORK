@@ -1,6 +1,13 @@
 // Update status from the decoupled supervisor. NOT under /rest — it's served at the origin by Caddy
 // (handle /update/* → supervisor), independent of the Java server.
 
+const aisEmbedPrefix =
+  typeof window !== 'undefined' &&
+  (window.location.pathname === '/mdm' || window.location.pathname.startsWith('/mdm/'))
+    ? '/mdm'
+    : '';
+const updatePath = (path: string) => `${aisEmbedPrefix}${path}`;
+
 /** Live state of an in-progress (or last) apply. Phases: authorizing→backup→pull→recreate→
  *  healthcheck→done; failures end at rollback→rolled_back or failed. */
 export interface ApplyState {
@@ -40,7 +47,7 @@ export const isApplyTerminal = (p?: string | null): boolean => !!p && APPLY_TERM
 
 export async function getUpdateStatus(): Promise<UpdateStatus | null> {
   try {
-    const r = await fetch('/update/status', { headers: { Accept: 'application/json' } });
+    const r = await fetch(updatePath('/update/status'), { headers: { Accept: 'application/json' } });
     if (!r.ok) return null;
     return (await r.json()) as UpdateStatus;
   } catch {
@@ -51,7 +58,7 @@ export async function getUpdateStatus(): Promise<UpdateStatus | null> {
 /** Force an on-demand poll of GitHub and return the refreshed status (authz'd + rate-limited server-side). */
 export async function checkForUpdates(): Promise<UpdateStatus | null> {
   try {
-    const r = await fetch('/update/check', {
+    const r = await fetch(updatePath('/update/check'), {
       method: 'POST',
       credentials: 'include',
       headers: { Accept: 'application/json', 'X-MDMesh-Console': '1' },
@@ -65,7 +72,7 @@ export async function checkForUpdates(): Promise<UpdateStatus | null> {
 /** Kick off a one-click apply. credentials:'include' forwards JSESSIONID for the supervisor's authz. */
 export async function applyUpdate(): Promise<{ ok: boolean; error?: string }> {
   try {
-    const r = await fetch('/update/apply', { method: 'POST', credentials: 'include', headers: { Accept: 'application/json', 'X-MDMesh-Console': '1' } });
+    const r = await fetch(updatePath('/update/apply'), { method: 'POST', credentials: 'include', headers: { Accept: 'application/json', 'X-MDMesh-Console': '1' } });
     if (r.status === 202) return { ok: true };
     const body = await r.json().catch(() => ({}));
     return { ok: false, error: (body as { error?: string }).error || `HTTP ${r.status}` };
@@ -77,7 +84,7 @@ export async function applyUpdate(): Promise<{ ok: boolean; error?: string }> {
 /** Toggle unattended ("automatic") updates. */
 export async function setAutoUpdate(auto: boolean): Promise<{ ok: boolean; error?: string }> {
   try {
-    const r = await fetch('/update/auto', {
+    const r = await fetch(updatePath('/update/auto'), {
       method: 'POST', credentials: 'include',
       headers: { 'content-type': 'application/json', Accept: 'application/json', 'X-MDMesh-Console': '1' },
       body: JSON.stringify({ auto }),

@@ -10,6 +10,10 @@ export default defineConfig(({ mode }) => {
   const proxyTarget = env.VITE_DEV_PROXY_TARGET || 'http://localhost:8090';
 
   return {
+    // Relative assets let the same signed console run at its normal root URL
+    // and behind AIS's same-origin /mdm/ gateway. Absolute /assets URLs would
+    // escape the gateway and reintroduce third-party session handling.
+    base: './',
     plugins: [react()],
     server: {
       host: true,

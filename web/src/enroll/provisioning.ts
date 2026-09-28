@@ -17,7 +17,9 @@ const SIGNATURE_CHECKSUM = env.VITE_AGENT_CHECKSUM || 'bhi71a1DsHsio1xr0TIMwBx0P
 
 /** Server origin — same-origin in production (Caddy serves the SPA and proxies the API). */
 export function serverBaseUrl(): string {
-  return window.location.origin;
+  const isAisEmbedded =
+    window.location.pathname === '/mdm' || window.location.pathname.startsWith('/mdm/');
+  return `${window.location.origin}${isAisEmbedded ? '/mdm' : ''}`;
 }
 
 export function agentApkUrl(): string {

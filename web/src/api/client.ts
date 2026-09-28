@@ -7,8 +7,17 @@
 // token to attach, so every request must be sent with credentials so the
 // cookie rides along.
 
+const aisEmbedPrefix =
+  typeof window !== 'undefined' &&
+  (window.location.pathname === '/mdm' || window.location.pathname.startsWith('/mdm/'))
+    ? '/mdm'
+    : '';
+
+// The AIS gateway makes the embedded console first-party. Keep the normal
+// /rest address for the standalone MDM domain and use /mdm/rest only inside
+// the gateway.
 export const API_BASE: string =
-  (import.meta.env.VITE_API_BASE ?? '/rest').replace(/\/$/, '');
+  (import.meta.env.VITE_API_BASE ?? `${aisEmbedPrefix}/rest`).replace(/\/$/, '');
 
 export type ResponseStatus = 'OK' | 'ERROR' | string;
 
