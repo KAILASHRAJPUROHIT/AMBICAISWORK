@@ -49,6 +49,7 @@ import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 MDNS_CONNECT_SERVICE = "_adb-tls-connect._tcp"
 
@@ -56,14 +57,30 @@ MDNS_CONNECT_SERVICE = "_adb-tls-connect._tcp"
 # window adb.exe would otherwise pop per call when run under a windowless (pythonw) parent.
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
+LOG_FILE = Path(__file__).with_name("logs") / "wireless-adb-reconnect.log"
+LOG_MAX_BYTES = 1_000_000
+
 
 def log(msg: str) -> None:
-    ts = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{ts}] {msg}", flush=True)
+    line = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
+    if sys.stdout is not None:  # None under pythonw (Task Scheduler)
+        print(line, flush=True)
+    try:
+        LOG_FILE.parent.mkdir(exist_ok=True)
+        if LOG_FILE.exists() and LOG_FILE.stat().st_size > LOG_MAX_BYTES:
+            LOG_FILE.replace(LOG_FILE.with_suffix(".log.1"))
+        with LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
 
 
 def adb(*args: str, timeout: int = 15) -> subprocess.CompletedProcess:
-    return subprocess.run(["adb", *args], capture_output=True, text=True, timeout=timeout, creationflags=_NO_WINDOW)
+    try:
+        return subprocess.run(["adb", *args], capture_output=True, text=True, timeout=timeout, creationflags=_NO_WINDOW)
+    except subprocess.TimeoutExpired:
+        # See appop-guardian.py: a hung adb call must not end the watcher.
+        return subprocess.CompletedProcess(["adb", *args], returncode=124, stdout="", stderr="timeout")
 
 
 def discovered_endpoints() -> dict[str, str]:
@@ -138,7 +155,10 @@ def main() -> int:
 
     try:
         while True:
-            known = poll_once(known)
+            try:
+                known = poll_once(known)
+            except Exception as e:  # never let one bad poll kill the watcher
+                log(f"poll failed, will retry: {type(e).__name__}: {e}")
             if args.once:
                 break
             time.sleep(args.interval)

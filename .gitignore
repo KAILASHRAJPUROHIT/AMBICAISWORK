@@ -70,3 +70,4 @@ Thumbs.db
 
 # appop-guardian.py runtime state (per-machine, not shared)
 tools/.appop-guardian-state.json
+tools/logs/

@@ -54,9 +54,22 @@ APPOP = "WRITE_SETTINGS"
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
+LOG_FILE = Path(__file__).with_name("logs") / "appop-guardian.log"
+LOG_MAX_BYTES = 1_000_000
+
+
 def log(msg: str) -> None:
-    ts = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{ts}] {msg}", flush=True)
+    line = f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
+    if sys.stdout is not None:  # None under pythonw (Task Scheduler)
+        print(line, flush=True)
+    try:
+        LOG_FILE.parent.mkdir(exist_ok=True)
+        if LOG_FILE.exists() and LOG_FILE.stat().st_size > LOG_MAX_BYTES:
+            LOG_FILE.replace(LOG_FILE.with_suffix(".log.1"))
+        with LOG_FILE.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError:
+        pass
 
 
 def adb(*args: str, serial: str | None = None, timeout: int = 15) -> subprocess.CompletedProcess:
@@ -64,7 +77,12 @@ def adb(*args: str, serial: str | None = None, timeout: int = 15) -> subprocess.
     if serial:
         cmd += ["-s", serial]
     cmd += list(args)
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, creationflags=_NO_WINDOW)
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, creationflags=_NO_WINDOW)
+    except subprocess.TimeoutExpired:
+        # A device dropping mid-call (offline, rebooting) can hang adb. Treat as a failed call
+        # instead of letting the exception end the whole watcher.
+        return subprocess.CompletedProcess(cmd, returncode=124, stdout="", stderr="timeout")
 
 
 def list_devices() -> list[str]:
@@ -178,8 +196,11 @@ def main() -> int:
 
     try:
         while True:
-            state = poll_once(packages, state)
-            save_state(state)
+            try:
+                state = poll_once(packages, state)
+                save_state(state)
+            except Exception as e:  # never let one bad poll kill the watcher
+                log(f"poll failed, will retry: {type(e).__name__}: {e}")
             if args.once:
                 break
             time.sleep(args.interval)
