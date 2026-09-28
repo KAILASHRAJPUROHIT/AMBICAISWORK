@@ -61,6 +61,14 @@ public class RolloutDAO {
         return mapper.listActiveAppRollouts(customerId);
     }
 
+    public AgentRollout findLatestForVersion(int customerId, String packageName, String targetVersion) {
+        return mapper.findLatestForVersion(customerId, packageName, targetVersion);
+    }
+
+    public List<Integer> listCustomerIdsWithDevices() {
+        return mapper.listCustomerIdsWithDevices();
+    }
+
     public AgentRollout findById(int id) {
         return mapper.findById(id);
     }

@@ -416,11 +416,12 @@ export function SettingsPage() {
             <div className="set-row auto-update-row">
               <span className="k">
                 Automatic updates
-                <small>Apply verified releases without a prompt.</small>
+                <small>Apply verified releases to the console and the tablets without a prompt.</small>
                 <p className="au-note">
                   When on, the updater applies each verified release on its own — backing up the
-                  database first and rolling back automatically if it fails. Leave off to review and
-                  click Update each time.
+                  database first and rolling back automatically if it fails. The tablets then update
+                  overnight (10 PM–7 AM): one tablet first, and the rest once it has run the new version
+                  for 20 minutes without crashing. Leave off to review and click Update / Roll out each time.
                 </p>
                 {autoErr && <p className="au-note" style={{ color: 'var(--err)' }}>{autoErr}</p>}
               </span>

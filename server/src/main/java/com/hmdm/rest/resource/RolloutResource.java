@@ -143,36 +143,49 @@ public class RolloutResource {
             return Response.ERROR("error.rollout.canary.empty");
         }
         int cust = customerId.get();
-        if (rolloutDAO.findActiveByCustomerAndPackage(cust, body.getPackageName()) != null) {
-            return Response.ERROR("error.rollout.active");
+        AgentRollout r = startAgentCanary(cust, body.getTargetVersion(), body.getPackageName(),
+                body.getApkVersionCode(), body.getApkSha256(), body.getCanaryDeviceNumbers(), null);
+        return r == null ? Response.ERROR("error.rollout.active") : Response.OK(buildView(r));
+    }
+
+    /**
+     * Starts a canary-stage agent rollout for {@code cust} -- shared by the console's POST and the
+     * automatic overnight updater ({@code AgentAutoRolloutTask}, displayName "auto-update").
+     * Inputs must already be validated. Returns null if another rollout for the package is active.
+     */
+    public AgentRollout startAgentCanary(int cust, String targetVersion, String packageName, int apkVersionCode,
+                                         String apkSha256, List<String> canaryDeviceNumbers, String displayName) {
+        if (rolloutDAO.findActiveByCustomerAndPackage(cust, packageName) != null) {
+            return null;
         }
         // Build the APK URL server-side from THIS deployment's base URL — the client never supplies a
         // host, so a rollout cannot be pointed at an attacker-controlled APK (the mirror is at
         // /update/agent.apk, proxied to the supervisor by Caddy).
-        String apkPath = AOSP_AGENT_PACKAGE.equals(body.getPackageName())
+        String apkPath = AOSP_AGENT_PACKAGE.equals(packageName)
                 ? "/update/agent-cn.apk?v=" : "/update/agent.apk?v=";
-        String apkUrl = baseUrl.replaceAll("/+$", "") + apkPath + body.getApkVersionCode();
+        String apkUrl = baseUrl.replaceAll("/+$", "") + apkPath + apkVersionCode;
 
         long now = System.currentTimeMillis();
         AgentRollout r = new AgentRollout();
         r.setCustomerId(cust);
-        r.setTargetVersion(body.getTargetVersion());
-        r.setPackageName(body.getPackageName());
+        r.setTargetVersion(targetVersion);
+        r.setPackageName(packageName);
         r.setApkUrl(apkUrl);
-        r.setApkSha256(body.getApkSha256());
-        r.setApkVersionCode(body.getApkVersionCode());
+        r.setApkSha256(apkSha256);
+        r.setApkVersionCode(apkVersionCode);
         r.setStage("canary");
         r.setCreatedAt(now);
         r.setUpdatedAt(now);
         r.setTrackingMode("version");
+        r.setDisplayName(displayName);
         try {
             rolloutDAO.insertRollout(r);
         } catch (Exception e) {
             // The partial unique index (one active rollout per customer+package) closes the
             // check-then-act race above: two concurrent creates → the loser lands here, not on a
             // duplicate rollout.
-            logger.info("Rollout create lost the single-active race for customer {} package {}", cust, body.getPackageName());
-            return Response.ERROR("error.rollout.active");
+            logger.info("Rollout create lost the single-active race for customer {} package {}", cust, packageName);
+            return null;
         }
 
         // Persist the canary set (only device numbers that actually belong to this customer).
@@ -180,7 +193,7 @@ public class RolloutResource {
         Set<String> customerNumbers = new HashSet<>();
         for (RolloutDeviceRow row : rows) customerNumbers.add(row.getDeviceNumber());
         Set<String> canary = new HashSet<>();
-        for (String n : body.getCanaryDeviceNumbers()) {
+        for (String n : canaryDeviceNumbers) {
             if (customerNumbers.contains(n)) { rolloutDAO.insertCanary(r.getId(), n); canary.add(n); }
         }
 
@@ -188,8 +201,9 @@ public class RolloutResource {
         Set<String> pending = new HashSet<>(rolloutDAO.listPendingInstallNumbers(cust));
         List<RolloutDeviceRow> canaryRows = filter(rows, canary, true);
         int queued = enqueueEligible(r, canaryRows, pending);
-        logger.info("Rollout {} created for customer {} (canary {}, queued {})", r.getId(), cust, canary.size(), queued);
-        return Response.OK(buildView(r));
+        logger.info("Rollout {} created for customer {} (canary {}, queued {}{})", r.getId(), cust, canary.size(), queued,
+                displayName == null ? "" : ", " + displayName);
+        return r;
     }
 
     /** Request body for creating a Library-app rollout. */
@@ -295,11 +309,17 @@ public class RolloutResource {
         AgentRollout r = rolloutDAO.findById(id);
         if (r == null || !customerId.get().equals(r.getCustomerId())) return Response.PERMISSION_DENIED();
         if (!"canary".equals(r.getStage())) return Response.ERROR("error.rollout.stage");
+        promoteRollout(r);
+        return Response.OK(buildView(r));
+    }
 
+    /** Canary -> fleet: queue the install to every remaining eligible device. Shared by the console
+     *  and the automatic overnight updater. Caller has checked ownership and stage. */
+    public void promoteRollout(AgentRollout r) {
         rolloutDAO.updateStage(r.getId(), "fleet");
         r.setStage("fleet");
 
-        int cust = customerId.get();
+        int cust = r.getCustomerId();
         List<RolloutDeviceRow> rows = rolloutDAO.listCustomerDevices(cust);
         Set<String> canary = new HashSet<>(rolloutDAO.listCanaryNumbers(r.getId()));
         List<RolloutDeviceRow> fleetRows = filter(rows, canary, false); // everyone NOT in canary
@@ -307,7 +327,6 @@ public class RolloutResource {
                 ? enqueueEligibleByCommand(r, fleetRows)
                 : enqueueEligible(r, fleetRows, new HashSet<>(rolloutDAO.listPendingInstallNumbers(cust)));
         logger.info("Rollout {} promoted to fleet (queued {})", r.getId(), queued);
-        return Response.OK(buildView(r));
     }
 
     // =================================================================================================================
@@ -369,8 +388,18 @@ public class RolloutResource {
 
     // ---- helpers ----------------------------------------------------------------------------------------------------
 
+    /** Version-tracked progress for one cohort of a rollout (canary=true or the rest). Used by the
+     *  automatic updater to decide when a canary is healthy and when a fleet rollout is finished. */
+    public RolloutProgress.Counts cohortCounts(AgentRollout r, boolean canaryCohort) {
+        int cust = r.getCustomerId();
+        List<RolloutDeviceRow> rows = rolloutDAO.listCustomerDevices(cust);
+        Set<String> canary = new HashSet<>(rolloutDAO.listCanaryNumbers(r.getId()));
+        Set<String> pending = new HashSet<>(rolloutDAO.listPendingInstallNumbers(cust));
+        return RolloutProgress.counts(r.getTargetVersion(), r.getPackageName(), filter(rows, canary, canaryCohort), pending);
+    }
+
     /** Ensure all devices in active stage have received commands. */
-    private void reconcileRollout(AgentRollout r) {
+    public void reconcileRollout(AgentRollout r) {
         int cust = r.getCustomerId();
         List<RolloutDeviceRow> rows = rolloutDAO.listCustomerDevices(cust);
         Set<String> canary = new HashSet<>(rolloutDAO.listCanaryNumbers(r.getId()));

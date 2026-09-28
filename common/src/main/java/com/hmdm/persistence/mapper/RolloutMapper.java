@@ -62,6 +62,17 @@ public interface RolloutMapper {
             "AND stage IN ('canary','fleet') ORDER BY id DESC"})
     List<AgentRollout> listActiveAppRollouts(@Param("customerId") int customerId);
 
+    /** Most recent rollout of this exact version in ANY stage (incl. cancelled/done) -- lets the
+     *  automatic updater skip a version it (or an admin) already rolled out or cancelled. */
+    @Select({"SELECT * FROM agentRollout WHERE customerId = #{customerId} AND packageName = #{packageName} " +
+            "AND targetVersion = #{targetVersion} ORDER BY id DESC LIMIT 1"})
+    AgentRollout findLatestForVersion(@Param("customerId") int customerId, @Param("packageName") String packageName,
+                                      @Param("targetVersion") String targetVersion);
+
+    /** Tenants that have at least one device (the automatic updater iterates these). */
+    @Select({"SELECT DISTINCT customerId FROM devices"})
+    List<Integer> listCustomerIdsWithDevices();
+
     @Select({"SELECT * FROM agentRollout WHERE id = #{id}"})
     AgentRollout findById(@Param("id") int id);
 
