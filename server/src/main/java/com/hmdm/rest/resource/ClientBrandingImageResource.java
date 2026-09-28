@@ -67,7 +67,7 @@ public class ClientBrandingImageResource {
         if (!SecurityContext.get().hasPermission("settings")) {
             log.error("Unauthorized attempt to upload client branding image by user "
                     + SecurityContext.get().getCurrentUserName());
-            return Response.PERMISSION_DENIED();
+            return Response.status(Response.Status.FORBIDDEN).build();
         }
         String slot = normaliseSlot(kind);
         if (slot == null) {
@@ -101,7 +101,7 @@ public class ClientBrandingImageResource {
                     .type(MediaType.APPLICATION_JSON).build();
         } catch (Exception e) {
             log.error("Unexpected error when storing client branding image", e);
-            return Response.INTERNAL_SERVER_ERROR();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
         }
     }
 
@@ -124,7 +124,7 @@ public class ClientBrandingImageResource {
             bytes = Files.readAllBytes(file.toPath());
         } catch (IOException e) {
             log.error("Cannot read stored client branding image", e);
-            return Response.INTERNAL_SERVER_ERROR();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
         }
         return Response.ok(bytes)
                 .type("image/png")
