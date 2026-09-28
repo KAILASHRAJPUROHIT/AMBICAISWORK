@@ -114,6 +114,19 @@
           "code": "4616",
           "namePattern": "^GOLD\\s+999\\s+IMPORTED\\b",
           "field": "sell"
+        },
+        {
+          "_comment": "Fallback when Kaka lists no 999 row at all (seen 2026-09-28): 995 spot row scaled to 999 purity.",
+          "code": "4669",
+          "namePattern": "^GOLD\\s+995\\s+\\(100-400GMS\\)\\s+T\\+0\\b",
+          "field": "sell",
+          "scale": 1.0040201
+        },
+        {
+          "code": "4615",
+          "namePattern": "^GOLD\\s+995\\s+\\(500GMS\\s*&\\s*ABOVE\\)\\s+T\\+0\\b",
+          "field": "sell",
+          "scale": 1.0040201
         }
       ],
       "autoFormat": {
@@ -193,7 +206,7 @@
   "server": {
     "port": 8080,
     "host": "0.0.0.0",
-    "publicDomain": "aradhana-gold-monitor.onrender.com"
+    "publicDomain": "gold.aradhanajewellers.com"
   },
   "storage": {
     "historyPoints": 2880,

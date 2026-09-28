@@ -95,10 +95,17 @@ function makeKakaSourceFrom(name, c, timeoutMs, log) {
     if (!primary.row) throw new Error(primary.note || `${c.label} target row not found`);
     const primaryField = primary.field || c.targetCandidates[primary.usedCandidate]?.field;
     if (!primaryField) throw new Error(`${c.label} selected row has no configured price field`);
-    const value = primary.row[primaryField];
-    if (typeof value !== 'number' || !(value > 0)) {
+    const rawValue = primary.row[primaryField];
+    if (typeof rawValue !== 'number' || !(rawValue > 0)) {
       throw new Error(`${c.label} ${primaryField} not numeric (raw "${primary.row.rawSell}")`);
     }
+    // A candidate may carry a purity scale: when the dealer drops its 999 line
+    // (Kaka did on 2026-09-28, listing only 995 rows) a 995 row x 999/995 is
+    // still a sound 999 reference. Scaled candidates sit after every real 999
+    // row, so they are only used when no 999 row exists.
+    const usedCand = primary.usedCandidate >= 0 ? c.targetCandidates[primary.usedCandidate] : null;
+    const scale = Number(usedCand?.scale) > 0 ? Number(usedCand.scale) : 1;
+    const value = scale === 1 ? rawValue : Math.round(rawValue * scale);
 
     const sec = c.secondaryCandidates ? selectRowAny(feed.rows, c.secondaryCandidates) : { row: null };
     const secField = sec.row && sec.usedCandidate >= 0 ? c.secondaryCandidates[sec.usedCandidate].field : null;
@@ -107,7 +114,7 @@ function makeKakaSourceFrom(name, c, timeoutMs, log) {
       : { row: null };
 
     const now = Date.now();
-    const fingerprint = `${primary.matchedBy}:${primary.row.code}:${primary.row.name}`;
+    const fingerprint = `${primary.matchedBy}:${primary.row.code}:${primary.row.name}${scale !== 1 ? ` x${scale}` : ''}`;
     const checkEveryMs = Number(c.autoFormat?.checkEveryMs) || 3600000;
     if (fingerprint !== lastFormatFingerprint || now - lastFormatCheckAt >= checkEveryMs) {
       log(`[ref:${name}] format check: ${fingerprint}${primary.note ? ` — ${primary.note}` : ''}`);
@@ -117,9 +124,10 @@ function makeKakaSourceFrom(name, c, timeoutMs, log) {
 
     return {
       value,
-      rowName: primary.row.name,
+      rowName: scale !== 1 ? `${primary.row.name} (x${scale} to 999)` : primary.row.name,
       rowCode: primary.row.code,
       matchedBy: primary.matchedBy,
+      scaledFrom: scale !== 1 ? rawValue : null,
       confident: primary.confident,
       formatNote: primary.note || null,
       buy: primary.row.buy,
