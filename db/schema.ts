@@ -43,3 +43,25 @@ export const parkedIdeas = sqliteTable("parked_ideas", {
   status: text("status").notNull().default("Parked"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+/** Public-key credentials only. AIS never stores a face image, video, or biometric template. */
+export const webauthnCredentials = sqliteTable("webauthn_credentials", {
+  id: text("id").primaryKey(),
+  label: text("label").notNull(),
+  publicKey: text("public_key").notNull(),
+  counter: integer("counter").notNull().default(0),
+  transports: text("transports").notNull().default("[]"),
+  deviceType: text("device_type").notNull().default("unknown"),
+  backedUp: integer("backed_up").notNull().default(0),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  lastUsedAt: text("last_used_at"),
+});
+
+/** Five-minute, one-time WebAuthn grants/challenges. */
+export const webauthnChallenges = sqliteTable("webauthn_challenges", {
+  id: text("id").primaryKey(),
+  purpose: text("purpose").notNull(),
+  challenge: text("challenge").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

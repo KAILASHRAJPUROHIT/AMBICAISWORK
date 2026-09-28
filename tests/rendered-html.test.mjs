@@ -22,15 +22,17 @@ test("server-renders the Aradhana Intelligence System shell", async () => {
   const html = await response.text();
   assert.match(html, /<title>Aradhana Intelligence System<\/title>/i);
   assert.match(html, /Aradhana company operations, AI workforce and production command centre\./i);
-  assert.match(html, /Loading Aradhana Intelligence System/);
+  assert.match(html, /INITIALIZING OBSIDIAN CONTROL PLANE/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
 test("keeps live control-plane integrations in the dashboard", async () => {
-  const [page, layout, packageJson] = await Promise.all([
+  const [page, layout, packageJson, loginRoute, webauthn] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/auth/login/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/_lib/webauthn.ts", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /\/api\/control\/snapshot/);
@@ -40,4 +42,8 @@ test("keeps live control-plane integrations in the dashboard", async () => {
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   assert.doesNotMatch(page, /codex-preview|_sites-preview|SkeletonPreview/);
   assert.doesNotMatch(layout, /codex-preview|_sites-preview|SkeletonPreview/);
+  assert.match(loginRoute, /requiresPasskey/);
+  assert.match(webauthn, /MAX_CREDENTIALS = 2/);
+  assert.match(webauthn, /requireUserVerification: true/);
+  assert.doesNotMatch(webauthn, /face_image|biometric_template/i);
 });

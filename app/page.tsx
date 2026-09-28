@@ -12,6 +12,63 @@ import { ActivityView } from "./components/ActivityView";
 import { PrintRouterView } from "./components/PrintRouterView";
 import { SystemItem, PipelineTask, ActivityFeedItem, RegistrySystem } from "./components/types";
 
+function base64url(bytes: ArrayBuffer) {
+  const values = new Uint8Array(bytes);
+  let binary = "";
+  for (const value of values) binary += String.fromCharCode(value);
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+}
+
+function base64urlBytes(value: string) {
+  const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
+  const binary = atob(normalized + "=".repeat((4 - normalized.length % 4) % 4));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0)).buffer;
+}
+
+function registrationOptionsForBrowser(options: Record<string, unknown>) {
+  const user = options.user as Record<string, string>;
+  const excludeCredentials = (options.excludeCredentials as Array<Record<string, unknown>> | undefined)?.map((credential) => ({ ...credential, id: base64urlBytes(String(credential.id)) }));
+  return { ...options, challenge: base64urlBytes(String(options.challenge)), user: { ...user, id: base64urlBytes(user.id) }, excludeCredentials } as PublicKeyCredentialCreationOptions;
+}
+
+function authenticationOptionsForBrowser(options: Record<string, unknown>) {
+  const allowCredentials = (options.allowCredentials as Array<Record<string, unknown>> | undefined)?.map((credential) => ({ ...credential, id: base64urlBytes(String(credential.id)) }));
+  return { ...options, challenge: base64urlBytes(String(options.challenge)), allowCredentials } as PublicKeyCredentialRequestOptions;
+}
+
+function registrationResponseJson(credential: PublicKeyCredential) {
+  const response = credential.response as AuthenticatorAttestationResponse;
+  return {
+    id: credential.id,
+    rawId: base64url(credential.rawId),
+    type: credential.type,
+    authenticatorAttachment: credential.authenticatorAttachment,
+    clientExtensionResults: credential.getClientExtensionResults(),
+    response: {
+      clientDataJSON: base64url(response.clientDataJSON),
+      attestationObject: base64url(response.attestationObject),
+      transports: response.getTransports ? response.getTransports() : [],
+    },
+  };
+}
+
+function authenticationResponseJson(credential: PublicKeyCredential) {
+  const response = credential.response as AuthenticatorAssertionResponse;
+  return {
+    id: credential.id,
+    rawId: base64url(credential.rawId),
+    type: credential.type,
+    authenticatorAttachment: credential.authenticatorAttachment,
+    clientExtensionResults: credential.getClientExtensionResults(),
+    response: {
+      clientDataJSON: base64url(response.clientDataJSON),
+      authenticatorData: base64url(response.authenticatorData),
+      signature: base64url(response.signature),
+      userHandle: response.userHandle ? base64url(response.userHandle) : undefined,
+    },
+  };
+}
+
 /** Maps GET /api/systems' real, lowercase health enum to the display enum/tone.
  * No numeric score: real device health here has no measured basis for one. */
 function applyRegistryRow(base: SystemItem, row: RegistrySystem): SystemItem {
@@ -331,6 +388,8 @@ export default function Home() {
   const [lastSyncedSecondsAgo, setLastSyncedSecondsAgo] = useState(0);
   const [loginError, setLoginError] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
+  const [passkeyRequired, setPasskeyRequired] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [controls, setControls] = useState(initialControls);
   const [supervisorOnline, setSupervisorOnline] = useState(false);
   const [supervisorModel, setSupervisorModel] = useState("Qwen local supervisor");
@@ -602,12 +661,74 @@ export default function Home() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ username: form.get("username"), password: form.get("password") }),
       });
-      if (!response.ok) throw new Error("Invalid login ID or password.");
+      const data = (await response.json().catch(() => null)) as { requiresPasskey?: boolean; error?: string } | null;
+      if (!response.ok) throw new Error(data?.error || "Invalid login ID or password.");
+      if (data?.requiresPasskey) {
+        setPasskeyRequired(true);
+        return;
+      }
       setAuthenticated(true);
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : "Unable to sign in.");
     } finally {
       setLoginBusy(false);
+    }
+  }
+
+  async function verifyPasskey() {
+    if (!window.PublicKeyCredential) {
+      setLoginError("This browser does not support device-bound passkeys. Use an approved modern browser.");
+      return;
+    }
+    setPasskeyBusy(true);
+    setLoginError("");
+    try {
+      const optionsResponse = await fetch("/api/auth/passkey/authenticate/options", { method: "POST" });
+      const optionsData = (await optionsResponse.json()) as { options?: Record<string, unknown>; error?: string };
+      if (!optionsResponse.ok || !optionsData.options) throw new Error(optionsData.error || "Could not start Windows Hello verification.");
+      const credential = await navigator.credentials.get({ publicKey: authenticationOptionsForBrowser(optionsData.options) }) as PublicKeyCredential | null;
+      if (!credential) throw new Error("No passkey response was returned.");
+      const verifyResponse = await fetch("/api/auth/passkey/authenticate/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ response: authenticationResponseJson(credential) }),
+      });
+      const verifyData = (await verifyResponse.json()) as { error?: string };
+      if (!verifyResponse.ok) throw new Error(verifyData.error || "Windows Hello verification failed.");
+      setPasskeyRequired(false);
+      setAuthenticated(true);
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Could not verify this device.");
+    } finally {
+      setPasskeyBusy(false);
+    }
+  }
+
+  async function enrollPasskey() {
+    if (!window.PublicKeyCredential) {
+      setNotice("This browser does not support device-bound passkeys.");
+      return;
+    }
+    setPasskeyBusy(true);
+    try {
+      const optionsResponse = await fetch("/api/auth/passkey/enroll/options", { method: "POST" });
+      const optionsData = (await optionsResponse.json()) as { options?: Record<string, unknown>; error?: string };
+      if (!optionsResponse.ok || !optionsData.options) throw new Error(optionsData.error || "Could not begin passkey enrollment.");
+      const credential = await navigator.credentials.create({ publicKey: registrationOptionsForBrowser(optionsData.options) }) as PublicKeyCredential | null;
+      if (!credential) throw new Error("No passkey response was returned.");
+      const verifyResponse = await fetch("/api/auth/passkey/enroll/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ response: registrationResponseJson(credential), label: "Windows Hello" }),
+      });
+      const verifyData = (await verifyResponse.json()) as { count?: number; error?: string };
+      if (!verifyResponse.ok) throw new Error(verifyData.error || "Passkey enrollment failed.");
+      setNotice(`Device passkey enrolled (${verifyData.count}/2). Set AIS_WEBAUTHN_ENABLED=true only after testing a new sign-in.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Passkey enrollment failed.");
+    } finally {
+      setPasskeyBusy(false);
+      window.setTimeout(() => setNotice(""), 6000);
     }
   }
 
@@ -1041,8 +1162,17 @@ export default function Home() {
               {loginBusy ? "Verifying Credentials…" : "ENTER OBSIDIAN CONTROL PLANE"}
             </button>
           </form>
+          {passkeyRequired && (
+            <div style={{ marginTop: "14px", padding: "14px", borderRadius: "14px", border: "1px solid rgba(55,227,161,.38)", background: "rgba(55,227,161,.07)", textAlign: "left" }}>
+              <b style={{ display: "block", fontSize: "12px", color: "#8CF2CB" }}>PASSWORD VERIFIED · DEVICE VERIFICATION REQUIRED</b>
+              <span style={{ display: "block", marginTop: "5px", fontSize: "11px", color: "var(--obsidian-muted)", lineHeight: 1.45 }}>Use the approved Windows Hello Face, fingerprint, PIN, or security key on this device.</span>
+              <button type="button" onClick={() => void verifyPasskey()} disabled={passkeyBusy} style={{ width: "100%", marginTop: "12px", padding: "11px", borderRadius: "10px", border: "1px solid rgba(55,227,161,.55)", background: "linear-gradient(135deg, rgba(55,227,161,.22), rgba(36,217,255,.16))", color: "#E9FFF5", fontWeight: 800, fontSize: "11px", letterSpacing: ".08em", cursor: "pointer" }}>
+                {passkeyBusy ? "VERIFYING DEVICE…" : "VERIFY WITH WINDOWS HELLO"}
+              </button>
+            </div>
+          )}
           <p style={{ color: "var(--obsidian-dim)", fontSize: "11px", marginTop: "20px" }}>
-            <span style={{ color: "var(--obsidian-green)" }}>●</span> Secured zero-trust session gateway
+            <span style={{ color: "var(--obsidian-green)" }}>●</span> Password plus device-bound passkey when enabled
           </p>
         </section>
       </main>
@@ -1198,6 +1328,9 @@ export default function Home() {
               </div>
               <button onClick={logout} style={{ background: "transparent", border: "1px solid rgba(120,170,220,0.2)", borderRadius: "8px", color: "var(--obsidian-muted)", padding: "5px 10px", fontSize: "10px", cursor: "pointer", marginLeft: "4px" }}>
                 Sign out
+              </button>
+              <button onClick={() => void enrollPasskey()} disabled={passkeyBusy} style={{ background: "transparent", border: "1px solid rgba(55,227,161,.35)", borderRadius: "8px", color: "#8CF2CB", padding: "5px 10px", fontSize: "10px", cursor: "pointer" }}>
+                {passkeyBusy ? "WORKING…" : "ADD DEVICE PASSKEY"}
               </button>
             </div>
           </header>

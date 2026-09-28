@@ -103,6 +103,26 @@ async function initializeSchema() {
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  await db.run(sql`CREATE TABLE IF NOT EXISTS webauthn_credentials (
+    id TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    public_key TEXT NOT NULL,
+    counter INTEGER NOT NULL DEFAULT 0,
+    transports TEXT NOT NULL DEFAULT '[]',
+    device_type TEXT NOT NULL DEFAULT 'unknown',
+    backed_up INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_used_at TEXT
+  )`);
+
+  await db.run(sql`CREATE TABLE IF NOT EXISTS webauthn_challenges (
+    id TEXT PRIMARY KEY,
+    purpose TEXT NOT NULL,
+    challenge TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   const existingDepartments = await db.select().from(schema.departments).limit(1);
   if (existingDepartments.length === 0) {
     await db.insert(schema.departments).values(DEFAULT_DEPARTMENTS);

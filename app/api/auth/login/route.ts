@@ -1,4 +1,5 @@
 import { sessionValue } from "../../_lib/session";
+import { createLoginGrant, credentialCount, webauthnEnabled } from "../../_lib/webauthn";
 
 async function sha256(value: string) {
   const bytes = new TextEncoder().encode(value);
@@ -16,6 +17,19 @@ export async function POST(request: Request) {
   const candidate = await sha256(`${body?.username?.trim().toLowerCase() || ""}:${body?.password || ""}`);
   if (candidate !== expectedCredentialHash) {
     return Response.json({ error: "Invalid credentials" }, { status: 401 });
+  }
+  if (webauthnEnabled()) {
+    try {
+      if (await credentialCount() === 0) {
+        return Response.json({ error: "WebAuthn is enabled but no AIS passkey is enrolled. Disable AIS_WEBAUTHN_ENABLED until initial enrollment is complete." }, { status: 503 });
+      }
+      return Response.json(
+        { ok: true, requiresPasskey: true },
+        { headers: { "set-cookie": await createLoginGrant(), "cache-control": "no-store" } },
+      );
+    } catch (error) {
+      return Response.json({ error: error instanceof Error ? error.message : "Could not start passkey verification." }, { status: 503 });
+    }
   }
   return Response.json(
     { ok: true },
