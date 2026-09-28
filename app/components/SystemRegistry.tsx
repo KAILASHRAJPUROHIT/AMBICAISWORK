@@ -127,7 +127,8 @@ export const SystemRegistry: React.FC<SystemRegistryProps> = ({
           }
 
           return (
-            <div
+            <button
+              type="button"
               key={sys.id}
               className={`ais-row ${isSelected ? "active" : ""}`}
               onClick={() => onSelectSystem(sys.id)}
@@ -140,6 +141,12 @@ export const SystemRegistry: React.FC<SystemRegistryProps> = ({
                 alignItems: "center",
                 background: rowBg,
                 borderLeft: borderLeftStyle,
+                borderTop: "none",
+                borderRight: "none",
+                color: "inherit",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                textAlign: "left",
               }}
             >
               <span className="sh" />
@@ -209,7 +216,7 @@ export const SystemRegistry: React.FC<SystemRegistryProps> = ({
               <div style={{ fontFamily: "'Geist Mono',monospace", fontSize: "11.5px", color: colorHex }}>
                 {sys.cleanUptime}
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

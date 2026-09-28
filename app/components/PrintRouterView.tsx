@@ -22,7 +22,10 @@ export function PrintRouterView() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load authenticated print nodes."); }
     finally { setBusy(false); }
   };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const node = useMemo(() => data?.nodes.find((item) => item.id === selectedId) || null, [data, selectedId]);
   return <main style={{ marginTop: "14px", minHeight: "calc(100vh - 230px)" }}><section className="ais-panel" style={{ padding: "24px", border: "1px solid rgba(36,217,255,.28)", borderRadius: "22px", background: "linear-gradient(145deg, rgba(13,20,29,.98), rgba(5,7,10,.96))" }}>
     <div style={{ display: "flex", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}><div><div className="ais-spec" style={{ color: "var(--obsidian-cyan)", fontSize: "10px", fontWeight: 800, letterSpacing: ".2em" }}>AUTHENTICATED NODE CONTROL</div><h1 style={{ margin: "6px 0", fontSize: "26px" }}>Print Router</h1><p style={{ margin: 0, color: "var(--obsidian-muted)", fontSize: "12px" }}>Real PC state only. Routing writes remain locked until signed commands and rollback are deployed.</p></div><button disabled={busy} onClick={() => void load(true)} style={{ padding: "9px 14px", borderRadius: "9px", border: "1px solid rgba(36,217,255,.45)", background: "rgba(36,217,255,.11)", color: "#BFF3FF", cursor: "pointer", fontWeight: 700 }}>{busy ? "CHECKING…" : "REFRESH REAL STATE"}</button></div>

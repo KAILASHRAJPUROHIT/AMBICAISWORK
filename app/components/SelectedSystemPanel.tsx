@@ -12,20 +12,16 @@ export const SelectedSystemPanel: React.FC<SelectedSystemPanelProps> = ({
   system,
   onDiagnoseAndFix,
 }) => {
-  let statusBadgeStyle = "border: 1px solid rgba(55,227,161,.45); color: var(--obsidian-green); box-shadow: 0 0 14px rgba(55,227,161,.22)";
   let issueBg = "linear-gradient(100deg, rgba(55,227,161,.08), rgba(36,217,255,.04))";
   let issueColor = "var(--obsidian-green)";
 
   if (system.statusTone === "amber") {
-    statusBadgeStyle = "border: 1px solid rgba(255,196,91,.45); color: var(--obsidian-amber); box-shadow: 0 0 14px rgba(255,196,91,.22)";
     issueBg = "linear-gradient(100deg, rgba(255,196,91,.12), rgba(255,95,120,.06))";
     issueColor = "var(--obsidian-amber)";
   } else if (system.statusTone === "red") {
-    statusBadgeStyle = "border: 1px solid rgba(255,95,120,.45); color: var(--obsidian-red); box-shadow: 0 0 14px rgba(255,95,120,.22)";
     issueBg = "linear-gradient(100deg, rgba(255,95,120,.14), rgba(139,92,255,.08))";
     issueColor = "var(--obsidian-red)";
   } else if (system.statusTone === "grey") {
-    statusBadgeStyle = "border: 1px solid rgba(120,144,163,.4); color: var(--obsidian-muted); box-shadow: none";
     issueBg = "linear-gradient(100deg, rgba(120,144,163,.08), rgba(8,11,16,.4))";
     issueColor = "var(--obsidian-muted)";
   }

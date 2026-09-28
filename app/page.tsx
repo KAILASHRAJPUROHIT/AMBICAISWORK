@@ -443,7 +443,7 @@ export default function Home() {
     };
   }, [systems]);
   const [diagnosisModalOpen, setDiagnosisModalOpen] = useState<boolean>(false);
-  const [tasks, setTasks] = useState<PipelineTask[]>(initialTasks);
+  const [tasks] = useState<PipelineTask[]>(initialTasks);
   const [activities, setActivities] = useState<ActivityFeedItem[]>(initialActivities);
   const chatEnd = useRef<HTMLDivElement>(null);
 
@@ -532,7 +532,9 @@ export default function Home() {
           setLiveMetrics(data);
           setLastSyncedSecondsAgo(0);
         }
-      } catch {}
+      } catch {
+        // Metrics are optional; leave the last verified sample visible.
+      }
     };
 
     fetchMetrics();
@@ -564,7 +566,9 @@ export default function Home() {
           }
           return next;
         });
-      } catch {}
+      } catch {
+        // Registry is optional; retain the last verified registry snapshot.
+      }
     };
     fetchRegistry();
     const registryTimer = window.setInterval(fetchRegistry, 10_000);
