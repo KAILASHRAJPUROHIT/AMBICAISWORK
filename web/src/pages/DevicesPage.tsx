@@ -613,7 +613,7 @@ function DeviceCard({
 
   return (
     <div
-      className={`dev ${selected ? 'sel' : ''}`}
+      className={`dev ${selected ? 'sel' : ''} ${online ? 'is-on' : 'is-off'}`}
       role="button"
       tabIndex={0}
       onClick={act}
@@ -629,11 +629,16 @@ function DeviceCard({
         {updatePendingApp && <UpdatePendingBadge appName={updatePendingApp} />}
         <DeviceGlyph className="ico" name={d.description || d.number} size={16} />
       </div>
-      <div className="kv">
-        <div>
-          <div className="k">Battery</div>
-          <div className="v">{formatBattery(state)}</div>
+      {state && state.battery >= 0 && (
+        <div className="dev-bat" title={formatBattery(state)}>
+          <span className={`dev-bat-bar ${state.battery <= 20 ? 'fail' : state.battery <= 45 ? 'warn' : 'ok'} ${state.charging ? 'charging' : ''}`}>
+            <i style={{ width: `${state.battery}%` }} />
+          </span>
+          <b>{state.battery}%</b>
+          {state.charging && <span className="dev-bat-chg">Charging</span>}
         </div>
+      )}
+      <div className="kv">
         <div>
           <div className="k">Internet</div>
           <div className="v" title={formatInternetStrength(tele)} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

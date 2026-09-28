@@ -332,6 +332,29 @@ public class AgentAdminResource {
     }
 
     // =================================================================================================================
+    @ApiOperation(value = "App time report",
+            notes = "Per device, per day (Asia/Kolkata), per app foreground time from the agents' appUsage events.")
+    @GET
+    @Path("/reports/app-usage")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response appUsageReport(@QueryParam("from") Long from,
+                                   @QueryParam("to") Long to,
+                                   @QueryParam("device") String deviceNumber) {
+        Optional<Integer> customerId = SecurityContext.get().getCurrentCustomerId();
+        if (!customerId.isPresent()) {
+            return Response.PERMISSION_DENIED();
+        }
+        long now = System.currentTimeMillis();
+        long toMs = to == null ? now : to;
+        long fromMs = from == null ? toMs - 7L * 24 * 60 * 60 * 1000 : from;
+        if (fromMs >= toMs || toMs - fromMs > 400L * 24 * 60 * 60 * 1000) {
+            return Response.ERROR("error.report.range");
+        }
+        String dev = deviceNumber == null || deviceNumber.trim().isEmpty() ? null : deviceNumber.trim();
+        return Response.OK(commandDAO.appUsage(customerId.get(), fromMs, toMs, dev));
+    }
+
+    // =================================================================================================================
     @ApiOperation(value = "Command history", notes = "Command lifecycle history for a device, newest first.")
     @GET
     @Path("/devices/{deviceId}/commands")

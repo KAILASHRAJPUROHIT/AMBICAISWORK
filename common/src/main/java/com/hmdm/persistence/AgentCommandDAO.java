@@ -24,6 +24,7 @@ package com.hmdm.persistence;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.hmdm.persistence.domain.AgentCommand;
+import com.hmdm.persistence.domain.AppUsageRow;
 import com.hmdm.persistence.domain.DeviceEvent;
 import com.hmdm.persistence.domain.DeviceState;
 import com.hmdm.persistence.mapper.AgentCommandMapper;
@@ -130,6 +131,11 @@ public class AgentCommandDAO {
     /** Event timeline for a device, newest first, at/after {@code since}. */
     public List<DeviceEvent> listEvents(String deviceNumber, long since, int limit) {
         return eventMapper.list(deviceNumber, since, limit);
+    }
+
+    /** App-time report rows (device x day x app); {@code deviceNumber} null = every device of the customer. */
+    public List<AppUsageRow> appUsage(int customerId, long from, long to, String deviceNumber) {
+        return eventMapper.appUsage(customerId, from, to, deviceNumber);
     }
 
     public AgentCommand findByDeviceAndId(String deviceNumber, Integer commandId) {

@@ -12,6 +12,8 @@ import { AppsPage } from './pages/AppsPage';
 import { ConfigurationsPage } from './pages/ConfigurationsPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { FleetPulseLayout } from './data/FleetPulse';
 
 export default function App() {
   return (
@@ -23,13 +25,16 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/set-password" element={<SetPasswordPage />} />
             <Route element={<ProtectedRoute />}>
+              <Route element={<FleetPulseLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/devices" element={<DevicesPage />} />
               <Route path="/devices/:id" element={<DeviceDetailPage />} />
               <Route path="/apps" element={<AppsPage />} />
               <Route path="/configs" element={<ConfigurationsPage />} />
               <Route path="/enroll" element={<EnrollPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              </Route>
             </Route>
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

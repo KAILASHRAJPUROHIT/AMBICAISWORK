@@ -1,5 +1,6 @@
 package com.hmdm.persistence.mapper;
 
+import com.hmdm.persistence.domain.AppUsageRow;
 import com.hmdm.persistence.domain.DeviceEvent;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
@@ -27,4 +28,20 @@ public interface DeviceEventMapper {
     /** Retention: delete all events older than {@code before} (epoch ms). */
     @Delete({"DELETE FROM device_event WHERE ts < #{before}"})
     int deleteOlderThan(@Param("before") long before);
+
+    /**
+     * App-time report: sums the agent's {@code appUsage} events ("pkg|Label|seconds") per device, local day
+     * (Asia/Kolkata) and app, for one customer's devices. A session is bucketed by the day it started.
+     */
+    @Select({"SELECT e.deviceNumber AS deviceNumber, " +
+            "to_char(to_timestamp(e.ts / 1000.0) AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS day, " +
+            "split_part(e.detail, '|', 1) AS pkg, max(split_part(e.detail, '|', 2)) AS label, " +
+            "sum(CASE WHEN split_part(e.detail, '|', 3) ~ '^[0-9]{1,9}$' THEN split_part(e.detail, '|', 3)::bigint ELSE 0 END) AS seconds, " +
+            "count(*)::int AS sessions " +
+            "FROM device_event e JOIN devices d ON d.number = e.deviceNumber " +
+            "WHERE d.customerId = #{customerId} AND e.type = 'appUsage' AND e.ts >= #{from} AND e.ts < #{to} " +
+            "AND (#{deviceNumber}::text IS NULL OR e.deviceNumber = #{deviceNumber}) " +
+            "GROUP BY 1, 2, 3 ORDER BY 1, 2, 5 DESC"})
+    List<AppUsageRow> appUsage(@Param("customerId") int customerId, @Param("from") long from, @Param("to") long to,
+                               @Param("deviceNumber") String deviceNumber);
 }

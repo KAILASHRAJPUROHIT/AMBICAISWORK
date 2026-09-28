@@ -113,3 +113,36 @@ export const IconMoon = (p: P) => (
     <path d="M13.5 9.2A5.5 5.5 0 0 1 6.8 2.5 5.5 5.5 0 1 0 13.5 9.2Z" />
   </Svg>
 );
+
+export const IconReport = (p: P) => (
+  <Svg {...p}>
+    <path d="M2.5 13.5h11" />
+    <path d="M4.5 11V7.5M8 11V4.5M11.5 11V9" />
+  </Svg>
+);
+
+export const IconSearch = (p: P) => (
+  <Svg {...p}>
+    <circle cx="7" cy="7" r="4.5" />
+    <path d="m10.5 10.5 3 3" />
+  </Svg>
+);
+
+export const IconBell = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 11.5V7a4 4 0 0 1 8 0v4.5l1 1H3z" />
+    <path d="M6.5 13.5a1.5 1.5 0 0 0 3 0" />
+  </Svg>
+);
+
+export const IconPlus = (p: P) => (
+  <Svg {...p}>
+    <path d="M8 3v10M3 8h10" />
+  </Svg>
+);
+
+export const IconBolt = (p: P) => (
+  <Svg {...p}>
+    <path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z" />
+  </Svg>
+);

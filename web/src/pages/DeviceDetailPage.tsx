@@ -8,6 +8,7 @@ import {
 import { ActionConsole } from '../components/ActionConsole';
 import { TelemetryCard } from '../components/TelemetryCard';
 import { EventTimeline } from '../components/EventTimeline';
+import { AppTimeReport } from '../components/AppTimeReport';
 import { LocationPanel } from '../components/LocationPanel';
 import { DataUsagePanel } from '../components/DataUsagePanel';
 import { RemoteViewPanel } from '../components/RemoteViewPanel';
@@ -20,7 +21,7 @@ import { isOnline as isOnlineByRecency } from '../ui/status';
 import { useToast } from '../ui/toast';
 import { fmtDateTime, fmtRelative, orDash } from '../ui/format';
 
-type Tab = 'control' | 'telemetry' | 'events' | 'location' | 'dataUsage' | 'remote';
+type Tab = 'control' | 'telemetry' | 'events' | 'appTime' | 'location' | 'dataUsage' | 'remote';
 
 interface Row {
   k: string;
@@ -390,6 +391,9 @@ export function DeviceDetailPage() {
             <button className={tab === 'events' ? 'on' : ''} onClick={() => setTab('events')}>
               Events
             </button>
+            <button className={tab === 'appTime' ? 'on' : ''} onClick={() => setTab('appTime')}>
+              App time
+            </button>
             <button className={tab === 'location' ? 'on' : ''} onClick={() => setTab('location')}>
               Location
             </button>
@@ -405,6 +409,7 @@ export function DeviceDetailPage() {
             {tab === 'control' && <ActionConsole device={device} />}
             {tab === 'telemetry' && <TelemetryCard device={device} />}
             {tab === 'events' && <EventTimeline device={device} />}
+            {tab === 'appTime' && <AppTimeReport devices={[device]} fixedDevice={device.number} />}
             {tab === 'location' && <LocationPanel device={device} />}
             {tab === 'dataUsage' && <DataUsagePanel device={device} />}
             {tab === 'remote' && <RemoteViewPanel deviceId={device.number} isDeviceOwner={sec.isDeviceOwner === true || device.mdmMode === true} />}
