@@ -36,8 +36,10 @@ builder.Services.AddSingleton<TopologyRepository>();
 builder.Services.AddSingleton(new DiskJobQueue(jobsDir));
 builder.Services.AddSingleton(new RulesCacheStore(configPath));
 builder.Services.AddHttpClient<NodeClient>();
+builder.Services.AddHttpClient("ais-heartbeat", client => client.Timeout = TimeSpan.FromSeconds(10));
 builder.Services.AddSingleton<PrintEngineService>();
 builder.Services.AddSingleton<AisControlAuthenticator>();
+builder.Services.AddHostedService<AisHeartbeatReporter>();
 
 builder.Services.AddSingleton<PdfOverlayService>();
 builder.Services.AddSingleton<ThermalReceiptFormatter>();
