@@ -420,7 +420,7 @@ export function SettingsPage() {
                 <p className="au-note">
                   When on, the updater applies each verified release on its own — backing up the
                   database first and rolling back automatically if it fails. The tablets then update
-                  overnight (10 PM–7 AM): one tablet first, and the rest once it has run the new version
+                  between 8:30 PM and 10:30 AM: one tablet first, and the rest once it has run the new version
                   for 20 minutes without crashing. Leave off to review and click Update / Roll out each time.
                 </p>
                 {autoErr && <p className="au-note" style={{ color: 'var(--err)' }}>{autoErr}</p>}

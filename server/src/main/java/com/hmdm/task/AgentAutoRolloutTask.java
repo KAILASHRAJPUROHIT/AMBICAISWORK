@@ -37,7 +37,7 @@ import java.util.Set;
  * <ol>
  *   <li>A newer agent release is mirrored and verified by the supervisor, no rollout of that version
  *       exists yet (so an admin's cancel is never overridden), and it is inside the install window
- *       (default 22:00-07:00 Asia/Kolkata): pick ONE online device still on the old version as the
+ *       (default 20:30-10:30 Asia/Kolkata, changed from 22:00-07:00 on 2026-09-28): pick ONE online device still on the old version as the
  *       canary and start the rollout.</li>
  *   <li>Canary stage: once every canary device reports the new version, at least
  *       {@link #CANARY_SOAK_MS} have passed and no canary logged a crash since the rollout started,
@@ -173,23 +173,30 @@ public class AgentAutoRolloutTask implements Runnable {
         return true;
     }
 
+    private static final int DEFAULT_FROM_MIN = 20 * 60 + 30; // 8:30 PM
+    private static final int DEFAULT_TO_MIN = 10 * 60 + 30;   // 10:30 AM
+
     private static boolean inInstallWindow() {
         String tz = env("MDM_AGENT_AUTO_UPDATE_TZ", "Asia/Kolkata");
-        int from = parseHour(env("MDM_AGENT_AUTO_UPDATE_FROM_HOUR", "22"), 22);
-        int to = parseHour(env("MDM_AGENT_AUTO_UPDATE_TO_HOUR", "7"), 7);
-        int h;
+        int from = parseHhMm(env("MDM_AGENT_AUTO_UPDATE_FROM", "20:30"), DEFAULT_FROM_MIN);
+        int to = parseHhMm(env("MDM_AGENT_AUTO_UPDATE_TO", "10:30"), DEFAULT_TO_MIN);
+        ZonedDateTime now;
         try {
-            h = ZonedDateTime.now(ZoneId.of(tz)).getHour();
+            now = ZonedDateTime.now(ZoneId.of(tz));
         } catch (Exception e) {
-            h = ZonedDateTime.now(ZoneId.of("Asia/Kolkata")).getHour();
+            now = ZonedDateTime.now(ZoneId.of("Asia/Kolkata"));
         }
-        return from <= to ? (h >= from && h < to) : (h >= from || h < to); // window may cross midnight
+        int m = now.getHour() * 60 + now.getMinute();
+        return from <= to ? (m >= from && m < to) : (m >= from || m < to); // window may cross midnight
     }
 
-    private static int parseHour(String v, int dflt) {
+    /** "HH:MM" (24h) -> minutes after midnight; {@code dflt} if malformed. */
+    private static int parseHhMm(String v, int dflt) {
         try {
-            int h = Integer.parseInt(v.trim());
-            return h >= 0 && h <= 23 ? h : dflt;
+            String[] p = v.trim().split(":");
+            int h = Integer.parseInt(p[0]);
+            int min = p.length > 1 ? Integer.parseInt(p[1]) : 0;
+            return h >= 0 && h <= 23 && min >= 0 && min <= 59 ? h * 60 + min : dflt;
         } catch (Exception e) {
             return dflt;
         }
