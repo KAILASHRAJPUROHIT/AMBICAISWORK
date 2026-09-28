@@ -14,7 +14,14 @@ import android.os.BatteryManager
  *  polls this on a short timer of its own, independent of the check-in cycle. */
 object KioskStatusSource {
 
-    data class Status(val batteryPct: Int, val charging: Boolean, val wifiConnected: Boolean, val wifiBars: Int)
+    data class Status(
+        val batteryPct: Int,
+        val charging: Boolean,
+        val wifiConnected: Boolean,
+        val wifiBars: Int,
+        /** Connected network name, or null when unknown (no location access) / not on Wi-Fi. */
+        val ssid: String? = null,
+    )
 
     fun read(context: Context): Status {
         val batt = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -25,6 +32,7 @@ object KioskStatusSource {
 
         var wifiConnected = false
         var wifiBars = 0
+        var ssid: String? = null
         runCatching {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             val caps = cm?.activeNetwork?.let { cm.getNetworkCapabilities(it) }
@@ -35,6 +43,8 @@ object KioskStatusSource {
                 @Suppress("DEPRECATION")
                 val rssi = wm?.connectionInfo?.rssi
                 wifiBars = if (rssi != null) WifiManager.calculateSignalLevel(rssi, 5) else 0
+                @Suppress("DEPRECATION")
+                ssid = wm?.connectionInfo?.ssid?.trim('"')?.takeIf { it.isNotBlank() && it != "<unknown ssid>" }
             }
         }
 
@@ -43,6 +53,7 @@ object KioskStatusSource {
             charging = charging,
             wifiConnected = wifiConnected,
             wifiBars = wifiBars,
+            ssid = ssid,
         )
     }
 }

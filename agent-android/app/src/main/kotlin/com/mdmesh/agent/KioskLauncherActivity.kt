@@ -14,6 +14,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.EditText
+import android.widget.FrameLayout
+import android.graphics.drawable.GradientDrawable
 import android.widget.GridLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -68,6 +70,26 @@ import com.mdmesh.proto.PasscodeHash
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.math.min
+import com.mdmesh.agent.ui.BatteryRingView
+import com.mdmesh.agent.ui.CountdownRingView
+import com.mdmesh.agent.ui.GradientSlider
+import com.mdmesh.agent.ui.GroundDrawable
+import com.mdmesh.agent.ui.HoldToConfirm
+import com.mdmesh.agent.ui.Metrics
+import com.mdmesh.agent.ui.ObsidianPrefs
+import com.mdmesh.agent.ui.Palette
+import com.mdmesh.agent.ui.ShimmerLineView
+import com.mdmesh.agent.ui.WifiBarsView
+import com.mdmesh.agent.ui.animationsOff
+import com.mdmesh.agent.ui.breathe
+import com.mdmesh.agent.ui.enter
+import com.mdmesh.agent.ui.gradient
+import com.mdmesh.agent.ui.gradientText
+import com.mdmesh.agent.ui.pressable
+import com.mdmesh.agent.ui.rounded
+import com.mdmesh.agent.ui.style
+import com.mdmesh.agent.ui.withAlpha
 
 /**
  * MDMesh kiosk HOME. This is the device's persistent launcher (`CATEGORY_HOME`), repointed to
@@ -114,9 +136,7 @@ class KioskLauncherActivity : FragmentActivity() {
     private val statusHandler = Handler(Looper.getMainLooper())
     private val statusTick: Runnable = object : Runnable {
         override fun run() {
-            val s = KioskStatusSource.read(this@KioskLauncherActivity)
-            batteryText?.text = formatBattery(s)
-            wifiText?.text = formatWifi(s)
+            updateStatusViews(KioskStatusSource.read(this@KioskLauncherActivity))
             statusHandler.postDelayed(this, STATUS_POLL_MS)
         }
     }
@@ -125,13 +145,27 @@ class KioskLauncherActivity : FragmentActivity() {
     private var clockText: TextView? = null
     private val clockFormat = SimpleDateFormat("dd MMM yyyy  hh:mm a", Locale.ENGLISH)
 
-    /** Updates the clock, then re-arms itself for the next minute boundary (+50ms so the new
-     *  minute has definitely started) -- a fixed 60s delay would drift across minute edges. */
+    /** Hero-card clock (Obsidian home): "04:45 PM" with a blinking colon, and the full date. */
+    private var heroTime: TextView? = null
+    private var heroDate: TextView? = null
+    private val heroTimeFormat = SimpleDateFormat("hh:mm", Locale.ENGLISH)
+    private val heroAmPmFormat = SimpleDateFormat("a", Locale.ENGLISH)
+    private val heroDateFormat = SimpleDateFormat("EEEE · dd MMMM yyyy", Locale.ENGLISH)
+
+    /** Live status views of the Obsidian home (re-pointed on every render, like [batteryText]). */
+    private var batteryRing: BatteryRingView? = null
+    private var batteryPct: TextView? = null
+    private var wifiBarsView: WifiBarsView? = null
+    private var wifiName: TextView? = null
+    private val dockRefreshers = mutableListOf<() -> Unit>()
+
+    /** Updates the clock once a second (the hero colon blinks), aligned to the second boundary
+     *  so it never drifts. */
     private val clockTick: Runnable = object : Runnable {
         override fun run() {
-            clockText?.text = clockFormat.format(Date())
+            renderClock()
             val now = System.currentTimeMillis()
-            statusHandler.postDelayed(this, 60_000L - now % 60_000L + 50L)
+            statusHandler.postDelayed(this, 1_000L - now % 1_000L + 20L)
         }
     }
 
@@ -338,7 +372,7 @@ class KioskLauncherActivity : FragmentActivity() {
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         val resolved = packageManager.resolveActivity(home, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
         if (resolved?.activityInfo?.packageName == packageName) return // Already the default home app.
-        AlertDialog.Builder(this)
+        alert()
             .setTitle("One-time setup needed")
             .setMessage(
                 "To lock this device, Android needs AMBIC MDM set as the Home app.\n\n" +
@@ -417,24 +451,79 @@ class KioskLauncherActivity : FragmentActivity() {
     private fun promptPasscode(p: KioskApplyPayload) {
         val pw = p.password
         val fleetHash = fleetPasscodeHash
-        val input = EditText(this).apply {
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            hint = "Admin password"
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Admin access")
-            .setView(input)
-            .setPositiveButton("Continue") { _, _ ->
+        val pal = palette(p)
+        val m = Metrics(this)
+        sheet(pal, m, "Admin access", null, "Enter the admin passcode to open the admin menu.") { body, dialog ->
+            val input = EditText(this).apply {
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                    android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                hint = "Admin passcode"
+                setHintTextColor(pal.faint)
+                style(m.sp(16f), pal.text, 500)
+                setPadding(m.dp(16), m.dp(14), m.dp(16), m.dp(14))
+                background = rounded(pal.surface2, m.dp(14f), pal.line, m.dp(1))
+                layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+                setOnFocusChangeListener { v, focused ->
+                    v.background = rounded(pal.surface2, m.dp(14f), if (focused) pal.c1 else pal.line, m.dp(if (focused) 2 else 1))
+                }
+            }
+            val error = TextView(this).apply {
+                style(m.sp(12f), pal.alert, 500)
+                setPadding(m.dp(4), m.dp(8), 0, 0)
+                visibility = View.GONE
+            }
+            fun submit() {
                 val entered = input.text.toString()
                 // Either the per-session password or the fleet-wide admin passcode (set from the
                 // web console's Settings page, delivered on check-in) unlocks the admin menu.
                 val sessionMatch = pw != null && entered == pw
                 val fleetMatch = !fleetHash.isNullOrBlank() && PasscodeHash.matches(entered, fleetHash)
-                if (sessionMatch || fleetMatch) showAdminMenu(p)
+                if (sessionMatch || fleetMatch) {
+                    dialog.dismiss()
+                    showAdminMenu(p)
+                } else {
+                    error.text = "That passcode isn't right. Try again."
+                    error.visibility = View.VISIBLE
+                    input.text.clear()
+                    input.animate().translationX(m.dp(8f)).setDuration(50).withEndAction {
+                        input.animate().translationX(0f).setDuration(120).start()
+                    }.start()
+                }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            input.setOnEditorActionListener { _, _, _ -> submit(); true }
+            body.addView(input)
+            body.addView(error)
+            val buttons = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, m.dp(16), 0, 0)
+            }
+            buttons.addView(
+                TextView(this).apply {
+                    text = "Cancel"
+                    gravity = Gravity.CENTER
+                    style(m.sp(14f), pal.text, 600)
+                    background = rounded(pal.surface2, m.dp(14f), pal.line, m.dp(1))
+                    layoutParams = LinearLayout.LayoutParams(0, m.dp(48), 1f).apply { rightMargin = m.dp(10) }
+                    setOnClickListener { dialog.dismiss() }
+                    pressable()
+                },
+            )
+            buttons.addView(
+                TextView(this).apply {
+                    text = "Continue"
+                    gravity = Gravity.CENTER
+                    style(m.sp(14f), Color.WHITE, 700)
+                    background = gradient(intArrayOf(pal.c1, pal.c2), m.dp(14f))
+                    layoutParams = LinearLayout.LayoutParams(0, m.dp(48), 1f)
+                    setOnClickListener { submit() }
+                    pressable()
+                },
+            )
+            body.addView(buttons)
+            dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or
+                android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+            input.requestFocus()
+        }
     }
 
     // --- Admin menu ---------------------------------------------------------------------------
@@ -447,44 +536,156 @@ class KioskLauncherActivity : FragmentActivity() {
     // real target package for a given intent and extends the lock-task allowlist to include it
     // (additive, never removes the admin-configured apps) before starting it.
 
+    private class AdminItem(val glyph: String, val label: String, val trailing: String?, val action: () -> Unit, val icon: Int? = null)
+
+    /** Admin menu as a grouped sheet. Destructive actions sit in a red Danger zone and need a
+     *  press-and-hold, so a stray tap can never exit kiosk or start an uninstall. */
     private fun showAdminMenu(p: KioskApplyPayload) {
-        val items = arrayOf(
-            "Reset passcode",
-            "Manage apps",
-            "Set default application",
-            "Change background",
-            "Browser shortcuts",
-            "Browser settings",
-            "Configure Wi-Fi",
-            "Open system settings",
-            "Capital Keyboard settings",
-            "Accessibility / Auto-Caps settings",
-            "Uninstall AMBIC MDM",
-            "About AMBIC MDM",
-            "Exit AMBIC MDM",
-        )
-        AlertDialog.Builder(this)
-            .setTitle("Admin menu")
-            .setItems(items) { _, which ->
-                when (which) {
-                    0 -> promptResetPasscode()
-                    1 -> manageAppsDialog(p)
-                    2 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
-                    3 -> launchAllowlisted(Intent(Intent.ACTION_SET_WALLPAPER))
-                    4 -> openBrowser()
-                    5 -> openBrowserSettings()
-                    6 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS))
-                    7 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_SETTINGS))
-                    8 -> showKeyboardSettingsDialog()
-                    9 -> launchAllowlisted(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                    10 -> confirmUninstall()
-                    11 -> showAbout()
-                    12 -> doExit()
-                }
+        val pal = palette(p)
+        val m = Metrics(this)
+        val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
+        val ssid = KioskStatusSource.read(this).ssid
+        val appearance = when (ObsidianPrefs.appearance(this)) { "light" -> "Light"; "system" -> "System"; else -> "Dark" }
+        sheet(pal, m, "Admin", "PASSCODE VERIFIED", null) { body, dialog ->
+            fun go(a: () -> Unit): () -> Unit = { dialog.dismiss(); a() }
+            adminGroup(body, pal, m, "APPS & HOME", 0, listOf(
+                AdminItem("▦", "Manage apps", null, go { manageAppsDialog(p) }),
+                AdminItem("★", "Set default application", null, go {
+                    launchAllowlisted(Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
+                }),
+                AdminItem("▣", "Change background", null, go { launchAllowlisted(Intent(Intent.ACTION_SET_WALLPAPER)) }),
+            ))
+            adminGroup(body, pal, m, "BROWSER & INPUT", 1, listOf(
+                AdminItem("↗", "Browser shortcuts", null, go { openBrowser() }),
+                AdminItem("⚙", "Browser settings", null, go { openBrowserSettings() }),
+                AdminItem("⌨", "Capital Keyboard settings", null, go { showKeyboardSettingsDialog() }),
+                AdminItem("Aa", "Accessibility / Auto-Caps", null, go {
+                    launchAllowlisted(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }),
+            ))
+            adminGroup(body, pal, m, "DEVICE", 2, listOf(
+                AdminItem("", "Configure Wi-Fi", ssid, go {
+                    launchAllowlisted(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS))
+                }, R.drawable.ic_ob_wifi),
+                AdminItem("⚙", "Open system settings", null, go {
+                    launchAllowlisted(Intent(android.provider.Settings.ACTION_SETTINGS))
+                }),
+                AdminItem("#", "Reset device passcode", null, go { promptResetPasscode() }),
+                AdminItem("", "Appearance", appearance, go { chooseAppearance(p) }, R.drawable.ic_ob_adaptive),
+                AdminItem("ⓘ", "About AMBIC MDM", version, go { showAbout() }),
+            ))
+            // Danger zone: hold-to-confirm rows.
+            body.addView(groupLabel(pal, m, "DANGER ZONE", pal.alert))
+            val danger = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = rounded(withAlpha(pal.alert, 0.06f), m.dp(16f), withAlpha(pal.alert, 0.35f), m.dp(1))
+                clipToOutline = true
+                enter(180)
+            }
+            danger.addView(holdRow(pal, m, "↩", "Hold to exit kiosk") { dialog.dismiss(); doExit() })
+            danger.addView(divider(pal, m))
+            danger.addView(holdRow(pal, m, "✕", "Hold to uninstall AMBIC MDM") { dialog.dismiss(); confirmUninstall() })
+            body.addView(danger)
+        }
+    }
+
+    private fun groupLabel(pal: Palette, m: Metrics, label: String, color: Int = pal.muted): TextView =
+        TextView(this).apply {
+            text = label
+            style(m.sp(10f), color, 700, mono = true, letterSp = 0.18f)
+            setPadding(m.dp(6), m.dp(14), 0, m.dp(6))
+        }
+
+    private fun divider(pal: Palette, m: Metrics): View = View(this).apply {
+        setBackgroundColor(pal.line)
+        layoutParams = LinearLayout.LayoutParams(MATCH, m.dp(1))
+    }
+
+    private fun adminGroup(body: LinearLayout, pal: Palette, m: Metrics, title: String, index: Int, items: List<AdminItem>) {
+        body.addView(groupLabel(pal, m, title))
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(pal.surface2, m.dp(16f), pal.line, m.dp(1))
+            clipToOutline = true
+            enter(index * 60L)
+        }
+        items.forEachIndexed { i, item ->
+            if (i > 0) card.addView(divider(pal, m))
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(m.dp(12), m.dp(11), m.dp(14), m.dp(11))
+                isClickable = true
+                background = android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(withAlpha(pal.c1, 0.18f)), null, null,
+                )
+                setOnClickListener { item.action() }
+            }
+            val iconBox = FrameLayout(this).apply {
+                background = rounded(withAlpha(pal.c1, 0.12f), m.dp(9f))
+                layoutParams = LinearLayout.LayoutParams(m.dp(30), m.dp(30)).apply { rightMargin = m.dp(12) }
+            }
+            if (item.icon != null) {
+                iconBox.addView(
+                    ImageView(this).apply { setImageResource(item.icon); setColorFilter(pal.c1) },
+                    FrameLayout.LayoutParams(m.dp(17), m.dp(17), Gravity.CENTER),
+                )
+            } else {
+                iconBox.addView(
+                    TextView(this).apply { text = item.glyph; gravity = Gravity.CENTER; style(m.sp(12f), pal.c1, 700) },
+                    FrameLayout.LayoutParams(MATCH, MATCH),
+                )
+            }
+            row.addView(iconBox)
+            row.addView(
+                TextView(this).apply {
+                    text = item.label
+                    style(m.sp(14f), pal.text, 500)
+                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                },
+            )
+            row.addView(
+                TextView(this).apply {
+                    text = item.trailing ?: "›"
+                    style(m.sp(if (item.trailing == null) 18f else 12f), pal.muted, 500, mono = item.trailing != null)
+                    maxLines = 1
+                },
+            )
+            card.addView(row)
+        }
+        body.addView(card)
+    }
+
+    private fun holdRow(pal: Palette, m: Metrics, glyph: String, label: String, onConfirm: () -> Unit): View =
+        HoldToConfirm(this, pal, onConfirm = onConfirm).apply {
+            text = "$glyph   $label"
+            style(m.sp(14f), pal.alert, 600)
+            setPadding(m.dp(16), m.dp(14), m.dp(16), m.dp(14))
+            layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+
+    /** Dark / Light / System for the on-device screens; re-renders the kiosk home immediately. */
+    private fun chooseAppearance(p: KioskApplyPayload) {
+        val modes = arrayOf("dark", "light", "system")
+        val labels = arrayOf("Dark", "Light", "Follow system")
+        val current = modes.indexOf(ObsidianPrefs.appearance(this)).coerceAtLeast(0)
+        alert()
+            .setTitle("Appearance")
+            .setSingleChoiceItems(labels, current) { d, which ->
+                ObsidianPrefs.setAppearance(this, modes[which])
+                d.dismiss()
+                if (active != null) setContentView(launcherGrid(p)) else setContentView(idleView())
             }
             .setNegativeButton("Close", null)
             .show()
     }
+
+    /** AlertDialog themed to the current appearance (dark dialogs on a dark kiosk). */
+    private fun alert(): AlertDialog.Builder = AlertDialog.Builder(
+        this,
+        if (ObsidianPrefs.isDark(this)) androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert
+        else androidx.appcompat.R.style.Theme_AppCompat_Light_Dialog_Alert,
+    )
 
     private fun showKeyboardSettingsDialog() {
         val options = arrayOf(
@@ -493,7 +694,7 @@ class KioskLauncherActivity : FragmentActivity() {
             "3. Lock to AMBIC Keyboard only (Device Owner)",
             "4. Allow all keyboards (Unlock)",
         )
-        AlertDialog.Builder(this)
+        alert()
             .setTitle("Capital Keyboard settings")
             .setItems(options) { _, which ->
                 when (which) {
@@ -536,26 +737,33 @@ class KioskLauncherActivity : FragmentActivity() {
     }
 
     /**
-     * Persistent, ungated corner button (bottom-end -- battery/wifi own top-start/top-end, the
-     * kebab menu or gesture target owns top-end too) opening [showQuickControlsDialog] directly.
-     *
-     * Deliberately separate from [showAdminMenu]: that menu is passcode/biometric-gated for IT
-     * ("Reset passcode", "Uninstall AMBIC MDM", "Open system settings" ...) and is the wrong home
-     * for four harmless, everyday device-comfort toggles a kiosk operator needs constantly. This
-     * button needs no passcode and its dialog never calls `Intent(Settings.ACTION_*)` -- the
-     * whole point is a real, working control that never puts the device user one tap from the
-     * actual Settings app.
+     * Ungated Quick Controls entry for screens without the dock (idle view): a glass pill in the
+     * bottom-end corner. Deliberately separate from [showAdminMenu] — that menu is passcode-gated
+     * for IT, while these are harmless everyday comfort toggles a kiosk operator needs constantly,
+     * and nothing here ever opens the real Settings app.
      *
      * Shows nothing if not one of the supported policies is available on this device (e.g. the
-     * WRITE_SETTINGS appop was never granted for rotation -- see
-     * `tools/provision-aosp-device.ps1`): an absent capability means an absent button, not a
-     * dead one. Flight mode is currently always absent -- see
-     * [com.mdmesh.policy.devicesettings.FlightModeSettingsPolicy]'s doc comment for why it was
-     * retracted before ever shipping.
+     * WRITE_SETTINGS appop was never granted for rotation): an absent capability means an absent
+     * button, not a dead one.
      */
     private fun addQuickControlsAffordance(parent: ViewGroup) {
-        if (!::capabilities.isInitialized) return
-        val anySupported = capabilities.togglePolicies().keys.any {
+        if (!quickControlsAvailable()) return
+        val pal = palette(active)
+        val m = Metrics(this)
+        val button = TextView(this).apply {
+            text = "Quick Controls"
+            style(m.sp(12f), pal.text, 600)
+            setPadding(m.dp(16), m.dp(10), m.dp(16), m.dp(10))
+            background = rounded(pal.glass, m.dp(20f), pal.line, m.dp(1))
+            setOnClickListener { showQuickControlsDialog() }
+            pressable()
+        }
+        parent.addView(FrameWrap(this, button, Gravity.BOTTOM or Gravity.END, m.dp(16), avoidSystemBars = true))
+    }
+
+    private fun quickControlsAvailable(): Boolean {
+        if (!::capabilities.isInitialized) return false
+        return capabilities.togglePolicies().keys.any {
             it in setOf(
                 AutoRotationPolicy.CAPABILITY_KEY,
                 AutoBrightnessPolicy.CAPABILITY_KEY,
@@ -563,103 +771,358 @@ class KioskLauncherActivity : FragmentActivity() {
                 WifiRadioPolicy.CAPABILITY_KEY,
             )
         } || capabilities.brightnessLevelPolicy() != null
-        if (!anySupported) return
-
-        val button = TextView(this).apply {
-            text = "Quick Controls"
-            setTextColor(MUTED)
-            textSize = 11f
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            setBackgroundColor(Color.argb(90, 0, 0, 0))
-            setOnClickListener { showQuickControlsDialog() }
-        }
-        parent.addView(
-            FrameWrap(this, button, Gravity.BOTTOM or Gravity.END, dp(16), avoidSystemBars = true),
-        )
     }
 
-    /** One row per supported policy; unsupported ones are simply absent, not disabled. */
+    private fun toggleState(key: String): Boolean? =
+        (capabilities.togglePolicies()[key] as? ReadableTogglePolicy)?.isEnabled()
+
+    /** Applies one Quick Control, logs it for the console timeline, and remembers when Wi-Fi was
+     *  switched off (for the auto-restore countdown). Returns false (with a toast) on failure. */
+    private fun applyToggle(key: String, label: String, checked: Boolean): Boolean {
+        val policy = capabilities.togglePolicies()[key] as? ReadableTogglePolicy ?: return false
+        val outcome = policy.setEnabled(checked)
+        if (outcome !is PolicyOutcome.Applied) {
+            Toast.makeText(this, "Could not change $label.", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        runCatching { events.record("quickControl", "$key=${if (checked) "on" else "off"}") }
+        if (key == WifiRadioPolicy.CAPABILITY_KEY) {
+            uiPrefs().edit().putLong(PREF_WIFI_OFF_AT, if (checked) 0L else System.currentTimeMillis()).apply()
+        }
+        return true
+    }
+
+    private fun iconRes(key: String): Int = when (key) {
+        AutoRotationPolicy.CAPABILITY_KEY -> R.drawable.ic_ob_rotate
+        AutoBrightnessPolicy.CAPABILITY_KEY -> R.drawable.ic_ob_adaptive
+        WifiRadioPolicy.CAPABILITY_KEY -> R.drawable.ic_ob_wifi
+        FlightModePolicy.CAPABILITY_KEY -> R.drawable.ic_ob_flight
+        else -> R.drawable.ic_ob_more
+    }
+
+    private fun iconView(res: Int, tint: Int, sizePx: Int): ImageView = ImageView(this).apply {
+        setImageResource(res)
+        setColorFilter(tint)
+        layoutParams = LinearLayout.LayoutParams(sizePx, sizePx)
+    }
+
+    private fun uiPrefs() = getSharedPreferences("obsidian_ui", MODE_PRIVATE)
+
+    /** Millis Wi-Fi was switched off from here, or 0 when on / unknown / restore window passed. */
+    private fun wifiOffAt(): Long {
+        val at = uiPrefs().getLong(PREF_WIFI_OFF_AT, 0L)
+        return if (at > 0 && System.currentTimeMillis() - at < WifiRadioPolicy.AUTO_RESTORE_MS) at else 0L
+    }
+
+    /** Quick Controls as a bottom sheet of big toggle tiles + a gradient brightness bar. One tile
+     *  per supported policy; unsupported ones are simply absent, not disabled. */
     private fun showQuickControlsDialog() {
+        val pal = palette(active)
+        val m = Metrics(this)
         val toggles = capabilities.togglePolicies()
+        val who = active?.deviceLabel?.takeIf { it.isNotBlank() } ?: "This device"
+        sheet(pal, m, "Quick Controls", null, "$who · changes are logged to the console") { body, dialog ->
+            val grid = GridLayout(this).apply {
+                columnCount = if (m.isPhone) 3 else 4
+                layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+            val specs = listOf(
+                Triple(AutoRotationPolicy.CAPABILITY_KEY, "Auto-rotate", "⟳"),
+                Triple(AutoBrightnessPolicy.CAPABILITY_KEY, "Adaptive", "◐"),
+                Triple(WifiRadioPolicy.CAPABILITY_KEY, "Wi-Fi", "◠"),
+                Triple(FlightModePolicy.CAPABILITY_KEY, "Flight mode", "✈"),
+            )
+            specs.filter { toggles[it.first] is ReadableTogglePolicy }.forEachIndexed { i, (key, label, glyph) ->
+                grid.addView(controlTile(pal, m, key, label, glyph).apply { enter(i * 50L) })
+            }
+            body.addView(grid)
+
+            capabilities.brightnessLevelPolicy()?.let { brightness ->
+                val level = brightness.getLevel()
+                body.addView(
+                    TextView(this).apply {
+                        text = "Brightness"
+                        style(m.sp(13f), pal.muted, 600)
+                        setPadding(m.dp(4), m.dp(14), 0, m.dp(8))
+                    },
+                )
+                body.addView(
+                    GradientSlider(this, pal).apply {
+                        value = level ?: 50
+                        isEnabled = level != null
+                        onChange = { brightness.setLevel(it) }
+                        // One log entry per drag, not per move.
+                        onCommit = { runCatching { events.record("quickControl", "brightness=$it%") } }
+                        layoutParams = LinearLayout.LayoutParams(MATCH, m.dp(46))
+                    },
+                )
+            }
+
+            if (toggles.containsKey(WifiRadioPolicy.CAPABILITY_KEY)) {
+                val note = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(m.dp(4), m.dp(14), 0, 0)
+                }
+                note.addView(
+                    View(this).apply {
+                        background = rounded(pal.c3, m.dp(4f))
+                        layoutParams = LinearLayout.LayoutParams(m.dp(7), m.dp(7)).apply { rightMargin = m.dp(8) }
+                        breathe(1200)
+                    },
+                )
+                note.addView(
+                    TextView(this).apply {
+                        text = "Wi-Fi turns itself back on 3 minutes after you switch it off."
+                        style(m.sp(12f), pal.muted)
+                    },
+                )
+                body.addView(note)
+            }
+            dialog.setOnDismissListener { refreshDock() }
+        }
+    }
+
+    /** One big Quick Controls tile. Tapping flips it; Wi-Fi shows a countdown ring while off. */
+    private fun controlTile(pal: Palette, m: Metrics, key: String, label: String, glyph: String): View {
+        val tile = FrameLayout(this).apply {
+            layoutParams = GridLayout.LayoutParams(
+                GridLayout.spec(GridLayout.UNDEFINED, 1f),
+                GridLayout.spec(GridLayout.UNDEFINED, 1f),
+            ).apply {
+                width = 0
+                setMargins(m.dp(4), m.dp(4), m.dp(4), m.dp(4))
+            }
+            pressable()
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(m.dp(12), m.dp(12), m.dp(12), m.dp(12))
+        }
+        val icon = FrameLayout(this).apply {
+            layoutParams = LinearLayout.LayoutParams(m.dp(36), m.dp(36)).apply { bottomMargin = m.dp(8) }
+        }
+        val iconImg = ImageView(this).apply { setImageResource(iconRes(key)) }
+        icon.addView(iconImg, FrameLayout.LayoutParams(m.dp(20), m.dp(20), Gravity.CENTER))
+        val title = TextView(this).apply { text = label; style(m.sp(13f), pal.text, 700) }
+        val state = TextView(this).apply { style(m.sp(11.5f), pal.muted) }
+        col.addView(icon); col.addView(title); col.addView(state)
+        tile.addView(col)
+        val ring = CountdownRingView(this, pal).apply { totalMs = WifiRadioPolicy.AUTO_RESTORE_MS }
+        tile.addView(ring, FrameLayout.LayoutParams(m.dp(22), m.dp(22), Gravity.TOP or Gravity.END).apply {
+            setMargins(0, m.dp(10), m.dp(10), 0)
+        })
+        val countdown = object : Runnable {
+            override fun run() {
+                val off = wifiOffAt()
+                if (off == 0L) return
+                val left = ((WifiRadioPolicy.AUTO_RESTORE_MS - (System.currentTimeMillis() - off)) / 1000).coerceAtLeast(0)
+                state.text = "Back in %d:%02d".format(left / 60, left % 60)
+                tile.postDelayed(this, 1000)
+            }
+        }
+
+        fun render() {
+            val on = toggleState(key)
+            val isOn = on == true
+            tile.background = if (isOn) {
+                gradient(intArrayOf(withAlpha(pal.c1, 0.22f), withAlpha(pal.c2, 0.18f)), m.dp(18f)).apply {
+                    setStroke(m.dp(1), withAlpha(pal.c1, 0.55f))
+                }
+            } else rounded(pal.surface2, m.dp(18f), pal.line, m.dp(1))
+            icon.background = if (isOn) gradient(intArrayOf(pal.c1, pal.c2), m.dp(11f))
+            else rounded(withAlpha(pal.text, 0.08f), m.dp(11f))
+            iconImg.setColorFilter(if (isOn) Color.WHITE else pal.text)
+            state.text = when (on) { null -> "Unavailable"; true -> "On"; false -> "Off" }
+            val showRing = key == WifiRadioPolicy.CAPABILITY_KEY && !isOn && wifiOffAt() > 0
+            ring.visibility = if (showRing) View.VISIBLE else View.GONE
+            tile.removeCallbacks(countdown)
+            if (showRing) { ring.startedAt = wifiOffAt(); tile.post(countdown) }
+            tile.isEnabled = on != null
+        }
+        render()
+        tile.setOnClickListener {
+            val current = toggleState(key) ?: return@setOnClickListener
+            applyToggle(key, label, !current)
+            // Wi-Fi state settles asynchronously; re-read shortly after as well as now.
+            render()
+            tile.postDelayed({ render() }, 900)
+        }
+        return tile
+    }
+
+    /**
+     * Shared Obsidian sheet: a rounded panel that slides up from the bottom (full width on phones,
+     * a centred 600dp card on tablets) with a grab handle, title, optional badge and subtitle.
+     */
+    private fun sheet(
+        pal: Palette,
+        m: Metrics,
+        title: String,
+        badge: String?,
+        subtitle: String?,
+        build: (LinearLayout, android.app.Dialog) -> Unit,
+    ): android.app.Dialog {
+        val dialog = android.app.Dialog(this)
+        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(12), dp(24), dp(4))
+            setPadding(m.dp(18), m.dp(10), m.dp(18), m.dp(22))
         }
-
-        fun toggleRow(key: String, label: String) {
-            val policy = toggles[key] as? ReadableTogglePolicy ?: return
-            val current = policy.isEnabled()
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(0, dp(10), 0, dp(10))
+        body.addView(
+            View(this).apply {
+                background = rounded(pal.line, m.dp(2f))
+                layoutParams = LinearLayout.LayoutParams(m.dp(40), m.dp(4)).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    bottomMargin = m.dp(14)
+                }
+            },
+        )
+        val head = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(m.dp(4), 0, 0, 0)
+        }
+        head.addView(TextView(this).apply { text = title; style(m.sp(19f), pal.text, 700) })
+        if (badge != null) {
+            head.addView(
+                TextView(this).apply {
+                    text = badge
+                    style(m.sp(9.5f), pal.c2, 700, mono = true, letterSp = 0.14f)
+                    setPadding(m.dp(8), m.dp(3), m.dp(8), m.dp(3))
+                    background = rounded(withAlpha(pal.c2, 0.12f), m.dp(6f))
+                    layoutParams = LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ).apply { leftMargin = m.dp(10) }
+                },
+            )
+        }
+        body.addView(head)
+        if (subtitle != null) {
+            body.addView(
+                TextView(this).apply {
+                    text = subtitle
+                    style(m.sp(12f), pal.muted)
+                    setPadding(m.dp(4), m.dp(4), 0, m.dp(14))
+                },
+            )
+        }
+        build(body, dialog)
+        val r = m.dp(24f)
+        val card = FrameLayout(this).apply {
+            background = GradientDrawable().apply {
+                setColor(pal.surface)
+                cornerRadii = if (m.isPhone) floatArrayOf(r, r, r, r, 0f, 0f, 0f, 0f) else FloatArray(8) { r }
+                setStroke(m.dp(1), pal.line)
             }
-            row.addView(
-                text(label, 15f, DIALOG_TEXT).apply {
-                    layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                },
-            )
-            row.addView(
-                Switch(this).apply {
-                    isChecked = current ?: false
-                    isEnabled = current != null
-                    setOnCheckedChangeListener { _, checked ->
-                        val outcome = policy.setEnabled(checked)
-                        if (outcome is PolicyOutcome.Applied) {
-                            runCatching { events.record("quickControl", "$key=${if (checked) "on" else "off"}") }
-                        }
-                        if (outcome !is PolicyOutcome.Applied) {
-                            isChecked = !checked // revert on failure rather than show a stuck wrong state
-                            Toast.makeText(this@KioskLauncherActivity, "Could not change $label.", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                },
-            )
-            body.addView(row)
+            addView(ScrollView(this@KioskLauncherActivity).apply { addView(body) })
         }
-
-        toggleRow(AutoRotationPolicy.CAPABILITY_KEY, "Auto-rotate screen")
-        toggleRow(AutoBrightnessPolicy.CAPABILITY_KEY, "Adaptive brightness")
-
-        capabilities.brightnessLevelPolicy()?.let { brightness ->
-            val level = brightness.getLevel()
-            body.addView(text("Brightness", 15f, DIALOG_TEXT).apply { setPadding(0, dp(10), 0, 0) })
-            body.addView(
-                SeekBar(this).apply {
-                    max = 100
-                    progress = level ?: 50
-                    isEnabled = level != null
-                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                        override fun onProgressChanged(sb: SeekBar?, value: Int, fromUser: Boolean) {
-                            if (fromUser) brightness.setLevel(value)
-                        }
-                        override fun onStartTrackingTouch(sb: SeekBar?) = Unit
-                        override fun onStopTrackingTouch(sb: SeekBar?) {
-                            // One log entry per drag, not per progress tick.
-                            runCatching { events.record("quickControl", "brightness=${sb?.progress}%") }
-                        }
-                    })
-                },
-            )
+        dialog.setContentView(card)
+        dialog.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            setLayout(m.sheetWidthPx(), ViewGroup.LayoutParams.WRAP_CONTENT)
+            setGravity(Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+            setDimAmount(if (pal.dark) 0.6f else 0.35f)
+            if (!m.isPhone) attributes = attributes.apply { y = m.dp(24) }
         }
-
-        toggleRow(FlightModePolicy.CAPABILITY_KEY, "Flight mode")
-
-        if (toggles.containsKey(WifiRadioPolicy.CAPABILITY_KEY)) {
-            toggleRow(WifiRadioPolicy.CAPABILITY_KEY, "Wi-Fi")
-            // Tablets are Wi-Fi only; the policy re-enables Wi-Fi itself (WifiAutoRestore).
-            body.addView(
-                text("Wi-Fi turns back on automatically 3 minutes after being switched off.", 12f, DIALOG_TEXT)
-                    .apply { alpha = 0.7f; setPadding(0, 0, 0, dp(6)) },
-            )
+        dialog.setOnShowListener {
+            if (!animationsOff(this)) {
+                card.translationY = card.height.toFloat() + m.dp(40)
+                card.animate().translationY(0f).setDuration(340)
+                    .setInterpolator(android.view.animation.DecelerateInterpolator(2f)).start()
+            }
         }
-
-        AlertDialog.Builder(this)
-            .setTitle("Quick Controls")
-            .setView(body)
-            .setNegativeButton("Close", null)
-            .show()
+        dialog.show()
+        return dialog
     }
+
+    /** Glass dock pinned to the bottom of the kiosk home: one-tap Rotate / Wi-Fi / Brightness chips
+     *  plus the gradient "more" button that opens the full Quick Controls sheet. */
+    private fun addDock(pal: Palette, m: Metrics, parent: ViewGroup) {
+        dockRefreshers.clear()
+        if (!quickControlsAvailable()) return
+        val dock = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(m.dp(8), m.dp(8), m.dp(8), m.dp(8))
+            background = rounded(pal.glass, m.dp(22f), pal.line, m.dp(1))
+            elevation = m.dp(6f)
+        }
+        val toggles = capabilities.togglePolicies()
+        fun chip(key: String, label: String, glyph: String) {
+            if (toggles[key] !is ReadableTogglePolicy) return
+            val c = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(m.dp(10), m.dp(6), m.dp(10), m.dp(6))
+                layoutParams = LinearLayout.LayoutParams(0, m.dp(50), 1f).apply { rightMargin = m.dp(6) }
+                pressable()
+            }
+            val g = iconView(iconRes(key), pal.muted, m.dp(20)).apply {
+                (layoutParams as LinearLayout.LayoutParams).bottomMargin = m.dp(3)
+            }
+            val t = TextView(this).apply { text = label; gravity = Gravity.CENTER; style(m.sp(10.5f), pal.muted, 600) }
+            c.addView(g); c.addView(t)
+            val render = {
+                val on = toggleState(key) == true
+                c.background = if (on) rounded(withAlpha(pal.c1, 0.16f), m.dp(14f), withAlpha(pal.c1, 0.5f), m.dp(1))
+                else rounded(withAlpha(pal.text, 0.04f), m.dp(14f))
+                g.setColorFilter(if (on) pal.c1 else pal.muted)
+                t.setTextColor(if (on) pal.text else pal.muted)
+                t.text = if (key == WifiRadioPolicy.CAPABILITY_KEY && !on && wifiOffAt() > 0) "Wi-Fi off" else label
+            }
+            render()
+            c.setOnClickListener {
+                val cur = toggleState(key) ?: return@setOnClickListener
+                applyToggle(key, label, !cur)
+                render()
+                c.postDelayed({ render() }, 900)
+            }
+            dockRefreshers += render
+            dock.addView(c)
+        }
+        chip(AutoRotationPolicy.CAPABILITY_KEY, "Rotate", "⟳")
+        chip(WifiRadioPolicy.CAPABILITY_KEY, "Wi-Fi", "◠")
+        capabilities.brightnessLevelPolicy()?.let { b ->
+            val c = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                background = rounded(withAlpha(pal.text, 0.04f), m.dp(14f))
+                layoutParams = LinearLayout.LayoutParams(0, m.dp(50), 1f).apply { rightMargin = m.dp(6) }
+                setOnClickListener { showQuickControlsDialog() }
+                pressable()
+            }
+            val g = iconView(R.drawable.ic_ob_sun, pal.warn, m.dp(20)).apply {
+                (layoutParams as LinearLayout.LayoutParams).bottomMargin = m.dp(3)
+            }
+            val t = TextView(this).apply { gravity = Gravity.CENTER; style(m.sp(10.5f), pal.muted, 600) }
+            c.addView(g); c.addView(t)
+            val render = { t.text = b.getLevel()?.let { "$it%" } ?: "Brightness" }
+            render()
+            dockRefreshers += render
+            dock.addView(c)
+        }
+        dock.addView(
+            ImageView(this).apply {
+                setImageResource(R.drawable.ic_ob_more)
+                setColorFilter(Color.WHITE)
+                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                setPadding(m.dp(13), m.dp(13), m.dp(13), m.dp(13))
+                background = gradient(intArrayOf(pal.c1, pal.c2), m.dp(15f))
+                layoutParams = LinearLayout.LayoutParams(m.dp(50), m.dp(50))
+                contentDescription = "All quick controls"
+                setOnClickListener { showQuickControlsDialog() }
+                pressable()
+            },
+        )
+        val width = if (m.isPhone) ViewGroup.LayoutParams.MATCH_PARENT else min(resources.displayMetrics.widthPixels - m.dp(32), m.dp(520))
+        parent.addView(
+            FrameWrap(this, dock, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL, m.dp(12), widthPx = width, avoidSystemBars = true),
+        )
+        dock.enter(250)
+    }
+
+    private fun refreshDock() = dockRefreshers.forEach { it() }
 
     /** Extend the lock-task allowlist (additive) to include whatever package [intent] actually
      *  resolves to, then start it. No-op (silently) if nothing on-device can handle it. */
@@ -688,7 +1151,7 @@ class KioskLauncherActivity : FragmentActivity() {
         }
         val labels = apps.map { it.label }.toTypedArray()
         val checked = apps.map { it.pkg in current.allowedPackages }.toBooleanArray()
-        AlertDialog.Builder(this)
+        alert()
             .setTitle("Allowed apps")
             .setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
             .setPositiveButton("Save") { _, _ ->
@@ -745,7 +1208,7 @@ class KioskLauncherActivity : FragmentActivity() {
                 android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
             hint = "New device PIN (blank clears it)"
         }
-        AlertDialog.Builder(this)
+        alert()
             .setTitle("Reset device passcode")
             .setMessage("Changes the device's screen-lock PIN directly on this device.")
             .setView(input)
@@ -787,7 +1250,7 @@ class KioskLauncherActivity : FragmentActivity() {
     }
 
     private fun confirmUninstall() {
-        AlertDialog.Builder(this)
+        alert()
             .setTitle("Uninstall AMBIC MDM")
             .setMessage(
                 "This permanently removes MDM management from this device — it drops Device " +
@@ -818,7 +1281,7 @@ class KioskLauncherActivity : FragmentActivity() {
         val versionName = runCatching {
             packageManager.getPackageInfo(packageName, 0).versionName
         }.getOrNull() ?: "unknown"
-        AlertDialog.Builder(this)
+        alert()
             .setTitle("About AMBIC MDM")
             .setMessage("AMBIC Digital MDM\nVersion $versionName\n\nDevice fleet management agent.")
             .setPositiveButton("OK", null)
@@ -861,6 +1324,7 @@ class KioskLauncherActivity : FragmentActivity() {
     // --- Views -------------------------------------------------------------------------------
 
     private fun splashView(p: KioskApplyPayload): View {
+        resetLiveRefs()
         val bg = parseColor(p.theme.backgroundColor, INK)
         val fg = parseColor(p.theme.textColor, TEXT)
         return frame(bg).apply {
@@ -870,81 +1334,259 @@ class KioskLauncherActivity : FragmentActivity() {
         }
     }
 
+    /** Palette for the current payload: Obsidian tokens, with the console's kiosk accent colour
+     *  (Settings → Kiosk accent) as the secondary accent when one is set. */
+    private fun palette(p: KioskApplyPayload?): Palette =
+        Palette.of(this, p?.theme?.accentColor?.let { runCatching { Color.parseColor(it) }.getOrNull() })
+
+    /** Drops live-view references before a new screen is built, so the timers never update
+     *  views that are no longer on screen. */
+    private fun resetLiveRefs() {
+        batteryText = null; wifiText = null; clockText = null
+        heroTime = null; heroDate = null; batteryRing = null; batteryPct = null
+        wifiBarsView = null; wifiName = null
+        dockRefreshers.clear()
+    }
+
+    /** Kiosk home: status pills, a live hero card (gradient clock, date, device, managed light),
+     *  app tiles grouped into showroom apps and tools, and the Quick Controls dock. Every size
+     *  comes from [Metrics], so the same code lays out a phone, a tablet or a 12" tablet. */
     private fun launcherGrid(p: KioskApplyPayload): View {
-        val bg = parseColor(p.theme.backgroundColor, INK)
-        val fg = parseColor(p.theme.textColor, TEXT)
-        val cell = iconCellPx(p.theme.iconSize)
-        val cols = maxOf(2, (resources.displayMetrics.widthPixels - dp(24)) / (cell + dp(24)))
-
-        val grid = GridLayout(this).apply {
-            columnCount = cols
-            setPadding(dp(8), dp(16), dp(8), dp(28))
-            layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+        resetLiveRefs()
+        val pal = palette(p)
+        val m = Metrics(this)
+        val root = FrameLayout(this).apply {
+            background = GroundDrawable(pal, m.dp(28f))
+            layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
         }
-        var rendered = 0
-        for (pkg in p.allowedPackages.distinct()) {
-            val app = runCatching { packageManager.getApplicationInfo(pkg, 0) }.getOrNull() ?: continue
-            val icon = runCatching { packageManager.getApplicationIcon(pkg) }.getOrNull() ?: continue
-            val label = runCatching { packageManager.getApplicationLabel(app).toString() }.getOrDefault(pkg)
-            grid.addView(appCell(pkg, label, icon, cell, fg))
-            rendered++
-        }
-
-        // Always render a header + (when nothing resolved) an empty-state, so kiosk is never a
-        // bare black screen — that previously happened whenever the allowlist was empty or none of
-        // the packages were installed on the device.
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(64), dp(24), dp(12))
-            layoutParams = ViewGroup.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
-        // Account for status bar / display cutout (e.g. Redmi teardrop notch) so header text starts
-        // cleanly below the status line.
         ViewCompat.setOnApplyWindowInsetsListener(column) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            v.setPadding(dp(24), bars.top + dp(48), dp(24), bars.bottom + dp(16))
+            v.setPadding(m.dp(m.gutterDp), bars.top + m.dp(12), m.dp(m.gutterDp), bars.bottom + m.dp(96))
             insets
         }
-        column.requestApplyInsets()
-        column.addView(text(p.deviceLabel?.takeIf { it.isNotBlank() } ?: "AMBIC MDM Kiosk", 20f, fg, bold = true))
-        p.orgName?.takeIf { it.isNotBlank() }?.let { column.addView(text(it, 14f, fg)) }
-        column.addView(
-            text("powered by AMBIC DIGITAL", 10f, MUTED).apply { setPadding(0, dp(2), 0, 0) },
-        )
-        if (rendered == 0) {
+        column.addView(topRow(p, pal, m))
+        column.addView(heroCard(p, pal, m))
+
+        // Group: user-installed apps (Capture, Ornate Buddy, BIS CARE…) are the showroom apps;
+        // preloaded system apps (Chrome, Camera, Gallery…) are tools.
+        data class Entry(val pkg: String, val label: String, val icon: android.graphics.drawable.Drawable, val system: Boolean)
+        val entries = p.allowedPackages.distinct().mapNotNull { pkg ->
+            val info = runCatching { packageManager.getApplicationInfo(pkg, 0) }.getOrNull() ?: return@mapNotNull null
+            val icon = runCatching { packageManager.getApplicationIcon(pkg) }.getOrNull() ?: return@mapNotNull null
+            val label = runCatching { packageManager.getApplicationLabel(info).toString() }.getOrDefault(pkg)
+            val system = info.flags and (android.content.pm.ApplicationInfo.FLAG_SYSTEM or
+                android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+            Entry(pkg, label, icon, system)
+        }
+        val showroom = entries.filterNot { it.system }
+        val tools = entries.filter { it.system }
+        var order = 0
+        fun section(title: String, list: List<Entry>, featured: Boolean) {
+            if (list.isEmpty()) return
+            column.addView(sectionLabel(title, pal, m))
+            val grid = GridLayout(this).apply {
+                columnCount = m.columns()
+                layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+            list.forEach { e -> grid.addView(appTile(e.pkg, e.label, e.icon, pal, m, featured, order++)) }
+            // Pad the last row with empty cells so tiles keep their column width instead of
+            // stretching across the screen when a section has fewer apps than columns.
+            repeat((grid.columnCount - list.size % grid.columnCount) % grid.columnCount) {
+                grid.addView(
+                    android.widget.Space(this),
+                    GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED, 1f), GridLayout.spec(GridLayout.UNDEFINED, 1f))
+                        .apply { width = 0; height = 1 },
+                )
+            }
+            column.addView(grid)
+        }
+        if (showroom.isNotEmpty() && tools.isNotEmpty()) {
+            section("SHOWROOM APPS", showroom, featured = true)
+            section("TOOLS", tools, featured = false)
+        } else {
+            section("APPS", entries.map { it }, featured = false)
+        }
+        if (entries.isEmpty()) {
             column.addView(
-                text(
-                    "No available apps. Add installed app packages to this kiosk's allowed list.",
-                    14f,
-                    MUTED,
-                ).apply { setPadding(0, dp(10), 0, 0) },
+                TextView(this).apply {
+                    text = "No available apps. Add installed app packages to this kiosk's allowed list."
+                    style(m.sp(14f), pal.muted)
+                    setPadding(m.dp(4), m.dp(18), 0, 0)
+                },
             )
         }
-        column.addView(grid)
 
-        val root = frame(bg)
+        // Centre the content column; on wide screens it stops at maxContentDp.
+        val holder = FrameLayout(this)
+        val contentWidth = if (m.isPhone) MATCH else min(resources.displayMetrics.widthPixels, m.dp(m.maxContentDp))
+        holder.addView(column, FrameLayout.LayoutParams(contentWidth, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL))
         root.addView(
             ScrollView(this).apply {
-                addView(column)
+                isFillViewport = true
+                isVerticalScrollBarEnabled = false
+                addView(holder)
                 layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
             },
         )
-        addExitAffordance(p, root)
-        addStatusBar(p, root)
-        addQuickControlsAffordance(root)
+        column.requestApplyInsets()
+        if (p.exitMode == "gesture") addExitAffordance(p, root)
+        addDock(pal, m, root)
         return root
     }
 
-    private fun appCell(
+    /** Battery ring + %, Wi-Fi bars + network name, and (exitMode "visible") the admin menu button. */
+    private fun topRow(p: KioskApplyPayload, pal: Palette, m: Metrics): View {
+        val s = KioskStatusSource.read(this)
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = m.dp(12) }
+        }
+        fun pill(): LinearLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(m.dp(10), m.dp(7), m.dp(12), m.dp(7))
+            background = rounded(pal.glass, m.dp(18f), pal.line, m.dp(1))
+        }
+        val bat = pill()
+        batteryRing = BatteryRingView(this, pal).apply {
+            percent = s.batteryPct; charging = s.charging
+            layoutParams = LinearLayout.LayoutParams(m.dp(16), m.dp(16)).apply { rightMargin = m.dp(7) }
+        }
+        batteryPct = TextView(this).apply { style(m.sp(12f), pal.text, 700, mono = true) }
+        bat.addView(batteryRing); bat.addView(batteryPct)
+        row.addView(bat)
+
+        val wifi = pill().apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { leftMargin = m.dp(8) }
+        }
+        wifiBarsView = WifiBarsView(this, pal).apply {
+            layoutParams = LinearLayout.LayoutParams(m.dp(16), m.dp(12)).apply { rightMargin = m.dp(7) }
+        }
+        wifiName = TextView(this).apply {
+            style(m.sp(12f), pal.text, 600)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            maxWidth = m.dp(if (m.isPhone) 120 else 220)
+        }
+        wifi.addView(wifiBarsView); wifi.addView(wifiName)
+        row.addView(wifi)
+        row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
+
+        if (p.exitMode == "visible") {
+            row.addView(
+                ImageView(this).apply {
+                    setImageResource(R.drawable.ic_ob_menu)
+                    setColorFilter(pal.text)
+                    setPadding(m.dp(10), m.dp(10), m.dp(10), m.dp(10))
+                    background = rounded(pal.glass, m.dp(12f), pal.line, m.dp(1))
+                    contentDescription = "Admin menu"
+                    layoutParams = LinearLayout.LayoutParams(m.dp(42), m.dp(42))
+                    setOnClickListener { promptExit(p) }
+                    pressable()
+                },
+            )
+        }
+        updateStatusViews(s)
+        return row
+    }
+
+    /** Glass hero card: big gradient clock with a blinking colon, full date, device + shop, a
+     *  breathing "MANAGED" light and a shimmering accent line along the bottom edge. */
+    private fun heroCard(p: KioskApplyPayload, pal: Palette, m: Metrics): View {
+        val card = FrameLayout(this).apply {
+            background = rounded(withAlpha(pal.surface, 0.86f), m.dp(22f), pal.line, m.dp(1))
+            clipToOutline = true
+            layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = m.dp(6) }
+            enter(0)
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(m.dp(18), m.dp(16), m.dp(18), m.dp(18))
+        }
+        val clockSp = when { m.isPhone -> 34f; m.isLargeTablet -> 52f; else -> 44f }
+        heroTime = TextView(this).apply {
+            style(clockSp, pal.c1, 800, mono = true, letterSp = -0.02f)
+            // Wrap the text so the gradient spans the digits, not the whole card width.
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            gradientText(pal.c1, pal.c2)
+        }
+        heroDate = TextView(this).apply {
+            style(m.sp(13f), pal.muted, 500)
+            setPadding(0, m.dp(4), 0, 0)
+        }
+        col.addView(heroTime); col.addView(heroDate)
+
+        val who = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.BOTTOM
+            setPadding(0, m.dp(14), 0, 0)
+        }
+        val names = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        names.addView(
+            TextView(this).apply {
+                text = p.deviceLabel?.takeIf { it.isNotBlank() } ?: "AMBIC MDM Kiosk"
+                style(m.sp(18f), pal.text, 700)
+            },
+        )
+        val org = p.orgName?.takeIf { it.isNotBlank() }
+        names.addView(
+            TextView(this).apply {
+                text = listOfNotNull(org, "powered by AMBIC DIGITAL").joinToString(" · ")
+                style(m.sp(11.5f), pal.muted)
+                setPadding(0, m.dp(2), 0, 0)
+            },
+        )
+        who.addView(names)
+        val managed = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        managed.addView(
+            View(this).apply {
+                background = rounded(pal.ok, m.dp(4f))
+                layoutParams = LinearLayout.LayoutParams(m.dp(7), m.dp(7)).apply { rightMargin = m.dp(6) }
+                breathe(1800)
+            },
+        )
+        managed.addView(TextView(this).apply { text = "MANAGED"; style(m.sp(9.5f), pal.ok, 700, mono = true, letterSp = 0.16f) })
+        who.addView(managed)
+        col.addView(who)
+        card.addView(col)
+        card.addView(
+            ShimmerLineView(this, pal),
+            FrameLayout.LayoutParams(MATCH, m.dp(2), Gravity.BOTTOM),
+        )
+        renderClock()
+        return card
+    }
+
+    private fun sectionLabel(title: String, pal: Palette, m: Metrics): TextView = TextView(this).apply {
+        text = title
+        style(m.sp(10f), pal.c2, 700, mono = true, letterSp = 0.2f)
+        setPadding(m.dp(4), m.dp(18), 0, m.dp(4))
+    }
+
+    /** One app tile. Showroom apps get a softly breathing accent ring behind the icon. */
+    private fun appTile(
         pkg: String,
         label: String,
         icon: android.graphics.drawable.Drawable,
-        cellPx: Int,
-        fg: Int,
+        pal: Palette,
+        m: Metrics,
+        featured: Boolean,
+        index: Int,
     ): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        gravity = Gravity.CENTER
-        setPadding(dp(6), dp(10), dp(6), dp(10))
+        gravity = Gravity.CENTER_HORIZONTAL
+        setPadding(m.dp(4), m.dp(10), m.dp(4), m.dp(8))
         layoutParams = GridLayout.LayoutParams(
             GridLayout.spec(GridLayout.UNDEFINED, 1f),
             GridLayout.spec(GridLayout.UNDEFINED, 1f),
@@ -953,20 +1595,39 @@ class KioskLauncherActivity : FragmentActivity() {
             height = ViewGroup.LayoutParams.WRAP_CONTENT
         }
         isClickable = true
-        addView(
-            ImageView(this@KioskLauncherActivity).apply {
-                setImageDrawable(icon)
-                layoutParams = LinearLayout.LayoutParams(cellPx, cellPx)
-            },
+        val box = m.dp(m.iconDp + 16)
+        val frame = FrameLayout(this@KioskLauncherActivity)
+        if (featured) {
+            frame.addView(
+                View(this@KioskLauncherActivity).apply {
+                    background = rounded(withAlpha(pal.c1, 0.08f), m.dp(20f), withAlpha(pal.c1, 0.7f), m.dp(2))
+                    breathe(2600, 0.25f)
+                },
+                FrameLayout.LayoutParams(box, box),
+            )
+        } else {
+            frame.addView(
+                View(this@KioskLauncherActivity).apply { background = rounded(withAlpha(pal.surface, 0.7f), m.dp(20f), pal.line, m.dp(1)) },
+                FrameLayout.LayoutParams(box, box),
+            )
+        }
+        frame.addView(
+            ImageView(this@KioskLauncherActivity).apply { setImageDrawable(icon) },
+            FrameLayout.LayoutParams(m.dp(m.iconDp), m.dp(m.iconDp), Gravity.CENTER),
         )
+        addView(frame, LinearLayout.LayoutParams(box, box))
         addView(
-            text(label, 12f, fg).apply {
+            TextView(this@KioskLauncherActivity).apply {
+                text = label
+                style(m.sp(12.5f), pal.text, 500)
                 gravity = Gravity.CENTER
                 maxLines = 2
                 ellipsize = android.text.TextUtils.TruncateAt.END
-                setPadding(0, dp(6), 0, 0)
+                setPadding(0, m.dp(7), 0, 0)
             },
         )
+        pressable()
+        enter(80L + index * 45L)
         setOnClickListener {
             runCatching {
                 packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it) }
@@ -979,34 +1640,107 @@ class KioskLauncherActivity : FragmentActivity() {
         }
     }
 
-    private fun idleView(): View = frame(INK).apply {
-        val col = LinearLayout(this@KioskLauncherActivity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+    private fun idleView(): View {
+        resetLiveRefs()
+        val pal = palette(null)
+        val m = Metrics(this)
+        return FrameLayout(this).apply {
+            background = GroundDrawable(pal, m.dp(28f))
             layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
+            val col = LinearLayout(this@KioskLauncherActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
+            }
+            col.addView(
+                TextView(this@KioskLauncherActivity).apply {
+                    text = "MDM"
+                    gravity = Gravity.CENTER
+                    style(m.sp(14f), Color.WHITE, 800, mono = true)
+                    background = gradient(intArrayOf(pal.c1, pal.c2, pal.c3), m.dp(18f))
+                    layoutParams = LinearLayout.LayoutParams(m.dp(64), m.dp(64)).apply { bottomMargin = m.dp(16) }
+                },
+            )
+            col.addView(
+                TextView(this@KioskLauncherActivity).apply {
+                    text = "AMBIC MDM"
+                    gravity = Gravity.CENTER
+                    style(m.sp(28f), pal.c1, 800)
+                    gradientText(pal.c1, pal.c2)
+                },
+            )
+            col.addView(
+                TextView(this@KioskLauncherActivity).apply {
+                    text = "Managed device"
+                    gravity = Gravity.CENTER
+                    style(m.sp(14f), pal.muted)
+                    setPadding(0, m.dp(6), 0, 0)
+                },
+            )
+            col.enter(0)
+            addView(col)
+            addQuickControlsAffordance(this)
         }
-        col.addView(centeredText("AMBIC MDM", 28f, SIGNAL, bold = true))
-        col.addView(centeredText("Managed device", 14f, MUTED))
-        addView(col)
-        addQuickControlsAffordance(this)
     }
 
-    private fun recoveryView(): View = frame(INK).apply {
-        val col = LinearLayout(this@KioskLauncherActivity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(28), 0, dp(28), 0)
+    private fun recoveryView(): View {
+        resetLiveRefs()
+        val pal = palette(null)
+        val m = Metrics(this)
+        return FrameLayout(this).apply {
+            background = GroundDrawable(pal, m.dp(28f))
             layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
+            val col = LinearLayout(this@KioskLauncherActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(m.dp(28), 0, m.dp(28), 0)
+                layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
+            }
+            col.addView(TextView(this@KioskLauncherActivity).apply {
+                text = "Kiosk stopped"; gravity = Gravity.CENTER; style(m.sp(22f), pal.alert, 700)
+            })
+            col.addView(TextView(this@KioskLauncherActivity).apply {
+                text = "A kiosk app crashed repeatedly, so kiosk mode was disabled to keep the device usable."
+                gravity = Gravity.CENTER
+                style(m.sp(14f), pal.muted)
+                setPadding(0, m.dp(12), 0, 0)
+            })
+            addView(col)
         }
-        col.addView(centeredText("Kiosk stopped", 22f, ALERT, bold = true))
-        col.addView(
-            centeredText(
-                "A kiosk app crashed repeatedly, so kiosk mode was disabled to keep the device usable.",
-                14f,
-                MUTED,
-            ).apply { setPadding(0, dp(12), 0, 0) },
-        )
-        addView(col)
+    }
+
+    /** Pushes one [KioskStatusSource] read into whichever status views are on screen. */
+    private fun updateStatusViews(s: KioskStatusSource.Status) {
+        batteryText?.text = formatBattery(s)
+        wifiText?.text = formatWifi(s)
+        batteryRing?.let { it.percent = s.batteryPct; it.charging = s.charging }
+        batteryPct?.text = if (s.batteryPct >= 0) "${s.batteryPct}%${if (s.charging) " ⚡" else ""}" else "—"
+        wifiBarsView?.let { it.connected = s.wifiConnected; it.bars = if (s.wifiConnected) s.wifiBars.coerceIn(1, 4) else 0 }
+        wifiName?.text = when {
+            !s.wifiConnected -> "Wi-Fi off"
+            s.ssid != null -> s.ssid
+            else -> "Wi-Fi"
+        }
+        refreshDock()
+    }
+
+    /** Clock text for both the legacy status bar (splash) and the hero card. The hero colon
+     *  blinks once a second (hidden on odd seconds) unless animations are off. */
+    private fun renderClock() {
+        val now = Date()
+        clockText?.text = clockFormat.format(now)
+        heroTime?.let { tv ->
+            val hm = heroTimeFormat.format(now)
+            val ampm = " " + heroAmPmFormat.format(now)
+            val span = android.text.SpannableString(hm + ampm)
+            val blinkOff = (System.currentTimeMillis() / 1000) % 2 == 1L && !animationsOff(this)
+            if (blinkOff) {
+                span.setSpan(android.text.style.ForegroundColorSpan(Color.TRANSPARENT), 2, 3, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            span.setSpan(android.text.style.RelativeSizeSpan(0.42f), hm.length, span.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            tv.text = span
+        }
+        heroDate?.text = heroDateFormat.format(now)
     }
 
     /** Add the per-[KioskApplyPayload.exitMode] exit affordance to [parent]. */
@@ -1194,6 +1928,7 @@ class KioskLauncherActivity : FragmentActivity() {
         const val GESTURE_TAPS = 7
         const val GESTURE_WINDOW_MS = 3_000L
         const val STATUS_POLL_MS = 15_000L
+        const val PREF_WIFI_OFF_AT = "wifiOffAt"
         const val HOME_ALIAS = "com.mdmesh.agent.KioskHomeAlias"
         val INK = Color.parseColor("#0E1117")
         val TEXT = Color.parseColor("#E8EEF4")

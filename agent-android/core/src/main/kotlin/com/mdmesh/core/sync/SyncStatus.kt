@@ -22,7 +22,12 @@ class SyncStatus @Inject constructor() {
         _lastError.value = Failure(t.message ?: t.javaClass.simpleName, System.currentTimeMillis())
     }
 
+    private val _lastOkAt = MutableStateFlow<Long?>(null)
+    /** Epoch ms of the last successful check-in (null until the first one this process). */
+    val lastOkAt: StateFlow<Long?> = _lastOkAt
+
     fun clear() {
         _lastError.value = null
+        _lastOkAt.value = System.currentTimeMillis()
     }
 }
