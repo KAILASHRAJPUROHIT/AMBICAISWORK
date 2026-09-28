@@ -32,6 +32,10 @@ import androidx.core.content.ContextCompat
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.widget.TextViewCompat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -116,6 +120,20 @@ class KioskLauncherActivity : FragmentActivity() {
         }
     }
 
+    /** Top-center date/time readout, re-pointed by [addStatusBar] like [batteryText]. */
+    private var clockText: TextView? = null
+    private val clockFormat = SimpleDateFormat("dd MMM yyyy  hh:mm a", Locale.ENGLISH)
+
+    /** Updates the clock, then re-arms itself for the next minute boundary (+50ms so the new
+     *  minute has definitely started) -- a fixed 60s delay would drift across minute edges. */
+    private val clockTick: Runnable = object : Runnable {
+        override fun run() {
+            clockText?.text = clockFormat.format(Date())
+            val now = System.currentTimeMillis()
+            statusHandler.postDelayed(this, 60_000L - now % 60_000L + 50L)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A kiosk device boots straight into HOME (this); keep the command channel alive even if
@@ -145,8 +163,22 @@ class KioskLauncherActivity : FragmentActivity() {
         statusHandler.post(statusTick)
     }
 
+    override fun onStart() {
+        super.onStart()
+        // Restart on every return to the foreground so the clock is right immediately (and picks up
+        // any time/timezone change made while hidden), instead of waiting for the next minute.
+        statusHandler.removeCallbacks(clockTick)
+        statusHandler.post(clockTick)
+    }
+
+    override fun onStop() {
+        statusHandler.removeCallbacks(clockTick)
+        super.onStop()
+    }
+
     override fun onDestroy() {
         statusHandler.removeCallbacks(statusTick)
+        statusHandler.removeCallbacks(clockTick)
         super.onDestroy()
     }
 
@@ -1024,6 +1056,53 @@ class KioskLauncherActivity : FragmentActivity() {
                 heightPx = dp(32), endExtraPx = endExtra, avoidSystemBars = true,
             ),
         )
+
+        // Date/time, top-center on the same row. Width is fitted after layout to the gap between
+        // battery and Wi-Fi (see fitClock) and the text auto-shrinks 16sp -> 10sp to fit, so it
+        // never overlaps them on a narrow phone; FrameWrap already pushes it below the status bar
+        // and any top display cutout.
+        val clock = TextView(this).apply {
+            setTextColor(color)
+            setTypeface(typeface, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            maxLines = 1
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            text = clockFormat.format(Date())
+        }
+        clockText = clock
+        parent.addView(
+            FrameWrap(
+                this, clock, Gravity.TOP or Gravity.CENTER_HORIZONTAL, dp(16),
+                widthPx = dp(220), heightPx = dp(32), avoidSystemBars = true,
+            ),
+        )
+        TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(clock, 10, 16, 1, TypedValue.COMPLEX_UNIT_SP)
+        val refit = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> clock.post { fitClock() } }
+        battery.addOnLayoutChangeListener(refit)
+        wifi.addOnLayoutChangeListener(refit)
+        parent.addOnLayoutChangeListener(refit)
+    }
+
+    /** Sizes [clockText] to the widest centered band that clears both [batteryText] (left) and
+     *  [wifiText] (right, already offset past the kebab menu), minus a small gap each side. */
+    private fun fitClock() {
+        val clock = clockText ?: return
+        val battery = batteryText ?: return
+        val wifi = wifiText ?: return
+        if (clock.width == 0 && battery.width == 0) return
+        val loc = IntArray(2)
+        battery.getLocationInWindow(loc)
+        val leftEdge = loc[0] + battery.width
+        wifi.getLocationInWindow(loc)
+        val rightEdge = loc[0]
+        val center = window.decorView.width / 2
+        val half = minOf(center - leftEdge, rightEdge - center) - dp(12)
+        val target = (2 * half).coerceIn(dp(60), dp(320))
+        val lp = clock.layoutParams ?: return
+        if (lp.width != target) {
+            lp.width = target
+            clock.layoutParams = lp
+        }
     }
 
     private fun formatBattery(s: KioskStatusSource.Status): String =
