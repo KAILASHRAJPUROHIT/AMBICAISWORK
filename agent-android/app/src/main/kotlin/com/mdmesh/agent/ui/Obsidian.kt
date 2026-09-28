@@ -495,3 +495,20 @@ class HoldToConfirm(
         return true
     }
 }
+
+// --- Client branding -------------------------------------------------------------------------------
+
+/** Decodes a cached client logo, downsampled so its longest side is at most [maxPx]. */
+fun loadBrandBitmap(file: java.io.File?, maxPx: Int): android.graphics.Bitmap? {
+    if (file == null) return null
+    return runCatching {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeFile(file.path, bounds)
+        var sample = 1
+        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPx) sample *= 2
+        android.graphics.BitmapFactory.decodeFile(
+            file.path,
+            android.graphics.BitmapFactory.Options().apply { inSampleSize = sample },
+        )
+    }.getOrNull()
+}

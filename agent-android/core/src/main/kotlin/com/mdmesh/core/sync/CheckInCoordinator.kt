@@ -50,6 +50,7 @@ class CheckInCoordinator @Inject constructor(
     private val adminPasscodeStore: AdminPasscodeStore? = null,
     private val fcmTokenStore: FcmTokenStore? = null,
     private val activityLogger: com.mdmesh.core.telemetry.ActivityLogger? = null,
+    private val clientBrandingStore: com.mdmesh.core.store.ClientBrandingStore? = null,
 ) {
 
     private val mutex = Mutex()
@@ -118,6 +119,9 @@ class CheckInCoordinator @Inject constructor(
         // Fleet-wide admin passcode, delivered on every check-in (independent of the per-device
         // command queue so it's current even for devices that were offline when it was set).
         adminPasscodeStore?.save(data.adminPasscodeHash)
+        // Client branding (logo/name for the kiosk and agent screens); downloads only on change,
+        // and a failed download never fails the check-in.
+        runCatching { clientBrandingStore?.apply(data.clientName, data.clientLogoUrl, data.clientMarkUrl) }
 
         val results = data.commands.map { dispatcher.dispatch(it) }
         pending.add(results)

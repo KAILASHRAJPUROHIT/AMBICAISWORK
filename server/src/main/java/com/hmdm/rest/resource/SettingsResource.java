@@ -257,6 +257,61 @@ public class SettingsResource {
         }
     }
 
+    /**
+     * Client branding: the customer's own name/logo, shown on its devices (kiosk, agent screen)
+     * and in the console. AMBIC DIGITAL remains the product brand. Blank values clear a field.
+     */
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("/clientBranding")
+    public Response updateClientBranding(ClientBrandingRequest request) {
+        if (!SecurityContext.get().hasPermission("settings")) {
+            log.error("Unauthorized attempt to update client branding by user " +
+                    SecurityContext.get().getCurrentUserName());
+            return Response.PERMISSION_DENIED();
+        }
+        try {
+            Settings settings = new Settings();
+            settings.setClientName(trimOrNull(request == null ? null : request.getName(), 120));
+            settings.setClientLogoUrl(httpUrlOrNull(request == null ? null : request.getLogoUrl()));
+            settings.setClientMarkUrl(httpUrlOrNull(request == null ? null : request.getMarkUrl()));
+            this.commonDAO.saveClientBranding(settings);
+            return Response.OK();
+        } catch (Exception e) {
+            log.error("Unexpected error when saving client branding", e);
+            return Response.INTERNAL_ERROR();
+        }
+    }
+
+    private static String trimOrNull(String v, int max) {
+        if (v == null || v.trim().isEmpty()) return null;
+        String t = v.trim();
+        return t.length() > max ? t.substring(0, max) : t;
+    }
+
+    /** Only http(s) image URLs are accepted; anything else is dropped. */
+    private static String httpUrlOrNull(String v) {
+        String t = trimOrNull(v, 2000);
+        if (t == null) return null;
+        String lower = t.toLowerCase();
+        return lower.startsWith("https://") || lower.startsWith("http://") ? t : null;
+    }
+
+    /** Body of {@link #updateClientBranding}. */
+    public static class ClientBrandingRequest {
+        private String name;
+        private String logoUrl;
+        private String markUrl;
+
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        public String getLogoUrl() { return logoUrl; }
+        public void setLogoUrl(String logoUrl) { this.logoUrl = logoUrl; }
+        public String getMarkUrl() { return markUrl; }
+        public void setMarkUrl(String markUrl) { this.markUrl = markUrl; }
+    }
+
     /** Body of {@link #updateAdminPasscode}: the raw passcode (or blank/null to clear it). */
     public static class AdminPasscodeRequest {
         private String passcode;

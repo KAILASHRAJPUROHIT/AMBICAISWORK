@@ -452,6 +452,13 @@ public class AgentResource {
 
         AgentCheckInResponse checkInResponse = new AgentCheckInResponse(commands);
         checkInResponse.setAdminPasscodeHash(adminPasscodeHash);
+        if (settings != null) {
+            // Client branding rides along on every check-in, like the admin passcode, so devices
+            // enrolled later (or offline when it changed) always converge on the current logo.
+            checkInResponse.setClientName(settings.getClientName());
+            checkInResponse.setClientLogoUrl(settings.getClientLogoUrl());
+            checkInResponse.setClientMarkUrl(settings.getClientMarkUrl());
+        }
         return Response.OK(checkInResponse);
     }
 

@@ -46,6 +46,11 @@ public class AgentCheckInResponse {
      *  proto's {@code AgentCheckInResponse.adminPasscodeHash} on the Kotlin side. */
     private String adminPasscodeHash;
 
+    /** Client branding (see Settings#clientName etc.) — null when not configured. */
+    private String clientName;
+    private String clientLogoUrl;
+    private String clientMarkUrl;
+
     public AgentCheckInResponse() {
     }
 

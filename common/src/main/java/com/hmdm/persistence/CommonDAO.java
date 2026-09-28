@@ -85,6 +85,10 @@ public class CommonDAO extends AbstractDAO<Settings> {
         insertRecord(settings, this.mapper::saveAdminPasscodeHash);
     }
 
+    public void saveClientBranding(Settings settings) {
+        insertRecord(settings, this.mapper::saveClientBranding);
+    }
+
     public void setTwoFactor(Settings settings) {
         insertRecord(settings, this.mapper::setTwoFactor);
     }

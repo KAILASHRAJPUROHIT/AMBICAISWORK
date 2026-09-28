@@ -98,4 +98,9 @@ data class AgentCheckInResponse(
      *  fleet-wide passcode is configured. Gates local kiosk exit as an override alongside the
      *  per-session [KioskApplyPayload.password] — see `promptExit` in KioskLauncherActivity. */
     val adminPasscodeHash: String? = null,
+    /** Client branding (console Settings > Client branding): the customer's name and hosted
+     *  logo/mark image URLs. Null when not configured. AMBIC DIGITAL stays the product brand. */
+    val clientName: String? = null,
+    val clientLogoUrl: String? = null,
+    val clientMarkUrl: String? = null,
 )

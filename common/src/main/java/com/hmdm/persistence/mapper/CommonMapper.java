@@ -175,6 +175,19 @@ public interface CommonMapper {
     })
     void saveAdminPasscodeHash(Settings settings);
 
+    @Insert({
+            "INSERT INTO settings (clientName, clientLogoUrl, clientMarkUrl, customerId" +
+                    ") VALUES (" +
+                    "#{clientName}, #{clientLogoUrl}, #{clientMarkUrl}, #{customerId} " +
+                    ") " +
+                    "ON CONFLICT ON CONSTRAINT settings_customer_unique DO " +
+                    "UPDATE SET " +
+                    "clientName = EXCLUDED.clientName, " +
+                    "clientLogoUrl = EXCLUDED.clientLogoUrl, " +
+                    "clientMarkUrl = EXCLUDED.clientMarkUrl "
+    })
+    void saveClientBranding(Settings settings);
+
     @Select({"SELECT COUNT(*) FROM settings"})
     int getSettingsCount();
 

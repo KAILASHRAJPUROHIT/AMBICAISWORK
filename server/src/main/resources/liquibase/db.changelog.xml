@@ -3038,4 +3038,18 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.09.28-settings-client-branding" author="ambic" context="common">
+        <comment>Columns,new: settings#clientName/clientLogoUrl/clientMarkUrl — the client's own brand (AMBIC DIGITAL owns the MDM; each customer's logo is shown on its devices and console). Delivered on each agent check-in.</comment>
+        <sql>
+            ALTER TABLE settings ADD COLUMN clientName TEXT;
+            ALTER TABLE settings ADD COLUMN clientLogoUrl TEXT;
+            ALTER TABLE settings ADD COLUMN clientMarkUrl TEXT;
+        </sql>
+        <rollback>
+            ALTER TABLE settings DROP COLUMN clientMarkUrl;
+            ALTER TABLE settings DROP COLUMN clientLogoUrl;
+            ALTER TABLE settings DROP COLUMN clientName;
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

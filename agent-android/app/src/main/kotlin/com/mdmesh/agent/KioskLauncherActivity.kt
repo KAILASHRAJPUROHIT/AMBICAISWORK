@@ -90,6 +90,8 @@ import com.mdmesh.agent.ui.pressable
 import com.mdmesh.agent.ui.rounded
 import com.mdmesh.agent.ui.style
 import com.mdmesh.agent.ui.withAlpha
+import com.mdmesh.agent.ui.loadBrandBitmap
+import com.mdmesh.core.store.ClientBrandingStore
 
 /**
  * MDMesh kiosk HOME. This is the device's persistent launcher (`CATEGORY_HOME`), repointed to
@@ -159,6 +161,15 @@ class KioskLauncherActivity : FragmentActivity() {
     private var wifiName: TextView? = null
     private val dockRefreshers = mutableListOf<() -> Unit>()
 
+    /** Re-renders as soon as a new client logo/name lands (check-in runs in the service). Held in
+     *  a field: SharedPreferences keeps listeners weakly. */
+    private val brandingListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == ClientBrandingStore.KEY_VERSION) runOnUiThread {
+            val p = active
+            if (p == null) setContentView(idleView()) else if (p.mode != "single") setContentView(launcherGrid(p))
+        }
+    }
+
     /** Updates the clock once a second (the hero colon blinks), aligned to the second boundary
      *  so it never drifts. */
     private val clockTick: Runnable = object : Runnable {
@@ -196,6 +207,7 @@ class KioskLauncherActivity : FragmentActivity() {
             }
         }
         statusHandler.post(statusTick)
+        ClientBrandingStore.prefs(this).registerOnSharedPreferenceChangeListener(brandingListener)
     }
 
     override fun onStart() {
@@ -212,6 +224,7 @@ class KioskLauncherActivity : FragmentActivity() {
     }
 
     override fun onDestroy() {
+        ClientBrandingStore.prefs(this).unregisterOnSharedPreferenceChangeListener(brandingListener)
         statusHandler.removeCallbacks(statusTick)
         statusHandler.removeCallbacks(clockTick)
         super.onDestroy()
@@ -1519,7 +1532,35 @@ class KioskLauncherActivity : FragmentActivity() {
             style(m.sp(13f), pal.muted, 500)
             setPadding(0, m.dp(4), 0, 0)
         }
-        col.addView(heroTime); col.addView(heroDate)
+        val brand = ClientBrandingStore.read(this)
+        val logoPx = m.dp(when { m.isPhone -> 64; m.isLargeTablet -> 108; else -> 92 })
+        val logo = loadBrandBitmap(brand.logo ?: brand.mark, logoPx * 3)
+        if (logo != null) {
+            // Client brand (e.g. Aradhana Jewellers) sits beside the clock; AMBIC DIGITAL stays in
+            // the "powered by" line below as the product brand.
+            val top = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val left = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            left.addView(heroTime); left.addView(heroDate)
+            top.addView(left)
+            top.addView(
+                ImageView(this).apply {
+                    setImageBitmap(logo)
+                    adjustViewBounds = true
+                    maxHeight = logoPx
+                    maxWidth = logoPx * 2
+                    contentDescription = brand.name ?: "Client logo"
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                        .apply { leftMargin = m.dp(12) }
+                    enter(120)
+                },
+            )
+            col.addView(top)
+        } else {
+            col.addView(heroTime); col.addView(heroDate)
+        }
 
         val who = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1536,7 +1577,7 @@ class KioskLauncherActivity : FragmentActivity() {
                 style(m.sp(18f), pal.text, 700)
             },
         )
-        val org = p.orgName?.takeIf { it.isNotBlank() }
+        val org = ClientBrandingStore.read(this).name ?: p.orgName?.takeIf { it.isNotBlank() }
         names.addView(
             TextView(this).apply {
                 text = listOfNotNull(org, "powered by AMBIC DIGITAL").joinToString(" · ")
@@ -1652,15 +1693,32 @@ class KioskLauncherActivity : FragmentActivity() {
                 gravity = Gravity.CENTER
                 layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
             }
-            col.addView(
-                TextView(this@KioskLauncherActivity).apply {
-                    text = "MDM"
-                    gravity = Gravity.CENTER
-                    style(m.sp(14f), Color.WHITE, 800, mono = true)
-                    background = gradient(intArrayOf(pal.c1, pal.c2, pal.c3), m.dp(18f))
-                    layoutParams = LinearLayout.LayoutParams(m.dp(64), m.dp(64)).apply { bottomMargin = m.dp(16) }
-                },
-            )
+            val brand = ClientBrandingStore.read(this@KioskLauncherActivity)
+            val logoW = kotlin.math.min(resources.displayMetrics.widthPixels * 6 / 10, m.dp(380))
+            val logo = loadBrandBitmap(brand.logo ?: brand.mark, logoW)
+            if (logo != null) {
+                col.addView(
+                    ImageView(this@KioskLauncherActivity).apply {
+                        setImageBitmap(logo)
+                        adjustViewBounds = true
+                        maxWidth = logoW
+                        maxHeight = logoW
+                        contentDescription = brand.name ?: "Client logo"
+                        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                            .apply { bottomMargin = m.dp(28) }
+                    },
+                )
+            } else {
+                col.addView(
+                    TextView(this@KioskLauncherActivity).apply {
+                        text = "MDM"
+                        gravity = Gravity.CENTER
+                        style(m.sp(14f), Color.WHITE, 800, mono = true)
+                        background = gradient(intArrayOf(pal.c1, pal.c2, pal.c3), m.dp(18f))
+                        layoutParams = LinearLayout.LayoutParams(m.dp(64), m.dp(64)).apply { bottomMargin = m.dp(16) }
+                    },
+                )
+            }
             col.addView(
                 TextView(this@KioskLauncherActivity).apply {
                     text = "AMBIC MDM"
@@ -1671,7 +1729,7 @@ class KioskLauncherActivity : FragmentActivity() {
             )
             col.addView(
                 TextView(this@KioskLauncherActivity).apply {
-                    text = "Managed device"
+                    text = if (brand.name != null) "Managed device · ${brand.name}" else "Managed device"
                     gravity = Gravity.CENTER
                     style(m.sp(14f), pal.muted)
                     setPadding(0, m.dp(6), 0, 0)

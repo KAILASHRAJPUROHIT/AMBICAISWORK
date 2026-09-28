@@ -42,6 +42,9 @@ import android.widget.FrameLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.mdmesh.core.state.KioskStatusSource
+import com.mdmesh.core.store.ClientBrandingStore
+import com.mdmesh.agent.ui.loadBrandBitmap
+import android.widget.ImageView
 import com.mdmesh.agent.ui.GroundDrawable
 import com.mdmesh.agent.ui.Metrics
 import com.mdmesh.agent.ui.Palette
@@ -287,7 +290,23 @@ class MainActivity : ComponentActivity() {
         headTx.addView(TextView(this).apply { text = "AMBIC DIGITAL · DEVICE AGENT"; style(m.sp(9.5f), pal.c2, 700, mono = true, letterSp = 0.18f) })
         titleView = TextView(this).apply { text = "Device health"; style(m.sp(20f), pal.text, 700); setPadding(0, m.dp(3), 0, 0) }
         headTx.addView(titleView)
-        head.addView(headTx)
+        head.addView(headTx.apply {
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        })
+        // Client brand on the right: AMBIC DIGITAL owns the agent, the client owns the device.
+        val brand = ClientBrandingStore.read(this)
+        val markPx = m.dp(if (m.isPhone) 52 else 64)
+        loadBrandBitmap(brand.logo ?: brand.mark, markPx * 3)?.let { bmp ->
+            head.addView(
+                ImageView(this).apply {
+                    setImageBitmap(bmp)
+                    adjustViewBounds = true
+                    maxHeight = markPx
+                    maxWidth = markPx * 2
+                    contentDescription = brand.name ?: "Client logo"
+                },
+            )
+        }
         col.addView(head)
 
         // Score card.
@@ -407,7 +426,8 @@ class MainActivity : ComponentActivity() {
         col.addView(actions)
         col.addView(
             TextView(this).apply {
-                text = "Managed by AMBIC DIGITAL"
+                text = ClientBrandingStore.read(this@MainActivity).name
+                    ?.let { "Managed by AMBIC DIGITAL for $it" } ?: "Managed by AMBIC DIGITAL"
                 gravity = Gravity.CENTER
                 style(m.sp(11.5f), pal.faint)
                 setPadding(0, m.dp(22), 0, 0)

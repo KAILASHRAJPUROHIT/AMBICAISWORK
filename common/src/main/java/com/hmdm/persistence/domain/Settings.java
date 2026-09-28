@@ -106,6 +106,12 @@ public class Settings implements CustomerData, Serializable {
     @ApiModelProperty(hidden = true)
     private String adminPasscodeHash;
 
+    // Client branding (AMBIC DIGITAL owns the MDM; this is the customer's own brand): display
+    // name, full logo (emblem + wordmark) and compact mark, as hosted image URLs.
+    private String clientName;
+    private String clientLogoUrl;
+    private String clientMarkUrl;
+
     // This property is not stored in the database, it is a transient field used by the Settings resource
     @ApiModelProperty(hidden = true)
     private boolean singleCustomer;
@@ -369,6 +375,13 @@ public class Settings implements CustomerData, Serializable {
     }
 
     @ApiModelProperty("Whether a fleet-wide admin passcode is currently configured")
+    public String getClientName() { return clientName; }
+    public void setClientName(String clientName) { this.clientName = clientName; }
+    public String getClientLogoUrl() { return clientLogoUrl; }
+    public void setClientLogoUrl(String clientLogoUrl) { this.clientLogoUrl = clientLogoUrl; }
+    public String getClientMarkUrl() { return clientMarkUrl; }
+    public void setClientMarkUrl(String clientMarkUrl) { this.clientMarkUrl = clientMarkUrl; }
+
     public boolean isAdminPasscodeSet() {
         return adminPasscodeHash != null && !adminPasscodeHash.trim().isEmpty();
     }
