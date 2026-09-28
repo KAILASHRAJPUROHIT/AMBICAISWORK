@@ -9,6 +9,7 @@ import { DiagnosisModal } from "./components/DiagnosisModal";
 import { PipelineView } from "./components/PipelineView";
 import { AgentsView } from "./components/AgentsView";
 import { ActivityView } from "./components/ActivityView";
+import { PrintRouterView } from "./components/PrintRouterView";
 import { SystemItem, PipelineTask, ActivityFeedItem, RegistrySystem } from "./components/types";
 
 /** Maps GET /api/systems' real, lowercase health enum to the display enum/tone.
@@ -421,7 +422,7 @@ export default function Home() {
   const [campaignError, setCampaignError] = useState("");
   const [researchBusy, setResearchBusy] = useState(false);
   const [view, setView] = useState<"home" | "tools" | "work" | "admin">("home");
-  const [obsidianTab, setObsidianTab] = useState<"command" | "pipeline" | "agents" | "activity" | "legacy">("command");
+  const [obsidianTab, setObsidianTab] = useState<"command" | "pipeline" | "agents" | "activity" | "print" | "legacy">("command");
   const [systems, setSystems] = useState<Record<string, SystemItem>>(initialSystemsData);
   const [selectedSystemId, setSelectedSystemId] = useState<string>("print-server");
   const healthCounts = useMemo(() => {
@@ -1202,6 +1203,12 @@ export default function Home() {
                 ACTIVITY
               </button>
               <button
+                onClick={() => setObsidianTab("print")}
+                style={{ padding: "6px 12px", borderRadius: "10px", fontSize: "10px", fontWeight: 700, letterSpacing: ".1em", background: obsidianTab === "print" ? "rgba(36,217,255,.18)" : "rgba(36,217,255,.08)", border: "1px solid rgba(36,217,255,.38)", color: "#BFF3FF", cursor: "pointer" }}
+              >
+                PRINT ROUTER
+              </button>
+              <button
                 onClick={() => setObsidianTab("legacy")}
                 style={{
                   padding: "6px 12px",
@@ -1374,6 +1381,8 @@ export default function Home() {
               <ActivityView activities={activities} />
             </main>
           )}
+
+          {obsidianTab === "print" && <PrintRouterView />}
 
           {/* Modal Overlay */}
           <DiagnosisModal
