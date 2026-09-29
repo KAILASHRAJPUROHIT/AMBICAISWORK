@@ -14,8 +14,10 @@ fi
 # SMB/TCP 445 over the WireGuard address is the authoritative reachability test.
 nc -zvw 5 "$SERVER2K22_TUNNEL_IP" 445
 
-apt-get update
-apt-get install -y cifs-utils
+if ! command -v mount.cifs >/dev/null 2>&1; then
+  apt-get update
+  apt-get install -y cifs-utils
+fi
 install -d -m 700 "$MOUNT_ROOT"
 
 if ! mountpoint -q "$MOUNT_ROOT"; then
