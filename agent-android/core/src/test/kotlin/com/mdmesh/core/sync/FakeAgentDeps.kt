@@ -74,6 +74,14 @@ class FakeMdmApi : MdmApi {
     val checkInRequests = mutableListOf<AgentCheckInRequest>()
     val checkInAuth = mutableListOf<String>()
 
+    var leaderboardResponse: ResponseEnvelope<com.mdmesh.proto.LeaderboardResponse> =
+        ResponseEnvelope(status = "OK", data = null)
+
+    override suspend fun leaderboard(
+        authorization: String,
+        deviceId: String,
+    ): ResponseEnvelope<com.mdmesh.proto.LeaderboardResponse> = leaderboardResponse
+
     override suspend fun enroll(request: AgentEnrollRequest): ResponseEnvelope<AgentEnrollResponse> {
         enrollRequests += request
         enrollGate?.await()

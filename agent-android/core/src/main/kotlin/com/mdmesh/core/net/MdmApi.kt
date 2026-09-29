@@ -6,8 +6,11 @@ import com.mdmesh.proto.AgentEnrollByCredentialsRequest
 import com.mdmesh.proto.AgentEnrollRequest
 import com.mdmesh.proto.AgentEnrollResponse
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.Query
+import com.mdmesh.proto.LeaderboardResponse
 
 /**
  * Retrofit contract for the device <-> server agent v1 protocol.
@@ -39,4 +42,12 @@ interface MdmApi {
         @Header("Authorization") authorization: String,
         @Body request: AgentCheckInRequest,
     ): ResponseEnvelope<AgentCheckInResponse>
+
+    /** Latest shop sales leaderboard for this device's customer (`data` is null before the shop
+     *  collector has ever pushed one). Same Bearer device-secret auth as [checkIn]. */
+    @GET("rest/public/agent/v1/leaderboard")
+    suspend fun leaderboard(
+        @Header("Authorization") authorization: String,
+        @Query("deviceId") deviceId: String,
+    ): ResponseEnvelope<LeaderboardResponse>
 }

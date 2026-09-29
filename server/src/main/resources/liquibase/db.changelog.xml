@@ -3052,4 +3052,18 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.09.29-leaderboard-snapshot" author="ambic" context="common">
+        <comment>Table,new: leaderboardSnapshot — latest daily sales leaderboard pushed by the shop-side collector (one row per customer), served to the kiosk tablets.</comment>
+        <sql>
+            CREATE TABLE leaderboardSnapshot (
+                customerId   INT PRIMARY KEY REFERENCES customers(id) ON DELETE CASCADE,
+                businessDate VARCHAR(10),
+                generatedAt  VARCHAR(40),
+                payload      TEXT NOT NULL,
+                receivedAt   BIGINT NOT NULL
+            );
+        </sql>
+        <rollback>DROP TABLE leaderboardSnapshot;</rollback>
+    </changeSet>
+
 </databaseChangeLog>

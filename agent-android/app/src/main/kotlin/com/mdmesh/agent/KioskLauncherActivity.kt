@@ -92,6 +92,7 @@ import com.mdmesh.agent.ui.style
 import com.mdmesh.agent.ui.withAlpha
 import com.mdmesh.agent.ui.loadBrandBitmap
 import com.mdmesh.core.store.ClientBrandingStore
+import com.mdmesh.core.store.LeaderboardRepository
 
 /**
  * MDMesh kiosk HOME. This is the device's persistent launcher (`CATEGORY_HOME`), repointed to
@@ -120,6 +121,7 @@ class KioskLauncherActivity : FragmentActivity() {
     @Inject lateinit var dpmHandle: DpmHandle
     @Inject lateinit var resetTokenStore: ResetPasswordTokenStore
     @Inject lateinit var capabilities: CapabilityRegistry
+    @Inject lateinit var leaderboardRepo: LeaderboardRepository
 
     /** Last applied non-null kiosk state, so [onResume] can recover a bounced single-app pin. */
     private var active: KioskApplyPayload? = null
@@ -139,6 +141,7 @@ class KioskLauncherActivity : FragmentActivity() {
     private val statusTick: Runnable = object : Runnable {
         override fun run() {
             updateStatusViews(KioskStatusSource.read(this@KioskLauncherActivity))
+            renderLeaderboard()
             statusHandler.postDelayed(this, STATUS_POLL_MS)
         }
     }
@@ -160,6 +163,14 @@ class KioskLauncherActivity : FragmentActivity() {
     private var wifiBarsView: WifiBarsView? = null
     private var wifiName: TextView? = null
     private val dockRefreshers = mutableListOf<() -> Unit>()
+
+    /** Sales-leaderboard card on the kiosk home (null on every other screen) and a signature of what
+     *  it last drew, so the 30s poll only rebuilds it when something visible changed. */
+    private var leaderboardBox: LinearLayout? = null
+    private var leaderboardSig: String? = null
+    private val leaderboardListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == LeaderboardRepository.KEY_VERSION) runOnUiThread { renderLeaderboard() }
+    }
 
     /** Re-renders as soon as a new client logo/name lands (check-in runs in the service). Held in
      *  a field: SharedPreferences keeps listeners weakly. */
@@ -208,6 +219,17 @@ class KioskLauncherActivity : FragmentActivity() {
         }
         statusHandler.post(statusTick)
         ClientBrandingStore.prefs(this).registerOnSharedPreferenceChangeListener(brandingListener)
+        LeaderboardRepository.prefs(this).registerOnSharedPreferenceChangeListener(leaderboardListener)
+        // Live sales leaderboard: poll every 30s, only while the kiosk home is on screen and only
+        // when its card exists. A failed poll keeps showing the last good copy.
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    if (leaderboardBox != null) leaderboardRepo.refresh()
+                    kotlinx.coroutines.delay(LEADERBOARD_POLL_MS)
+                }
+            }
+        }
     }
 
     override fun onStart() {
@@ -225,6 +247,7 @@ class KioskLauncherActivity : FragmentActivity() {
 
     override fun onDestroy() {
         ClientBrandingStore.prefs(this).unregisterOnSharedPreferenceChangeListener(brandingListener)
+        LeaderboardRepository.prefs(this).unregisterOnSharedPreferenceChangeListener(leaderboardListener)
         statusHandler.removeCallbacks(statusTick)
         statusHandler.removeCallbacks(clockTick)
         super.onDestroy()
@@ -805,6 +828,50 @@ class KioskLauncherActivity : FragmentActivity() {
         return true
     }
 
+    /** Flips the tablet UI between Dark and Light and re-draws the kiosk home in the new palette. */
+    private fun appearanceTile(pal: Palette, m: Metrics, dialog: android.app.Dialog): View {
+        val dark = ObsidianPrefs.isDark(this)
+        val tile = FrameLayout(this).apply {
+            layoutParams = GridLayout.LayoutParams(
+                GridLayout.spec(GridLayout.UNDEFINED, 1f),
+                GridLayout.spec(GridLayout.UNDEFINED, 1f),
+            ).apply {
+                width = 0
+                setMargins(m.dp(4), m.dp(4), m.dp(4), m.dp(4))
+            }
+            background = rounded(pal.surface2, m.dp(18f), pal.line, m.dp(1))
+            contentDescription = "Switch to ${if (dark) "light" else "dark"} mode"
+            pressable()
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(m.dp(12), m.dp(12), m.dp(12), m.dp(12))
+        }
+        val icon = FrameLayout(this).apply {
+            background = rounded(withAlpha(pal.text, 0.08f), m.dp(11f))
+            layoutParams = LinearLayout.LayoutParams(m.dp(36), m.dp(36)).apply { bottomMargin = m.dp(8) }
+        }
+        icon.addView(
+            ImageView(this).apply {
+                setImageResource(if (dark) R.drawable.ic_ob_moon else R.drawable.ic_ob_sun)
+                setColorFilter(pal.text)
+            },
+            FrameLayout.LayoutParams(m.dp(20), m.dp(20), Gravity.CENTER),
+        )
+        col.addView(icon)
+        col.addView(TextView(this).apply { text = "Appearance"; style(m.sp(13f), pal.text, 700) })
+        col.addView(TextView(this).apply { text = if (dark) "Dark" else "Light"; style(m.sp(11.5f), pal.muted) })
+        tile.addView(col)
+        tile.setOnClickListener {
+            ObsidianPrefs.setAppearance(this, if (dark) "light" else "dark")
+            dialog.dismiss()
+            val p = active
+            if (p == null) setContentView(idleView()) else if (p.mode != "single") setContentView(launcherGrid(p))
+            showQuickControlsDialog() // reopen in the new palette so the change is visible at once
+        }
+        return tile
+    }
+
     private fun iconRes(key: String): Int = when (key) {
         AutoRotationPolicy.CAPABILITY_KEY -> R.drawable.ic_ob_rotate
         AutoBrightnessPolicy.CAPABILITY_KEY -> R.drawable.ic_ob_adaptive
@@ -848,6 +915,8 @@ class KioskLauncherActivity : FragmentActivity() {
             specs.filter { toggles[it.first] is ReadableTogglePolicy }.forEachIndexed { i, (key, label, glyph) ->
                 grid.addView(controlTile(pal, m, key, label, glyph).apply { enter(i * 50L) })
             }
+            // Light / Dark for the tablet's own screens; needs no passcode, like the other tiles.
+            grid.addView(appearanceTile(pal, m, dialog).apply { enter(250) })
             body.addView(grid)
 
             capabilities.brightnessLevelPolicy()?.let { brightness ->
@@ -1356,6 +1425,7 @@ class KioskLauncherActivity : FragmentActivity() {
      *  views that are no longer on screen. */
     private fun resetLiveRefs() {
         batteryText = null; wifiText = null; clockText = null
+        leaderboardBox = null; leaderboardSig = null
         heroTime = null; heroDate = null; batteryRing = null; batteryPct = null
         wifiBarsView = null; wifiName = null
         dockRefreshers.clear()
@@ -1382,6 +1452,7 @@ class KioskLauncherActivity : FragmentActivity() {
         }
         column.addView(topRow(p, pal, m))
         column.addView(heroCard(p, pal, m))
+        column.addView(leaderboardCard(pal, m))
 
         // Group: user-installed apps (Capture, Ornate Buddy, BIS CARE…) are the showroom apps;
         // preloaded system apps (Chrome, Camera, Gallery…) are tools.
@@ -1448,6 +1519,149 @@ class KioskLauncherActivity : FragmentActivity() {
         if (p.exitMode == "gesture") addExitAffordance(p, root)
         addDock(pal, m, root)
         return root
+    }
+
+    private val inr: java.text.NumberFormat by lazy {
+        java.text.NumberFormat.getInstance(Locale("en", "IN")).apply { maximumFractionDigits = 0 }
+    }
+    private val timeOnly = SimpleDateFormat("hh:mm a", Locale.ENGLISH)
+    private val isoDay = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
+
+    private fun rupees(v: Double) = "\u20B9" + inr.format(v)
+
+    /** Container for the live sales leaderboard; hidden until the shop has pushed one. */
+    private fun leaderboardCard(pal: Palette, m: Metrics): View {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(m.dp(16), m.dp(14), m.dp(16), m.dp(14))
+            background = rounded(withAlpha(pal.surface, 0.86f), m.dp(20f), pal.line, m.dp(1))
+            layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = m.dp(10) }
+            visibility = View.GONE
+        }
+        leaderboardBox = box
+        leaderboardSig = null
+        renderLeaderboard()
+        return box
+    }
+
+    /** Draws the latest cached leaderboard: rank, name, bills, amount, shop total and when it was
+     *  last updated ("stale" when the shop server has gone quiet for over 5 minutes). */
+    private fun renderLeaderboard() {
+        val box = leaderboardBox ?: return
+        val lb = LeaderboardRepository.read(this)
+        if (lb == null) { box.visibility = View.GONE; leaderboardSig = null; return }
+        val now = System.currentTimeMillis()
+        val ageMs = (now - lb.receivedAt).coerceAtLeast(0)
+        val today = isoDay.format(Date(now))
+        val isToday = lb.board.businessDate == today
+        val sig = "${lb.hashCode()}|${ageMs / 60_000}|$isToday"
+        if (sig == leaderboardSig && box.childCount > 0) return
+        val firstDraw = leaderboardSig == null
+        leaderboardSig = sig
+
+        val pal = palette(active)
+        val m = Metrics(this)
+        val maxRows = if (m.isPhone) 5 else 8
+        box.removeAllViews()
+        box.visibility = View.VISIBLE
+
+        // Header: eyebrow left, freshness right.
+        val head = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        head.addView(
+            TextView(this).apply {
+                text = "TODAY'S SALES"
+                style(m.sp(10f), pal.c2, 700, mono = true, letterSp = 0.2f)
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            },
+        )
+        val stale = ageMs > LEADERBOARD_STALE_MS
+        head.addView(
+            TextView(this).apply {
+                text = if (stale) "Updated ${ageMs / 60_000} min ago" else "Live \u00B7 ${timeOnly.format(Date(lb.receivedAt))}"
+                style(m.sp(10.5f), if (stale) pal.warn else pal.ok, 700, mono = true)
+            },
+        )
+        box.addView(head)
+
+        val entries = if (isToday) lb.board.entries.filter { !it.name.equals("none", true) }.take(maxRows) else emptyList()
+        if (entries.isEmpty()) {
+            box.addView(
+                TextView(this).apply {
+                    text = "No bills yet today"
+                    style(m.sp(14f), pal.muted, 500)
+                    setPadding(m.dp(2), m.dp(10), 0, m.dp(4))
+                },
+            )
+            return
+        }
+
+        val top = entries.maxOf { it.total }.coerceAtLeast(1.0)
+        entries.forEachIndexed { i, e ->
+            val medal = when (e.rank) {
+                1 -> Color.parseColor("#F5C542")
+                2 -> Color.parseColor("#C9D3E0")
+                3 -> Color.parseColor("#D9915B")
+                else -> null
+            }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, m.dp(if (i == 0) 10 else 8), 0, 0)
+            }
+            val line = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            line.addView(
+                TextView(this).apply {
+                    text = e.rank.toString()
+                    gravity = Gravity.CENTER
+                    style(m.sp(12f), if (medal != null) Color.parseColor("#1B1200") else pal.text, 800, mono = true)
+                    background = rounded(medal ?: pal.surface2, m.dp(14f), if (medal == null) pal.line else null, m.dp(1))
+                    layoutParams = LinearLayout.LayoutParams(m.dp(28), m.dp(28)).apply { rightMargin = m.dp(10) }
+                },
+            )
+            val names = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            names.addView(
+                TextView(this).apply {
+                    text = e.name
+                    style(m.sp(if (e.rank == 1) 16f else 14.5f), pal.text, if (e.rank == 1) 800 else 600)
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                },
+            )
+            names.addView(
+                TextView(this).apply {
+                    text = if (e.bills == 1) "1 bill" else "${e.bills} bills"
+                    style(m.sp(11.5f), pal.muted)
+                },
+            )
+            line.addView(names)
+            line.addView(TextView(this).apply { text = rupees(e.total); style(m.sp(if (e.rank == 1) 17f else 15f), pal.text, 800, mono = true) })
+            row.addView(line)
+            // Amount relative to the leader, so the gap between people reads at a glance.
+            val fill = ((e.total / top) * 1000).toInt().coerceIn(15, 1000)
+            val bar = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(MATCH, m.dp(4)).apply { topMargin = m.dp(6); leftMargin = m.dp(38) }
+            }
+            bar.addView(View(this).apply {
+                background = gradient(intArrayOf(medal ?: pal.c1, pal.c2), m.dp(2f), GradientDrawable.Orientation.LEFT_RIGHT)
+                layoutParams = LinearLayout.LayoutParams(0, MATCH, fill.toFloat())
+            })
+            if (fill < 1000) bar.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(0, MATCH, (1000 - fill).toFloat()) })
+            row.addView(bar)
+            box.addView(row)
+            if (firstDraw) row.enter(i * 60L)
+        }
+
+        val t = lb.board.totals
+        box.addView(
+            TextView(this).apply {
+                text = "Shop total  ${rupees(t.amount)}  \u00B7  ${t.bills} ${if (t.bills == 1L) "bill" else "bills"}"
+                style(m.sp(12f), pal.muted, 600, mono = true)
+                setPadding(m.dp(2), m.dp(12), 0, 0)
+            },
+        )
     }
 
     /** Battery ring + %, Wi-Fi bars + network name, and (exitMode "visible") the admin menu button. */
@@ -1986,6 +2200,8 @@ class KioskLauncherActivity : FragmentActivity() {
         const val GESTURE_TAPS = 7
         const val GESTURE_WINDOW_MS = 3_000L
         const val STATUS_POLL_MS = 15_000L
+        const val LEADERBOARD_POLL_MS = 30_000L
+        const val LEADERBOARD_STALE_MS = 5 * 60_000L
         const val PREF_WIFI_OFF_AT = "wifiOffAt"
         const val HOME_ALIAS = "com.mdmesh.agent.KioskHomeAlias"
         val INK = Color.parseColor("#0E1117")
