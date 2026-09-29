@@ -51,6 +51,9 @@ public class AgentCheckInResponse {
     private String clientLogoUrl;
     private String clientMarkUrl;
 
+    /** JSON map of kiosk sections switched off/on (see Settings#kioskSections); null = all on. */
+    private String kioskSections;
+
     public AgentCheckInResponse() {
     }
 

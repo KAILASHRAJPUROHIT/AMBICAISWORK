@@ -188,6 +188,17 @@ public interface CommonMapper {
     })
     void saveClientBranding(Settings settings);
 
+    @Insert({
+            "INSERT INTO settings (kioskSections, customerId" +
+                    ") VALUES (" +
+                    "#{kioskSections}, #{customerId} " +
+                    ") " +
+                    "ON CONFLICT ON CONSTRAINT settings_customer_unique DO " +
+                    "UPDATE SET " +
+                    "kioskSections = EXCLUDED.kioskSections "
+    })
+    void saveKioskSections(Settings settings);
+
     @Select({"SELECT COUNT(*) FROM settings"})
     int getSettingsCount();
 

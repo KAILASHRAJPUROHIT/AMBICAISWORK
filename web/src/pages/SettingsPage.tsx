@@ -11,6 +11,7 @@ import { getFleetSettings, setAdminPasscode } from '../api/settings';
 import { RolloutPanel } from '../components/RolloutPanel';
 import { WallpaperPanel } from '../components/WallpaperPanel';
 import { ClientBrandingPanel } from '../components/ClientBrandingPanel';
+import { KioskSectionsPanel } from '../components/KioskSectionsPanel';
 import { AlertRulesPanel } from '../components/AlertRulesPanel';
 import { GeofencePanel } from '../components/GeofencePanel';
 import { beginFrpRecoveryAccountConnection, listFrpRecoveryAccounts, removeFrpRecoveryAccount, type FrpRecoveryAccount } from '../api/frp';
@@ -325,6 +326,7 @@ export function SettingsPage() {
         </section>
 
         <WallpaperPanel />
+      <KioskSectionsPanel />
       <ClientBrandingPanel />
 
         {/* Updates */}

@@ -81,3 +81,37 @@ export async function saveClientBranding(b: {
     markUrl: b.markUrl,
   });
 }
+
+// --- Kiosk sections (which parts of the tablet UI are shown) ---------------------------------------
+
+export type KioskSectionKey = 'leaderboard' | 'quickControls' | 'clientLogo' | 'clockCard' | 'statusPills';
+export type KioskSectionMap = Record<KioskSectionKey, boolean>;
+
+/** The switchable parts of the tablet, in display order. The admin menu button is never switchable. */
+export const KIOSK_SECTIONS: { key: KioskSectionKey; label: string; hint: string }[] = [
+  { key: 'leaderboard', label: 'Sales leaderboard', hint: "Today's ranking of salespeople, under the clock." },
+  { key: 'quickControls', label: 'Quick Controls', hint: 'The bottom bar (Rotate, Wi-Fi, Brightness) and the full Quick Controls sheet.' },
+  { key: 'clientLogo', label: 'Client logo', hint: "Your client's logo beside the clock, on the idle screen and on the agent screen." },
+  { key: 'clockCard', label: 'Clock & device card', hint: 'The big time, the date, the device name and the Managed light.' },
+  { key: 'statusPills', label: 'Battery & Wi-Fi status', hint: 'The battery and Wi-Fi indicators at the top of the screen.' },
+];
+
+/** Current switches. A section is on unless the server has stored an explicit false. */
+export async function getKioskSections(): Promise<KioskSectionMap> {
+  const d = await apiClient.get<{ kioskSections?: string | null }>('/private/settings');
+  const map = Object.fromEntries(KIOSK_SECTIONS.map((s) => [s.key, true])) as KioskSectionMap;
+  if (d?.kioskSections) {
+    try {
+      const stored = JSON.parse(d.kioskSections) as Record<string, unknown>;
+      for (const s of KIOSK_SECTIONS) if (stored[s.key] === false) map[s.key] = false;
+    } catch {
+      /* unreadable value: leave everything on */
+    }
+  }
+  return map;
+}
+
+/** Saves the switches for every managed device. */
+export async function saveKioskSections(map: KioskSectionMap): Promise<void> {
+  await apiClient.post<void>('/private/settings/kioskSections', map);
+}

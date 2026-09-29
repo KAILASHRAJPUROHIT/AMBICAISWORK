@@ -112,6 +112,9 @@ public class Settings implements CustomerData, Serializable {
     private String clientLogoUrl;
     private String clientMarkUrl;
 
+    // JSON map {"leaderboard":false,...} of kiosk sections switched off/on; null = everything on.
+    private String kioskSections;
+
     // This property is not stored in the database, it is a transient field used by the Settings resource
     @ApiModelProperty(hidden = true)
     private boolean singleCustomer;
@@ -375,6 +378,9 @@ public class Settings implements CustomerData, Serializable {
     }
 
     @ApiModelProperty("Whether a fleet-wide admin passcode is currently configured")
+    public String getKioskSections() { return kioskSections; }
+    public void setKioskSections(String kioskSections) { this.kioskSections = kioskSections; }
+
     public String getClientName() { return clientName; }
     public void setClientName(String clientName) { this.clientName = clientName; }
     public String getClientLogoUrl() { return clientLogoUrl; }

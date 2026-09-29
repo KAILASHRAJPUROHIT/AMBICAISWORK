@@ -43,6 +43,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.mdmesh.core.state.KioskStatusSource
 import com.mdmesh.core.store.ClientBrandingStore
+import com.mdmesh.core.store.KioskSectionsStore
 import com.mdmesh.agent.ui.loadBrandBitmap
 import android.widget.ImageView
 import com.mdmesh.agent.ui.GroundDrawable
@@ -294,7 +295,9 @@ class MainActivity : ComponentActivity() {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
         // Client brand on the right: AMBIC DIGITAL owns the agent, the client owns the device.
-        val brand = ClientBrandingStore.read(this)
+        val brand = ClientBrandingStore.read(this).let { b ->
+            if (KioskSectionsStore.read(this).clientLogo) b else b.copy(logo = null, mark = null)
+        }
         val markPx = m.dp(if (m.isPhone) 52 else 64)
         loadBrandBitmap(brand.logo ?: brand.mark, markPx * 3)?.let { bmp ->
             head.addView(

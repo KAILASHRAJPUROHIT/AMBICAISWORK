@@ -103,4 +103,6 @@ data class AgentCheckInResponse(
     val clientName: String? = null,
     val clientLogoUrl: String? = null,
     val clientMarkUrl: String? = null,
+    /** JSON map of kiosk sections the admin switched off (`{"leaderboard":false}`); null = all on. */
+    val kioskSections: String? = null,
 )

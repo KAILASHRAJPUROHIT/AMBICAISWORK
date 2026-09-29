@@ -92,7 +92,9 @@ import com.mdmesh.agent.ui.style
 import com.mdmesh.agent.ui.withAlpha
 import com.mdmesh.agent.ui.loadBrandBitmap
 import com.mdmesh.core.store.ClientBrandingStore
+import com.mdmesh.core.store.KioskSectionsStore
 import com.mdmesh.core.store.LeaderboardRepository
+import com.mdmesh.proto.KioskSections
 
 /**
  * MDMesh kiosk HOME. This is the device's persistent launcher (`CATEGORY_HOME`), repointed to
@@ -168,6 +170,20 @@ class KioskLauncherActivity : FragmentActivity() {
      *  it last drew, so the 30s poll only rebuilds it when something visible changed. */
     private var leaderboardBox: LinearLayout? = null
     private var leaderboardSig: String? = null
+    /** The admin switched a kiosk section on/off in the console: redraw whichever screen is showing. */
+    private val sectionsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == KioskSectionsStore.KEY_VERSION) runOnUiThread {
+            val p = active
+            if (p == null) setContentView(idleView()) else if (p.mode != "single") setContentView(launcherGrid(p))
+        }
+    }
+
+    private fun sections(): KioskSections = KioskSectionsStore.read(this)
+
+    /** Client branding as the admin wants it shown: the name always, the logo only if its section is on. */
+    private fun brand(): ClientBrandingStore.Branding =
+        ClientBrandingStore.read(this).let { b -> if (sections().clientLogo) b else b.copy(logo = null, mark = null) }
+
     private val leaderboardListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == LeaderboardRepository.KEY_VERSION) runOnUiThread { renderLeaderboard() }
     }
@@ -220,6 +236,7 @@ class KioskLauncherActivity : FragmentActivity() {
         statusHandler.post(statusTick)
         ClientBrandingStore.prefs(this).registerOnSharedPreferenceChangeListener(brandingListener)
         LeaderboardRepository.prefs(this).registerOnSharedPreferenceChangeListener(leaderboardListener)
+        KioskSectionsStore.prefs(this).registerOnSharedPreferenceChangeListener(sectionsListener)
         // Live sales leaderboard: poll every 30s, only while the kiosk home is on screen and only
         // when its card exists. A failed poll keeps showing the last good copy.
         lifecycleScope.launch {
@@ -248,6 +265,7 @@ class KioskLauncherActivity : FragmentActivity() {
     override fun onDestroy() {
         ClientBrandingStore.prefs(this).unregisterOnSharedPreferenceChangeListener(brandingListener)
         LeaderboardRepository.prefs(this).unregisterOnSharedPreferenceChangeListener(leaderboardListener)
+        KioskSectionsStore.prefs(this).unregisterOnSharedPreferenceChangeListener(sectionsListener)
         statusHandler.removeCallbacks(statusTick)
         statusHandler.removeCallbacks(clockTick)
         super.onDestroy()
@@ -783,7 +801,7 @@ class KioskLauncherActivity : FragmentActivity() {
      * button, not a dead one.
      */
     private fun addQuickControlsAffordance(parent: ViewGroup) {
-        if (!quickControlsAvailable()) return
+        if (!sections().quickControls || !quickControlsAvailable()) return
         val pal = palette(active)
         val m = Metrics(this)
         val button = TextView(this).apply {
@@ -1122,7 +1140,7 @@ class KioskLauncherActivity : FragmentActivity() {
      *  plus the gradient "more" button that opens the full Quick Controls sheet. */
     private fun addDock(pal: Palette, m: Metrics, parent: ViewGroup) {
         dockRefreshers.clear()
-        if (!quickControlsAvailable()) return
+        if (!sections().quickControls || !quickControlsAvailable()) return
         val dock = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -1450,9 +1468,11 @@ class KioskLauncherActivity : FragmentActivity() {
             v.setPadding(m.dp(m.gutterDp), bars.top + m.dp(12), m.dp(m.gutterDp), bars.bottom + m.dp(96))
             insets
         }
-        column.addView(topRow(p, pal, m))
-        column.addView(heroCard(p, pal, m))
-        column.addView(leaderboardCard(pal, m))
+        val sec = sections()
+        // The row always exists (the admin menu button lives in it); the status pills inside it are optional.
+        column.addView(topRow(p, pal, m, showPills = sec.statusPills))
+        if (sec.clockCard) column.addView(heroCard(p, pal, m))
+        if (sec.leaderboard) column.addView(leaderboardCard(pal, m))
 
         // Group: user-installed apps (Capture, Ornate Buddy, BIS CARE…) are the showroom apps;
         // preloaded system apps (Chrome, Camera, Gallery…) are tools.
@@ -1665,7 +1685,7 @@ class KioskLauncherActivity : FragmentActivity() {
     }
 
     /** Battery ring + %, Wi-Fi bars + network name, and (exitMode "visible") the admin menu button. */
-    private fun topRow(p: KioskApplyPayload, pal: Palette, m: Metrics): View {
+    private fun topRow(p: KioskApplyPayload, pal: Palette, m: Metrics, showPills: Boolean = true): View {
         val s = KioskStatusSource.read(this)
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1678,30 +1698,32 @@ class KioskLauncherActivity : FragmentActivity() {
             setPadding(m.dp(10), m.dp(7), m.dp(12), m.dp(7))
             background = rounded(pal.glass, m.dp(18f), pal.line, m.dp(1))
         }
-        val bat = pill()
-        batteryRing = BatteryRingView(this, pal).apply {
-            percent = s.batteryPct; charging = s.charging
-            layoutParams = LinearLayout.LayoutParams(m.dp(16), m.dp(16)).apply { rightMargin = m.dp(7) }
-        }
-        batteryPct = TextView(this).apply { style(m.sp(12f), pal.text, 700, mono = true) }
-        bat.addView(batteryRing); bat.addView(batteryPct)
-        row.addView(bat)
+        if (showPills) {
+            val bat = pill()
+            batteryRing = BatteryRingView(this, pal).apply {
+                percent = s.batteryPct; charging = s.charging
+                layoutParams = LinearLayout.LayoutParams(m.dp(16), m.dp(16)).apply { rightMargin = m.dp(7) }
+            }
+            batteryPct = TextView(this).apply { style(m.sp(12f), pal.text, 700, mono = true) }
+            bat.addView(batteryRing); bat.addView(batteryPct)
+            row.addView(bat)
 
-        val wifi = pill().apply {
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                .apply { leftMargin = m.dp(8) }
+            val wifi = pill().apply {
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    .apply { leftMargin = m.dp(8) }
+            }
+            wifiBarsView = WifiBarsView(this, pal).apply {
+                layoutParams = LinearLayout.LayoutParams(m.dp(16), m.dp(12)).apply { rightMargin = m.dp(7) }
+            }
+            wifiName = TextView(this).apply {
+                style(m.sp(12f), pal.text, 600)
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                maxWidth = m.dp(if (m.isPhone) 120 else 220)
+            }
+            wifi.addView(wifiBarsView); wifi.addView(wifiName)
+            row.addView(wifi)
         }
-        wifiBarsView = WifiBarsView(this, pal).apply {
-            layoutParams = LinearLayout.LayoutParams(m.dp(16), m.dp(12)).apply { rightMargin = m.dp(7) }
-        }
-        wifiName = TextView(this).apply {
-            style(m.sp(12f), pal.text, 600)
-            maxLines = 1
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            maxWidth = m.dp(if (m.isPhone) 120 else 220)
-        }
-        wifi.addView(wifiBarsView); wifi.addView(wifiName)
-        row.addView(wifi)
         row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
 
         if (p.exitMode == "visible") {
@@ -1746,7 +1768,7 @@ class KioskLauncherActivity : FragmentActivity() {
             style(m.sp(13f), pal.muted, 500)
             setPadding(0, m.dp(4), 0, 0)
         }
-        val brand = ClientBrandingStore.read(this)
+        val brand = brand()
         val logoPx = m.dp(when { m.isPhone -> 64; m.isLargeTablet -> 108; else -> 92 })
         val logo = loadBrandBitmap(brand.logo ?: brand.mark, logoPx * 3)
         if (logo != null) {
@@ -1791,7 +1813,7 @@ class KioskLauncherActivity : FragmentActivity() {
                 style(m.sp(18f), pal.text, 700)
             },
         )
-        val org = ClientBrandingStore.read(this).name ?: p.orgName?.takeIf { it.isNotBlank() }
+        val org = brand().name ?: p.orgName?.takeIf { it.isNotBlank() }
         names.addView(
             TextView(this).apply {
                 text = listOfNotNull(org, "powered by AMBIC DIGITAL").joinToString(" · ")
@@ -1907,7 +1929,7 @@ class KioskLauncherActivity : FragmentActivity() {
                 gravity = Gravity.CENTER
                 layoutParams = ViewGroup.LayoutParams(MATCH, MATCH)
             }
-            val brand = ClientBrandingStore.read(this@KioskLauncherActivity)
+            val brand = brand()
             val logoW = kotlin.math.min(resources.displayMetrics.widthPixels * 6 / 10, m.dp(380))
             val logo = loadBrandBitmap(brand.logo ?: brand.mark, logoW)
             if (logo != null) {

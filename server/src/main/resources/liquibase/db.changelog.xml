@@ -3066,4 +3066,10 @@
         <rollback>DROP TABLE leaderboardSnapshot;</rollback>
     </changeSet>
 
+    <changeSet id="26.09.29-settings-kiosk-sections" author="ambic" context="common">
+        <comment>Column,new: settings#kioskSections — JSON map of kiosk sections the admin has switched on/off (missing key = on). Delivered to devices on check-in; hidden sections disappear from the tablets.</comment>
+        <sql>ALTER TABLE settings ADD COLUMN kioskSections TEXT;</sql>
+        <rollback>ALTER TABLE settings DROP COLUMN kioskSections;</rollback>
+    </changeSet>
+
 </databaseChangeLog>

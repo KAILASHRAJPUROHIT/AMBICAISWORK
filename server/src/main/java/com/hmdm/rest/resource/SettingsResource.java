@@ -284,6 +284,46 @@ public class SettingsResource {
         }
     }
 
+    /** Kiosk sections the admin can switch on/off. Anything else in a request is ignored. */
+    private static final java.util.List<String> KIOSK_SECTIONS = java.util.Arrays.asList(
+            "leaderboard", "quickControls", "clientLogo", "clockCard", "statusPills");
+
+    /**
+     * Switches kiosk sections on/off for every managed device. The body is a map of section key to
+     * boolean; only known keys are kept, and only {@code false} is stored (a missing key means on).
+     * Devices pick the result up on their next check-in.
+     */
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("/kioskSections")
+    public Response updateKioskSections(java.util.Map<String, Boolean> request) {
+        if (!SecurityContext.get().hasPermission("settings")) {
+            log.error("Unauthorized attempt to update kiosk sections by user " +
+                    SecurityContext.get().getCurrentUserName());
+            return Response.PERMISSION_DENIED();
+        }
+        try {
+            StringBuilder json = new StringBuilder("{");
+            if (request != null) {
+                for (String key : KIOSK_SECTIONS) {
+                    if (Boolean.FALSE.equals(request.get(key))) {
+                        if (json.length() > 1) json.append(',');
+                        json.append('"').append(key).append("\":false");
+                    }
+                }
+            }
+            json.append('}');
+            Settings settings = new Settings();
+            settings.setKioskSections(json.length() > 2 ? json.toString() : null);
+            this.commonDAO.saveKioskSections(settings);
+            return Response.OK();
+        } catch (Exception e) {
+            log.error("Unexpected error when saving kiosk sections", e);
+            return Response.INTERNAL_ERROR();
+        }
+    }
+
     private static String trimOrNull(String v, int max) {
         if (v == null || v.trim().isEmpty()) return null;
         String t = v.trim();

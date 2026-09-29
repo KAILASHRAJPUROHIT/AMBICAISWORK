@@ -458,6 +458,7 @@ public class AgentResource {
             checkInResponse.setClientName(settings.getClientName());
             checkInResponse.setClientLogoUrl(settings.getClientLogoUrl());
             checkInResponse.setClientMarkUrl(settings.getClientMarkUrl());
+            checkInResponse.setKioskSections(settings.getKioskSections());
         }
         return Response.OK(checkInResponse);
     }
