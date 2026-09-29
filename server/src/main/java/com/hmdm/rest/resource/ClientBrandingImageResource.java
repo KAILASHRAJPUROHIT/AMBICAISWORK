@@ -101,7 +101,9 @@ public class ClientBrandingImageResource {
             // Replace atomically so a device never fetches a half-written image.
             Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
             log.info("Client branding '{}' image stored ({} bytes)", slot, bytes.length);
-            return Response.ok("{\"path\":\"" + publicPath(slot) + "\"}")
+            // Same {status,message,data} envelope every other /rest endpoint returns; the console
+            // client unwraps `data`, so a bare {"path":...} reads back as empty.
+            return Response.ok("{\"status\":\"OK\",\"message\":null,\"data\":{\"path\":\"" + publicPath(slot) + "\"}}")
                     .type(MediaType.APPLICATION_JSON).build();
         } catch (Exception e) {
             log.error("Unexpected error when storing client branding image", e);
