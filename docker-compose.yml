@@ -52,6 +52,8 @@ services:
       AMBIC_GOOGLE_OAUTH_CLIENT_SECRET: ${AMBIC_GOOGLE_OAUTH_CLIENT_SECRET:-}
       AMBIC_GOOGLE_OAUTH_REDIRECT_URI: ${AMBIC_GOOGLE_OAUTH_REDIRECT_URI:-}
       AMBIC_FCM_PROJECT_ID: ${AMBIC_FCM_PROJECT_ID:-}
+      # Shop-side sales-leaderboard collector push token (X-Collector-Token). Unset = ingest disabled (503).
+      MDM_COLLECTOR_TOKEN: ${MDM_COLLECTOR_TOKEN:-}
     volumes:
       - mdmeshdata:/opt/mdmesh
       # AMAPI/FCM Workload Identity Federation credential (GoogleWifTokenService's default path).
