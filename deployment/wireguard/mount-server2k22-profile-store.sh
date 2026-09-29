@@ -10,7 +10,8 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 [[ -f "$CREDENTIALS" ]] || { echo "Create $CREDENTIALS first (mode 600)." >&2; exit 1; }
-ping -c 1 -W 3 10.241.77.2 >/dev/null
+# ICMP is intentionally not required: the Server2k22 firewall may block ping.
+# SMB/TCP 445 is the authoritative reachability test for this mount.
 nc -zvw 5 192.168.0.100 445
 
 apt-get update
