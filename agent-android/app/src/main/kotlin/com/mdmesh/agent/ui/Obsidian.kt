@@ -498,17 +498,55 @@ class HoldToConfirm(
 
 // --- Client branding -------------------------------------------------------------------------------
 
-/** Decodes a cached client logo, downsampled so its longest side is at most [maxPx]. */
+/**
+ * Decodes a cached client logo for display: downsampled (longest side around [maxPx] * 2, so the
+ * trimmed artwork stays sharp) and with fully transparent borders cropped away. Logos are often
+ * exported on a large square canvas with generous empty margins; without the crop the artwork
+ * would occupy only a fraction of the space it is given.
+ */
 fun loadBrandBitmap(file: java.io.File?, maxPx: Int): android.graphics.Bitmap? {
     if (file == null) return null
     return runCatching {
         val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
         android.graphics.BitmapFactory.decodeFile(file.path, bounds)
+        val target = maxPx * 2
         var sample = 1
-        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPx) sample *= 2
-        android.graphics.BitmapFactory.decodeFile(
+        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= target) sample *= 2
+        val decoded = android.graphics.BitmapFactory.decodeFile(
             file.path,
             android.graphics.BitmapFactory.Options().apply { inSampleSize = sample },
-        )
+        ) ?: return@runCatching null
+        trimTransparent(decoded)
     }.getOrNull()
+}
+
+/** Crops [src] to the bounding box of its visible (non-transparent) pixels; returns [src] if none. */
+private fun trimTransparent(src: android.graphics.Bitmap): android.graphics.Bitmap {
+    if (!src.hasAlpha()) return src
+    val w = src.width
+    val h = src.height
+    val px = IntArray(w * h)
+    src.getPixels(px, 0, w, 0, 0, w, h)
+    var minX = w
+    var minY = h
+    var maxX = -1
+    var maxY = -1
+    for (y in 0 until h) {
+        val row = y * w
+        for (x in 0 until w) {
+            if ((px[row + x] ushr 24) > 24) {
+                if (x < minX) minX = x
+                if (x > maxX) maxX = x
+                if (y < minY) minY = y
+                if (y > maxY) maxY = y
+            }
+        }
+    }
+    if (maxX < minX || maxY < minY) return src
+    // Small breathing margin so anti-aliased edges are not clipped.
+    val pad = 2
+    minX = (minX - pad).coerceAtLeast(0); minY = (minY - pad).coerceAtLeast(0)
+    maxX = (maxX + pad).coerceAtMost(w - 1); maxY = (maxY + pad).coerceAtMost(h - 1)
+    if (minX == 0 && minY == 0 && maxX == w - 1 && maxY == h - 1) return src
+    return android.graphics.Bitmap.createBitmap(src, minX, minY, maxX - minX + 1, maxY - minY + 1)
 }
