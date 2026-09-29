@@ -2915,6 +2915,15 @@ a {
     text-align: left;
     align-items: flex-start;
   }
+  /* The wide-actions cell has a 340px flex-basis for the horizontal layout; in a column that
+     basis becomes a 340px HEIGHT, leaving a huge empty gap under every such row. */
+  .set-row .v.wide-actions {
+    flex: 0 0 auto;
+    min-width: 0;
+    width: 100%;
+    align-items: stretch;
+  }
+  .set-row .upd-actions { justify-content: flex-start; }
 }
 
 /* Staged agent-APK rollout */
@@ -3442,3 +3451,8 @@ body {
   .atr-app { grid-template-columns: 10px minmax(0, 1fr) minmax(0, 1fr) 56px; }
   .atr-pct { display: none; }
 }
+
+/* Client branding: image preview chip (gold-on-transparent logos need a neutral ground). */
+.brand-preview { display: inline-flex; align-items: center; justify-content: center; width: 96px; height: 56px; padding: 6px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); overflow: hidden; }
+.brand-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.brand-preview em { font-style: normal; font-size: 11px; color: var(--muted); }

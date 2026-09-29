@@ -61,7 +61,7 @@ export async function uploadClientBrandingImage(file: File, kind: BrandingSlot):
   form.append('kind', kind);
   form.append('file', file, file.name);
   const r = await apiClient.postForm<{ path?: string }>(
-    '/private/settings/clientBranding/image',
+    '/private/client-branding/image',
     form,
   );
   const url = absUrl(r?.path);

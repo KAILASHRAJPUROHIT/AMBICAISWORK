@@ -35,7 +35,7 @@ import java.util.Locale;
  * credentials. Only PNG is accepted, and the stored name is fixed per slot so a re-upload
  * replaces rather than accumulates.
  */
-@Path("/")
+@Path("/private/client-branding")
 public class ClientBrandingImageResource {
 
     private static final Logger log = LoggerFactory.getLogger(ClientBrandingImageResource.class);
@@ -50,9 +50,13 @@ public class ClientBrandingImageResource {
 
     private final File brandingDir;
 
+    static File dirFor(String filesDirectory) {
+        return new File(filesDirectory, "client-branding");
+    }
+
     @Inject
     public ClientBrandingImageResource(@Named("files.directory") String filesDirectory) {
-        this.brandingDir = new File(filesDirectory, "client-branding");
+        this.brandingDir = dirFor(filesDirectory);
     }
 
     // ------------------------------------------------------------------ upload
@@ -60,7 +64,7 @@ public class ClientBrandingImageResource {
     @POST
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Produces(MediaType.APPLICATION_JSON)
-    @Path("/private/settings/clientBranding/image")
+    @Path("/image")
     public Response upload(@FormDataParam("file") InputStream in,
                            @FormDataParam("file") FormDataContentDisposition detail,
                            @FormDataParam("kind") String kind) {
@@ -105,34 +109,6 @@ public class ClientBrandingImageResource {
         }
     }
 
-    // ------------------------------------------------------------------ delivery
-
-    @GET
-    @PermitAll
-    @Path("/public/client-branding/{name}")
-    public Response fetch(@PathParam("name") String name) {
-        String slot = normaliseSlot(stripPng(name));
-        if (slot == null) {
-            return Response.status(Response.Status.NOT_FOUND).build();
-        }
-        File file = new File(brandingDir, slot + ".png");
-        if (!file.isFile()) {
-            return Response.status(Response.Status.NOT_FOUND).build();
-        }
-        byte[] bytes;
-        try {
-            bytes = Files.readAllBytes(file.toPath());
-        } catch (IOException e) {
-            log.error("Cannot read stored client branding image", e);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).build();
-        }
-        return Response.ok(bytes)
-                .type("image/png")
-                // The URL stays stable across re-uploads, so devices are told to re-fetch.
-                .header("Cache-Control", "no-cache")
-                .build();
-    }
-
     // ------------------------------------------------------------------ helpers
 
     private static Response badRequest(String message) {
@@ -141,7 +117,7 @@ public class ClientBrandingImageResource {
                 .type(MediaType.APPLICATION_JSON).build();
     }
 
-    private static String normaliseSlot(String kind) {
+    static String normaliseSlot(String kind) {
         if (kind == null) {
             return null;
         }
@@ -149,7 +125,7 @@ public class ClientBrandingImageResource {
         return ("logo".equals(k) || "mark".equals(k)) ? k : null;
     }
 
-    private static String stripPng(String name) {
+    static String stripPng(String name) {
         if (name == null) {
             return null;
         }
@@ -159,7 +135,7 @@ public class ClientBrandingImageResource {
     }
 
     private static String publicPath(String slot) {
-        return "/public/client-branding/" + slot + ".png";
+        return "/rest/public/client-branding/" + slot + ".png";
     }
 
     /** Reads at most {@link #MAX_BYTES}; returns null when the stream is larger. */
