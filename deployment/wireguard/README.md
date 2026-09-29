@@ -21,12 +21,13 @@ AWS notifier host (10.241.77.1) -- WireGuard UDP/51820 --> Server2k22 (10.241.77
 ## One-time setup order
 
 1. On AWS run `sudo bash aws-initialize.sh`. It generates the AWS WireGuard private/public key.
-2. Add an AWS Security Group inbound rule: **Custom UDP / 51820**. Prefer the office public IP CIDR. If the office IP changes dynamically, `0.0.0.0/0` is acceptable only for this WireGuard UDP port; WireGuard authentication still rejects unknown peers.
-3. On Server2k22 install WireGuard from the official installer, then run `New-Server2k22RtgsTunnel.ps1` as Administrator with the AWS public key and public endpoint. It writes `server2k22-rtgs.conf` and prints the Server2k22 public key.
-4. Back on AWS run `sudo bash aws-add-server2k22-peer.sh <SERVER2K22_PUBLIC_KEY>`. It enables the tunnel and establishes the private route for `192.168.0.100`.
-5. Verify from AWS: `ping -c 2 10.241.77.2` then `nc -zv 192.168.0.100 445`.
-6. Create `/etc/samba/credentials/server2k22-rtgs` manually, mode `600`, with the restricted Server2k22 service account. Do not paste its contents into terminal history or Git.
-7. On AWS run `sudo bash mount-server2k22-profile-store.sh`.
-8. In `/opt/aradhana-payment-notifier/deployment/aws/.env`, set `RTGS_PROFILE_STORE_DIR=/mnt/server2k22-d/AradhanaPaymentAuditor`, then redeploy the notifier.
+2. Associate an Elastic IP with the AWS instance and use that stable IP/DNS as the client endpoint. EC2's automatic public IPv4 can change after a stop/start. This replaces the existing public IPv4 rather than adding a second endpoint.
+3. Add an AWS Security Group inbound rule: **Custom UDP / 51820**, source the office public IP CIDR. If the office IP changes dynamically, update this one rule; do not expose SMB.
+4. On Server2k22 install WireGuard from the official installer, then run `New-Server2k22RtgsTunnel.ps1` as Administrator with the AWS public key and public endpoint. It writes `server2k22-rtgs.conf` and prints the Server2k22 public key.
+5. Back on AWS run `sudo bash aws-add-server2k22-peer.sh <SERVER2K22_PUBLIC_KEY>`. It enables the tunnel and establishes the private route for `192.168.0.100`.
+6. Verify from AWS: `ping -c 2 10.241.77.2` then `nc -zv 192.168.0.100 445`.
+7. Create `/etc/samba/credentials/server2k22-rtgs` manually, mode `600`, with the restricted Server2k22 service account. Do not paste its contents into terminal history or Git.
+8. On AWS run `sudo bash mount-server2k22-profile-store.sh`.
+9. In `/opt/aradhana-payment-notifier/deployment/aws/.env`, set `RTGS_PROFILE_STORE_DIR=/mnt/server2k22-d/AradhanaPaymentAuditor`, then redeploy the notifier.
 
 The profile-store backend already persists remitter, B2B, and B2C data. The mount changes its durable location to the Server2k22 folder.
