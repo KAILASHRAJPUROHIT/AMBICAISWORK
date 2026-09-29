@@ -32,7 +32,10 @@ export interface ClientBranding {
 function absUrl(path: string | null | undefined): string | null {
   if (!path) return null;
   if (/^https?:\/\//i.test(path)) return path;
-  const origin = API_BASE.replace(/\/rest\/?$/i, '');
+  // API_BASE is a relative "/rest" on the standalone MDM domain, so use the page's own origin then;
+  // the server also completes a relative branding path, this keeps the console preview correct.
+  const stripped = API_BASE.replace(/\/rest\/?$/i, '');
+  const origin = /^https?:\/\//i.test(stripped) ? stripped : window.location.origin;
   return origin + (path.startsWith('/') ? path : `/${path}`);
 }
 

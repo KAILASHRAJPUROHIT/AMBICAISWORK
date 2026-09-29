@@ -66,8 +66,13 @@ public class SettingsResource {
     public SettingsResource() {
     }
 
+    /** Public address of this server (BASE_URL), used to complete relative branding image paths. */
+    private final String baseUrl;
+
     @Inject
-    public SettingsResource(CommonDAO commonDAO, UserRoleSettingsDAO userRoleSettingsDAO, UnsecureDAO unsecureDAO) {
+    public SettingsResource(CommonDAO commonDAO, UserRoleSettingsDAO userRoleSettingsDAO, UnsecureDAO unsecureDAO,
+                            @javax.inject.Named("base.url") String baseUrl) {
+        this.baseUrl = baseUrl == null ? "" : baseUrl.trim().replaceAll("/+$", "");
         this.commonDAO = commonDAO;
         this.userRoleSettingsDAO = userRoleSettingsDAO;
         this.unsecureDAO = unsecureDAO;
@@ -330,17 +335,26 @@ public class SettingsResource {
         return t.length() > max ? t.substring(0, max) : t;
     }
 
+    private static final java.util.regex.Pattern BRANDING_PATH =
+            java.util.regex.Pattern.compile("^(?:/[A-Za-z0-9_-]+)*/public/client-branding/(logo|mark)\\.png$");
+
     /**
-     * Accepts an absolute http(s) image URL, or a path this server serves itself
-     * ({@code /public/client-branding/...}). Anything else is dropped so a console
-     * mistake cannot point managed devices at an unexpected scheme.
+     * Branding image address for devices. A full http(s) URL is kept. A root-relative path to one of
+     * this server's own branding images (what a console served from this same server sends, e.g.
+     * {@code /rest/public/client-branding/logo.png}) is completed with the server's public address,
+     * because devices need a full URL. Anything else is dropped so a console mistake cannot point
+     * managed devices at an unexpected place. (The relative form used to be dropped silently, which
+     * left devices with no logo even though the console said "Branding saved".)
      */
-    private static String httpUrlOrNull(String v) {
+    private String httpUrlOrNull(String v) {
         String t = trimOrNull(v, 2000);
         if (t == null) return null;
         String lower = t.toLowerCase();
         if (lower.startsWith("https://") || lower.startsWith("http://")) return t;
-        if (lower.startsWith("/public/client-branding/")) return t;
+        java.util.regex.Matcher m = BRANDING_PATH.matcher(t);
+        if (m.matches() && !baseUrl.isEmpty()) {
+            return baseUrl + "/rest/public/client-branding/" + m.group(1) + ".png";
+        }
         return null;
     }
 
