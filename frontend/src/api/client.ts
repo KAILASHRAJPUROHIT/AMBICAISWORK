@@ -117,3 +117,23 @@ export async function getRtgsTemplateStatus(bank: string) {
     updateAvailable: Boolean(result.update_available),
   };
 }
+
+export type RtgsProfileStore = {
+  schemaVersion: number;
+  profiles: Record<string, Record<string, string>>;
+  parties: Array<Record<string, string>>;
+};
+
+export async function getRtgsProfileStore(): Promise<RtgsProfileStore> {
+  const response = await fetch(`${BASE_URL}/api/rtgs/profile-store`, { headers: getHeaders() });
+  return handleJsonResponse(response, 'Failed to load RTGS saved profiles') as Promise<RtgsProfileStore>;
+}
+
+export async function saveRtgsProfileStore(store: RtgsProfileStore) {
+  const response = await fetch(`${BASE_URL}/api/rtgs/profile-store`, {
+    method: 'PUT',
+    headers: getHeaders(),
+    body: JSON.stringify(store),
+  });
+  return handleJsonResponse(response, 'Failed to save RTGS profiles');
+}

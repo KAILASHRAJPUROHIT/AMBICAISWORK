@@ -7,6 +7,8 @@ import json
 import logging
 import os
 import re
+import tempfile
+import threading
 import urllib.request
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -47,6 +49,8 @@ app.add_middleware(
 
 NOTIFIER_TOKEN = os.environ.get("NOTIFIER_TOKEN", "")
 RELAY_TOKEN = os.environ.get("RELAY_TOKEN", "")
+RTGS_PROFILE_STORE_PATH = os.environ.get("RTGS_PROFILE_STORE_PATH", "/var/lib/aradhana-payment-notifier/rtgs-profiles.json")
+_rtgs_profile_lock = threading.Lock()
 
 RTGS_TEMPLATES = {
     "icici": {
@@ -92,6 +96,90 @@ def require_notifier_token(x_notifier_token: str = Header(default="")):
 def require_relay_token(x_relay_token: str = Header(default="")):
     if not RELAY_TOKEN or x_relay_token != RELAY_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid or missing relay token.")
+
+
+class RtgsProfileStorePayload(BaseModel):
+    profiles: Dict[str, Dict[str, str]] = {}
+    parties: List[Dict[str, str]] = []
+
+
+_RTGS_PROFILE_FIELDS = {"branch", "account", "mobile", "company", "address1", "address2", "email"}
+_RTGS_PARTY_FIELDS = {
+    "customerType", "beneficiaryName", "beneficiaryAccount", "ifsc", "beneficiaryBank",
+    "beneficiaryBranch", "beneficiaryAddress", "beneficiaryContact", "beneficiaryGstin",
+    "beneficiaryLei", "beneficiaryLeiExpiry",
+}
+
+
+def _rtgs_profile_store_path():
+    return os.path.abspath(RTGS_PROFILE_STORE_PATH)
+
+
+def _read_rtgs_profile_store():
+    path = _rtgs_profile_store_path()
+    if not os.path.exists(path):
+        return {"schemaVersion": 1, "profiles": {}, "parties": []}
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            stored = json.load(handle)
+        return {
+            "schemaVersion": 1,
+            "profiles": stored.get("profiles", {}) if isinstance(stored.get("profiles"), dict) else {},
+            "parties": stored.get("parties", []) if isinstance(stored.get("parties"), list) else [],
+        }
+    except (OSError, ValueError) as error:
+        logger.error("Could not read RTGS profile store %s: %s", path, error)
+        raise HTTPException(status_code=503, detail="RTGS profile store is unavailable.")
+
+
+def _clean_rtgs_store(payload: RtgsProfileStorePayload):
+    profiles = {}
+    for name, profile in payload.profiles.items():
+        if name not in {"default", *RTGS_TEMPLATES.keys()} or not isinstance(profile, dict):
+            continue
+        profiles[name] = {field: str(profile.get(field, "")).strip()[:256] for field in _RTGS_PROFILE_FIELDS}
+
+    parties = []
+    seen = set()
+    for party in payload.parties:
+        if not isinstance(party, dict) or party.get("customerType") not in {"B2B", "B2C"}:
+            continue
+        cleaned = {field: str(party.get(field, "")).strip()[:256] for field in _RTGS_PARTY_FIELDS}
+        if not cleaned["beneficiaryName"] or not cleaned["beneficiaryAccount"]:
+            continue
+        key = (cleaned["customerType"], cleaned["beneficiaryAccount"])
+        if key in seen:
+            continue
+        seen.add(key)
+        parties.append(cleaned)
+        if len(parties) == 50:
+            break
+    return {"schemaVersion": 1, "profiles": profiles, "parties": parties}
+
+
+@app.get("/api/rtgs/profile-store")
+def get_rtgs_profile_store(_auth=Depends(require_notifier_token)):
+    with _rtgs_profile_lock:
+        return _read_rtgs_profile_store()
+
+
+@app.put("/api/rtgs/profile-store")
+def put_rtgs_profile_store(payload: RtgsProfileStorePayload, _auth=Depends(require_notifier_token)):
+    stored = _clean_rtgs_store(payload)
+    path = _rtgs_profile_store_path()
+    try:
+        with _rtgs_profile_lock:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            fd, temporary_path = tempfile.mkstemp(prefix=".rtgs-profiles-", suffix=".json", dir=os.path.dirname(path))
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(stored, handle, ensure_ascii=False, separators=(",", ":"))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, path)
+    except OSError as error:
+        logger.error("Could not write RTGS profile store %s: %s", path, error)
+        raise HTTPException(status_code=503, detail="RTGS profile store is unavailable.")
+    return {"status": "saved", "partyCount": len(stored["parties"])}
 
 
 @app.get("/api/rtgs/template-status")

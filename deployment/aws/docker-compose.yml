@@ -10,8 +10,10 @@ services:
     environment:
       PORT: "8000"
       DATABASE_URL: sqlite:////var/lib/aradhana-payment-notifier/notifier.db
+      RTGS_PROFILE_STORE_PATH: /rtgs-profile-store/rtgs-profiles.json
     volumes:
       - ${APN_DATA_DIR:-/srv/aradhana-payment-notifier/data}:/var/lib/aradhana-payment-notifier
+      - ${RTGS_PROFILE_STORE_DIR:-/srv/aradhana-payment-notifier/rtgs-profile-store}:/rtgs-profile-store
     restart: unless-stopped
     init: true
     security_opt:

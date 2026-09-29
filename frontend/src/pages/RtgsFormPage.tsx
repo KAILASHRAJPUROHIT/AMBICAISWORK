@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { getRtgsTemplateStatus } from "../api/client";
+import { getRtgsProfileStore, getRtgsTemplateStatus, saveRtgsProfileStore } from "../api/client";
 
 type BankId = "icici" | "kotak" | "hdfc" | "sbi";
 type PartyType = "B2B" | "B2C";
@@ -686,6 +686,7 @@ const RtgsFormPage: React.FC = () => {
   const [update, setUpdate] = useState("");
   const [working, setWorking] = useState(false);
   const [parties, setParties] = useState<SavedParty[]>(readParties);
+  const [profileStoreLoaded, setProfileStoreLoaded] = useState(false);
   const set = (key: keyof FormState, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
   const parsed = useMemo(() => parseAmount(form.amount), [form.amount]);
@@ -693,6 +694,29 @@ const RtgsFormPage: React.FC = () => {
   const visibleParties = parties.filter(
     (party) => party.customerType === form.customerType,
   );
+  useEffect(() => {
+    let active = true;
+    getRtgsProfileStore()
+      .then((store) => {
+        if (!active) return;
+        const profiles = store.profiles || {};
+        const serverParties = Array.isArray(store.parties) ? store.parties as SavedParty[] : [];
+        // First rollout: preserve an existing browser-only profile and upload it
+        // to the shared store instead of replacing it with an empty file.
+        if (!Object.keys(profiles).length && !serverParties.length) {
+          setProfileStoreLoaded(true);
+          return;
+        }
+        localStorage.setItem(PROFILE_KEY, JSON.stringify(profiles));
+        localStorage.setItem(PARTY_KEY, JSON.stringify(serverParties));
+        setParties(serverParties);
+        const profile = profiles.default || profiles[form.bank] || blankProfile;
+        setForm((current) => ({ ...current, ...profile }));
+        setProfileStoreLoaded(true);
+      })
+      .catch((error: Error) => setNotice(error.message || "Could not load shared RTGS profiles."));
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     const profiles = readProfiles();
     const profile = profiles.default || profiles[form.bank] || blankProfile;
@@ -739,6 +763,19 @@ const RtgsFormPage: React.FC = () => {
     form.beneficiaryLei,
     form.beneficiaryLeiExpiry,
   ]);
+  const profileStorePayload = useMemo(() => ({ schemaVersion: 1, profiles: readProfiles(), parties: readParties() }), [
+    form.bank, form.branch, form.account, form.mobile, form.company, form.address1, form.address2, form.email,
+    form.customerType, form.beneficiaryName, form.beneficiaryAccount, form.ifsc, form.beneficiaryBank,
+    form.beneficiaryBranch, form.beneficiaryAddress, form.beneficiaryContact, form.beneficiaryGstin,
+    form.beneficiaryLei, form.beneficiaryLeiExpiry,
+  ]);
+  useEffect(() => {
+    if (!profileStoreLoaded) return;
+    const timer = window.setTimeout(() => {
+      saveRtgsProfileStore(profileStorePayload).catch((error: Error) => setNotice(error.message || "Could not save shared RTGS profiles."));
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [profileStoreLoaded, profileStorePayload]);
   const saveProfile = () => {
     persistRemitterProfile(form);
     setNotice(
