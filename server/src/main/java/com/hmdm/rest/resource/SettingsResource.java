@@ -67,7 +67,7 @@ public class SettingsResource {
     }
 
     /** Public address of this server (BASE_URL), used to complete relative branding image paths. */
-    private final String baseUrl;
+    private String baseUrl = "";
 
     @Inject
     public SettingsResource(CommonDAO commonDAO, UserRoleSettingsDAO userRoleSettingsDAO, UnsecureDAO unsecureDAO,
