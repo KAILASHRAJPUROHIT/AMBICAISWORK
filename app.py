@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import urllib.request
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from uuid import uuid4
@@ -47,6 +48,29 @@ app.add_middleware(
 NOTIFIER_TOKEN = os.environ.get("NOTIFIER_TOKEN", "")
 RELAY_TOKEN = os.environ.get("RELAY_TOKEN", "")
 
+RTGS_TEMPLATES = {
+    "icici": {
+        "label": "ICICI Bank",
+        "source": "https://www.icici.bank.in/content/dam/icicibank/managed-assets/docs/form-center/application-for-funds-transfer-through-rtgs-neft-English-Hindi-Marathi.pdf",
+        "approved_hash": "4C1BA995AC7BE0A45142B64ED05913121182EE8350F40F7F339317E2251B4A54",
+    },
+    "kotak": {
+        "label": "Kotak Mahindra Bank",
+        "source": "https://www.kotak.bank.in/content/dam/Kotak/Customer-Service/Download-Forms/Personal-Banking/Remittance/rtgs-and-neft-form.pdf",
+        "approved_hash": "D5EDFBC8391EF98797B0F1080280D1F202D74344B0A2579AA8E386395F4B25F6",
+    },
+    "hdfc": {
+        "label": "HDFC Bank",
+        "source": "https://www.hdfc.bank.in/content/dam/hdfcbankpws/in/en/personal-banking/discover-products/nri-banking/forms-centre/rtgs-neft-combine-form.pdf",
+        "approved_hash": "681501F274FB3F76EA4D5095FF49FB3E0EE88BAAD8DF5456D825BF439B94E2A6",
+    },
+    "sbi": {
+        "label": "State Bank of India",
+        "source": "https://sbi.bank.in/documents/70137/0/010725-RTGS%2BNEFT%2BREQUISITION%2BFORM.pdf/27138bee-16e3-80de-5dd5-44631470819a?E4CsQb9LNBg=bMINhoP7&t=1722421918493",
+        "approved_hash": "CD18E9652B20EE5AC6B4DFB24B8DE40442F0A75F156B0210BAF9C30FA4EAA4FA",
+    },
+}
+
 app.include_router(documents_router)
 
 _dashboard_dist = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "dist")
@@ -68,6 +92,24 @@ def require_notifier_token(x_notifier_token: str = Header(default="")):
 def require_relay_token(x_relay_token: str = Header(default="")):
     if not RELAY_TOKEN or x_relay_token != RELAY_TOKEN:
         raise HTTPException(status_code=401, detail="Invalid or missing relay token.")
+
+
+@app.get("/api/rtgs/template-status")
+def rtgs_template_status(bank: str = "icici", _auth=Depends(require_notifier_token)):
+    """Check the selected official form without ever replacing the reviewed bundled PDF."""
+    template = RTGS_TEMPLATES.get(bank)
+    if not template:
+        raise HTTPException(status_code=400, detail="Unsupported RTGS bank.")
+    result = {"bank": bank, "label": template["label"], "source": template["source"], "approved_hash": template["approved_hash"], "update_available": False}
+    try:
+        request = urllib.request.Request(template["source"], headers={"User-Agent": "AMBIC-RTGS-Form-Filler/1.0"})
+        with urllib.request.urlopen(request, timeout=12) as response:
+            result["hash"] = hashlib.sha256(response.read()).hexdigest().upper()
+        result["update_available"] = result["hash"] != template["approved_hash"]
+    except Exception as error:
+        logger.warning("RTGS template check failed for %s: %s", bank, error)
+        result["check_error"] = "Official template check unavailable."
+    return result
 
 
 @app.on_event("startup")

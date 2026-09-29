@@ -32,6 +32,19 @@ See `deployment/aws/` — Docker Compose, joins the shared `ambic-shared` networ
 the existing Caddy instance (from `qr-print-server/deployment/aws`) can front it.
 Copy `.env.example` to `.env` and fill in real IMAP credentials + generated tokens.
 
+## RTGS / NEFT form filler
+
+The authenticated dashboard now has an **RTGS / NEFT** tab. It contains reviewed
+official blank forms for ICICI, Kotak Mahindra, HDFC and SBI. Filled PDFs are
+generated in the browser; remitter profiles are stored only in that browser and
+separately per bank. No bank account number is bundled in the dashboard or sent
+to this service.
+
+`GET /api/rtgs/template-status?bank=<icici|kotak|hdfc|sbi>` checks the selected
+official PDF against its reviewed SHA-256. An update warning never replaces the
+bundled template automatically. Rebuild the frontend image and redeploy the
+existing Compose service to publish this tab.
+
 ## Known gap
 
 The notifier's self-update mechanism (`/api/bank-activity/notifier-release*` in the

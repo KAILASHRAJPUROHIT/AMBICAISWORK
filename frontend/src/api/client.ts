@@ -108,3 +108,12 @@ export async function sendBankActivityTestPopup() {
   });
   return handleJsonResponse(response, 'Failed to send test popup');
 }
+
+export async function getRtgsTemplateStatus(bank: string) {
+  const response = await fetch(`${BASE_URL}/api/rtgs/template-status?bank=${encodeURIComponent(bank)}`, { headers: getHeaders() });
+  const result = await handleJsonResponse(response, 'Failed to check official RTGS template') as Record<string, unknown>;
+  return {
+    ...result,
+    updateAvailable: Boolean(result.update_available),
+  };
+}
