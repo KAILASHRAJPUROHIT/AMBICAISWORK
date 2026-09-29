@@ -31,6 +31,16 @@ $Here      = Split-Path -Parent $MyInvocation.MyCommand.Path
 function Step($m) { Write-Host ""; Write-Host "== $m" -ForegroundColor Cyan }
 function Fail($m) { Write-Host ""; Write-Host "STOPPED: $m" -ForegroundColor Red; exit 1 }
 
+# Run a program, capture stdout+stderr as text and the exit code, without PowerShell turning stderr into
+# red error records (Windows PowerShell 5.1 does that for native commands).
+function Invoke-Native([string]$Exe, [string[]]$Arguments) {
+    $o = [IO.Path]::GetTempFileName(); $e = [IO.Path]::GetTempFileName()
+    try {
+        $p = Start-Process -FilePath $Exe -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $o -RedirectStandardError $e
+        [pscustomobject]@{ Code = $p.ExitCode; Text = ((Get-Content $o -Raw) + (Get-Content $e -Raw)) }
+    } finally { Remove-Item $o, $e -Force -ErrorAction SilentlyContinue }
+}
+
 # --- 0. Preconditions ------------------------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) { Fail 'Open PowerShell with "Run as administrator" and run this again.' }
@@ -104,20 +114,38 @@ conn = pyodbc.connect(cs, autocommit=True)
 conn.execute("ALTER LOGIN [" + login + "] WITH PASSWORD = N'" + pwd + "'")
 print("rotated")
 '@
-$env:ROT_SERVER = $SqlServer; $env:ROT_LOGIN = $SqlLogin; $env:ROT_PWD = $NewPassword
-$out = $rotate | & $Python - 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Host 'Windows sign-in could not change the login. Enter the SQL "sa" password to do it that way.' -ForegroundColor Yellow
-    $sa = Read-Host 'SQL sa password' -AsSecureString
-    $env:ROT_SA_PWD = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sa))
-    $out = $rotate | & $Python - 2>&1
-    Remove-Item Env:\ROT_SA_PWD -ErrorAction SilentlyContinue
+# Already rotated by an earlier run? Then the machine password works - keep it instead of rotating again.
+$existing = [Environment]::GetEnvironmentVariable('ORNATE_SQL_PASSWORD', 'Machine')
+$SkipRotation = $false
+if (-not [string]::IsNullOrEmpty($existing)) {
+    $probe = Join-Path $env:TEMP 'lb_probe.py'
+    Set-Content -Path $probe -Encoding ASCII -Value @(
+        'import os, pyodbc',
+        'pyodbc.connect("DRIVER={ODBC Driver 17 for SQL Server};SERVER=" + os.environ["ROT_SERVER"] + ";UID=" + os.environ["ROT_LOGIN"] + ";PWD=" + os.environ["ROT_PWD"] + ";Encrypt=no;TrustServerCertificate=yes;Connection Timeout=10")',
+        'print("probe-ok")')
+    $env:ROT_SERVER = $SqlServer; $env:ROT_LOGIN = $SqlLogin; $env:ROT_PWD = $existing
+    $pr = Invoke-Native $Python @($probe)
+    Remove-Item Env:\ROT_SERVER, Env:\ROT_LOGIN, Env:\ROT_PWD, $probe -Force -ErrorAction SilentlyContinue
+    if ($pr.Text -match 'probe-ok') { $SkipRotation = $true; $NewPassword = $existing; Write-Host 'The password was already rotated by an earlier run - keeping it.' }
 }
-Remove-Item Env:\ROT_SERVER, Env:\ROT_LOGIN, Env:\ROT_PWD -ErrorAction SilentlyContinue
-if ($LASTEXITCODE -ne 0 -or (($out | Out-String) -notmatch 'rotated')) {
-    Fail ("Could not change the SQL password. Details (no secrets): " + (($out | Out-String) -replace [regex]::Escape($NewPassword), '***'))
+if (-not $SkipRotation) {
+    $rotateFile = Join-Path $env:TEMP 'lb_rotate.py'
+    Set-Content -Path $rotateFile -Encoding ASCII -Value $rotate
+    $env:ROT_SERVER = $SqlServer; $env:ROT_LOGIN = $SqlLogin; $env:ROT_PWD = $NewPassword
+    $r = Invoke-Native $Python @($rotateFile)
+    if ($r.Text -notmatch 'rotated') {
+        Write-Host 'Windows sign-in could not change the login. Enter the SQL "sa" password to do it that way.' -ForegroundColor Yellow
+        $sa = Read-Host 'SQL sa password' -AsSecureString
+        $env:ROT_SA_PWD = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sa))
+        $r = Invoke-Native $Python @($rotateFile)
+        Remove-Item Env:\ROT_SA_PWD -ErrorAction SilentlyContinue
+    }
+    Remove-Item Env:\ROT_SERVER, Env:\ROT_LOGIN, Env:\ROT_PWD, $rotateFile -Force -ErrorAction SilentlyContinue
+    if ($r.Text -notmatch 'rotated') {
+        Fail ("Could not change the SQL password. Details (no secrets): " + ($r.Text -replace [regex]::Escape($NewPassword), '***'))
+    }
+    Write-Host 'SQL password rotated. The old (leaked) password no longer works.'
 }
-Write-Host 'SQL password rotated. The old (leaked) password no longer works.'
 
 # --- 4. Machine environment ------------------------------------------------------------------
 Step 'Saving settings (machine environment)'
@@ -138,7 +166,7 @@ $NewPassword = $null
 
 # --- 5. One live test ------------------------------------------------------------------------
 Step 'Testing: SQL -> MDM (one push)'
-$test = & $Python (Join-Path $InstallTo 'leaderboard_collector.py') --once 2>&1 | Out-String
+$test = (Invoke-Native $Python @((Join-Path $InstallTo 'leaderboard_collector.py'), '--once')).Text
 if ($test -notmatch 'pushed:') {
     Write-Host $test
     if ($test -match 'CERTIFICATE_VERIFY_FAILED') {

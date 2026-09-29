@@ -138,6 +138,8 @@ def push(endpoint: str, token: str, payload: dict, timeout: int = 15) -> None:
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(endpoint, data=body, method="POST")
     request.add_header("Content-Type", "application/json")
+    # MDM is behind Cloudflare, which rejects Python's default "Python-urllib" agent (error 1010).
+    request.add_header("User-Agent", "AradhanaLeaderboardCollector/1.0")
     if token:
         request.add_header("X-Collector-Token", token)
 
