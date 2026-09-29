@@ -19,8 +19,11 @@ apt-get install -y cifs-utils
 install -d -m 700 "$MOUNT_ROOT"
 
 if ! mountpoint -q "$MOUNT_ROOT"; then
+  # The WireGuard path already encrypts traffic. SMB 3.0 is broadly compatible
+  # with Windows Server and avoids kernel-CIFS 3.1.1 encryption negotiation
+  # failures seen on this route.
   mount -t cifs "//$SERVER2K22_TUNNEL_IP/D" "$MOUNT_ROOT" \
-    -o "credentials=$CREDENTIALS,vers=3.1.1,seal,uid=10003,gid=10003,dir_mode=0700,file_mode=0600,noserverino"
+    -o "credentials=$CREDENTIALS,vers=3.0,uid=10003,gid=10003,dir_mode=0700,file_mode=0600,noserverino"
 fi
 install -d -m 700 "$TARGET"
 touch "$TARGET/.rtgs-profile-store-write-test"
