@@ -18,14 +18,10 @@ cat > "$CONFIG" <<EOF
 Address = 10.241.77.1/24
 ListenPort = 51820
 PrivateKey = $(cat "$KEY")
-# Keep the SMB client source inside the tunnel address space. Server2k22 only
-# accepts TCP/445 from 10.241.77.1, and no LAN port is exposed publicly.
-PostUp = iptables -t nat -A POSTROUTING -o %i -d 192.168.0.100/32 -p tcp --dport 445 -j SNAT --to-source 10.241.77.1
-PostDown = iptables -t nat -D POSTROUTING -o %i -d 192.168.0.100/32 -p tcp --dport 445 -j SNAT --to-source 10.241.77.1
 
 [Peer]
 PublicKey = $SERVER2K22_PUBLIC_KEY
-AllowedIPs = 10.241.77.2/32, 192.168.0.100/32
+AllowedIPs = 10.241.77.2/32
 EOF
 
 chmod 600 "$CONFIG"
