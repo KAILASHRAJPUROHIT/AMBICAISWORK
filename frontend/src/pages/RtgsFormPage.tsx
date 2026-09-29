@@ -1,22 +1,86 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
-import { getRtgsTemplateStatus } from '../api/client';
+import React, { useEffect, useMemo, useState } from "react";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { getRtgsTemplateStatus } from "../api/client";
 
-type BankId = 'icici' | 'kotak' | 'hdfc' | 'sbi';
-type PartyType = 'B2B' | 'B2C';
-type Profile = { branch: string; account: string; mobile: string; company: string; address1: string; address2: string; email: string };
-type FormState = Profile & { bank: BankId; customerType: PartyType; beneficiaryGstin: string; mode: 'RTGS' | 'NEFT'; payment: 'CHEQUE' | 'CASH'; date: string; cheque: string; amount: string; beneficiaryName: string; beneficiaryAccount: string; ifsc: string; beneficiaryBank: string; beneficiaryBranch: string; beneficiaryAddress: string; beneficiaryContact: string; purpose: string; kotakAccountType: string; hdfcAccountType: string; banv: 'VERIFY' | 'CUSTOMER_VERIFIED'; remitterLei: string; remitterLeiExpiry: string; beneficiaryLei: string; beneficiaryLeiExpiry: string };
-type SavedParty = { customerType: PartyType; beneficiaryName: string; beneficiaryAccount: string; ifsc: string; beneficiaryBank: string; beneficiaryBranch: string; beneficiaryAddress: string; beneficiaryContact: string; beneficiaryGstin: string; beneficiaryLei: string; beneficiaryLeiExpiry: string };
-
-const PROFILE_KEY = 'payment_notifier_rtgs_profiles_v1';
-const PARTY_KEY = 'payment_notifier_rtgs_parties_v1';
-const BANKS: Record<BankId, { label: string; asset: string }> = {
-  icici: { label: 'ICICI Bank', asset: '/dashboard/rtgs-forms/ICICI-RTGS-NEFT.pdf' },
-  kotak: { label: 'Kotak Mahindra Bank', asset: '/dashboard/rtgs-forms/Kotak-RTGS-NEFT.pdf' },
-  hdfc: { label: 'HDFC Bank', asset: '/dashboard/rtgs-forms/HDFC-RTGS-NEFT.pdf' },
-  sbi: { label: 'State Bank of India', asset: '/dashboard/rtgs-forms/SBI-RTGS-NEFT.pdf' },
+type BankId = "icici" | "kotak" | "hdfc" | "sbi";
+type PartyType = "B2B" | "B2C";
+type Profile = {
+  branch: string;
+  account: string;
+  mobile: string;
+  company: string;
+  address1: string;
+  address2: string;
+  email: string;
 };
-const blankProfile: Profile = { branch: '', account: '', mobile: '', company: '', address1: '', address2: '', email: '' };
+type FormState = Profile & {
+  bank: BankId;
+  customerType: PartyType;
+  beneficiaryGstin: string;
+  mode: "RTGS" | "NEFT";
+  payment: "CHEQUE" | "CASH";
+  date: string;
+  cheque: string;
+  amount: string;
+  beneficiaryName: string;
+  beneficiaryAccount: string;
+  ifsc: string;
+  beneficiaryBank: string;
+  beneficiaryBranch: string;
+  beneficiaryAddress: string;
+  beneficiaryContact: string;
+  purpose: string;
+  kotakAccountType: string;
+  hdfcAccountType: string;
+  banv: "VERIFY" | "CUSTOMER_VERIFIED";
+  remitterLei: string;
+  remitterLeiExpiry: string;
+  beneficiaryLei: string;
+  beneficiaryLeiExpiry: string;
+};
+type SavedParty = {
+  customerType: PartyType;
+  beneficiaryName: string;
+  beneficiaryAccount: string;
+  ifsc: string;
+  beneficiaryBank: string;
+  beneficiaryBranch: string;
+  beneficiaryAddress: string;
+  beneficiaryContact: string;
+  beneficiaryGstin: string;
+  beneficiaryLei: string;
+  beneficiaryLeiExpiry: string;
+};
+
+const PROFILE_KEY = "payment_notifier_rtgs_profiles_v1";
+const PARTY_KEY = "payment_notifier_rtgs_parties_v1";
+const BANKS: Record<BankId, { label: string; asset: string }> = {
+  icici: {
+    label: "ICICI Bank",
+    asset: "/dashboard/rtgs-forms/ICICI-RTGS-NEFT.pdf",
+  },
+  kotak: {
+    label: "Kotak Mahindra Bank",
+    asset: "/dashboard/rtgs-forms/Kotak-RTGS-NEFT.pdf",
+  },
+  hdfc: {
+    label: "HDFC Bank",
+    asset: "/dashboard/rtgs-forms/HDFC-RTGS-NEFT.pdf",
+  },
+  sbi: {
+    label: "State Bank of India",
+    asset: "/dashboard/rtgs-forms/SBI-RTGS-NEFT.pdf",
+  },
+};
+const blankProfile: Profile = {
+  branch: "",
+  account: "",
+  mobile: "",
+  company: "",
+  address1: "",
+  address2: "",
+  email: "",
+};
 
 // ICICI's reviewed template uses physical comb boxes. These limits are part of
 // the template contract, not arbitrary application validation.
@@ -38,120 +102,1167 @@ const iciciBoxLimits: Partial<Record<keyof FormState, number>> = {
   ifsc: 11,
   beneficiaryBranch: 28,
 };
-const dateToday = () => new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date()).replace(/\//g, '');
-const initialForm = (): FormState => ({ bank: 'icici', customerType: 'B2C', beneficiaryGstin: '', mode: 'RTGS', payment: 'CHEQUE', date: dateToday(), cheque: '', amount: '', beneficiaryName: '', beneficiaryAccount: '', ifsc: '', beneficiaryBank: '', beneficiaryBranch: '', beneficiaryAddress: '', beneficiaryContact: '', purpose: '', kotakAccountType: 'CURRENT', hdfcAccountType: 'RESIDENT', banv: 'VERIFY', remitterLei: '', remitterLeiExpiry: '', beneficiaryLei: '', beneficiaryLeiExpiry: '', ...blankProfile });
+const dateToday = () =>
+  new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
+    .format(new Date())
+    .replace(/\//g, "");
+const initialForm = (): FormState => ({
+  bank: "icici",
+  customerType: "B2C",
+  beneficiaryGstin: "",
+  mode: "RTGS",
+  payment: "CHEQUE",
+  date: dateToday(),
+  cheque: "",
+  amount: "",
+  beneficiaryName: "",
+  beneficiaryAccount: "",
+  ifsc: "",
+  beneficiaryBank: "",
+  beneficiaryBranch: "",
+  beneficiaryAddress: "",
+  beneficiaryContact: "",
+  purpose: "",
+  kotakAccountType: "CURRENT",
+  hdfcAccountType: "RESIDENT",
+  banv: "VERIFY",
+  remitterLei: "",
+  remitterLeiExpiry: "",
+  beneficiaryLei: "",
+  beneficiaryLeiExpiry: "",
+  ...blankProfile,
+});
 const upper = (text: string) => text.trim().toUpperCase();
-const fieldClass = 'mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100';
-const labelClass = 'text-[10px] font-black uppercase tracking-widest text-gray-500';
+const fieldClass =
+  "mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm font-semibold text-gray-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100";
+const labelClass =
+  "text-[10px] font-black uppercase tracking-widest text-gray-500";
 
-function readProfiles(): Record<string, Profile> { try { return JSON.parse(localStorage.getItem(PROFILE_KEY) || '{}'); } catch { return {}; } }
-function readParties(): SavedParty[] { try { const parsed = JSON.parse(localStorage.getItem(PARTY_KEY) || '[]'); return Array.isArray(parsed) ? parsed.filter(item => item && (item.customerType === 'B2B' || item.customerType === 'B2C') && item.beneficiaryName && item.beneficiaryAccount) : []; } catch { return []; } }
-function profileFrom(form: FormState): Profile { return { branch: form.branch, account: form.account, mobile: form.mobile, company: form.company, address1: form.address1, address2: form.address2, email: form.email }; }
-function persistRemitterProfile(form: FormState) { const profile = profileFrom(form); if (!Object.values(profile).some(Boolean)) return; const profiles = readProfiles(); profiles.default = profile; profiles[form.bank] = profile; localStorage.setItem(PROFILE_KEY, JSON.stringify(profiles)); }
+function readProfiles(): Record<string, Profile> {
+  try {
+    return JSON.parse(localStorage.getItem(PROFILE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+function readParties(): SavedParty[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PARTY_KEY) || "[]");
+    return Array.isArray(parsed)
+      ? parsed.filter(
+          (item) =>
+            item &&
+            (item.customerType === "B2B" || item.customerType === "B2C") &&
+            item.beneficiaryName &&
+            item.beneficiaryAccount,
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+function profileFrom(form: FormState): Profile {
+  return {
+    branch: form.branch,
+    account: form.account,
+    mobile: form.mobile,
+    company: form.company,
+    address1: form.address1,
+    address2: form.address2,
+    email: form.email,
+  };
+}
+function persistRemitterProfile(form: FormState) {
+  const profile = profileFrom(form);
+  if (!Object.values(profile).some(Boolean)) return;
+  const profiles = readProfiles();
+  profiles.default = profile;
+  profiles[form.bank] = profile;
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(profiles));
+}
+function partyFrom(form: FormState): SavedParty | null {
+  if (!form.beneficiaryName.trim() || !form.beneficiaryAccount.trim())
+    return null;
+  return {
+    customerType: form.customerType,
+    beneficiaryName: upper(form.beneficiaryName),
+    beneficiaryAccount: form.beneficiaryAccount.trim(),
+    ifsc: upper(form.ifsc),
+    beneficiaryBank: upper(form.beneficiaryBank),
+    beneficiaryBranch: upper(form.beneficiaryBranch),
+    beneficiaryAddress: upper(form.beneficiaryAddress),
+    beneficiaryContact: form.beneficiaryContact.trim(),
+    beneficiaryGstin: upper(form.beneficiaryGstin),
+    beneficiaryLei: upper(form.beneficiaryLei),
+    beneficiaryLeiExpiry: form.beneficiaryLeiExpiry.trim(),
+  };
+}
+function persistParty(form: FormState): SavedParty[] | null {
+  const party = partyFrom(form);
+  if (!party) return null;
+  const next = [
+    party,
+    ...readParties().filter(
+      (item) =>
+        !(
+          item.customerType === party.customerType &&
+          item.beneficiaryAccount === party.beneficiaryAccount
+        ),
+    ),
+  ].slice(0, 50);
+  localStorage.setItem(PARTY_KEY, JSON.stringify(next));
+  return next;
+}
 type Rect = [page: number, x: number, y: number, width: number, height: number];
-function write(page: any, x: number, y: number, text: string, font: any, size = 8, max = 90) { if (text) page.drawText(text.slice(0, max), { x, y, size, font, color: rgb(0, 0, 0) }); }
+function write(
+  page: any,
+  x: number,
+  y: number,
+  text: string,
+  font: any,
+  size = 8,
+  max = 90,
+) {
+  if (text)
+    page.drawText(text.slice(0, max), {
+      x,
+      y,
+      size,
+      font,
+      color: rgb(0, 0, 0),
+    });
+}
 function writeInRect(page: any, rect: Rect, text: string, font: any, size = 8) {
   if (!text) return;
   const [, x, y, width, height] = rect;
-  if (font.widthOfTextAtSize(text, size) > width - 3) throw new Error(`Value does not fit the bank form field: ${text.slice(0, 32)}.`);
-  page.drawText(text, { x: x + 1.5, y: y + Math.max(2, (height - size) / 2 + 1), size, font, color: rgb(0, 0, 0) });
-}
-function comb(page: any, x: number, y: number, width: number, count: number, text: string, font: any, size = 7.2, eraseTemplate = false, height = 15) {
-  if (text.length > count) throw new Error(`Value exceeds the ${count}-character bank form field.`);
-  const cell = width / count;
-  if (eraseTemplate) for (let index = 0; index < count; index += 1) page.drawRectangle({ x: x + cell * index + 1.5, y: y + 2, width: cell - 3, height: height - 4, color: rgb(1, 1, 1) });
-  [...text].forEach((character, index) => {
-    const charWidth = font.widthOfTextAtSize(character, size);
-    page.drawText(character, { x: x + cell * index + (cell - charWidth) / 2, y: y + Math.max(2, (height - size) / 2 + 1), size, font, color: rgb(0, 0, 0) });
+  if (font.widthOfTextAtSize(text, size) > width - 3)
+    throw new Error(
+      `Value does not fit the bank form field: ${text.slice(0, 32)}.`,
+    );
+  page.drawText(text, {
+    x: x + 1.5,
+    y: y + Math.max(2, (height - size) / 2 + 1),
+    size,
+    font,
+    color: rgb(0, 0, 0),
   });
 }
-function mark(page: any, x: number, y: number, font: any) { write(page, x + 1, y + 1, 'X', font, 8, 1); }
-const ones = ['', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE', 'TEN', 'ELEVEN', 'TWELVE', 'THIRTEEN', 'FOURTEEN', 'FIFTEEN', 'SIXTEEN', 'SEVENTEEN', 'EIGHTEEN', 'NINETEEN'];
-const tens = ['', '', 'TWENTY', 'THIRTY', 'FORTY', 'FIFTY', 'SIXTY', 'SEVENTY', 'EIGHTY', 'NINETY'];
-function underThousand(value: bigint) { const n = Number(value); if (!n) return ''; const head = n >= 100 ? `${ones[Math.floor(n / 100)]} HUNDRED${n % 100 ? ' ' : ''}` : ''; const tail = n % 100 < 20 ? ones[n % 100] : `${tens[Math.floor((n % 100) / 10)]}${n % 10 ? ` ${ones[n % 10]}` : ''}`; return `${head}${tail}`.trim(); }
-function indianWords(number: bigint) { if (number === 0n) return 'ZERO'; const groups: Array<[bigint, string]> = [[10000000n, 'CRORE'], [100000n, 'LAKH'], [1000n, 'THOUSAND'], [1n, '']]; let rest = number; const out: string[] = []; for (const [base, label] of groups) { const part = rest / base; if (part) out.push(`${underThousand(part)}${label ? ` ${label}` : ''}`); rest %= base; } return out.join(' '); }
-export function parseAmount(raw: string) { const clean = raw.replace(/[,₹]/g, '').trim(); if (!/^\d+(\.\d{1,2})?$/.test(clean)) return null; const [whole, fraction = ''] = clean.split('.'); const paise = Number((fraction + '00').slice(0, 2)); return { whole: BigInt(whole), paise, display: `${Number(whole).toLocaleString('en-IN')}${paise ? `.${String(paise).padStart(2, '0')}` : ''}` }; }
-function words(parsed: NonNullable<ReturnType<typeof parseAmount>>) { return `RUPEES ${indianWords(parsed.whole)}${parsed.paise ? ` AND PAISE ${indianWords(BigInt(parsed.paise))}` : ''} ONLY`; }
-function splitForRects(text: string, font: any, size: number, firstWidth: number, secondWidth: number) {
-  const tokens = text.split(' '); const first: string[] = [];
-  while (tokens.length && font.widthOfTextAtSize([...first, tokens[0]].join(' '), size) <= firstWidth - 3) first.push(tokens.shift()!);
-  const second = tokens.join(' ');
-  if (!first.length || font.widthOfTextAtSize(second, size) > secondWidth - 3) throw new Error('Amount in words does not fit this bank form. Use a shorter amount or the bank’s current form.');
-  return [first.join(' '), second];
+function writeCenteredInRect(
+  page: any,
+  rect: Rect,
+  text: string,
+  font: any,
+  size = 10,
+) {
+  if (!text) return;
+  const [, x, y, width, height] = rect;
+  if (font.widthOfTextAtSize(text, size) > width - 6)
+    throw new Error(
+      `Value does not fit the bank form field: ${text.slice(0, 32)}.`,
+    );
+  page.drawText(text, {
+    x: x + (width - font.widthOfTextAtSize(text, size)) / 2,
+    y: y + Math.max(2, (height - size) / 2 + 1),
+    size,
+    font,
+    color: rgb(0, 0, 0),
+  });
 }
-function split(text: string) { const cut = 54; if (text.length <= cut) return [text, '']; const point = text.lastIndexOf(' ', cut); return [text.slice(0, point), text.slice(point + 1)]; }
+function comb(
+  page: any,
+  x: number,
+  y: number,
+  width: number,
+  count: number,
+  text: string,
+  font: any,
+  size = 7.2,
+  eraseTemplate = false,
+  height = 15,
+) {
+  if (text.length > count)
+    throw new Error(`Value exceeds the ${count}-character bank form field.`);
+  const cell = width / count;
+  if (eraseTemplate)
+    for (let index = 0; index < count; index += 1)
+      page.drawRectangle({
+        x: x + cell * index + 1.5,
+        y: y + 2,
+        width: cell - 3,
+        height: height - 4,
+        color: rgb(1, 1, 1),
+      });
+  [...text].forEach((character, index) => {
+    const charWidth = font.widthOfTextAtSize(character, size);
+    page.drawText(character, {
+      x: x + cell * index + (cell - charWidth) / 2,
+      y: y + Math.max(2, (height - size) / 2 + 1),
+      size,
+      font,
+      color: rgb(0, 0, 0),
+    });
+  });
+}
+function mark(page: any, x: number, y: number, _font: any) {
+  // A drawn tick is legible in tiny checkbox cells and avoids the printable "X" mark.
+  const color = rgb(0, 0, 0);
+  page.drawLine({
+    start: { x: x + 1.4, y: y + 4.1 },
+    end: { x: x + 4.0, y: y + 1.5 },
+    thickness: 1.1,
+    color,
+  });
+  page.drawLine({
+    start: { x: x + 3.8, y: y + 1.5 },
+    end: { x: x + 9.1, y: y + 8.2 },
+    thickness: 1.1,
+    color,
+  });
+}
+const ones = [
+  "",
+  "ONE",
+  "TWO",
+  "THREE",
+  "FOUR",
+  "FIVE",
+  "SIX",
+  "SEVEN",
+  "EIGHT",
+  "NINE",
+  "TEN",
+  "ELEVEN",
+  "TWELVE",
+  "THIRTEEN",
+  "FOURTEEN",
+  "FIFTEEN",
+  "SIXTEEN",
+  "SEVENTEEN",
+  "EIGHTEEN",
+  "NINETEEN",
+];
+const tens = [
+  "",
+  "",
+  "TWENTY",
+  "THIRTY",
+  "FORTY",
+  "FIFTY",
+  "SIXTY",
+  "SEVENTY",
+  "EIGHTY",
+  "NINETY",
+];
+function underThousand(value: bigint) {
+  const n = Number(value);
+  if (!n) return "";
+  const head =
+    n >= 100 ? `${ones[Math.floor(n / 100)]} HUNDRED${n % 100 ? " " : ""}` : "";
+  const tail =
+    n % 100 < 20
+      ? ones[n % 100]
+      : `${tens[Math.floor((n % 100) / 10)]}${n % 10 ? ` ${ones[n % 10]}` : ""}`;
+  return `${head}${tail}`.trim();
+}
+function indianWords(number: bigint) {
+  if (number === 0n) return "ZERO";
+  const groups: Array<[bigint, string]> = [
+    [10000000n, "CRORE"],
+    [100000n, "LAKH"],
+    [1000n, "THOUSAND"],
+    [1n, ""],
+  ];
+  let rest = number;
+  const out: string[] = [];
+  for (const [base, label] of groups) {
+    const part = rest / base;
+    if (part) out.push(`${underThousand(part)}${label ? ` ${label}` : ""}`);
+    rest %= base;
+  }
+  return out.join(" ");
+}
+export function parseAmount(raw: string) {
+  const clean = raw.replace(/[,₹]/g, "").trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(clean)) return null;
+  const [whole, fraction = ""] = clean.split(".");
+  const paise = Number((fraction + "00").slice(0, 2));
+  return {
+    whole: BigInt(whole),
+    paise,
+    display: `${Number(whole).toLocaleString("en-IN")}${paise ? `.${String(paise).padStart(2, "0")}` : ""}`,
+  };
+}
+function words(parsed: NonNullable<ReturnType<typeof parseAmount>>) {
+  return `${indianWords(parsed.whole)}${parsed.paise ? ` AND PAISE ${indianWords(BigInt(parsed.paise))}` : ""} ONLY`;
+}
+function splitForRects(
+  text: string,
+  font: any,
+  size: number,
+  firstWidth: number,
+  secondWidth: number,
+) {
+  const tokens = text.split(" ");
+  const first: string[] = [];
+  while (
+    tokens.length &&
+    font.widthOfTextAtSize([...first, tokens[0]].join(" "), size) <=
+      firstWidth - 3
+  )
+    first.push(tokens.shift()!);
+  const second = tokens.join(" ");
+  if (!first.length || font.widthOfTextAtSize(second, size) > secondWidth - 3)
+    throw new Error(
+      "Amount in words does not fit this bank form. Use a shorter amount or the bank’s current form.",
+    );
+  return [first.join(" "), second];
+}
+function split(text: string) {
+  const cut = 54;
+  if (text.length <= cut) return [text, ""];
+  const point = text.lastIndexOf(" ", cut);
+  return [text.slice(0, point), text.slice(point + 1)];
+}
 
-export function fillIcici(pdf: any, font: any, form: FormState, amount: NonNullable<ReturnType<typeof parseAmount>>) {
+export function fillIcici(
+  pdf: any,
+  font: any,
+  form: FormState,
+  amount: NonNullable<ReturnType<typeof parseAmount>>,
+) {
   // Exact coordinates come from the approved ICICI source form's AcroForm widgets.
   const boxes: Record<string, Rect> = {
-    branch:[0,18,866,87,16], date:[0,455.8,881.6,119.1,14.9], figures:[0,212,834.5,140,17], words1:[0,435,834.5,145,17], words2:[0,18,822,210,16.5], account:[0,201.1,654.2,178.6,14.9], remitterLei:[0,242.5,633.9,297.6,14.9], remitterLeiExpiry:[0,470.35,596,119.05,14.9], cheque:[0,130.6,475.1,104.2,15], chequeDate:[0,470.35,476.7,119.05,14.9], name:[0,157.8,450.2,416.7,14.9], addr1:[0,157.8,429.05,416.7,14.85], addr2:[0,157.8,412.9,416.7,14.9], mobile:[0,261.8,389.05,148.8,14.95], beneficiary:[0,172.7,344.3,416.7,14.9], beneAccount:[0,172.7,320.8,416.7,14.9], beneficiaryLei:[0,240.5,298.9,297.6,14.9], bank:[0,157.7,243.8,416.7,15], ifsc:[0,321.8,224,163.7,14.9], branchAddress:[0,157.7,202,416.7,14.9], beneAccountConfirm:[0,172.7,177.8,416.7,14.9], ackName:[1,132,101,141,15], ackBeneficiary:[1,132,80,141,15], ackBank:[1,132,61,141,15], ackDate:[1,453.6,101.2,119.1,14.9], ackMode:[1,367,83,181,15], ackAccount:[1,421,62,127,15], ackAmount:[1,361,43,187,15],
+    branch: [0, 18, 866, 87, 16],
+    date: [0, 455.8, 881.6, 119.1, 14.9],
+    figures: [0, 212, 834.5, 140, 17],
+    words1: [0, 435, 834.5, 145, 17],
+    words2: [0, 18, 822, 210, 16.5],
+    account: [0, 201.1, 654.2, 178.6, 14.9],
+    remitterLei: [0, 242.5, 633.9, 297.6, 14.9],
+    remitterLeiExpiry: [0, 470.35, 596, 119.05, 14.9],
+    cheque: [0, 130.6, 475.1, 104.2, 15],
+    chequeDate: [0, 470.35, 476.7, 119.05, 14.9],
+    name: [0, 157.8, 450.2, 416.7, 14.9],
+    addr1: [0, 157.8, 429.05, 416.7, 14.85],
+    addr2: [0, 157.8, 412.9, 416.7, 14.9],
+    mobile: [0, 261.8, 389.05, 148.8, 14.95],
+    beneficiary: [0, 172.7, 344.3, 416.7, 14.9],
+    beneAccount: [0, 172.7, 320.8, 416.7, 14.9],
+    beneficiaryLei: [0, 240.5, 298.9, 297.6, 14.9],
+    bank: [0, 157.7, 243.8, 416.7, 15],
+    ifsc: [0, 321.8, 224, 163.7, 14.9],
+    branchAddress: [0, 157.7, 202, 416.7, 14.9],
+    beneAccountConfirm: [0, 172.7, 177.8, 416.7, 14.9],
+    ackName: [1, 132, 101, 141, 15],
+    ackBeneficiary: [1, 132, 80, 141, 15],
+    ackBank: [1, 132, 61, 141, 15],
+    ackDate: [1, 453.6, 101.2, 119.1, 14.9],
+    ackMode: [1, 367, 83, 181, 15],
+    ackAccount: [1, 421, 62, 127, 15],
+    ackAmount: [1, 361, 43, 187, 15],
   };
-  const pages = pdf.getPages(); const line = (key: string, value: string, size = 8) => writeInRect(pages[boxes[key][0]], boxes[key], value, font, size);
-  const boxed = (key: string, value: string, count: number, eraseTemplate = false) => { const [, x, y, width, height] = boxes[key]; comb(pages[boxes[key][0]], x, y, width, count, value, font, 7.2, eraseTemplate, height); };
-  const [line1, line2] = splitForRects(words(amount), font, 8, boxes.words1[3], boxes.words2[3]);
-  const modePoints = form.mode === 'RTGS' ? [[160.7,969.2],[190.1,940.3],[148.8,910.3]] : [[203.3,969.2],[255.2,940.3],[203.3,910.3]];
-  modePoints.forEach(([x, y]) => mark(pages[0], x, y, font)); mark(pages[0], form.payment === 'CASH' ? 18 : 262.9, 748.4, font);
-  line('branch', upper(form.branch)); boxed('date', form.date, 8, true); line('figures', amount.display); line('words1', line1); line('words2', line2); boxed('account', form.account, 12); boxed('remitterLei', upper(form.remitterLei), 20); boxed('remitterLeiExpiry', form.remitterLeiExpiry, 8, true); boxed('cheque', form.cheque, 7); boxed('chequeDate', form.date, 8, true); boxed('name', upper(form.company), 28); boxed('addr1', upper(form.address1), 28); boxed('addr2', upper(form.address2), 28); boxed('mobile', form.mobile, 10); boxed('beneficiary', upper(form.beneficiaryName), 28); boxed('beneAccount', form.beneficiaryAccount, 28); boxed('beneficiaryLei', upper(form.beneficiaryLei), 20); boxed('bank', upper(form.beneficiaryBank), 28); boxed('ifsc', upper(form.ifsc), 11); boxed('branchAddress', upper(form.beneficiaryBranch), 28); boxed('beneAccountConfirm', form.beneficiaryAccount, 28); line('ackName', upper(form.company)); line('ackBeneficiary', upper(form.beneficiaryName)); line('ackBank', upper(form.beneficiaryBank)); boxed('ackDate', form.date, 8, true); line('ackMode', form.payment); line('ackAccount', form.beneficiaryAccount); line('ackAmount', amount.display);
+  const pages = pdf.getPages();
+  const line = (key: string, value: string, size = 8) =>
+    writeInRect(pages[boxes[key][0]], boxes[key], value, font, size);
+  const centered = (key: string, value: string, size = 10) =>
+    writeCenteredInRect(pages[boxes[key][0]], boxes[key], value, font, size);
+  const boxed = (
+    key: string,
+    value: string,
+    count: number,
+    eraseTemplate = false,
+  ) => {
+    const [, x, y, width, height] = boxes[key];
+    comb(
+      pages[boxes[key][0]],
+      x,
+      y,
+      width,
+      count,
+      value,
+      font,
+      7.2,
+      eraseTemplate,
+      height,
+    );
+  };
+  const [line1, line2] = splitForRects(
+    words(amount),
+    font,
+    8,
+    boxes.words1[3],
+    boxes.words2[3],
+  );
+  const modePoints =
+    form.mode === "RTGS"
+      ? [
+          [160.7, 969.2],
+          [190.1, 940.3],
+          [148.8, 910.3],
+        ]
+      : [
+          [203.3, 969.2],
+          [255.2, 940.3],
+          [203.3, 910.3],
+        ];
+  modePoints.forEach(([x, y]) => mark(pages[0], x, y, font));
+  mark(pages[0], form.payment === "CASH" ? 18 : 262.9, 748.4, font);
+  line("branch", upper(form.branch));
+  boxed("date", form.date, 8, true);
+  centered("figures", amount.display, 11);
+  line("words1", line1);
+  line("words2", line2);
+  boxed("account", form.account, 12);
+  boxed("remitterLei", upper(form.remitterLei), 20);
+  boxed("remitterLeiExpiry", form.remitterLeiExpiry, 8, true);
+  boxed("cheque", form.cheque, 7);
+  boxed("chequeDate", form.date, 8, true);
+  boxed("name", upper(form.company), 28);
+  boxed("addr1", upper(form.address1), 28);
+  boxed("addr2", upper(form.address2), 28);
+  boxed("mobile", form.mobile, 10);
+  boxed("beneficiary", upper(form.beneficiaryName), 28);
+  boxed("beneAccount", form.beneficiaryAccount, 28);
+  boxed("beneficiaryLei", upper(form.beneficiaryLei), 20);
+  boxed("bank", upper(form.beneficiaryBank), 28);
+  boxed("ifsc", upper(form.ifsc), 11);
+  boxed("branchAddress", upper(form.beneficiaryBranch), 28);
+  boxed("beneAccountConfirm", form.beneficiaryAccount, 28);
+  line("ackName", upper(form.company), 7);
+  line("ackBeneficiary", upper(form.beneficiaryName), 7);
+  line("ackBank", upper(form.beneficiaryBank), 7);
+  boxed("ackDate", form.date, 8, true);
+  line("ackMode", form.payment, 7);
+  line("ackAccount", form.beneficiaryAccount, 7);
+  line("ackAmount", amount.display, 7);
 }
-function fillKotak(page: any, font: any, form: FormState, amount: NonNullable<ReturnType<typeof parseAmount>>) {
-  const [line1, line2] = split(words(amount)); mark(page, form.mode === 'RTGS' ? 182 : 234, 777, font); write(page,449,742,form.date,font); write(page,137,719,upper(form.branch),font); write(page,149,680,form.account,font); write(page,422,680,form.cheque,font); write(page,122,666,amount.display,font); write(page,277,666,line1,font); write(page,28,653,line2,font); write(page,81,625,upper(form.purpose),font);
-  const type: Record<string, number> = { CURRENT:171, SAVINGS:212, NRE:250, OD:280, CC:351, 'CREDIT CARD':426, LOAN:488, OTHER:523 }; mark(page,type[form.kotakAccountType] || 171,616,font); write(page,129,589,upper(form.beneficiaryName),font); write(page,421,589,form.beneficiaryAccount,font); write(page,157,572,form.beneficiaryAccount,font); write(page,362,572,upper(form.ifsc),font); write(page,55,555,upper(form.beneficiaryBank),font); write(page,328,555,upper(form.beneficiaryBranch),font); write(page,164,537,upper(form.beneficiaryLei),font); write(page,50,487,upper(form.company),font); write(page,120,89,upper(form.branch),font); write(page,418,89,form.date,font); write(page,259,62,amount.display,font); write(page,269,46,form.beneficiaryAccount,font); write(page,467,46,upper(form.beneficiaryBank),font);
+function fillKotak(
+  page: any,
+  font: any,
+  form: FormState,
+  amount: NonNullable<ReturnType<typeof parseAmount>>,
+) {
+  const [line1, line2] = split(words(amount));
+  mark(page, form.mode === "RTGS" ? 182 : 234, 777, font);
+  write(page, 449, 742, form.date, font);
+  write(page, 137, 719, upper(form.branch), font);
+  write(page, 149, 680, form.account, font);
+  write(page, 422, 680, form.cheque, font);
+  write(page, 122, 666, amount.display, font);
+  write(page, 277, 666, line1, font);
+  write(page, 28, 653, line2, font);
+  write(page, 81, 625, upper(form.purpose), font);
+  const type: Record<string, number> = {
+    CURRENT: 171,
+    SAVINGS: 212,
+    NRE: 250,
+    OD: 280,
+    CC: 351,
+    "CREDIT CARD": 426,
+    LOAN: 488,
+    OTHER: 523,
+  };
+  mark(page, type[form.kotakAccountType] || 171, 616, font);
+  write(page, 129, 589, upper(form.beneficiaryName), font);
+  write(page, 421, 589, form.beneficiaryAccount, font);
+  write(page, 157, 572, form.beneficiaryAccount, font);
+  write(page, 362, 572, upper(form.ifsc), font);
+  write(page, 55, 555, upper(form.beneficiaryBank), font);
+  write(page, 328, 555, upper(form.beneficiaryBranch), font);
+  write(page, 164, 537, upper(form.beneficiaryLei), font);
+  write(page, 50, 487, upper(form.company), font);
+  write(page, 120, 89, upper(form.branch), font);
+  write(page, 418, 89, form.date, font);
+  write(page, 259, 62, amount.display, font);
+  write(page, 269, 46, form.beneficiaryAccount, font);
+  write(page, 467, 46, upper(form.beneficiaryBank), font);
 }
-function fillHdfc(page: any, font: any, form: FormState, amount: NonNullable<ReturnType<typeof parseAmount>>) {
-  const [line1, line2] = split(words(amount)); mark(page,form.mode === 'RTGS' ? 54 : 244,954,font); write(page,463,946,form.date,font); write(page,80,846,upper(form.company),font); write(page,115,815,form.account,font); write(page,265,815,form.cheque,font); write(page,115,783,form.mobile,font); comb(page,242,756,330,20,upper(form.remitterLei),font); comb(page,156,724,147,8,form.remitterLeiExpiry,font); write(page,290,695,upper(`${form.address1} ${form.address2}`),font); write(page,387,679,upper(form.email),font); write(page,86,647,upper(form.beneficiaryName),font); write(page,458,647,form.beneficiaryContact,font); write(page,83,630,upper(form.beneficiaryAddress),font); comb(page,166,596,296,16,form.beneficiaryAccount,font); comb(page,166,565,296,16,form.beneficiaryAccount,font); write(page,155,542,upper(`${form.beneficiaryBank} ${form.beneficiaryBranch}`),font); write(page,409,542,upper(form.ifsc),font);
-  const type: Record<string, number> = { RESIDENT:104, 'NON RESIDENT':158, FCRA:240 }; mark(page,type[form.hdfcAccountType] || 104,523,font); write(page,301,523,upper(form.purpose),font); comb(page,242,491,330,20,upper(form.beneficiaryLei),font); comb(page,156,459,147,8,form.beneficiaryLeiExpiry,font); write(page,207,426,amount.display,font); write(page,400,426,line1,font); write(page,83,409,line2,font); write(page,82,393,upper(form.purpose),font); mark(page,45,form.banv === 'VERIFY' ? 357 : 335,font); write(page,275,79,amount.display,font); write(page,202,62,form.cheque,font); write(page,270,45,form.beneficiaryAccount,font); write(page,415,45,upper(form.beneficiaryBank),font); write(page,106,28,upper(form.ifsc),font);
+function fillHdfc(
+  page: any,
+  font: any,
+  form: FormState,
+  amount: NonNullable<ReturnType<typeof parseAmount>>,
+) {
+  const [line1, line2] = split(words(amount));
+  mark(page, form.mode === "RTGS" ? 54 : 244, 954, font);
+  write(page, 463, 946, form.date, font);
+  write(page, 80, 846, upper(form.company), font);
+  write(page, 115, 815, form.account, font);
+  write(page, 265, 815, form.cheque, font);
+  write(page, 115, 783, form.mobile, font);
+  comb(page, 242, 756, 330, 20, upper(form.remitterLei), font);
+  comb(page, 156, 724, 147, 8, form.remitterLeiExpiry, font);
+  write(page, 290, 695, upper(`${form.address1} ${form.address2}`), font);
+  write(page, 387, 679, upper(form.email), font);
+  write(page, 86, 647, upper(form.beneficiaryName), font);
+  write(page, 458, 647, form.beneficiaryContact, font);
+  write(page, 83, 630, upper(form.beneficiaryAddress), font);
+  comb(page, 166, 596, 296, 16, form.beneficiaryAccount, font);
+  comb(page, 166, 565, 296, 16, form.beneficiaryAccount, font);
+  write(
+    page,
+    155,
+    542,
+    upper(`${form.beneficiaryBank} ${form.beneficiaryBranch}`),
+    font,
+  );
+  write(page, 409, 542, upper(form.ifsc), font);
+  const type: Record<string, number> = {
+    RESIDENT: 104,
+    "NON RESIDENT": 158,
+    FCRA: 240,
+  };
+  mark(page, type[form.hdfcAccountType] || 104, 523, font);
+  write(page, 301, 523, upper(form.purpose), font);
+  comb(page, 242, 491, 330, 20, upper(form.beneficiaryLei), font);
+  comb(page, 156, 459, 147, 8, form.beneficiaryLeiExpiry, font);
+  write(page, 207, 426, amount.display, font);
+  write(page, 400, 426, line1, font);
+  write(page, 83, 409, line2, font);
+  write(page, 82, 393, upper(form.purpose), font);
+  mark(page, 45, form.banv === "VERIFY" ? 357 : 335, font);
+  write(page, 275, 79, amount.display, font);
+  write(page, 202, 62, form.cheque, font);
+  write(page, 270, 45, form.beneficiaryAccount, font);
+  write(page, 415, 45, upper(form.beneficiaryBank), font);
+  write(page, 106, 28, upper(form.ifsc), font);
 }
-function fillSbi(page: any, font: any, form: FormState, amount: NonNullable<ReturnType<typeof parseAmount>>) {
-  const [line1, line2] = split(words(amount)); mark(page,form.mode === 'RTGS' ? 523 : 468,440,font); write(page,592,444,form.date,font); write(page,545,420,upper(form.branch),font); write(page,351,405,amount.display,font); write(page,405,405,line1,font); write(page,272,390,line2,font); write(page,272,374,form.account,font); write(page,646,374,form.cheque,font); write(page,272,347,upper(form.beneficiaryName),font); write(page,272,332,upper(`${form.beneficiaryBank} ${form.beneficiaryBranch}`),font); comb(page,318,315,194,11,upper(form.ifsc),font); comb(page,405,295,315,18,form.beneficiaryAccount,font); comb(page,405,276,315,18,form.beneficiaryAccount,font); comb(page,370,250,350,20,upper(form.beneficiaryLei),font); comb(page,378,220,125,10,amount.display.replace(/,/g,''),font); write(page,272,176,words(amount),font,7,120); write(page,272,160,upper(form.company),font); comb(page,360,143,350,20,upper(form.remitterLei),font); write(page,272,116,upper(`${form.address1} ${form.address2}`),font); write(page,272,102,form.mobile,font); write(page,102,211,upper(form.beneficiaryName),font); write(page,102,181,form.beneficiaryAccount,font); write(page,102,165,form.beneficiaryAccount,font); write(page,102,150,upper(form.ifsc),font); write(page,102,135,upper(`${form.beneficiaryBank} ${form.beneficiaryBranch}`),font); write(page,102,104,amount.display,font); write(page,102,88,line1,font); write(page,102,73,line2,font);
+function fillSbi(
+  page: any,
+  font: any,
+  form: FormState,
+  amount: NonNullable<ReturnType<typeof parseAmount>>,
+) {
+  const [line1, line2] = split(words(amount));
+  mark(page, form.mode === "RTGS" ? 523 : 468, 440, font);
+  write(page, 592, 444, form.date, font);
+  write(page, 545, 420, upper(form.branch), font);
+  write(page, 351, 405, amount.display, font);
+  write(page, 405, 405, line1, font);
+  write(page, 272, 390, line2, font);
+  write(page, 272, 374, form.account, font);
+  write(page, 646, 374, form.cheque, font);
+  write(page, 272, 347, upper(form.beneficiaryName), font);
+  write(
+    page,
+    272,
+    332,
+    upper(`${form.beneficiaryBank} ${form.beneficiaryBranch}`),
+    font,
+  );
+  comb(page, 318, 315, 194, 11, upper(form.ifsc), font);
+  comb(page, 405, 295, 315, 18, form.beneficiaryAccount, font);
+  comb(page, 405, 276, 315, 18, form.beneficiaryAccount, font);
+  comb(page, 370, 250, 350, 20, upper(form.beneficiaryLei), font);
+  comb(page, 378, 220, 125, 10, amount.display.replace(/,/g, ""), font);
+  write(page, 272, 176, words(amount), font, 7, 120);
+  write(page, 272, 160, upper(form.company), font);
+  comb(page, 360, 143, 350, 20, upper(form.remitterLei), font);
+  write(page, 272, 116, upper(`${form.address1} ${form.address2}`), font);
+  write(page, 272, 102, form.mobile, font);
+  write(page, 102, 211, upper(form.beneficiaryName), font);
+  write(page, 102, 181, form.beneficiaryAccount, font);
+  write(page, 102, 165, form.beneficiaryAccount, font);
+  write(page, 102, 150, upper(form.ifsc), font);
+  write(
+    page,
+    102,
+    135,
+    upper(`${form.beneficiaryBank} ${form.beneficiaryBranch}`),
+    font,
+  );
+  write(page, 102, 104, amount.display, font);
+  write(page, 102, 88, line1, font);
+  write(page, 102, 73, line2, font);
 }
 
 const RtgsFormPage: React.FC = () => {
-  const [form, setForm] = useState<FormState>(initialForm); const [notice, setNotice] = useState(''); const [update, setUpdate] = useState(''); const [working, setWorking] = useState(false); const [parties, setParties] = useState<SavedParty[]>(readParties);
-  const set = (key: keyof FormState, value: string) => setForm(current => ({ ...current, [key]: value }));
+  const [form, setForm] = useState<FormState>(initialForm);
+  const [notice, setNotice] = useState("");
+  const [update, setUpdate] = useState("");
+  const [working, setWorking] = useState(false);
+  const [parties, setParties] = useState<SavedParty[]>(readParties);
+  const set = (key: keyof FormState, value: string) =>
+    setForm((current) => ({ ...current, [key]: value }));
   const parsed = useMemo(() => parseAmount(form.amount), [form.amount]);
   const bank = BANKS[form.bank];
-  const visibleParties = parties.filter(party => party.customerType === form.customerType);
-  useEffect(() => { const profiles = readProfiles(); const profile = profiles.default || profiles[form.bank] || blankProfile; setForm(current => ({ ...current, ...profile })); getRtgsTemplateStatus(form.bank).then((status: any) => setUpdate(status.updateAvailable ? `Updated official ${status.label} form detected. This screen stays on the reviewed template until AMBIC remaps it.` : '')).catch(() => setUpdate('Official template check unavailable. The bundled reviewed form remains selected.')); }, [form.bank]);
-  useEffect(() => { persistRemitterProfile(form); }, [form.bank, form.branch, form.account, form.mobile, form.company, form.address1, form.address2, form.email]);
-  const saveProfile = () => { persistRemitterProfile(form); setNotice('Remitter profile saved and will prefill every bank form on this browser.'); };
+  const visibleParties = parties.filter(
+    (party) => party.customerType === form.customerType,
+  );
+  useEffect(() => {
+    const profiles = readProfiles();
+    const profile = profiles.default || profiles[form.bank] || blankProfile;
+    setForm((current) => ({ ...current, ...profile }));
+    getRtgsTemplateStatus(form.bank)
+      .then((status: any) =>
+        setUpdate(
+          status.updateAvailable
+            ? `Updated official ${status.label} form detected. This screen stays on the reviewed template until AMBIC remaps it.`
+            : "",
+        ),
+      )
+      .catch(() =>
+        setUpdate(
+          "Official template check unavailable. The bundled reviewed form remains selected.",
+        ),
+      );
+  }, [form.bank]);
+  useEffect(() => {
+    persistRemitterProfile(form);
+  }, [
+    form.bank,
+    form.branch,
+    form.account,
+    form.mobile,
+    form.company,
+    form.address1,
+    form.address2,
+    form.email,
+  ]);
+  useEffect(() => {
+    const next = persistParty(form);
+    if (next) setParties(next);
+  }, [
+    form.customerType,
+    form.beneficiaryName,
+    form.beneficiaryAccount,
+    form.ifsc,
+    form.beneficiaryBank,
+    form.beneficiaryBranch,
+    form.beneficiaryAddress,
+    form.beneficiaryContact,
+    form.beneficiaryGstin,
+    form.beneficiaryLei,
+    form.beneficiaryLeiExpiry,
+  ]);
+  const saveProfile = () => {
+    persistRemitterProfile(form);
+    setNotice(
+      "Remitter profile saved and will prefill every bank form on this browser.",
+    );
+  };
   const saveParty = (quiet = false) => {
-    if (!form.beneficiaryName.trim() || !form.beneficiaryAccount.trim()) { if (!quiet) setNotice('Enter beneficiary name and account number before saving the party.'); return false; }
-    const party: SavedParty = { customerType: form.customerType, beneficiaryName: upper(form.beneficiaryName), beneficiaryAccount: form.beneficiaryAccount.trim(), ifsc: upper(form.ifsc), beneficiaryBank: upper(form.beneficiaryBank), beneficiaryBranch: upper(form.beneficiaryBranch), beneficiaryAddress: upper(form.beneficiaryAddress), beneficiaryContact: form.beneficiaryContact.trim(), beneficiaryGstin: upper(form.beneficiaryGstin), beneficiaryLei: upper(form.beneficiaryLei), beneficiaryLeiExpiry: form.beneficiaryLeiExpiry.trim() };
-    const next = [party, ...parties.filter(item => !(item.customerType === party.customerType && item.beneficiaryAccount === party.beneficiaryAccount))].slice(0, 50);
-    localStorage.setItem(PARTY_KEY, JSON.stringify(next)); setParties(next); if (!quiet) setNotice(`${party.customerType} party saved only in this browser.`); return true;
+    const next = persistParty(form);
+    if (!next) {
+      if (!quiet)
+        setNotice(
+          "Enter beneficiary name and account number before saving the party.",
+        );
+      return false;
+    }
+    setParties(next);
+    if (!quiet)
+      setNotice(`${form.customerType} party saved only in this browser.`);
+    return true;
   };
-  const selectParty = (indexText: string) => { if (!indexText) return; const party = visibleParties[Number(indexText)]; if (!party) return; setForm(current => ({ ...current, ...party })); setNotice(`${party.customerType} party details loaded. Verify before generating the bank form.`); };
-  const lookupIfsc = async (raw = form.ifsc) => { const ifsc = upper(raw); if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) return setNotice('Enter a valid 11-character IFSC.'); try { const response = await fetch(`https://ifsc.razorpay.com/${encodeURIComponent(ifsc)}`); if (!response.ok) throw new Error('IFSC not found.'); const item = await response.json(); setForm(current => ({ ...current, ifsc, beneficiaryBank: upper(item.BANK || ''), beneficiaryBranch: upper([item.BRANCH, item.ADDRESS].filter(Boolean).join(', ')) })); setNotice('Bank and branch filled from IFSC. Verify against beneficiary proof.'); } catch (error: any) { setNotice(error.message || 'IFSC lookup failed.'); } };
-  const generate = async () => { const missing = [['branch', 'remitter branch'], ['account', 'remitter account'], ['company', 'remitter name'], ['beneficiaryName', 'beneficiary name'], ['beneficiaryAccount', 'beneficiary account'], ['ifsc', 'IFSC'], ['beneficiaryBank', 'beneficiary bank']].filter(([key]) => !String(form[key as keyof FormState]).trim()).map(([, label]) => label); if (!parsed) missing.unshift('valid amount'); if (form.mode === 'RTGS' && form.payment === 'CASH') missing.push('RTGS cannot use cash'); if (form.bank === 'kotak' && form.mode === 'RTGS' && !form.purpose.trim()) missing.push('Kotak RTGS purpose code'); if (missing.length) return setNotice(`Complete: ${[...new Set(missing)].join(', ')}.`); if (!parsed) return;
+  const selectParty = (indexText: string) => {
+    if (!indexText) return;
+    const party = visibleParties[Number(indexText)];
+    if (!party) return;
+    setForm((current) => ({ ...current, ...party }));
+    setNotice(
+      `${party.customerType} party details loaded. Verify before generating the bank form.`,
+    );
+  };
+  const completePartyByName = (name: string) => {
+    const match = visibleParties.find(
+      (party) => upper(party.beneficiaryName) === upper(name),
+    );
+    if (match) setForm((current) => ({ ...current, ...match }));
+  };
+  const lookupIfsc = async (raw = form.ifsc) => {
+    const ifsc = upper(raw);
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc))
+      return setNotice("Enter a valid 11-character IFSC.");
+    try {
+      const response = await fetch(
+        `https://ifsc.razorpay.com/${encodeURIComponent(ifsc)}`,
+      );
+      if (!response.ok) throw new Error("IFSC not found.");
+      const item = await response.json();
+      setForm((current) => ({
+        ...current,
+        ifsc,
+        beneficiaryBank: upper(item.BANK || ""),
+        beneficiaryBranch: upper(
+          [item.BRANCH, item.ADDRESS].filter(Boolean).join(", "),
+        ),
+      }));
+      setNotice(
+        "Bank and branch filled from IFSC. Verify against beneficiary proof.",
+      );
+    } catch (error: any) {
+      setNotice(error.message || "IFSC lookup failed.");
+    }
+  };
+  const generate = async () => {
+    const missing = [
+      ["branch", "remitter branch"],
+      ["account", "remitter account"],
+      ["company", "remitter name"],
+      ["beneficiaryName", "beneficiary name"],
+      ["beneficiaryAccount", "beneficiary account"],
+      ["ifsc", "IFSC"],
+      ["beneficiaryBank", "beneficiary bank"],
+    ]
+      .filter(([key]) => !String(form[key as keyof FormState]).trim())
+      .map(([, label]) => label);
+    if (!parsed) missing.unshift("valid amount");
+    if (form.mode === "RTGS" && form.payment === "CASH")
+      missing.push("RTGS cannot use cash");
+    if (form.bank === "kotak" && form.mode === "RTGS" && !form.purpose.trim())
+      missing.push("Kotak RTGS purpose code");
+    if (missing.length)
+      return setNotice(`Complete: ${[...new Set(missing)].join(", ")}.`);
+    if (!parsed) return;
     // Open during the trusted click event. Browser download permissions expire after awaits.
-    const preview = window.open('', '_blank');
-    setWorking(true); setNotice('Preparing the bank PDF…'); try { const source = await fetch(bank.asset); if (!source.ok) throw new Error('Approved bank template unavailable.'); const pdf = await PDFDocument.load(await source.arrayBuffer(), { updateMetadata: false }); const font = await pdf.embedFont(StandardFonts.Helvetica); if (form.bank === 'icici') fillIcici(pdf, font, form, parsed); if (form.bank === 'kotak') fillKotak(pdf.getPages()[0], font, form, parsed); if (form.bank === 'hdfc') fillHdfc(pdf.getPages()[0], font, form, parsed); if (form.bank === 'sbi') fillSbi(pdf.getPages()[0], font, form, parsed); const result = await pdf.save(); const fileBytes = result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength) as ArrayBuffer; const url = URL.createObjectURL(new Blob([fileBytes], { type: 'application/pdf' })); if (preview) preview.location.replace(url); else { const link = document.createElement('a'); link.href = url; link.download = `${form.customerType}-${form.bank.toUpperCase()}-${form.date}-${form.beneficiaryAccount.slice(-4) || 'draft'}.pdf`; document.body.appendChild(link); link.click(); link.remove(); } window.setTimeout(() => URL.revokeObjectURL(url), 300000); saveParty(true); persistRemitterProfile(form); setNotice(preview ? 'Filled PDF opened in a new tab. Review it, then use the browser download button.' : 'Filled PDF download started. Allow downloads for notifier.aradhanajewellers.com if prompted.'); } catch (error: any) { const message = error?.message || 'Could not generate PDF.'; if (preview && !preview.closed) { preview.document.title = 'RTGS PDF generation failed'; preview.document.body.innerHTML = `<main style="font:16px system-ui;padding:32px;max-width:720px"><h1>Form was not generated</h1><p>${message.replace(/[<>&]/g, (char: string) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[char] || char))}</p><p>Return to the form, correct the stated field, and generate again.</p></main>`; } setNotice(`Could not generate PDF: ${message}`); } finally { setWorking(false); }
+    const preview = window.open("", "_blank");
+    setWorking(true);
+    setNotice("Preparing the bank PDF…");
+    try {
+      const source = await fetch(bank.asset);
+      if (!source.ok) throw new Error("Approved bank template unavailable.");
+      const pdf = await PDFDocument.load(await source.arrayBuffer(), {
+        updateMetadata: false,
+      });
+      const font = await pdf.embedFont(StandardFonts.Helvetica);
+      if (form.bank === "icici") fillIcici(pdf, font, form, parsed);
+      if (form.bank === "kotak")
+        fillKotak(pdf.getPages()[0], font, form, parsed);
+      if (form.bank === "hdfc") fillHdfc(pdf.getPages()[0], font, form, parsed);
+      if (form.bank === "sbi") fillSbi(pdf.getPages()[0], font, form, parsed);
+      const result = await pdf.save();
+      const fileBytes = result.buffer.slice(
+        result.byteOffset,
+        result.byteOffset + result.byteLength,
+      ) as ArrayBuffer;
+      const url = URL.createObjectURL(
+        new Blob([fileBytes], { type: "application/pdf" }),
+      );
+      if (preview) preview.location.replace(url);
+      else {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${form.customerType}-${form.bank.toUpperCase()}-${form.date}-${form.beneficiaryAccount.slice(-4) || "draft"}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 300000);
+      saveParty(true);
+      persistRemitterProfile(form);
+      setNotice(
+        preview
+          ? "Filled PDF opened in a new tab. Review it, then use the browser download button."
+          : "Filled PDF download started. Allow downloads for notifier.aradhanajewellers.com if prompted.",
+      );
+    } catch (error: any) {
+      const message = error?.message || "Could not generate PDF.";
+      if (preview && !preview.closed) {
+        preview.document.title = "RTGS PDF generation failed";
+        preview.document.body.innerHTML = `<main style="font:16px system-ui;padding:32px;max-width:720px"><h1>Form was not generated</h1><p>${message.replace(/[<>&]/g, (char: string) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" })[char] || char)}</p><p>Return to the form, correct the stated field, and generate again.</p></main>`;
+      }
+      setNotice(`Could not generate PDF: ${message}`);
+    } finally {
+      setWorking(false);
+    }
   };
-  const input = (key: keyof FormState, label: string, extra: React.InputHTMLAttributes<HTMLInputElement> = {}) => {
-    const { maxLength: suppliedMaxLength, ...rest } = extra;
-    const limit = form.bank === 'icici' ? iciciBoxLimits[key] : undefined;
+  const input = (
+    key: keyof FormState,
+    label: string,
+    extra: React.InputHTMLAttributes<HTMLInputElement> = {},
+  ) => {
+    const {
+      maxLength: suppliedMaxLength,
+      onChange: suppliedOnChange,
+      ...rest
+    } = extra;
+    const limit = form.bank === "icici" ? iciciBoxLimits[key] : undefined;
     const value = String(form[key]);
     const reached = Boolean(limit && value.length >= limit);
     const nearLimit = Boolean(limit && value.length >= Math.max(1, limit - 2));
-    const stateClass = reached ? 'border-amber-500 focus:border-amber-500 focus:ring-amber-200' : '';
+    const stateClass = reached
+      ? "border-amber-500 focus:border-amber-500 focus:ring-amber-200"
+      : "";
 
-    return <label className={labelClass}>
-      {label}
-      <input className={`${fieldClass} ${stateClass}`} value={value} onChange={event => set(key, event.target.value)} maxLength={limit ?? suppliedMaxLength} {...rest} />
-      {limit && <span className={`mt-1 block text-[10px] font-bold ${nearLimit ? 'text-amber-700' : 'text-slate-500'}`}>
-        {value.length}/{limit} ICICI boxes{reached ? ' — limit reached' : nearLimit ? ' — nearing limit' : ''}
-      </span>}
-    </label>;
+    return (
+      <label className={labelClass}>
+        {label}
+        <input
+          className={`${fieldClass} ${stateClass}`}
+          value={value}
+          onChange={(event) => {
+            set(key, event.target.value);
+            suppliedOnChange?.(event);
+          }}
+          maxLength={limit ?? suppliedMaxLength}
+          {...rest}
+        />
+        {limit && (
+          <span
+            className={`mt-1 block text-[10px] font-bold ${nearLimit ? "text-amber-700" : "text-slate-500"}`}
+          >
+            {value.length}/{limit} ICICI boxes
+            {reached ? " — limit reached" : nearLimit ? " — nearing limit" : ""}
+          </span>
+        )}
+      </label>
+    );
   };
-  return <div className="space-y-6"><header className="rounded-2xl bg-gradient-to-br from-slate-950 to-blue-950 p-6 text-white shadow-sm"><p className="text-[10px] font-black uppercase tracking-[.24em] text-cyan-300">AMBIC DIGITAL · Payment operations</p><h2 className="mt-2 text-3xl font-black">RTGS / NEFT Form Filler</h2><p className="mt-2 max-w-3xl text-sm text-slate-300">Uses the selected bank's reviewed official blank form. The generated PDF stays in this browser. Banking details are not stored on the notifier server.</p></header>
-    {update && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-bold text-amber-900">{update}</div>}{notice && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-900">{notice}</div>}
-    <section className="grid gap-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:grid-cols-2"><div className="space-y-4"><p className="text-xs font-black uppercase tracking-widest text-blue-700">Bank and transfer</p><label className={labelClass}>Bank form<select className={fieldClass} value={form.bank} onChange={event => set('bank', event.target.value)}>{Object.entries(BANKS).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}</select></label><div><p className={labelClass}>Beneficiary type</p><div className="mt-1 grid grid-cols-2 rounded-xl border border-gray-300 bg-gray-50 p-1"><button type="button" onClick={() => set('customerType','B2B')} className={`rounded-lg px-3 py-2 text-xs font-black ${form.customerType === 'B2B' ? 'bg-blue-700 text-white' : 'text-gray-600'}`}>B2B BUSINESS</button><button type="button" onClick={() => set('customerType','B2C')} className={`rounded-lg px-3 py-2 text-xs font-black ${form.customerType === 'B2C' ? 'bg-blue-700 text-white' : 'text-gray-600'}`}>B2C CONSUMER</button></div></div><div className="grid gap-3 sm:grid-cols-2"><label className={labelClass}>Transfer mode<select className={fieldClass} value={form.mode} onChange={event => set('mode', event.target.value)}><option value="RTGS">RTGS</option><option value="NEFT">NEFT</option></select></label><label className={labelClass}>Payment mode<select className={fieldClass} value={form.payment} onChange={event => set('payment', event.target.value)}><option value="CHEQUE">Cheque</option><option value="CASH">Cash (NEFT only)</option></select></label></div><div className="grid gap-3 sm:grid-cols-2">{input('date','Date (DDMMYYYY)',{maxLength:8})}{input('cheque','Cheque number',{maxLength:20})}</div>{input('amount','Amount (INR)',{inputMode:'decimal',placeholder:'e.g. 300000'})}<div className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900">{parsed ? words(parsed) : 'Enter a valid INR amount to generate words.'}</div>
-      </div>
-      <div className="space-y-4"><p className="text-xs font-black uppercase tracking-widest text-emerald-700">{form.customerType} beneficiary</p><div className="grid gap-3 sm:grid-cols-[1fr_auto]"><label className={labelClass}>Saved {form.customerType} party<select className={fieldClass} value="" onChange={event => selectParty(event.target.value)}><option value="">{visibleParties.length ? `Select saved ${form.customerType} party` : `No saved ${form.customerType} parties`}</option>{visibleParties.map((party,index) => <option key={`${party.customerType}-${party.beneficiaryAccount}`} value={index}>{party.beneficiaryName} · {party.beneficiaryAccount.slice(-4)}</option>)}</select></label><button type="button" onClick={() => saveParty()} className="mt-5 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-xs font-black uppercase text-emerald-800">Save party</button></div>{input('beneficiaryName',form.customerType === 'B2B' ? 'Business / beneficiary name' : 'Beneficiary name')}{form.customerType === 'B2B' && <><label className={labelClass}>Beneficiary GSTIN<input className={fieldClass} value={form.beneficiaryGstin} onChange={event => set('beneficiaryGstin', upper(event.target.value))} maxLength={15} placeholder="Optional - saved with B2B party" /></label><p className="-mt-2 text-xs text-gray-500">GSTIN is saved locally. The current bank templates do not provide a GSTIN box.</p></>}{input('beneficiaryAccount','Account number',{inputMode:'numeric'})}<div className="grid gap-3 sm:grid-cols-[1fr_auto]"><label className={labelClass}>IFSC<input className={fieldClass} value={form.ifsc} onChange={event => set('ifsc', upper(event.target.value))} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); lookupIfsc(event.currentTarget.value); } }} maxLength={11} /></label><button type="button" onClick={() => lookupIfsc()} className="mt-5 rounded-xl bg-blue-700 px-4 py-3 text-xs font-black uppercase text-white">Look up IFSC</button></div>{input('beneficiaryBank','Bank name')}{input('beneficiaryBranch','Bank branch / address')}</div></section>
-    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-widest text-violet-700">Remitter profile</p><p className="mt-1 text-sm text-gray-500">Saved automatically on this browser and prefilled for every bank form. No account data is embedded in this public dashboard.</p></div><button type="button" onClick={saveProfile} className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-xs font-black uppercase text-violet-800">Save remitter profile</button></div><div className="grid gap-3 md:grid-cols-3">{input('branch',`${bank.label} branch`)}{input('account','Remitter account number',{inputMode:'numeric'})}{input('mobile','Mobile',{inputMode:'tel'})}</div><div className="mt-3 grid gap-3 md:grid-cols-2">{input('company','Company / remitter name')}{input('address1','Address line 1')}{input('address2','Address line 2')}</div></section>
-    <details className="rounded-2xl border border-amber-200 bg-amber-50 p-5"><summary className="cursor-pointer text-sm font-black uppercase tracking-wider text-amber-900">Advanced bank options</summary><p className="mt-2 text-sm text-amber-800">Use only when required by the selected bank or RBI. Fields outside this bank form are retained locally but are not printed.</p><div className="mt-4 grid gap-3 md:grid-cols-2">{(form.bank === 'kotak' || form.bank === 'sbi' || form.bank === 'hdfc') && input('purpose', form.bank === 'kotak' ? 'Purpose code / purpose (mandatory for Kotak RTGS)' : 'Transfer purpose')}{form.bank === 'kotak' && <label className={labelClass}>Beneficiary account type<select className={fieldClass} value={form.kotakAccountType} onChange={event => set('kotakAccountType', event.target.value)}>{['CURRENT','SAVINGS','NRE','OD','CC','CREDIT CARD','LOAN','OTHER'].map(item => <option key={item}>{item}</option>)}</select></label>}{form.bank === 'hdfc' && <><label className={labelClass}>Beneficiary account type<select className={fieldClass} value={form.hdfcAccountType} onChange={event => set('hdfcAccountType', event.target.value)}><option value="RESIDENT">Resident</option><option value="NON RESIDENT">Non-resident</option><option value="FCRA">FCRA</option></select></label><label className={labelClass}>Beneficiary name verification<select className={fieldClass} value={form.banv} onChange={event => set('banv', event.target.value)}><option value="VERIFY">HDFC Bank to verify</option><option value="CUSTOMER_VERIFIED">Verified by remitter</option></select></label>{input('beneficiaryContact','Beneficiary contact number',{inputMode:'tel'})}{input('beneficiaryAddress','Beneficiary address')}{input('email','Remitter email',{type:'email'})}</>}{input('remitterLei','Remitter LEI (only if required by bank / RBI)')}{input('remitterLeiExpiry','Remitter LEI expiry (DDMMYYYY)',{maxLength:8})}{input('beneficiaryLei','Beneficiary LEI (only if required by bank / RBI)')}{input('beneficiaryLeiExpiry','Beneficiary LEI expiry (DDMMYYYY)',{maxLength:8})}</div></details>
-    <section className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-slate-950 p-6 text-white shadow-sm md:flex-row md:items-center md:justify-between"><p className="max-w-3xl text-sm text-slate-300">Verify beneficiary name, account number, IFSC, amount, selected bank form and bank-specific fields. IFSC lookup does not establish account ownership. Review and sign manually.</p><button type="button" disabled={working} onClick={generate} className="rounded-xl bg-cyan-400 px-5 py-3 text-xs font-black uppercase text-slate-950 disabled:opacity-60">{working ? 'Generating…' : 'Generate filled PDF'}</button></section>
-  </div>;
+  return (
+    <div className="space-y-6">
+      <header className="rounded-2xl bg-gradient-to-br from-slate-950 to-blue-950 p-6 text-white shadow-sm">
+        <p className="text-[10px] font-black uppercase tracking-[.24em] text-cyan-300">
+          AMBIC DIGITAL · Payment operations
+        </p>
+        <h2 className="mt-2 text-3xl font-black">RTGS / NEFT Form Filler</h2>
+        <p className="mt-2 max-w-3xl text-sm text-slate-300">
+          Uses the selected bank's reviewed official blank form. The generated
+          PDF stays in this browser. Banking details are not stored on the
+          notifier server.
+        </p>
+      </header>
+      {update && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-bold text-amber-900">
+          {update}
+        </div>
+      )}
+      {notice && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-900">
+          {notice}
+        </div>
+      )}
+      <section className="grid gap-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:grid-cols-2">
+        <div className="space-y-4">
+          <p className="text-xs font-black uppercase tracking-widest text-blue-700">
+            Bank and transfer
+          </p>
+          <label className={labelClass}>
+            Bank form
+            <select
+              className={fieldClass}
+              value={form.bank}
+              onChange={(event) => set("bank", event.target.value)}
+            >
+              {Object.entries(BANKS).map(([id, item]) => (
+                <option key={id} value={id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div>
+            <p className={labelClass}>Beneficiary type</p>
+            <div className="mt-1 grid grid-cols-2 rounded-xl border border-gray-300 bg-gray-50 p-1">
+              <button
+                type="button"
+                onClick={() => set("customerType", "B2B")}
+                className={`rounded-lg px-3 py-2 text-xs font-black ${form.customerType === "B2B" ? "bg-blue-700 text-white" : "text-gray-600"}`}
+              >
+                B2B BUSINESS
+              </button>
+              <button
+                type="button"
+                onClick={() => set("customerType", "B2C")}
+                className={`rounded-lg px-3 py-2 text-xs font-black ${form.customerType === "B2C" ? "bg-blue-700 text-white" : "text-gray-600"}`}
+              >
+                B2C CONSUMER
+              </button>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={labelClass}>
+              Transfer mode
+              <select
+                className={fieldClass}
+                value={form.mode}
+                onChange={(event) => set("mode", event.target.value)}
+              >
+                <option value="RTGS">RTGS</option>
+                <option value="NEFT">NEFT</option>
+              </select>
+            </label>
+            <label className={labelClass}>
+              Payment mode
+              <select
+                className={fieldClass}
+                value={form.payment}
+                onChange={(event) => set("payment", event.target.value)}
+              >
+                <option value="CHEQUE">Cheque</option>
+                <option value="CASH">Cash (NEFT only)</option>
+              </select>
+            </label>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {input("date", "Date (DDMMYYYY)", { maxLength: 8 })}
+            {input("cheque", "Cheque number", { maxLength: 20 })}
+          </div>
+          {input("amount", "Amount (INR)", {
+            inputMode: "decimal",
+            placeholder: "e.g. 300000",
+          })}
+          <div className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900">
+            {parsed
+              ? words(parsed)
+              : "Enter a valid INR amount to generate words."}
+          </div>
+        </div>
+        <div className="space-y-4">
+          <p className="text-xs font-black uppercase tracking-widest text-emerald-700">
+            {form.customerType} beneficiary
+          </p>
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <label className={labelClass}>
+              Saved {form.customerType} party
+              <select
+                className={fieldClass}
+                value=""
+                onChange={(event) => selectParty(event.target.value)}
+              >
+                <option value="">
+                  {visibleParties.length
+                    ? `Select saved ${form.customerType} party`
+                    : `No saved ${form.customerType} parties`}
+                </option>
+                {visibleParties.map((party, index) => (
+                  <option
+                    key={`${party.customerType}-${party.beneficiaryAccount}`}
+                    value={index}
+                  >
+                    {party.beneficiaryName} ·{" "}
+                    {party.beneficiaryAccount.slice(-4)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => saveParty()}
+              className="mt-5 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-xs font-black uppercase text-emerald-800"
+            >
+              Save party
+            </button>
+          </div>
+          <datalist id={`rtgs-party-names-${form.customerType}`}>
+            {visibleParties.map((party) => (
+              <option
+                key={`${party.customerType}-${party.beneficiaryAccount}`}
+                value={party.beneficiaryName}
+              >
+                {party.beneficiaryAccount.slice(-4)} · {party.beneficiaryBank}
+              </option>
+            ))}
+          </datalist>
+          {input(
+            "beneficiaryName",
+            form.customerType === "B2B"
+              ? "Business / beneficiary name"
+              : "Beneficiary name",
+            {
+              list: `rtgs-party-names-${form.customerType}`,
+              onChange: (event) => completePartyByName(event.target.value),
+            },
+          )}
+          {form.customerType === "B2B" && (
+            <>
+              <label className={labelClass}>
+                Beneficiary GSTIN
+                <input
+                  className={fieldClass}
+                  value={form.beneficiaryGstin}
+                  onChange={(event) =>
+                    set("beneficiaryGstin", upper(event.target.value))
+                  }
+                  maxLength={15}
+                  placeholder="Optional - saved with B2B party"
+                />
+              </label>
+              <p className="-mt-2 text-xs text-gray-500">
+                GSTIN is saved locally. The current bank templates do not
+                provide a GSTIN box.
+              </p>
+            </>
+          )}
+          {input("beneficiaryAccount", "Account number", {
+            inputMode: "numeric",
+          })}
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <label className={labelClass}>
+              IFSC
+              <input
+                className={fieldClass}
+                value={form.ifsc}
+                onChange={(event) => set("ifsc", upper(event.target.value))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    lookupIfsc(event.currentTarget.value);
+                  }
+                }}
+                maxLength={11}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => lookupIfsc()}
+              className="mt-5 rounded-xl bg-blue-700 px-4 py-3 text-xs font-black uppercase text-white"
+            >
+              Look up IFSC
+            </button>
+          </div>
+          {input("beneficiaryBank", "Bank name")}
+          {input("beneficiaryBranch", "Bank branch / address")}
+        </div>
+      </section>
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-violet-700">
+              Remitter profile
+            </p>
+            <p className="mt-1 text-sm text-gray-500">
+              Saved automatically on this browser and prefilled for every bank
+              form. No account data is embedded in this public dashboard.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={saveProfile}
+            className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-xs font-black uppercase text-violet-800"
+          >
+            Save remitter profile
+          </button>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {input("branch", `${bank.label} branch`)}
+          {input("account", "Remitter account number", {
+            inputMode: "numeric",
+          })}
+          {input("mobile", "Mobile", { inputMode: "tel" })}
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {input("company", "Company / remitter name")}
+          {input("address1", "Address line 1")}
+          {input("address2", "Address line 2")}
+        </div>
+      </section>
+      <details className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+        <summary className="cursor-pointer text-sm font-black uppercase tracking-wider text-amber-900">
+          Advanced bank options
+        </summary>
+        <p className="mt-2 text-sm text-amber-800">
+          Use only when required by the selected bank or RBI. Fields outside
+          this bank form are retained locally but are not printed.
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {(form.bank === "kotak" ||
+            form.bank === "sbi" ||
+            form.bank === "hdfc") &&
+            input(
+              "purpose",
+              form.bank === "kotak"
+                ? "Purpose code / purpose (mandatory for Kotak RTGS)"
+                : "Transfer purpose",
+            )}
+          {form.bank === "kotak" && (
+            <label className={labelClass}>
+              Beneficiary account type
+              <select
+                className={fieldClass}
+                value={form.kotakAccountType}
+                onChange={(event) =>
+                  set("kotakAccountType", event.target.value)
+                }
+              >
+                {[
+                  "CURRENT",
+                  "SAVINGS",
+                  "NRE",
+                  "OD",
+                  "CC",
+                  "CREDIT CARD",
+                  "LOAN",
+                  "OTHER",
+                ].map((item) => (
+                  <option key={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {form.bank === "hdfc" && (
+            <>
+              <label className={labelClass}>
+                Beneficiary account type
+                <select
+                  className={fieldClass}
+                  value={form.hdfcAccountType}
+                  onChange={(event) =>
+                    set("hdfcAccountType", event.target.value)
+                  }
+                >
+                  <option value="RESIDENT">Resident</option>
+                  <option value="NON RESIDENT">Non-resident</option>
+                  <option value="FCRA">FCRA</option>
+                </select>
+              </label>
+              <label className={labelClass}>
+                Beneficiary name verification
+                <select
+                  className={fieldClass}
+                  value={form.banv}
+                  onChange={(event) => set("banv", event.target.value)}
+                >
+                  <option value="VERIFY">HDFC Bank to verify</option>
+                  <option value="CUSTOMER_VERIFIED">
+                    Verified by remitter
+                  </option>
+                </select>
+              </label>
+              {input("beneficiaryContact", "Beneficiary contact number", {
+                inputMode: "tel",
+              })}
+              {input("beneficiaryAddress", "Beneficiary address")}
+              {input("email", "Remitter email", { type: "email" })}
+            </>
+          )}
+          {input(
+            "remitterLei",
+            "Remitter LEI (only if required by bank / RBI)",
+          )}
+          {input("remitterLeiExpiry", "Remitter LEI expiry (DDMMYYYY)", {
+            maxLength: 8,
+          })}
+          {input(
+            "beneficiaryLei",
+            "Beneficiary LEI (only if required by bank / RBI)",
+          )}
+          {input("beneficiaryLeiExpiry", "Beneficiary LEI expiry (DDMMYYYY)", {
+            maxLength: 8,
+          })}
+        </div>
+      </details>
+      <section className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-slate-950 p-6 text-white shadow-sm md:flex-row md:items-center md:justify-between">
+        <p className="max-w-3xl text-sm text-slate-300">
+          Verify beneficiary name, account number, IFSC, amount, selected bank
+          form and bank-specific fields. IFSC lookup does not establish account
+          ownership. Review and sign manually.
+        </p>
+        <button
+          type="button"
+          disabled={working}
+          onClick={generate}
+          className="rounded-xl bg-cyan-400 px-5 py-3 text-xs font-black uppercase text-slate-950 disabled:opacity-60"
+        >
+          {working ? "Generating…" : "Generate filled PDF"}
+        </button>
+      </section>
+    </div>
+  );
 };
 
 export default RtgsFormPage;
