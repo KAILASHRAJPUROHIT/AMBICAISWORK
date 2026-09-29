@@ -17,6 +17,27 @@ const BANKS: Record<BankId, { label: string; asset: string }> = {
   sbi: { label: 'State Bank of India', asset: '/dashboard/rtgs-forms/SBI-RTGS-NEFT.pdf' },
 };
 const blankProfile: Profile = { branch: '', account: '', mobile: '', company: '', address1: '', address2: '', email: '' };
+
+// ICICI's reviewed template uses physical comb boxes. These limits are part of
+// the template contract, not arbitrary application validation.
+const iciciBoxLimits: Partial<Record<keyof FormState, number>> = {
+  date: 8,
+  cheque: 7,
+  account: 12,
+  remitterLei: 20,
+  remitterLeiExpiry: 8,
+  company: 28,
+  address1: 28,
+  address2: 28,
+  mobile: 10,
+  beneficiaryName: 28,
+  beneficiaryAccount: 28,
+  beneficiaryLei: 20,
+  beneficiaryLeiExpiry: 8,
+  beneficiaryBank: 28,
+  ifsc: 11,
+  beneficiaryBranch: 28,
+};
 const dateToday = () => new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date()).replace(/\//g, '');
 const initialForm = (): FormState => ({ bank: 'icici', customerType: 'B2C', beneficiaryGstin: '', mode: 'RTGS', payment: 'CHEQUE', date: dateToday(), cheque: '', amount: '', beneficiaryName: '', beneficiaryAccount: '', ifsc: '', beneficiaryBank: '', beneficiaryBranch: '', beneficiaryAddress: '', beneficiaryContact: '', purpose: '', kotakAccountType: 'CURRENT', hdfcAccountType: 'RESIDENT', banv: 'VERIFY', remitterLei: '', remitterLeiExpiry: '', beneficiaryLei: '', beneficiaryLeiExpiry: '', ...blankProfile });
 const upper = (text: string) => text.trim().toUpperCase();
@@ -35,12 +56,13 @@ function writeInRect(page: any, rect: Rect, text: string, font: any, size = 8) {
   if (font.widthOfTextAtSize(text, size) > width - 3) throw new Error(`Value does not fit the bank form field: ${text.slice(0, 32)}.`);
   page.drawText(text, { x: x + 1.5, y: y + Math.max(2, (height - size) / 2 + 1), size, font, color: rgb(0, 0, 0) });
 }
-function comb(page: any, x: number, y: number, width: number, count: number, text: string, font: any, size = 8) {
+function comb(page: any, x: number, y: number, width: number, count: number, text: string, font: any, size = 7.2, eraseTemplate = false, height = 15) {
   if (text.length > count) throw new Error(`Value exceeds the ${count}-character bank form field.`);
+  const cell = width / count;
+  if (eraseTemplate) for (let index = 0; index < count; index += 1) page.drawRectangle({ x: x + cell * index + 1.5, y: y + 2, width: cell - 3, height: height - 4, color: rgb(1, 1, 1) });
   [...text].forEach((character, index) => {
-    const cell = width / count;
     const charWidth = font.widthOfTextAtSize(character, size);
-    page.drawText(character, { x: x + cell * index + (cell - charWidth) / 2, y, size, font, color: rgb(0, 0, 0) });
+    page.drawText(character, { x: x + cell * index + (cell - charWidth) / 2, y: y + Math.max(2, (height - size) / 2 + 1), size, font, color: rgb(0, 0, 0) });
   });
 }
 function mark(page: any, x: number, y: number, font: any) { write(page, x + 1, y + 1, 'X', font, 8, 1); }
@@ -65,11 +87,11 @@ export function fillIcici(pdf: any, font: any, form: FormState, amount: NonNulla
     branch:[0,18,866,87,16], date:[0,455.8,881.6,119.1,14.9], figures:[0,212,834.5,140,17], words1:[0,435,834.5,145,17], words2:[0,18,822,210,16.5], account:[0,201.1,654.2,178.6,14.9], remitterLei:[0,242.5,633.9,297.6,14.9], remitterLeiExpiry:[0,470.35,596,119.05,14.9], cheque:[0,130.6,475.1,104.2,15], chequeDate:[0,470.35,476.7,119.05,14.9], name:[0,157.8,450.2,416.7,14.9], addr1:[0,157.8,429.05,416.7,14.85], addr2:[0,157.8,412.9,416.7,14.9], mobile:[0,261.8,389.05,148.8,14.95], beneficiary:[0,172.7,344.3,416.7,14.9], beneAccount:[0,172.7,320.8,416.7,14.9], beneficiaryLei:[0,240.5,298.9,297.6,14.9], bank:[0,157.7,243.8,416.7,15], ifsc:[0,321.8,224,163.7,14.9], branchAddress:[0,157.7,202,416.7,14.9], beneAccountConfirm:[0,172.7,177.8,416.7,14.9], ackName:[1,132,101,141,15], ackBeneficiary:[1,132,80,141,15], ackBank:[1,132,61,141,15], ackDate:[1,453.6,101.2,119.1,14.9], ackMode:[1,367,83,181,15], ackAccount:[1,421,62,127,15], ackAmount:[1,361,43,187,15],
   };
   const pages = pdf.getPages(); const line = (key: string, value: string, size = 8) => writeInRect(pages[boxes[key][0]], boxes[key], value, font, size);
-  const boxed = (key: string, value: string, count: number, size = 8) => { const [, x, y, width] = boxes[key]; comb(pages[boxes[key][0]], x, y, width, count, value, font, size); };
+  const boxed = (key: string, value: string, count: number, eraseTemplate = false) => { const [, x, y, width, height] = boxes[key]; comb(pages[boxes[key][0]], x, y, width, count, value, font, 7.2, eraseTemplate, height); };
   const [line1, line2] = splitForRects(words(amount), font, 8, boxes.words1[3], boxes.words2[3]);
   const modePoints = form.mode === 'RTGS' ? [[160.7,969.2],[190.1,940.3],[148.8,910.3]] : [[203.3,969.2],[255.2,940.3],[203.3,910.3]];
   modePoints.forEach(([x, y]) => mark(pages[0], x, y, font)); mark(pages[0], form.payment === 'CASH' ? 18 : 262.9, 748.4, font);
-  line('branch', upper(form.branch)); boxed('date', form.date, 8); line('figures', amount.display); line('words1', line1); line('words2', line2); boxed('account', form.account, 12); boxed('remitterLei', upper(form.remitterLei), 20); boxed('remitterLeiExpiry', form.remitterLeiExpiry, 8); boxed('cheque', form.cheque, 7); boxed('chequeDate', form.date, 8); boxed('name', upper(form.company), 28); boxed('addr1', upper(form.address1), 28); boxed('addr2', upper(form.address2), 28); boxed('mobile', form.mobile, 10); boxed('beneficiary', upper(form.beneficiaryName), 28); boxed('beneAccount', form.beneficiaryAccount, 28); boxed('beneficiaryLei', upper(form.beneficiaryLei), 20); boxed('bank', upper(form.beneficiaryBank), 28); boxed('ifsc', upper(form.ifsc), 11); boxed('branchAddress', upper(form.beneficiaryBranch), 28); boxed('beneAccountConfirm', form.beneficiaryAccount, 28); line('ackName', upper(form.company)); line('ackBeneficiary', upper(form.beneficiaryName)); line('ackBank', upper(form.beneficiaryBank)); boxed('ackDate', form.date, 8); line('ackMode', form.payment); line('ackAccount', form.beneficiaryAccount); line('ackAmount', amount.display);
+  line('branch', upper(form.branch)); boxed('date', form.date, 8, true); line('figures', amount.display); line('words1', line1); line('words2', line2); boxed('account', form.account, 12); boxed('remitterLei', upper(form.remitterLei), 20); boxed('remitterLeiExpiry', form.remitterLeiExpiry, 8, true); boxed('cheque', form.cheque, 7); boxed('chequeDate', form.date, 8, true); boxed('name', upper(form.company), 28); boxed('addr1', upper(form.address1), 28); boxed('addr2', upper(form.address2), 28); boxed('mobile', form.mobile, 10); boxed('beneficiary', upper(form.beneficiaryName), 28); boxed('beneAccount', form.beneficiaryAccount, 28); boxed('beneficiaryLei', upper(form.beneficiaryLei), 20); boxed('bank', upper(form.beneficiaryBank), 28); boxed('ifsc', upper(form.ifsc), 11); boxed('branchAddress', upper(form.beneficiaryBranch), 28); boxed('beneAccountConfirm', form.beneficiaryAccount, 28); line('ackName', upper(form.company)); line('ackBeneficiary', upper(form.beneficiaryName)); line('ackBank', upper(form.beneficiaryBank)); boxed('ackDate', form.date, 8, true); line('ackMode', form.payment); line('ackAccount', form.beneficiaryAccount); line('ackAmount', amount.display);
 }
 function fillKotak(page: any, font: any, form: FormState, amount: NonNullable<ReturnType<typeof parseAmount>>) {
   const [line1, line2] = split(words(amount)); mark(page, form.mode === 'RTGS' ? 182 : 234, 777, font); write(page,449,742,form.date,font); write(page,137,719,upper(form.branch),font); write(page,149,680,form.account,font); write(page,422,680,form.cheque,font); write(page,122,666,amount.display,font); write(page,277,666,line1,font); write(page,28,653,line2,font); write(page,81,625,upper(form.purpose),font);
@@ -105,7 +127,22 @@ const RtgsFormPage: React.FC = () => {
     const preview = window.open('', '_blank');
     setWorking(true); setNotice('Preparing the bank PDF…'); try { const source = await fetch(bank.asset); if (!source.ok) throw new Error('Approved bank template unavailable.'); const pdf = await PDFDocument.load(await source.arrayBuffer(), { updateMetadata: false }); const font = await pdf.embedFont(StandardFonts.Helvetica); if (form.bank === 'icici') fillIcici(pdf, font, form, parsed); if (form.bank === 'kotak') fillKotak(pdf.getPages()[0], font, form, parsed); if (form.bank === 'hdfc') fillHdfc(pdf.getPages()[0], font, form, parsed); if (form.bank === 'sbi') fillSbi(pdf.getPages()[0], font, form, parsed); const result = await pdf.save(); const fileBytes = result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength) as ArrayBuffer; const url = URL.createObjectURL(new Blob([fileBytes], { type: 'application/pdf' })); if (preview) preview.location.replace(url); else { const link = document.createElement('a'); link.href = url; link.download = `${form.customerType}-${form.bank.toUpperCase()}-${form.date}-${form.beneficiaryAccount.slice(-4) || 'draft'}.pdf`; document.body.appendChild(link); link.click(); link.remove(); } window.setTimeout(() => URL.revokeObjectURL(url), 300000); saveParty(true); persistRemitterProfile(form); setNotice(preview ? 'Filled PDF opened in a new tab. Review it, then use the browser download button.' : 'Filled PDF download started. Allow downloads for notifier.aradhanajewellers.com if prompted.'); } catch (error: any) { const message = error?.message || 'Could not generate PDF.'; if (preview && !preview.closed) { preview.document.title = 'RTGS PDF generation failed'; preview.document.body.innerHTML = `<main style="font:16px system-ui;padding:32px;max-width:720px"><h1>Form was not generated</h1><p>${message.replace(/[<>&]/g, (char: string) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[char] || char))}</p><p>Return to the form, correct the stated field, and generate again.</p></main>`; } setNotice(`Could not generate PDF: ${message}`); } finally { setWorking(false); }
   };
-  const input = (key: keyof FormState, label: string, extra: React.InputHTMLAttributes<HTMLInputElement> = {}) => <label className={labelClass}>{label}<input className={fieldClass} value={String(form[key])} onChange={event => set(key, event.target.value)} {...extra} /></label>;
+  const input = (key: keyof FormState, label: string, extra: React.InputHTMLAttributes<HTMLInputElement> = {}) => {
+    const { maxLength: suppliedMaxLength, ...rest } = extra;
+    const limit = form.bank === 'icici' ? iciciBoxLimits[key] : undefined;
+    const value = String(form[key]);
+    const reached = Boolean(limit && value.length >= limit);
+    const nearLimit = Boolean(limit && value.length >= Math.max(1, limit - 2));
+    const stateClass = reached ? 'border-amber-500 focus:border-amber-500 focus:ring-amber-200' : '';
+
+    return <label className={labelClass}>
+      {label}
+      <input className={`${fieldClass} ${stateClass}`} value={value} onChange={event => set(key, event.target.value)} maxLength={limit ?? suppliedMaxLength} {...rest} />
+      {limit && <span className={`mt-1 block text-[10px] font-bold ${nearLimit ? 'text-amber-700' : 'text-slate-500'}`}>
+        {value.length}/{limit} ICICI boxes{reached ? ' — limit reached' : nearLimit ? ' — nearing limit' : ''}
+      </span>}
+    </label>;
+  };
   return <div className="space-y-6"><header className="rounded-2xl bg-gradient-to-br from-slate-950 to-blue-950 p-6 text-white shadow-sm"><p className="text-[10px] font-black uppercase tracking-[.24em] text-cyan-300">AMBIC DIGITAL · Payment operations</p><h2 className="mt-2 text-3xl font-black">RTGS / NEFT Form Filler</h2><p className="mt-2 max-w-3xl text-sm text-slate-300">Uses the selected bank's reviewed official blank form. The generated PDF stays in this browser. Banking details are not stored on the notifier server.</p></header>
     {update && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm font-bold text-amber-900">{update}</div>}{notice && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-900">{notice}</div>}
     <section className="grid gap-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:grid-cols-2"><div className="space-y-4"><p className="text-xs font-black uppercase tracking-widest text-blue-700">Bank and transfer</p><label className={labelClass}>Bank form<select className={fieldClass} value={form.bank} onChange={event => set('bank', event.target.value)}>{Object.entries(BANKS).map(([id, item]) => <option key={id} value={id}>{item.label}</option>)}</select></label><div><p className={labelClass}>Beneficiary type</p><div className="mt-1 grid grid-cols-2 rounded-xl border border-gray-300 bg-gray-50 p-1"><button type="button" onClick={() => set('customerType','B2B')} className={`rounded-lg px-3 py-2 text-xs font-black ${form.customerType === 'B2B' ? 'bg-blue-700 text-white' : 'text-gray-600'}`}>B2B BUSINESS</button><button type="button" onClick={() => set('customerType','B2C')} className={`rounded-lg px-3 py-2 text-xs font-black ${form.customerType === 'B2C' ? 'bg-blue-700 text-white' : 'text-gray-600'}`}>B2C CONSUMER</button></div></div><div className="grid gap-3 sm:grid-cols-2"><label className={labelClass}>Transfer mode<select className={fieldClass} value={form.mode} onChange={event => set('mode', event.target.value)}><option value="RTGS">RTGS</option><option value="NEFT">NEFT</option></select></label><label className={labelClass}>Payment mode<select className={fieldClass} value={form.payment} onChange={event => set('payment', event.target.value)}><option value="CHEQUE">Cheque</option><option value="CASH">Cash (NEFT only)</option></select></label></div><div className="grid gap-3 sm:grid-cols-2">{input('date','Date (DDMMYYYY)',{maxLength:8})}{input('cheque','Cheque number',{maxLength:20})}</div>{input('amount','Amount (INR)',{inputMode:'decimal',placeholder:'e.g. 300000'})}<div className="rounded-xl bg-amber-50 p-3 text-sm font-bold text-amber-900">{parsed ? words(parsed) : 'Enter a valid INR amount to generate words.'}</div>
