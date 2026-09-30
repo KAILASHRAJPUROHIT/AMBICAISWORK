@@ -33,8 +33,10 @@ class LockTaskKioskController(
         val ownPackage = homeComponent.packageName
         if (!dpm.isDeviceOwnerApp(ownPackage)) return KioskResult.Unsupported
         return runGuarded {
-            // Own package must stay allowlisted so the kiosk launcher can run.
-            val allowlist = (allowedPackages + ownPackage).distinct().toTypedArray()
+            // Own package must stay allowlisted so the kiosk launcher can run; the fleet's always-allowed
+            // helper packages (e.g. the icon-less Mi Doc Viewer) are added so documents opened from any
+            // allowed app are not blocked. See KioskAllowlist.
+            val allowlist = KioskAllowlist.effective(allowedPackages, ownPackage).toTypedArray()
             dpm.setLockTaskPackages(admin, allowlist)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
