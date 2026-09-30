@@ -66,18 +66,23 @@ public class RemoteSnapshotUploadResource {
     // misbehaving/malicious client can't use this as an unbounded upload sink.
     private static final int MAX_BYTES = 8 * 1024 * 1024;
 
+    private static final int LIVE_MAX_BYTES = 2 * 1024 * 1024;
+
     private UnsecureDAO unsecureDAO;
     private AgentCommandDAO commandDAO;
     private RemoteSnapshotDAO snapshotDAO;
+    private com.hmdm.notification.RemoteLiveHub liveHub;
 
     public RemoteSnapshotUploadResource() {
     }
 
     @Inject
-    public RemoteSnapshotUploadResource(UnsecureDAO unsecureDAO, AgentCommandDAO commandDAO, RemoteSnapshotDAO snapshotDAO) {
+    public RemoteSnapshotUploadResource(UnsecureDAO unsecureDAO, AgentCommandDAO commandDAO, RemoteSnapshotDAO snapshotDAO,
+                                        com.hmdm.notification.RemoteLiveHub liveHub) {
         this.unsecureDAO = unsecureDAO;
         this.commandDAO = commandDAO;
         this.snapshotDAO = snapshotDAO;
+        this.liveHub = liveHub;
     }
 
     // =================================================================================================================
@@ -129,6 +134,38 @@ public class RemoteSnapshotUploadResource {
         snapshot.setData(data);
         snapshotDAO.upsert(snapshot);
 
+        return Response.OK();
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "Push one live-view frame", notes = "Raw JPEG body; relayed in memory to viewers, never stored.")
+    @POST
+    @Path("/live")
+    @Consumes(MediaType.APPLICATION_OCTET_STREAM)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response live(
+            @HeaderParam("Authorization") String authorization,
+            @HeaderParam("X-Device-Number") String deviceNumber,
+            InputStream body) {
+        if (deviceNumber == null || deviceNumber.trim().isEmpty()) {
+            return Response.ERROR("error.remote.device.missing");
+        }
+        if (!AgentAuth.authenticate(authorization, deviceNumber, commandDAO)) {
+            return Response.PERMISSION_DENIED();
+        }
+        if (body == null) {
+            return Response.ERROR("error.remote.file.missing");
+        }
+        byte[] data;
+        try {
+            data = readBounded(body, LIVE_MAX_BYTES);
+        } catch (IOException e) {
+            return Response.ERROR("error.remote.file.read");
+        }
+        if (data.length < 4) {
+            return Response.ERROR("error.remote.file.empty");
+        }
+        liveHub.publish(deviceNumber, data);
         return Response.OK();
     }
 

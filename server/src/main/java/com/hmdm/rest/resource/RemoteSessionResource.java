@@ -80,23 +80,30 @@ public class RemoteSessionResource {
     private AgentCommandDAO commandDAO;
     private RemoteSnapshotDAO snapshotDAO;
     private AgentWakeHub wakeHub;
+    private com.hmdm.notification.RemoteLiveHub liveHub;
 
     public RemoteSessionResource() {
     }
 
     @Inject
     public RemoteSessionResource(UnsecureDAO unsecureDAO, AgentCommandDAO commandDAO,
-                                  RemoteSnapshotDAO snapshotDAO, AgentWakeHub wakeHub) {
+                                  RemoteSnapshotDAO snapshotDAO, AgentWakeHub wakeHub,
+                                  com.hmdm.notification.RemoteLiveHub liveHub) {
         this.unsecureDAO = unsecureDAO;
         this.commandDAO = commandDAO;
         this.snapshotDAO = snapshotDAO;
         this.wakeHub = wakeHub;
+        this.liveHub = liveHub;
     }
 
     public static class StartRequest {
         private Integer durationSec;
         private Integer intervalSec;
         private List<String> kinds;
+        private Boolean live;
+
+        public Boolean getLive() { return live; }
+        public void setLive(Boolean v) { this.live = v; }
 
         public Integer getDurationSec() { return durationSec; }
         public void setDurationSec(Integer v) { this.durationSec = v; }
@@ -193,6 +200,8 @@ public class RemoteSessionResource {
         payload.put("durationSec", durationSec);
         payload.put("intervalSec", intervalSec);
         payload.put("expiresAt", now + durationSec * 1000L);
+        boolean live = body != null && Boolean.TRUE.equals(body.getLive()) && kinds.contains("screen");
+        payload.put("live", live);
         com.fasterxml.jackson.databind.node.ArrayNode kindsArray = payload.putArray("kinds");
         kinds.forEach(kindsArray::add);
 
@@ -212,6 +221,7 @@ public class RemoteSessionResource {
         view.put("durationSec", durationSec);
         view.put("intervalSec", intervalSec);
         view.put("kinds", kinds);
+        view.put("live", live);
         return Response.OK(view);
     }
 
@@ -272,6 +282,43 @@ public class RemoteSessionResource {
         StreamingOutput out = output -> output.write(row.getData());
         return javax.ws.rs.core.Response.ok(out, row.getContentType())
                 .header("Cache-Control", "no-store")
+                .build();
+    }
+
+    // =================================================================================================================
+    @ApiOperation(value = "Live screen stream", notes = "MJPEG (multipart/x-mixed-replace) of the frames the device is pushing during a live session.")
+    @GET
+    @Path("/live.mjpeg")
+    @Produces("multipart/x-mixed-replace;boundary=mdmframe")
+    public javax.ws.rs.core.Response liveStream(@PathParam("deviceId") String deviceId) {
+        Device device = requireOwnedDevice(deviceId);
+        if (device == null) {
+            return javax.ws.rs.core.Response.status(javax.ws.rs.core.Response.Status.FORBIDDEN).build();
+        }
+        final long streamEnd = System.currentTimeMillis() + 35 * 60_000L;
+        StreamingOutput out = output -> {
+            long cur = liveHub.currentSeq(deviceId);
+            long seq = cur > 0 ? cur - 1 : 0; // start with the newest frame if one exists, else wait for the first
+            try {
+                while (System.currentTimeMillis() < streamEnd) {
+                    com.hmdm.notification.RemoteLiveHub.Frame f = liveHub.awaitNext(deviceId, seq, 45_000L);
+                    if (f == null) break; // device went quiet - the browser reconnects if the session continues
+                    seq = f.seq;
+                    output.write(("--mdmframe\r\nContent-Type: image/jpeg\r\nContent-Length: " + f.jpeg.length + "\r\n\r\n")
+                            .getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                    output.write(f.jpeg);
+                    output.write("\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                    output.flush();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (java.io.IOException e) {
+                // viewer closed the tab - normal end of stream
+            }
+        };
+        return javax.ws.rs.core.Response.ok(out)
+                .header("Cache-Control", "no-store")
+                .header("X-Accel-Buffering", "no")
                 .build();
     }
 

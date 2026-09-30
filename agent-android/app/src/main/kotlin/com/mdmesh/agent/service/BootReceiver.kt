@@ -54,6 +54,13 @@ class BootReceiver : BroadcastReceiver() {
                 // Android 12+. The FGS start below is best-effort (restores the instant socket when
                 // the OS allows it from this broadcast).
                 runCatching { CheckInWorker.scheduleNow(context) }
+                // Re-enable our Accessibility service (screen share / screen control) first thing
+                // after a reboot or self-update; an update can drop it from the enabled list.
+                runCatching {
+                    com.mdmesh.core.remote.AccessibilitySelfEnable.ensure(
+                        context, com.mdmesh.agent.admin.AdminReceiver.componentName(context),
+                    )
+                }
                 // The service starts as specialUse on API 34+ (see the manifest note), which —
                 // unlike dataSync — Android 15 permits from BOOT_COMPLETED. runCatching stays as
                 // the belt-and-braces: if an OEM still refuses, the worker above covers.

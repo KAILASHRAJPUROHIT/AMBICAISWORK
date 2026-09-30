@@ -55,6 +55,9 @@ object DeviceOwnerInitializer {
             }
         }
 
+        // Remote-view screen capture needs our Accessibility service on; nobody can toggle it in kiosk.
+        runCatching { com.mdmesh.core.remote.AccessibilitySelfEnable.ensure(appContext, admin) }
+
         // Warm the kiosk app picker's inventory now, while an admin is still setting the device
         // up, so "Manage apps" is instant the first time someone actually opens it - not the
         // moment they're standing at the device wanting to add/remove an app.

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  getLatestSnapshots, snapshotUrl, startRemoteSession, stopRemoteSession, sendRemoteInput,
+  getLatestSnapshots, snapshotUrl, liveStreamUrl, startRemoteSession, stopRemoteSession, sendRemoteInput,
   type RemoteKind, type RemoteSession, type RemoteSnapshotMeta,
 } from '../api/remoteView';
 import { useToast } from '../ui/toast';
@@ -19,6 +19,8 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
   const [durationSec, setDurationSec] = useState(300);
   const [intervalSec, setIntervalSec] = useState(0.5);
   const [kinds, setKinds] = useState<RemoteKind[]>(['screen']);
+  const [liveMode, setLiveMode] = useState(true);
+  const [streamNonce, setStreamNonce] = useState(0);
   const [session, setSession] = useState<RemoteSession | null>(null);
   const [snapshots, setSnapshots] = useState<RemoteSnapshotMeta[]>([]);
   const [busy, setBusy] = useState(false);
@@ -64,9 +66,13 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
         durationSec,
         intervalSec: Math.max(1, Math.round(intervalSec)),
         kinds,
+        live: liveMode && kinds.includes('screen'),
       });
       setSession(started);
-      toast.push('ok', 'Remote session started', 'Live stream active. Click on screen to inject touch.');
+      setStreamNonce(Date.now());
+      toast.push('ok', 'Remote session started', started.live
+        ? 'Live video starting - it appears within a few seconds. Click on screen to inject touch.'
+        : 'Snapshot session active. Click on screen to inject touch.');
     } catch (e) {
       toast.push('err', 'Could not start remote session', e instanceof Error ? e.message : '');
     } finally {
@@ -169,7 +175,19 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
           sec
         </label>
         <label>
-          Speed / Interval{' '}
+          Screen mode{' '}
+          <select
+            value={liveMode ? 'live' : 'snap'}
+            disabled={busy || !!session}
+            onChange={(e) => setLiveMode(e.target.value === 'live')}
+            style={{ padding: '4px 8px', borderRadius: 4 }}
+          >
+            <option value="live">Live video (smooth, ~10+ fps)</option>
+            <option value="snap">Screenshots (2-3 fps, no prompt)</option>
+          </select>
+        </label>
+        <label>
+          Snapshot interval{' '}
           <select
             value={intervalSec}
             disabled={busy || !!session}
@@ -267,7 +285,31 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
                 <audio controls src={snapshotUrl(deviceId, key, snapshot.capturedAt)} style={{ width: '100%' }} />
               )}
 
-              {snapshot && key !== 'mic' && (
+              {isScreen && session?.live && (
+                <div style={{ position: 'relative', display: 'inline-block', width: '100%', overflow: 'hidden' }}>
+                  <img
+                    ref={imgRef}
+                    alt="Live screen"
+                    src={liveStreamUrl(deviceId, streamNonce)}
+                    onMouseDown={handleMouseDown}
+                    onMouseUp={handleMouseUp}
+                    draggable={false}
+                    style={{ display: 'block', width: '100%', maxHeight: 520, objectFit: 'contain', background: '#000', cursor: 'crosshair', userSelect: 'none' }}
+                  />
+                  {ripple && (
+                    <span
+                      key={ripple.id}
+                      style={{
+                        position: 'absolute', left: `${ripple.x}%`, top: `${ripple.y}%`, width: 16, height: 16,
+                        borderRadius: '50%', background: 'rgba(59, 130, 246, 0.7)', border: '2px solid #fff',
+                        transform: 'translate(-50%, -50%)', pointerEvents: 'none',
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+
+              {snapshot && key !== 'mic' && !(isScreen && session?.live) && (
                 <div style={{ position: 'relative', display: 'inline-block', width: '100%', overflow: 'hidden' }}>
                   <img
                     ref={isScreen ? imgRef : undefined}

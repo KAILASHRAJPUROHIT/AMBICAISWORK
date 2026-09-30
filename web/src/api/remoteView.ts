@@ -6,6 +6,8 @@ export interface RemoteSessionRequest {
   durationSec: number;
   intervalSec: number;
   kinds: RemoteKind[];
+  /** Stream the screen as live video (needs agent >= 0.2.87) instead of periodic screenshots. */
+  live?: boolean;
 }
 
 export interface RemoteSession {
@@ -13,6 +15,11 @@ export interface RemoteSession {
   durationSec: number;
   intervalSec: number;
   kinds: RemoteKind[];
+  live?: boolean;
+}
+
+export function liveStreamUrl(deviceId: string, nonce: number): string {
+  return `${API_BASE}${base(deviceId)}/live.mjpeg?_=${nonce}`;
 }
 
 export interface RemoteSnapshotMeta {

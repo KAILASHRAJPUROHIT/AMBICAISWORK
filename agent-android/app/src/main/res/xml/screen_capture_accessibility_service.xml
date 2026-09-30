@@ -1,11 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- No event or window-content access. This service exists only for takeScreenshot() after the
-     device administrator has manually enabled it once in Android Accessibility settings. -->
+<!-- Used for takeScreenshot() (remote view), gesture/text injection, pressing the MediaProjection
+     consent button for live screen share, and Ornate auto-caps. The Device Owner enables it itself
+     (AccessibilitySelfEnable); the manual toggle in Accessibility settings is only the fallback.
+     canTakeScreenshot is REQUIRED on API 30+ - without it takeScreenshot() is rejected.
+     packageNames keeps event traffic to the three packages that matter. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeViewTextChanged"
+    android:accessibilityEventTypes="typeViewTextChanged|typeWindowStateChanged|typeWindowContentChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows|flagReportViewIds"
     android:canPerformGestures="true"
     android:canRetrieveWindowContent="true"
+    android:canTakeScreenshot="true"
+    android:packageNames="com.ornate.nx,com.android.systemui,com.miui.securitycenter"
     android:description="@string/app_name"
     android:notificationTimeout="20" />

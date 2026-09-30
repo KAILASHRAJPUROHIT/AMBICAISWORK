@@ -19,6 +19,8 @@ data class RemoteSessionStartPayload(
     val durationSec: Int = 300,
     val intervalSec: Int = 3,
     val kinds: List<String> = listOf("screen", "cameraFront", "cameraBack", "mic"),
+    /** When true, "screen" is streamed as live video via MediaProjection instead of periodic screenshots. */
+    val live: Boolean = false,
 )
 
 /**

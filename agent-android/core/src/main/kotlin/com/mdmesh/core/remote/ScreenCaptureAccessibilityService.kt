@@ -34,6 +34,12 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (System.currentTimeMillis() < consentUntilMs && event != null &&
+            (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED ||
+                event.eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)
+        ) {
+            runCatching { acceptProjectionDialog() }
+        }
         try {
             handleAccessibilityEvent(event)
         } catch (t: Throwable) {
@@ -117,8 +123,52 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {}
 
+    /**
+     * Presses the system "start recording / sharing" button of the MediaProjection consent dialog so a
+     * live session needs no one at the tablet. Only active for a short window armed by
+     * [armProjectionConsent], and only ever touches a system-UI window.
+     */
+    private fun acceptProjectionDialog() {
+        val roots = buildList {
+            windows?.forEach { w -> w.root?.let { add(it) } }
+            rootInActiveWindow?.let { add(it) }
+        }
+        for (root in roots) {
+            val pkg = root.packageName?.toString() ?: continue
+            if (pkg != "com.android.systemui" && pkg != "com.miui.securitycenter") continue
+            // Android 14+ lets the user pick "one app" vs "entire screen"; choose entire screen first.
+            root.findAccessibilityNodeInfosByText("Entire screen").firstOrNull()?.let { clickUp(it) }
+            val byId = root.findAccessibilityNodeInfosByViewId("android:id/button1").firstOrNull()
+            if (byId != null && clickUp(byId)) return
+            for (label in ACCEPT_LABELS) {
+                val node = root.findAccessibilityNodeInfosByText(label).firstOrNull { it.text?.toString()?.trim().equals(label, ignoreCase = true) }
+                if (node != null && clickUp(node)) return
+            }
+        }
+    }
+
+    private fun clickUp(start: AccessibilityNodeInfo): Boolean {
+        var n: AccessibilityNodeInfo? = start
+        while (n != null) {
+            if (n.isClickable && n.isEnabled) return n.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            n = n.parent
+        }
+        return false
+    }
+
     companion object {
         @Volatile private var instance: ScreenCaptureAccessibilityService? = null
+        @Volatile private var consentUntilMs = 0L
+        private val ACCEPT_LABELS = listOf("Start now", "Share screen", "Start", "Share", "Allow")
+
+        /** Auto-press the projection consent button for the next [windowMs]. */
+        fun armProjectionConsent(windowMs: Long = 25_000L) {
+            consentUntilMs = System.currentTimeMillis() + windowMs
+        }
+
+        fun disarmProjectionConsent() {
+            consentUntilMs = 0L
+        }
 
         fun isConnected(): Boolean = instance != null
 

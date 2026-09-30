@@ -27,6 +27,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <!-- Keep the wake channel reachable while parked (request battery-optimization exemption). -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -215,6 +216,19 @@
             android:name=".service.RemoteCaptureService"
             android:exported="false"
             android:foregroundServiceType="camera|microphone|dataSync" />
+
+        <service
+            android:name=".service.LiveScreenService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+        <activity
+            android:name=".service.ProjectionConsentActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <service
             android:name="com.mdmesh.core.remote.ScreenCaptureAccessibilityService"

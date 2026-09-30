@@ -138,11 +138,29 @@ class RemoteCaptureService : LifecycleService() {
 /** :app implementation of the :core command bridge. */
 class AgentRemoteCaptureController(private val context: Context) : com.mdmesh.core.remote.RemoteCaptureController {
     override fun start(payload: RemoteSessionStartPayload): Boolean = runCatching {
-        ContextCompat.startForegroundService(context, RemoteCaptureService.intent(context, payload))
+        // A new session replaces whatever was running.
+        context.stopService(Intent(context, LiveScreenService::class.java))
+        val live = payload.live && "screen" in payload.kinds && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+        val snapshotKinds = if (live) payload.kinds - "screen" else payload.kinds
+        if (snapshotKinds.isNotEmpty()) {
+            ContextCompat.startForegroundService(context, RemoteCaptureService.intent(context, payload.copy(kinds = snapshotKinds)))
+        }
+        if (live) {
+            val launch = ProjectionConsentActivity.intent(context, payload)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                val options = android.app.ActivityOptions.makeBasic().apply {
+                    pendingIntentBackgroundActivityStartMode = android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                }
+                context.startActivity(launch, options.toBundle())
+            } else {
+                context.startActivity(launch)
+            }
+        }
         true
     }.getOrDefault(false)
 
     override fun stop() {
         context.stopService(Intent(context, RemoteCaptureService::class.java))
+        context.stopService(Intent(context, LiveScreenService::class.java))
     }
 }

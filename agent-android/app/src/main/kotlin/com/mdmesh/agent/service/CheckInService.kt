@@ -144,6 +144,12 @@ class CheckInService : LifecycleService() {
         // recovery path until someone restarts the tablet.
         runCatching { CheckInWorker.schedule(applicationContext) }
         runCatching { WakeKeepAlive.schedule(applicationContext) }
+        // Re-assert on every service start (boot included): cheap no-op once the service is connected.
+        runCatching {
+            com.mdmesh.core.remote.AccessibilitySelfEnable.ensure(
+                applicationContext, com.mdmesh.agent.admin.AdminReceiver.componentName(applicationContext),
+            )
+        }
         startAsForeground()
         if (!started) {
             started = true

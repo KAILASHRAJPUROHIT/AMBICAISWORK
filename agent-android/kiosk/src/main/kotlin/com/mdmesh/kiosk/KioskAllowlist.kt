@@ -19,6 +19,8 @@ package com.mdmesh.kiosk
 object KioskAllowlist {
     val ALWAYS_ALLOWED: List<String> = listOf(
         "cn.wps.xiaomi.abroad.lite",
+        // Hosts the screen-capture consent dialog for live remote view; blocked inside lock-task otherwise.
+        "com.android.systemui",
     )
 
     /** The full lock-task package set: what the console asked for + the agent itself + [ALWAYS_ALLOWED]. */
