@@ -222,6 +222,11 @@
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
 
+        <service
+            android:name=".service.LiveCameraService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
+
         <activity
             android:name=".service.ProjectionConsentActivity"
             android:exported="false"

@@ -8,6 +8,8 @@ export interface RemoteSessionRequest {
   kinds: RemoteKind[];
   /** Stream the screen as live video (needs agent >= 0.2.87) instead of periodic screenshots. */
   live?: boolean;
+  /** Live screen only: let the tablet press the system screen-share prompt itself. */
+  autoConsent?: boolean;
 }
 
 export interface RemoteSession {
@@ -18,8 +20,8 @@ export interface RemoteSession {
   live?: boolean;
 }
 
-export function liveStreamUrl(deviceId: string, nonce: number): string {
-  return `${API_BASE}${base(deviceId)}/live.stream?_=${nonce}`;
+export function liveStreamUrl(deviceId: string, kind: RemoteKind, nonce: number): string {
+  return `${API_BASE}${base(deviceId)}/live.stream?kind=${kind}&_=${nonce}`;
 }
 
 export interface RemoteSnapshotMeta {

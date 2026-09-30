@@ -19,8 +19,10 @@ data class RemoteSessionStartPayload(
     val durationSec: Int = 300,
     val intervalSec: Int = 3,
     val kinds: List<String> = listOf("screen", "cameraFront", "cameraBack", "mic"),
-    /** When true, "screen" is streamed as live video via MediaProjection instead of periodic screenshots. */
+    /** When true, video sources (screen, cameras) are streamed live as H.264 instead of periodic stills. */
     val live: Boolean = false,
+    /** Live screen only: press the system screen-share consent button via Accessibility. False = the prompt is left for a person to accept. */
+    val autoConsent: Boolean = true,
 )
 
 /**

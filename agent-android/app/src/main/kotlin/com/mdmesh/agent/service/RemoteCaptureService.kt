@@ -140,12 +140,15 @@ class AgentRemoteCaptureController(private val context: Context) : com.mdmesh.co
     override fun start(payload: RemoteSessionStartPayload): Boolean = runCatching {
         // A new session replaces whatever was running.
         context.stopService(Intent(context, LiveScreenService::class.java))
-        val live = payload.live && "screen" in payload.kinds && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-        val snapshotKinds = if (live) payload.kinds - "screen" else payload.kinds
+        context.stopService(Intent(context, LiveCameraService::class.java))
+        val liveKinds = if (payload.live) payload.kinds.filter { it == "screen" || it == "cameraFront" || it == "cameraBack" } else emptyList()
+        val snapshotKinds = payload.kinds - liveKinds.toSet()
         if (snapshotKinds.isNotEmpty()) {
             ContextCompat.startForegroundService(context, RemoteCaptureService.intent(context, payload.copy(kinds = snapshotKinds)))
         }
-        if (live) {
+        if ("cameraFront" in liveKinds) ContextCompat.startForegroundService(context, LiveCameraService.intent(context, true, payload.durationSec))
+        if ("cameraBack" in liveKinds) ContextCompat.startForegroundService(context, LiveCameraService.intent(context, false, payload.durationSec))
+        if ("screen" in liveKinds) {
             val launch = ProjectionConsentActivity.intent(context, payload)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 val options = android.app.ActivityOptions.makeBasic().apply {
@@ -162,5 +165,6 @@ class AgentRemoteCaptureController(private val context: Context) : com.mdmesh.co
     override fun stop() {
         context.stopService(Intent(context, RemoteCaptureService::class.java))
         context.stopService(Intent(context, LiveScreenService::class.java))
+        context.stopService(Intent(context, LiveCameraService::class.java))
     }
 }

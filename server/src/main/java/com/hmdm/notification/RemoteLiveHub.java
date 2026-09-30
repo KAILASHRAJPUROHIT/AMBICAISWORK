@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * joining mid-stream starts cleanly on a keyframe, and a slow viewer skips forward to the newest
  * keyframe instead of building latency.
  *
- * <p>Packet framing (identical on both legs): type(1: 1=config, 2=key, 3=delta) | ptsUs(8, BE) |
+ * <p>Packet framing (identical on both legs): type(1: 1=config, 2=key, 3=delta, 4=meta JSON) | ptsUs(8, BE) |
  * length(4, BE) | payload.</p>
  */
 @Singleton
@@ -34,6 +34,7 @@ public class RemoteLiveHub {
     private static final class Slot {
         final Object lock = new Object();
         byte[] config;
+        byte[] meta;
         final ArrayList<byte[]> gop = new ArrayList<>();
         long baseSeq = 1;   // sequence number of gop.get(0)
         long nextSeq = 1;   // sequence number the next packet will get
@@ -42,12 +43,14 @@ public class RemoteLiveHub {
 
     private final ConcurrentHashMap<String, Slot> slots = new ConcurrentHashMap<>();
 
-    /** @param type 1 config, 2 key, 3 delta; {@code framed} is the complete packet including header. */
+    /** @param type 1 config, 2 key, 3 delta, 4 meta; {@code framed} is the complete packet including header. */
     public void publish(String deviceNumber, int type, byte[] framed) {
         Slot slot = slots.computeIfAbsent(deviceNumber, k -> new Slot());
         synchronized (slot.lock) {
             if (type == 1) {
                 slot.config = framed;
+            } else if (type == 4) {
+                slot.meta = framed;
             } else {
                 if (type == 2 || slot.gop.size() >= MAX_GOP_PACKETS) {
                     slot.gop.clear();
@@ -67,13 +70,16 @@ public class RemoteLiveHub {
         }
     }
 
-    /** Codec config packet, or null if the device has not sent one yet. */
-    public byte[] config(String deviceNumber) {
+    /** Sticky packets a new viewer needs first (meta, then codec config); empty if none yet. */
+    public List<byte[]> stickyPackets(String deviceNumber) {
+        List<byte[]> out = new ArrayList<>(2);
         Slot slot = slots.get(deviceNumber);
-        if (slot == null) return null;
+        if (slot == null) return out;
         synchronized (slot.lock) {
-            return slot.config;
+            if (slot.meta != null) out.add(slot.meta);
+            if (slot.config != null) out.add(slot.config);
         }
+        return out;
     }
 
     /** Where a new viewer starts: the beginning of the current GOP (a keyframe). */

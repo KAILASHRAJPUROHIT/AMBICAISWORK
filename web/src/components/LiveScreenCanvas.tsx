@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { liveStreamUrl } from '../api/remoteView';
+import { liveStreamUrl, type RemoteKind } from '../api/remoteView';
 
 /** Packet header: type(1) | ptsUs(8) | length(4). Types: 1 codec config, 2 keyframe, 3 delta. */
 const HEADER = 13;
@@ -23,12 +23,13 @@ function codecFromAnnexB(data: Uint8Array): string | null {
  * events from the canvas, so callers can map clicks to relative device coordinates.
  */
 export function LiveScreenCanvas({
-  deviceId, nonce, onMouseDown, onMouseUp,
+  deviceId, kind = 'screen', nonce, onMouseDown, onMouseUp,
 }: {
   deviceId: string;
+  kind?: RemoteKind;
   nonce: number;
-  onMouseDown: (e: React.MouseEvent<HTMLElement>) => void;
-  onMouseUp: (e: React.MouseEvent<HTMLElement>) => void;
+  onMouseDown?: (e: React.MouseEvent<HTMLElement>) => void;
+  onMouseUp?: (e: React.MouseEvent<HTMLElement>) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [status, setStatus] = useState('Connecting…');
@@ -43,17 +44,29 @@ export function LiveScreenCanvas({
     let decoder: VideoDecoder | null = null;
     let configured = false;
     let frames = 0;
+    let rotation = 0;
+    let mirror = false;
     const fpsTimer = setInterval(() => { setFps(frames); frames = 0; }, 1000);
 
     const makeDecoder = () => new VideoDecoder({
       output: (frame) => {
         const canvas = canvasRef.current;
         if (canvas) {
-          if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
-            canvas.width = frame.displayWidth;
-            canvas.height = frame.displayHeight;
+          const swap = rotation === 90 || rotation === 270;
+          const cw = swap ? frame.displayHeight : frame.displayWidth;
+          const ch = swap ? frame.displayWidth : frame.displayHeight;
+          if (canvas.width !== cw || canvas.height !== ch) {
+            canvas.width = cw;
+            canvas.height = ch;
           }
-          canvas.getContext('2d')?.drawImage(frame, 0, 0);
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.translate(cw / 2, ch / 2);
+            if (mirror) ctx.scale(-1, 1);
+            ctx.rotate((rotation * Math.PI) / 180);
+            ctx.drawImage(frame, -frame.displayWidth / 2, -frame.displayHeight / 2);
+          }
           frames++;
           setStatus('');
         }
@@ -65,7 +78,7 @@ export function LiveScreenCanvas({
     const run = async () => {
       while (!ac.signal.aborted) {
         try {
-          const res = await fetch(liveStreamUrl(deviceId, nonce), { credentials: 'include', signal: ac.signal });
+          const res = await fetch(liveStreamUrl(deviceId, kind, nonce), { credentials: 'include', signal: ac.signal });
           if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
           const reader = res.body.getReader();
           let buf = new Uint8Array(0);
@@ -85,6 +98,14 @@ export function LiveScreenCanvas({
               if (buf.length - pos - HEADER < len) break;
               const payload = buf.subarray(pos + HEADER, pos + HEADER + len);
               pos += HEADER + len;
+              if (type === 4) { // camera orientation hint from the tablet
+                try {
+                  const m = JSON.parse(new TextDecoder().decode(payload));
+                  rotation = Number(m.rotation) || 0;
+                  mirror = !!m.mirror;
+                } catch { /* ignore a malformed hint */ }
+                continue;
+              }
               if (type === 1) continue; // SPS/PPS also ride in front of every keyframe
               if (type === 2) {
                 if (!configured) {
@@ -120,7 +141,7 @@ export function LiveScreenCanvas({
       clearInterval(fpsTimer);
       try { decoder?.close(); } catch { /* already closed */ }
     };
-  }, [deviceId, nonce]);
+  }, [deviceId, kind, nonce]);
 
   return (
     <div style={{ position: 'relative', width: '100%' }}>

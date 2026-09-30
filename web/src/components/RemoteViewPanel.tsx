@@ -21,6 +21,7 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
   const [intervalSec, setIntervalSec] = useState(0.5);
   const [kinds, setKinds] = useState<RemoteKind[]>(['screen']);
   const [liveMode, setLiveMode] = useState(true);
+  const [autoConsent, setAutoConsent] = useState(true);
   const [streamNonce, setStreamNonce] = useState(0);
   const [session, setSession] = useState<RemoteSession | null>(null);
   const [snapshots, setSnapshots] = useState<RemoteSnapshotMeta[]>([]);
@@ -67,7 +68,8 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
         durationSec,
         intervalSec: Math.max(1, Math.round(intervalSec)),
         kinds,
-        live: liveMode && kinds.includes('screen'),
+        live: liveMode && kinds.some((k) => k !== 'mic'),
+        autoConsent,
       });
       setSession(started);
       setStreamNonce(Date.now());
@@ -183,9 +185,13 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
             onChange={(e) => setLiveMode(e.target.value === 'live')}
             style={{ padding: '4px 8px', borderRadius: 4 }}
           >
-            <option value="live">Live video (30 fps)</option>
+            <option value="live">Live video (up to 60 fps)</option>
             <option value="snap">Screenshots (2-3 fps, no prompt)</option>
           </select>
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Off: the tablet shows Android's screen-share prompt and waits for someone to tap it.">
+          <input type="checkbox" checked={autoConsent} disabled={busy || !!session || !liveMode} onChange={(e) => setAutoConsent(e.target.checked)} />
+          Auto-accept screen-share prompt
         </label>
         <label>
           Snapshot interval{' '}
@@ -286,7 +292,11 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
                 <audio controls src={snapshotUrl(deviceId, key, snapshot.capturedAt)} style={{ width: '100%' }} />
               )}
 
-              {isScreen && session?.live && (
+              {session?.live && session.kinds.includes(key) && key !== 'mic' && !isScreen && (
+                <LiveScreenCanvas deviceId={deviceId} kind={key} nonce={streamNonce} />
+              )}
+
+              {isScreen && session?.live && session.kinds.includes('screen') && (
                 <div style={{ position: 'relative', width: '100%', overflow: 'hidden' }}>
                   <LiveScreenCanvas deviceId={deviceId} nonce={streamNonce} onMouseDown={handleMouseDown} onMouseUp={handleMouseUp} />
                   {ripple && (
@@ -302,7 +312,7 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
                 </div>
               )}
 
-              {snapshot && key !== 'mic' && !(isScreen && session?.live) && (
+              {snapshot && key !== 'mic' && !(session?.live && session.kinds.includes(key)) && (
                 <div style={{ position: 'relative', display: 'inline-block', width: '100%', overflow: 'hidden' }}>
                   <img
                     ref={isScreen ? imgRef : undefined}

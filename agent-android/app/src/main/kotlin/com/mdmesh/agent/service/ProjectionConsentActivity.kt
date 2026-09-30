@@ -24,6 +24,7 @@ class ProjectionConsentActivity : Activity() {
     private val handler = Handler(Looper.getMainLooper())
     private var finished = false
     private lateinit var session: RemoteSessionStartPayload
+    private var autoConsent = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,9 +34,11 @@ class ProjectionConsentActivity : Activity() {
             intervalSec = intent.getIntExtra(EXTRA_INTERVAL, 3),
             kinds = listOf("screen"),
         )
+        autoConsent = intent.getBooleanExtra(EXTRA_AUTO, true)
         if (savedInstanceState != null) return
         runCatching {
-            ScreenCaptureAccessibilityService.armProjectionConsent()
+            // autoConsent=false: leave the system prompt for a person at the tablet to accept.
+            if (autoConsent) ScreenCaptureAccessibilityService.armProjectionConsent()
             val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
             val captureIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 mpm.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
@@ -48,7 +51,7 @@ class ProjectionConsentActivity : Activity() {
             Log.e(TAG, "could not request screen capture", it)
             fallbackAndFinish()
         }
-        handler.postDelayed({ fallbackAndFinish() }, 30_000L)
+        handler.postDelayed({ fallbackAndFinish() }, if (autoConsent) 30_000L else 120_000L)
     }
 
     @Deprecated("Deprecated in Java")
@@ -88,6 +91,7 @@ class ProjectionConsentActivity : Activity() {
         private const val EXTRA_SESSION_ID = "sessionId"
         private const val EXTRA_DURATION = "durationSec"
         private const val EXTRA_INTERVAL = "intervalSec"
+        private const val EXTRA_AUTO = "autoConsent"
 
         fun intent(context: Context, payload: RemoteSessionStartPayload): Intent =
             Intent(context, ProjectionConsentActivity::class.java)
@@ -95,5 +99,6 @@ class ProjectionConsentActivity : Activity() {
                 .putExtra(EXTRA_SESSION_ID, payload.sessionId)
                 .putExtra(EXTRA_DURATION, payload.durationSec)
                 .putExtra(EXTRA_INTERVAL, payload.intervalSec)
+                .putExtra(EXTRA_AUTO, payload.autoConsent)
     }
 }

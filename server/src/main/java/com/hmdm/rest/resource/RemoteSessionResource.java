@@ -101,6 +101,10 @@ public class RemoteSessionResource {
         private Integer intervalSec;
         private List<String> kinds;
         private Boolean live;
+        private Boolean autoConsent;
+
+        public Boolean getAutoConsent() { return autoConsent; }
+        public void setAutoConsent(Boolean v) { this.autoConsent = v; }
 
         public Boolean getLive() { return live; }
         public void setLive(Boolean v) { this.live = v; }
@@ -200,8 +204,10 @@ public class RemoteSessionResource {
         payload.put("durationSec", durationSec);
         payload.put("intervalSec", intervalSec);
         payload.put("expiresAt", now + durationSec * 1000L);
-        boolean live = body != null && Boolean.TRUE.equals(body.getLive()) && kinds.contains("screen");
+        boolean live = body != null && Boolean.TRUE.equals(body.getLive())
+                && kinds.stream().anyMatch(k -> !"mic".equals(k));
         payload.put("live", live);
+        payload.put("autoConsent", body == null || body.getAutoConsent() == null || body.getAutoConsent());
         com.fasterxml.jackson.databind.node.ArrayNode kindsArray = payload.putArray("kinds");
         kinds.forEach(kindsArray::add);
 
@@ -290,19 +296,24 @@ public class RemoteSessionResource {
     @GET
     @Path("/live.stream")
     @Produces(MediaType.APPLICATION_OCTET_STREAM)
-    public javax.ws.rs.core.Response liveStream(@PathParam("deviceId") String deviceId) {
+    public javax.ws.rs.core.Response liveStream(@PathParam("deviceId") String deviceId,
+                                                @javax.ws.rs.QueryParam("kind") String kindParam) {
         Device device = requireOwnedDevice(deviceId);
         if (device == null) {
             return javax.ws.rs.core.Response.status(javax.ws.rs.core.Response.Status.FORBIDDEN).build();
         }
+        final String kind = kindParam == null || kindParam.isEmpty() ? "screen" : kindParam;
+        if (!KNOWN_KINDS.contains(kind) || "mic".equals(kind)) {
+            return javax.ws.rs.core.Response.status(javax.ws.rs.core.Response.Status.BAD_REQUEST).build();
+        }
+        final String hubKey = deviceId + "|" + kind;
         final long streamEnd = System.currentTimeMillis() + 35 * 60_000L;
         StreamingOutput out = output -> {
             try {
-                byte[] config = liveHub.config(deviceId);
-                if (config != null) output.write(config);
-                long cursor = liveHub.startCursor(deviceId);
+                for (byte[] sticky : liveHub.stickyPackets(hubKey)) output.write(sticky);
+                long cursor = liveHub.startCursor(hubKey);
                 while (System.currentTimeMillis() < streamEnd) {
-                    com.hmdm.notification.RemoteLiveHub.Batch batch = liveHub.awaitNext(deviceId, cursor, 45_000L);
+                    com.hmdm.notification.RemoteLiveHub.Batch batch = liveHub.awaitNext(hubKey, cursor, 45_000L);
                     if (batch == null) break; // device went quiet - the browser reconnects if the session continues
                     cursor = batch.cursor;
                     for (byte[] p : batch.packets) output.write(p);

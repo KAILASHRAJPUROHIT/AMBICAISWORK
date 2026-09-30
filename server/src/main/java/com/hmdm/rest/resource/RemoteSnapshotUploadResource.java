@@ -146,12 +146,17 @@ public class RemoteSnapshotUploadResource {
     public Response live(
             @HeaderParam("Authorization") String authorization,
             @HeaderParam("X-Device-Number") String deviceNumber,
+            @HeaderParam("X-Live-Kind") String liveKind,
             InputStream body) {
         if (deviceNumber == null || deviceNumber.trim().isEmpty()) {
             return Response.ERROR("error.remote.device.missing");
         }
         if (!AgentAuth.authenticate(authorization, deviceNumber, commandDAO)) {
             return Response.PERMISSION_DENIED();
+        }
+        String kind = liveKind == null || liveKind.isEmpty() ? "screen" : liveKind;
+        if (!KNOWN_KINDS.contains(kind) || "mic".equals(kind)) {
+            return Response.ERROR("error.remote.kind.invalid");
         }
         if (body == null) {
             return Response.ERROR("error.remote.file.missing");
@@ -168,10 +173,10 @@ public class RemoteSnapshotUploadResource {
             int type = data[pos] & 0xff;
             int len = ((data[pos + 9] & 0xff) << 24) | ((data[pos + 10] & 0xff) << 16)
                     | ((data[pos + 11] & 0xff) << 8) | (data[pos + 12] & 0xff);
-            if (type < 1 || type > 3 || len < 0 || pos + hdr + len > data.length) {
+            if (type < 1 || type > 4 || len < 0 || pos + hdr + len > data.length) {
                 return Response.ERROR("error.remote.file.read");
             }
-            liveHub.publish(deviceNumber, type, java.util.Arrays.copyOfRange(data, pos, pos + hdr + len));
+            liveHub.publish(deviceNumber + "|" + kind, type, java.util.Arrays.copyOfRange(data, pos, pos + hdr + len));
             pos += hdr + len;
         }
         return Response.OK();
