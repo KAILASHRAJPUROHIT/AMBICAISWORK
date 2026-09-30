@@ -19,7 +19,7 @@ export interface RemoteSession {
 }
 
 export function liveStreamUrl(deviceId: string, nonce: number): string {
-  return `${API_BASE}${base(deviceId)}/live.mjpeg?_=${nonce}`;
+  return `${API_BASE}${base(deviceId)}/live.stream?_=${nonce}`;
 }
 
 export interface RemoteSnapshotMeta {

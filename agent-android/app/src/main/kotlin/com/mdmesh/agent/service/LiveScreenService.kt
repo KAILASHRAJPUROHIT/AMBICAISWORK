@@ -6,18 +6,20 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.graphics.Bitmap
-import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
-import android.media.ImageReader
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.DisplayMetrics
 import android.util.Log
+import android.view.Surface
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
@@ -25,30 +27,33 @@ import androidx.lifecycle.lifecycleScope
 import com.mdmesh.agent.R
 import com.mdmesh.core.remote.LiveFrameUploader
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
 /**
- * Live screen share: MediaProjection -> VirtualDisplay -> ImageReader -> JPEG -> server relay.
- * Targets ~12 fps at 1024 px wide. Unchanged frames are not re-sent (a keep-alive goes out every
- * 2 s) so an idle screen costs almost nothing. The newest frame always wins - a slow uplink drops
- * frames instead of building latency.
+ * Live screen share: MediaProjection -> VirtualDisplay -> hardware H.264 encoder (surface input)
+ * -> framed packets batched every ~66 ms -> server relay -> browser (WebCodecs).
+ *
+ * 30 fps, ~4 Mbps at up to 1280 px on the long edge, a keyframe every second so a viewer can join
+ * quickly. If the uplink backs up, queued video is dropped and a fresh keyframe requested rather
+ * than letting latency grow. Rotation rebuilds the encoder at the new shape.
+ *
+ * Packet framing: type(1: 1=config, 2=key, 3=delta) | ptsUs(8, BE) | length(4, BE) | payload.
  */
 @AndroidEntryPoint
 class LiveScreenService : LifecycleService() {
     @Inject lateinit var uploader: LiveFrameUploader
 
     private var projection: MediaProjection? = null
-    private var display: VirtualDisplay? = null
-    private var reader: ImageReader? = null
     private var job: Job? = null
-    private var sendJob: Job? = null
     private val handler = Handler(Looper.getMainLooper())
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -73,91 +78,136 @@ class LiveScreenService : LifecycleService() {
         }, handler)
 
         job?.cancel()
-        job = lifecycleScope.launch { runCapture(mp, durationSec) }
+        job = lifecycleScope.launch(Dispatchers.Default) {
+            runCatching { runStream(mp, durationSec) }.onFailure { Log.e(TAG, "live stream ended with error", it) }
+            handler.post { stopSelf() }
+        }
         return START_NOT_STICKY
     }
 
-    private suspend fun runCapture(mp: MediaProjection, durationSec: Int) {
-        val frames = Channel<ByteArray>(Channel.CONFLATED)
-        sendJob = lifecycleScope.launch {
-            for (bytes in frames) {
-                runCatching { uploader.upload(bytes) }
+    private class Pipeline(val encoder: MediaCodec, val input: Surface, val display: VirtualDisplay, val w: Int, val h: Int) {
+        fun release() {
+            runCatching { display.release() }
+            runCatching { encoder.stop() }
+            runCatching { encoder.release() }
+            runCatching { input.release() }
+        }
+    }
+
+    private fun buildPipeline(mp: MediaProjection, size: Pair<Int, Int>): Pipeline {
+        val (w, h) = size
+        fun format(hints: Boolean) = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h).apply {
+            setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+            setInteger(MediaFormat.KEY_BIT_RATE, BITRATE)
+            setInteger(MediaFormat.KEY_FRAME_RATE, FPS)
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+            // A static screen produces no new frames; repeat the last one so the stream never stalls.
+            setLong(MediaFormat.KEY_REPEAT_PREVIOUS_FRAME_AFTER, 150_000L)
+            setInteger("prepend-sps-pps-to-idr-frames", 1)
+            if (hints) {
+                setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_CBR)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) setInteger(MediaFormat.KEY_PRIORITY, 0)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) setInteger(MediaFormat.KEY_LATENCY, 1)
             }
         }
-        var size = targetSize()
-        var dpi = resources.displayMetrics.densityDpi
-        var localReader = ImageReader.newInstance(size.first, size.second, PixelFormat.RGBA_8888, 2)
-        reader = localReader
-        display = mp.createVirtualDisplay(
-            "mdm-live", size.first, size.second, dpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, localReader.surface, null, handler,
+        var encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        try {
+            encoder.configure(format(true), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        } catch (e: Exception) {
+            // Some encoders reject CBR / latency hints - retry with the bare minimum on a fresh codec.
+            runCatching { encoder.release() }
+            encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+            encoder.configure(format(false), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+        }
+        val input = encoder.createInputSurface()
+        encoder.start()
+        val display = mp.createVirtualDisplay(
+            "mdm-live", w, h, resources.displayMetrics.densityDpi,
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, input, null, handler,
         )
+        return Pipeline(encoder, input, display, w, h)
+    }
+
+    private suspend fun runStream(mp: MediaProjection, durationSec: Int) = kotlinx.coroutines.coroutineScope {
+        val queue = ConcurrentLinkedQueue<ByteArray>()
+        val queuedBytes = AtomicLong(0)
+        val needKey = java.util.concurrent.atomic.AtomicBoolean(false)
+        var pipeline = buildPipeline(mp, targetSize())
+
+        val sender = launch(Dispatchers.IO) {
+            val batch = ByteArrayOutputStream(64 * 1024)
+            while (isActive) {
+                delay(BATCH_MS)
+                batch.reset()
+                while (true) {
+                    val p = queue.poll() ?: break
+                    queuedBytes.addAndGet(-p.size.toLong())
+                    batch.write(p)
+                }
+                if (batch.size() == 0) continue
+                val ok = runCatching { uploader.upload(batch.toByteArray()) }.getOrDefault(false)
+                if (!ok) { // connection hiccup: what was lost is undecodable, so restart from a keyframe
+                    needKey.set(true)
+                    runCatching { pipeline.encoder.setParameters(Bundle().apply { putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0) }) }
+                }
+            }
+        }
+
         val until = System.currentTimeMillis() + durationSec.coerceIn(30, 1800) * 1000L
-        var lastHash = 0
-        var lastSentAt = 0L
+        val info = MediaCodec.BufferInfo()
         var lastSizeCheck = 0L
-        val out = ByteArrayOutputStream(96 * 1024)
-        var padded: Bitmap? = null
-        while (currentCoroutineContext().isActive && System.currentTimeMillis() < until) {
+        while (isActive && System.currentTimeMillis() < until) {
             val now = System.currentTimeMillis()
             if (now - lastSizeCheck > 1000) { // follow rotation
                 lastSizeCheck = now
                 val s = targetSize()
-                if (s != size) {
-                    size = s
-                    dpi = resources.displayMetrics.densityDpi
-                    val fresh = ImageReader.newInstance(size.first, size.second, PixelFormat.RGBA_8888, 2)
-                    display?.resize(size.first, size.second, dpi)
-                    display?.surface = fresh.surface
-                    localReader.close()
-                    localReader = fresh
-                    reader = fresh
-                    padded?.recycle(); padded = null
+                if (s.first != pipeline.w || s.second != pipeline.h) {
+                    pipeline.release()
+                    pipeline = buildPipeline(mp, s)
                 }
             }
-            val image = runCatching { localReader.acquireLatestImage() }.getOrNull()
-            if (image == null) { delay(30); continue }
-            try {
-                val plane = image.planes[0]
-                val rowPixels = plane.rowStride / plane.pixelStride
-                var bmp = padded
-                if (bmp == null || bmp.width != rowPixels || bmp.height != image.height) {
-                    bmp?.recycle()
-                    bmp = Bitmap.createBitmap(rowPixels, image.height, Bitmap.Config.ARGB_8888)
-                    padded = bmp
+            val idx = runCatching { pipeline.encoder.dequeueOutputBuffer(info, 10_000L) }.getOrDefault(-1)
+            if (idx < 0) continue
+            val buf: ByteBuffer? = pipeline.encoder.getOutputBuffer(idx)
+            if (buf != null && info.size > 0) {
+                val isConfig = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                val isKey = info.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME != 0
+                if (isKey) needKey.set(false)
+                if (isConfig || isKey || !needKey.get()) {
+                    val payload = ByteArray(info.size)
+                    buf.position(info.offset); buf.limit(info.offset + info.size); buf.get(payload)
+                    val type = if (isConfig) 1 else if (isKey) 2 else 3
+                    val framed = frame(type, info.presentationTimeUs, payload)
+                    queue.add(framed)
+                    if (queuedBytes.addAndGet(framed.size.toLong()) > MAX_BACKLOG) {
+                        // Uplink can't keep up: drop it all and resume at the next keyframe.
+                        queue.clear(); queuedBytes.set(0); needKey.set(true)
+                        runCatching { pipeline.encoder.setParameters(Bundle().apply { putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME, 0) }) }
+                    }
                 }
-                plane.buffer.rewind()
-                bmp.copyPixelsFromBuffer(plane.buffer)
-                val cropped = if (rowPixels == image.width) bmp else Bitmap.createBitmap(bmp, 0, 0, image.width, image.height)
-                out.reset()
-                cropped.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
-                if (cropped !== bmp) cropped.recycle()
-                val bytes = out.toByteArray()
-                val hash = bytes.contentHashCode()
-                if (hash != lastHash || now - lastSentAt > 2000) {
-                    lastHash = hash
-                    lastSentAt = now
-                    frames.trySend(bytes)
-                }
-            } finally {
-                image.close()
             }
-            delay(FRAME_INTERVAL_MS)
+            runCatching { pipeline.encoder.releaseOutputBuffer(idx, false) }
         }
-        frames.close()
-        stopSelf()
+        sender.cancel()
+        pipeline.release()
     }
 
-    /** 1024 px on the long edge, aspect preserved, even numbers (encoders and VirtualDisplay like that). */
+    private fun frame(type: Int, ptsUs: Long, payload: ByteArray): ByteArray {
+        val out = ByteBuffer.allocate(13 + payload.size)
+        out.put(type.toByte()).putLong(ptsUs).putInt(payload.size).put(payload)
+        return out.array()
+    }
+
+    /** Long edge capped at 1280 px, aspect kept, both sides multiples of 16 (hardware encoders want that). */
     private fun targetSize(): Pair<Int, Int> {
         val dm = DisplayMetrics()
         @Suppress("DEPRECATION")
         (getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.getRealMetrics(dm)
         val long = maxOf(dm.widthPixels, dm.heightPixels).toFloat()
         val scale = (LONG_EDGE / long).coerceAtMost(1f)
-        val w = (dm.widthPixels * scale).toInt() and 1.inv()
-        val h = (dm.heightPixels * scale).toInt() and 1.inv()
-        return w.coerceAtLeast(2) to h.coerceAtLeast(2)
+        val w = ((dm.widthPixels * scale).toInt() / 16 * 16).coerceAtLeast(16)
+        val h = ((dm.heightPixels * scale).toInt() / 16 * 16).coerceAtLeast(16)
+        return w to h
     }
 
     private fun startForegroundNow() {
@@ -180,11 +230,8 @@ class LiveScreenService : LifecycleService() {
 
     override fun onDestroy() {
         job?.cancel()
-        sendJob?.cancel()
-        runCatching { display?.release() }
-        runCatching { reader?.close() }
         runCatching { projection?.stop() }
-        display = null; reader = null; projection = null
+        projection = null
         super.onDestroy()
     }
 
@@ -195,9 +242,11 @@ class LiveScreenService : LifecycleService() {
         private const val EXTRA_RESULT_CODE = "resultCode"
         private const val EXTRA_DATA = "data"
         private const val EXTRA_DURATION = "durationSec"
-        private const val LONG_EDGE = 1024f
-        private const val JPEG_QUALITY = 50
-        private const val FRAME_INTERVAL_MS = 60L
+        private const val LONG_EDGE = 1280f
+        private const val FPS = 30
+        private const val BITRATE = 4_000_000
+        private const val BATCH_MS = 66L
+        private const val MAX_BACKLOG = 1_500_000L
 
         fun intent(context: Context, resultCode: Int, data: Intent, durationSec: Int): Intent =
             Intent(context, LiveScreenService::class.java)

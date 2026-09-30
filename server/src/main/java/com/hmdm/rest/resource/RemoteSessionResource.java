@@ -286,10 +286,10 @@ public class RemoteSessionResource {
     }
 
     // =================================================================================================================
-    @ApiOperation(value = "Live screen stream", notes = "MJPEG (multipart/x-mixed-replace) of the frames the device is pushing during a live session.")
+    @ApiOperation(value = "Live screen stream", notes = "Framed H.264 packets (type|ptsUs|len|payload) as a chunked byte stream; decoded in the browser with WebCodecs.")
     @GET
-    @Path("/live.mjpeg")
-    @Produces("multipart/x-mixed-replace;boundary=mdmframe")
+    @Path("/live.stream")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
     public javax.ws.rs.core.Response liveStream(@PathParam("deviceId") String deviceId) {
         Device device = requireOwnedDevice(deviceId);
         if (device == null) {
@@ -297,17 +297,15 @@ public class RemoteSessionResource {
         }
         final long streamEnd = System.currentTimeMillis() + 35 * 60_000L;
         StreamingOutput out = output -> {
-            long cur = liveHub.currentSeq(deviceId);
-            long seq = cur > 0 ? cur - 1 : 0; // start with the newest frame if one exists, else wait for the first
             try {
+                byte[] config = liveHub.config(deviceId);
+                if (config != null) output.write(config);
+                long cursor = liveHub.startCursor(deviceId);
                 while (System.currentTimeMillis() < streamEnd) {
-                    com.hmdm.notification.RemoteLiveHub.Frame f = liveHub.awaitNext(deviceId, seq, 45_000L);
-                    if (f == null) break; // device went quiet - the browser reconnects if the session continues
-                    seq = f.seq;
-                    output.write(("--mdmframe\r\nContent-Type: image/jpeg\r\nContent-Length: " + f.jpeg.length + "\r\n\r\n")
-                            .getBytes(java.nio.charset.StandardCharsets.US_ASCII));
-                    output.write(f.jpeg);
-                    output.write("\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                    com.hmdm.notification.RemoteLiveHub.Batch batch = liveHub.awaitNext(deviceId, cursor, 45_000L);
+                    if (batch == null) break; // device went quiet - the browser reconnects if the session continues
+                    cursor = batch.cursor;
+                    for (byte[] p : batch.packets) output.write(p);
                     output.flush();
                 }
             } catch (InterruptedException e) {

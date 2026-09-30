@@ -5,6 +5,7 @@ import {
 } from '../api/remoteView';
 import { useToast } from '../ui/toast';
 import { fmtRelative } from '../ui/format';
+import { LiveScreenCanvas } from './LiveScreenCanvas';
 
 const KINDS: Array<{ key: RemoteKind; label: string }> = [
   { key: 'screen', label: 'Screen' },
@@ -93,14 +94,14 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
     }
   }
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLImageElement>) => {
+  const handleMouseDown = (e: React.MouseEvent<HTMLElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
     setDragStart({ x, y, time: Date.now() });
   };
 
-  const handleMouseUp = async (e: React.MouseEvent<HTMLImageElement>) => {
+  const handleMouseUp = async (e: React.MouseEvent<HTMLElement>) => {
     if (!dragStart) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const endX = (e.clientX - rect.left) / rect.width;
@@ -182,7 +183,7 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
             onChange={(e) => setLiveMode(e.target.value === 'live')}
             style={{ padding: '4px 8px', borderRadius: 4 }}
           >
-            <option value="live">Live video (smooth, ~10+ fps)</option>
+            <option value="live">Live video (30 fps)</option>
             <option value="snap">Screenshots (2-3 fps, no prompt)</option>
           </select>
         </label>
@@ -286,16 +287,8 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
               )}
 
               {isScreen && session?.live && (
-                <div style={{ position: 'relative', display: 'inline-block', width: '100%', overflow: 'hidden' }}>
-                  <img
-                    ref={imgRef}
-                    alt="Live screen"
-                    src={liveStreamUrl(deviceId, streamNonce)}
-                    onMouseDown={handleMouseDown}
-                    onMouseUp={handleMouseUp}
-                    draggable={false}
-                    style={{ display: 'block', width: '100%', maxHeight: 520, objectFit: 'contain', background: '#000', cursor: 'crosshair', userSelect: 'none' }}
-                  />
+                <div style={{ position: 'relative', width: '100%', overflow: 'hidden' }}>
+                  <LiveScreenCanvas deviceId={deviceId} nonce={streamNonce} onMouseDown={handleMouseDown} onMouseUp={handleMouseUp} />
                   {ripple && (
                     <span
                       key={ripple.id}

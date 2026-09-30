@@ -66,7 +66,7 @@ public class RemoteSnapshotUploadResource {
     // misbehaving/malicious client can't use this as an unbounded upload sink.
     private static final int MAX_BYTES = 8 * 1024 * 1024;
 
-    private static final int LIVE_MAX_BYTES = 2 * 1024 * 1024;
+    private static final int LIVE_MAX_BYTES = 4 * 1024 * 1024;
 
     private UnsecureDAO unsecureDAO;
     private AgentCommandDAO commandDAO;
@@ -162,10 +162,18 @@ public class RemoteSnapshotUploadResource {
         } catch (IOException e) {
             return Response.ERROR("error.remote.file.read");
         }
-        if (data.length < 4) {
-            return Response.ERROR("error.remote.file.empty");
+        int pos = 0;
+        int hdr = com.hmdm.notification.RemoteLiveHub.HEADER;
+        while (pos + hdr <= data.length) {
+            int type = data[pos] & 0xff;
+            int len = ((data[pos + 9] & 0xff) << 24) | ((data[pos + 10] & 0xff) << 16)
+                    | ((data[pos + 11] & 0xff) << 8) | (data[pos + 12] & 0xff);
+            if (type < 1 || type > 3 || len < 0 || pos + hdr + len > data.length) {
+                return Response.ERROR("error.remote.file.read");
+            }
+            liveHub.publish(deviceNumber, type, java.util.Arrays.copyOfRange(data, pos, pos + hdr + len));
+            pos += hdr + len;
         }
-        liveHub.publish(deviceNumber, data);
         return Response.OK();
     }
 
