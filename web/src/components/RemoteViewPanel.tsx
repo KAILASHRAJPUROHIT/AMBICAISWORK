@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  getLatestSnapshots, snapshotUrl, liveStreamUrl, startRemoteSession, stopRemoteSession, sendRemoteInput,
+  getLatestSnapshots, snapshotUrl, startRemoteSession, stopRemoteSession, sendRemoteInput,
   type RemoteKind, type RemoteSession, type RemoteSnapshotMeta,
 } from '../api/remoteView';
 import { useToast } from '../ui/toast';
