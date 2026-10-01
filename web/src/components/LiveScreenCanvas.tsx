@@ -34,6 +34,7 @@ export function LiveScreenCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [status, setStatus] = useState('Connecting…');
   const [fps, setFps] = useState(0);
+  const [diag, setDiag] = useState('');
 
   useEffect(() => {
     if (typeof VideoDecoder === 'undefined') {
@@ -44,6 +45,8 @@ export function LiveScreenCanvas({
     let decoder: VideoDecoder | null = null;
     let configured = false;
     let frames = 0;
+    const c = { rx: 0, dec: 0, out: 0, err: '', tablet: '' };
+    const diagTimer = setInterval(() => setDiag(`tablet: ${c.tablet || 'no stats yet'} | rx ${c.rx} dec ${c.dec} out ${c.out}${c.err ? ' | ERR ' + c.err : ''}`), 1000);
     let rotation = 0;
     let mirror = false;
     const fpsTimer = setInterval(() => { setFps(frames); frames = 0; }, 1000);
@@ -67,12 +70,12 @@ export function LiveScreenCanvas({
             ctx.rotate((rotation * Math.PI) / 180);
             ctx.drawImage(frame, -frame.displayWidth / 2, -frame.displayHeight / 2);
           }
-          frames++;
+          frames++; c.out++;
           setStatus('');
         }
         frame.close();
       },
-      error: () => { configured = false; },
+      error: (e) => { configured = false; c.err = String(e && e.message ? e.message : e).slice(0, 80); },
     });
 
     const run = async () => {
@@ -101,11 +104,13 @@ export function LiveScreenCanvas({
               if (type === 4) { // camera orientation hint from the tablet
                 try {
                   const m = JSON.parse(new TextDecoder().decode(payload));
-                  rotation = Number(m.rotation) || 0;
-                  mirror = !!m.mirror;
+                  if (m.rotation !== undefined) rotation = Number(m.rotation) || 0;
+                  if (m.mirror !== undefined) mirror = !!m.mirror;
+                  if (m.enc_fps !== undefined) c.tablet = `${m.enc_fps} fps ${m.kbps} kbps backlog ${m.backlog_kb}KB upfail ${m.upload_fail}`;
                 } catch { /* ignore a malformed hint */ }
                 continue;
               }
+              c.rx++;
               if (type === 1) continue; // SPS/PPS also ride in front of every keyframe
               if (type === 2) {
                 if (!configured) {
@@ -120,7 +125,8 @@ export function LiveScreenCanvas({
               }
               if (needKey || !configured || !decoder || decoder.state !== 'configured') continue;
               // Never let decode lag build up: if the queue is deep, wait for the next keyframe.
-              if (decoder.decodeQueueSize > 8 && type === 3) { needKey = true; continue; }
+              if (decoder.decodeQueueSize > 40 && type === 3) { needKey = true; continue; }
+              c.dec++;
               decoder.decode(new EncodedVideoChunk({ type: type === 2 ? 'key' : 'delta', timestamp: pts, data: payload }));
             }
             buf = buf.slice(pos);
@@ -139,6 +145,7 @@ export function LiveScreenCanvas({
     return () => {
       ac.abort();
       clearInterval(fpsTimer);
+      clearInterval(diagTimer);
       try { decoder?.close(); } catch { /* already closed */ }
     };
   }, [deviceId, kind, nonce]);
@@ -158,6 +165,7 @@ export function LiveScreenCanvas({
           {status}
         </div>
       )}
+      {diag && <div style={{ position: 'absolute', left: 8, bottom: 8, right: 8, fontSize: 11, color: '#cbd5e1', background: 'rgba(0,0,0,.55)', padding: '2px 6px', borderRadius: 4, pointerEvents: 'none' }}>{diag}</div>}
       {!status && <span style={{ position: 'absolute', right: 8, top: 8, fontSize: 12, color: '#94a3b8', background: 'rgba(0,0,0,.5)', padding: '2px 6px', borderRadius: 4 }}>{fps} fps</span>}
     </div>
   );

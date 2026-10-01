@@ -97,9 +97,11 @@ def list_devices() -> list[str]:
         line = line.strip()
         if not line or "\t" not in line and " " not in line:
             continue
-        parts = line.split()
-        if len(parts) >= 2 and parts[1] == "device":
-            serials.append(parts[0])
+        # The state is the LAST token. mDNS serials can contain a space ("adb-xyz (2)._adb-tls-connect._tcp"
+        # when a tablet is advertised twice), so splitting on the first space dropped those tablets.
+        parts = line.rsplit(None, 1)
+        if len(parts) == 2 and parts[1] == "device":
+            serials.append(parts[0].strip())
     return serials
 
 

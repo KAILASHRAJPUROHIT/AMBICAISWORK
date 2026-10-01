@@ -5,6 +5,7 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.Surface
 import com.mdmesh.core.remote.LiveFrameUploader
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +41,10 @@ class LiveEncoderPump(
     private val needKey = AtomicBoolean(false)
     private val info = MediaCodec.BufferInfo()
     private var sender: Job? = null
+    private var statFrames = 0
+    private var statBytes = 0L
+    private var statSince = System.currentTimeMillis()
+    private var statUploadFail = 0
 
     /** Creates and starts the encoder; returns the surface the video source must render into. */
     fun open(w: Int, h: Int): Surface {
@@ -98,7 +103,7 @@ class LiveEncoderPump(
                 }
                 if (batch.size() == 0) continue
                 val ok = runCatching { uploader.upload(kind, batch.toByteArray()) }.getOrDefault(false)
-                if (!ok) requestKeyframe() // what was lost is undecodable: restart from a keyframe
+                if (!ok) { statUploadFail++; requestKeyframe() } // what was lost is undecodable: restart from a keyframe
             }
         }
     }
@@ -128,6 +133,7 @@ class LiveEncoderPump(
                 val payload = ByteArray(info.size)
                 buf.position(info.offset); buf.limit(info.offset + info.size); buf.get(payload)
                 val type = if (isConfig) 1 else if (isKey) 2 else 3
+                if (!isConfig) { statFrames++; statBytes += payload.size }
                 val framed = frame(type, info.presentationTimeUs, payload)
                 queue.add(framed)
                 if (queuedBytes.addAndGet(framed.size.toLong()) > MAX_BACKLOG) {
@@ -137,6 +143,18 @@ class LiveEncoderPump(
             }
         }
         runCatching { enc.releaseOutputBuffer(idx, false) }
+        sendStatsIfDue()
+    }
+
+    /** Every 2 s tell the console what the encoder is really producing, so a stall can be located. */
+    private fun sendStatsIfDue() {
+        val now = System.currentTimeMillis()
+        if (now - statSince < 2000) return
+        val secs = (now - statSince) / 1000.0
+        val json = """{"enc_fps":${"%.1f".format(java.util.Locale.US, statFrames / secs)},"kbps":${(statBytes * 8 / 1000 / secs).toInt()},"backlog_kb":${queuedBytes.get() / 1024},"upload_fail":$statUploadFail}"""
+        Log.i("LiveEncoderPump", "$kind $json")
+        meta(json)
+        statFrames = 0; statBytes = 0; statSince = now
     }
 
     fun stop() {
