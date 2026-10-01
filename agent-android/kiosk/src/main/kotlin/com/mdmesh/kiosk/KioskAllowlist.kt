@@ -21,6 +21,13 @@ object KioskAllowlist {
         "cn.wps.xiaomi.abroad.lite",
         // Hosts the screen-capture consent dialog for live remote view; blocked inside lock-task otherwise.
         "com.android.systemui",
+        // Xiaomi's "allow this adb install?" confirmation (AdbInstallActivity) and the stock installers.
+        // Blocked by lock-task, every `adb install` from the shop PC is cancelled with
+        // INSTALL_FAILED_USER_RESTRICTED before anyone can approve it.
+        "com.miui.securitycenter",
+        "com.miui.packageinstaller",
+        "com.android.packageinstaller",
+        "com.google.android.packageinstaller",
     )
 
     /** The full lock-task package set: what the console asked for + the agent itself + [ALWAYS_ALLOWED]. */
