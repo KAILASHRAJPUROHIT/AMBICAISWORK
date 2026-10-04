@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../ui/theme';
 import { listConfigurations, type ConfigurationSummary } from '../api/configurations';
 import { API_BASE } from '../api/client';
-import { fetchAuthOptions } from '../api/auth';
+import { fetchAuthOptions, listConsoleDevices, removeConsoleDevice, type ConsoleDeviceList } from '../api/auth';
 import { getUpdateStatus, setAutoUpdate, checkForUpdates, applyUpdate, type UpdateStatus } from '../api/updates';
 import { getFleetSettings, setAdminPasscode } from '../api/settings';
 import { RolloutPanel } from '../components/RolloutPanel';
@@ -51,6 +51,8 @@ export function SettingsPage() {
   const { theme, setTheme, density, setDensity } = useTheme();
   const [configList, setConfigList] = useState<ConfigurationSummary[]>([]);
   const [conn, setConn] = useState<Conn>('checking');
+  const [consoleDevices, setConsoleDevices] = useState<ConsoleDeviceList | null>(null);
+  const [consoleDevicesErr, setConsoleDevicesErr] = useState<string | null>(null);
   const [idleSeconds, setIdleState] = useState<number>(getIdleSeconds);
   const [tab, setTabState] = useState<SettingsTab>(initialTab);
   const setTab = (t: SettingsTab) => {
@@ -78,6 +80,10 @@ export function SettingsPage() {
       return '';
     }
   });
+
+  useEffect(() => {
+    listConsoleDevices().then(setConsoleDevices).catch((e) => setConsoleDevicesErr(e instanceof Error ? e.message : 'Unavailable'));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -328,6 +334,34 @@ export function SettingsPage() {
         <section className="panel">
           <div className="panel-head">
             <h2 className="panel-title">Security</h2>
+          </div>
+          <div className="set-row">
+            <span className="k">
+              Allowed computers
+              <small>
+                A computer you have not signed in from before needs a code emailed to {consoleDevices?.sentTo || 'the owner'}; once entered it is listed here and signs in without one.
+                {consoleDevices && !consoleDevices.enforcing ? ' The check is OFF right now: outgoing email is not configured on the server (set SMTP_HOST).' : ''}
+              </small>
+            </span>
+            <span className="v" style={{ display: 'grid', gap: 6, justifyItems: 'end' }}>
+              {consoleDevicesErr && <span className="muted">{consoleDevicesErr}</span>}
+              {consoleDevices && consoleDevices.devices.length === 0 && <span className="muted">None yet</span>}
+              {consoleDevices?.devices.map((d) => (
+                <span key={d.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span title={`${d.userAgent} · ${d.ipAddress}`}>{d.label}</span>
+                  <small className="muted">last used {fmtRelative(d.lastSeenAt)}</small>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => {
+                      if (!window.confirm(`Remove "${d.label}"? It will need a new emailed code the next time it signs in.`)) return;
+                      void removeConsoleDevice(d.id).then(() => listConsoleDevices().then(setConsoleDevices)).catch(() => undefined);
+                    }}
+                  >
+                    Remove
+                  </button>
+                </span>
+              ))}
+            </span>
           </div>
           <div className="set-row">
             <span className="k">

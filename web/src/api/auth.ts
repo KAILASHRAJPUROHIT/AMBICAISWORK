@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { deviceFingerprint, deviceLabel } from '../auth/fingerprint';
 
 // Endpoints (see server: com.hmdm.rest.resource.AuthResource):
 //   POST /rest/public/auth/login   body: { login, password }
@@ -25,6 +26,17 @@ export interface AuthUser {
     superAdmin?: boolean;
     permissions?: { name: string }[];
   };
+}
+
+/** Returned instead of a user when this computer is not on the allowed list yet: a code was emailed. */
+export interface OtpChallenge {
+  otpRequired: true;
+  /** The address the code went to, partly hidden. */
+  sentTo: string;
+}
+
+export function isOtpChallenge(v: AuthUser | OtpChallenge): v is OtpChallenge {
+  return (v as OtpChallenge).otpRequired === true;
 }
 
 export interface AuthOptions {
@@ -81,12 +93,41 @@ export async function fetchAuthOptions(): Promise<AuthOptions> {
 export async function login(
   username: string,
   password: string,
-): Promise<AuthUser> {
+  otp?: string,
+): Promise<AuthUser | OtpChallenge> {
   const payload = {
     login: username,
     password: await securedPasswordPayload(password),
+    deviceFingerprint: await deviceFingerprint(),
+    deviceLabel: deviceLabel(),
+    otp: otp?.trim() || undefined,
   };
-  return apiClient.post<AuthUser>('/public/auth/login', payload);
+  return apiClient.post<AuthUser | OtpChallenge>('/public/auth/login', payload);
+}
+
+export interface ConsoleDevice {
+  id: number;
+  label: string;
+  userAgent: string;
+  ipAddress: string;
+  createdAt: number;
+  lastSeenAt: number;
+}
+
+export interface ConsoleDeviceList {
+  devices: ConsoleDevice[];
+  /** False while the check is off (mode off, or auto with email not configured). */
+  enforcing: boolean;
+  mode: string;
+  sentTo: string;
+}
+
+export function listConsoleDevices(): Promise<ConsoleDeviceList> {
+  return apiClient.get<ConsoleDeviceList>('/private/console-devices');
+}
+
+export function removeConsoleDevice(id: number): Promise<void> {
+  return apiClient.del<void>(`/private/console-devices/${id}`);
 }
 
 export async function logout(): Promise<void> {

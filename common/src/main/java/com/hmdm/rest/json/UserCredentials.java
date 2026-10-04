@@ -43,8 +43,24 @@ public class UserCredentials implements Serializable {
     @Deprecated
     private String email;
 
+    @ApiModelProperty("Browser fingerprint of the computer signing in (for the console allow-list)")
+    private String deviceFingerprint;
+
+    @ApiModelProperty("Friendly name of the computer signing in")
+    private String deviceLabel;
+
+    @ApiModelProperty("One-time code emailed for a computer that is not on the allowed list yet")
+    private String otp;
+
     public UserCredentials() {
     }
+
+    public String getDeviceFingerprint() { return deviceFingerprint; }
+    public void setDeviceFingerprint(String deviceFingerprint) { this.deviceFingerprint = deviceFingerprint; }
+    public String getDeviceLabel() { return deviceLabel; }
+    public void setDeviceLabel(String deviceLabel) { this.deviceLabel = deviceLabel; }
+    public String getOtp() { return otp; }
+    public void setOtp(String otp) { this.otp = otp; }
 
     public String getLogin() {
         return this.login;

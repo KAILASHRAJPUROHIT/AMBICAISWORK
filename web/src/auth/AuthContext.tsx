@@ -10,6 +10,8 @@ import {
   login as apiLogin,
   logout as apiLogout,
   type AuthUser,
+  type OtpChallenge,
+  isOtpChallenge,
 } from '../api/auth';
 import { IdleWarning, useIdleLogout } from './idle';
 
@@ -24,7 +26,8 @@ const STORAGE_KEY = 'hmdm.admin.user';
 interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
-  signIn: (username: string, password: string) => Promise<AuthUser>;
+  /** Resolves to the user, or to an OtpChallenge when this computer still needs the emailed code. */
+  signIn: (username: string, password: string, otp?: string) => Promise<AuthUser | OtpChallenge>;
   signOut: () => Promise<void>;
 }
 
@@ -42,8 +45,9 @@ function loadStoredUser(): AuthUser | null {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(loadStoredUser);
 
-  const signIn = useCallback(async (username: string, password: string) => {
-    const u = await apiLogin(username, password);
+  const signIn = useCallback(async (username: string, password: string, otp?: string) => {
+    const u = await apiLogin(username, password, otp);
+    if (isOtpChallenge(u)) return u;
     setUser(u);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(u));

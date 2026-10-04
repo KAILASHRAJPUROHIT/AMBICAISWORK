@@ -66,6 +66,7 @@ public class AuthResource {
     private RsaKeyService rsaKeyService;
     private boolean transmitPassword;
     private HmdmAuthInterface authEngine;
+    private com.hmdm.service.ConsoleDeviceGuard deviceGuard;
 
     /**
      * <p>A constructor required by Swagger.</p>
@@ -85,7 +86,8 @@ public class AuthResource {
                         RsaKeyService rsaKeyService,
                         @Named("customer.signup") boolean customerSignup,
                         @Named("transmit.password") boolean transmitPassword,
-                        @Named("auth.class") HmdmAuthInterface authEngine) {
+                        @Named("auth.class") HmdmAuthInterface authEngine,
+                        com.hmdm.service.ConsoleDeviceGuard deviceGuard) {
         this.userDAO = userDAO;
         this.customerDAO = customerDAO;
         this.settingsDAO = settingsDAO;
@@ -95,6 +97,7 @@ public class AuthResource {
         this.customerSignup = customerSignup;
         this.transmitPassword = transmitPassword;
         this.authEngine = authEngine;
+        this.deviceGuard = deviceGuard;
     }
 
     /**
@@ -143,6 +146,24 @@ public class AuthResource {
             return Response.ERROR();
         }
 
+        // Password is right. A computer not on this user's allowed list must also present the emailed one-time code.
+        com.hmdm.service.ConsoleDeviceGuard.Outcome gate = deviceGuard.check(user, credentials.getDeviceFingerprint(),
+                credentials.getOtp(), credentials.getDeviceLabel(), clientAddress(req), req.getHeader("User-Agent"));
+        if (!gate.allowed()) {
+            switch (gate.result) {
+                case OTP_SENT: {
+                    java.util.Map<String, Object> challenge = new java.util.HashMap<>();
+                    challenge.put("otpRequired", true);
+                    challenge.put("sentTo", gate.sentTo);
+                    return Response.OK(challenge);
+                }
+                case OTP_INVALID: Thread.sleep(1000); return Response.ERROR("error.otp.invalid");
+                case RATE_LIMITED: return Response.ERROR("error.otp.rate.limited");
+                case MAIL_FAILED: return Response.ERROR("error.otp.mail.failed");
+                default: return Response.ERROR("error.device.fingerprint.missing");
+            }
+        }
+
         try {
             this.taskRunner.submitTask(() -> {
                 this.customerDAO.recordLastLoginTime(user.getCustomerId(), System.currentTimeMillis());
@@ -175,6 +196,13 @@ public class AuthResource {
             e.printStackTrace();
             return Response.INTERNAL_ERROR();
         }
+    }
+
+    /** The caller's address, honouring the reverse proxy's forwarded header (used for the email and the audit line only). */
+    private static String clientAddress(HttpServletRequest req) {
+        String fwd = req.getHeader("X-Forwarded-For");
+        if (fwd != null && !fwd.trim().isEmpty()) return fwd.split(",")[0].trim();
+        return req.getRemoteAddr();
     }
 
     /**

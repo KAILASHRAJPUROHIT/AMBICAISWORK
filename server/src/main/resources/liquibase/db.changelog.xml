@@ -2969,6 +2969,40 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.10.04-console-device-binding" author="ambic" context="common">
+        <comment>Console sign-in allow-list. A computer is identified by a SHA-256 digest of its browser fingerprint (never the raw value). New computers need an emailed one-time code; the code is stored only as a salted digest.</comment>
+        <sql>
+            CREATE TABLE consoleTrustedDevice (
+                id              SERIAL PRIMARY KEY,
+                userId          INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                fingerprintHash CHAR(64) NOT NULL,
+                label           VARCHAR(120) NOT NULL,
+                userAgent       VARCHAR(300),
+                ipAddress       VARCHAR(64),
+                createdAt       BIGINT NOT NULL,
+                lastSeenAt      BIGINT NOT NULL,
+                UNIQUE (userId, fingerprintHash)
+            );
+            CREATE TABLE consoleLoginOtp (
+                id              SERIAL PRIMARY KEY,
+                userId          INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                fingerprintHash CHAR(64) NOT NULL,
+                salt            VARCHAR(64) NOT NULL,
+                codeHash        CHAR(64) NOT NULL,
+                createdAt       BIGINT NOT NULL,
+                expiresAt       BIGINT NOT NULL,
+                attempts        INT NOT NULL DEFAULT 0,
+                usedAt          BIGINT
+            );
+            CREATE INDEX consoleLoginOtp_lookup_idx ON consoleLoginOtp (userId, fingerprintHash, createdAt);
+        </sql>
+        <rollback>
+            DROP INDEX consoleLoginOtp_lookup_idx;
+            DROP TABLE consoleLoginOtp;
+            DROP TABLE consoleTrustedDevice;
+        </rollback>
+    </changeSet>
+
     <changeSet id="26.09.17-devices-fcm-token" author="ambic" context="common">
         <comment>Column,new: devices#fcmToken - the device's current Firebase Cloud Messaging
         registration token, so the server can wake a device via FCM (survives Doze/OEM battery
