@@ -232,6 +232,11 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     },
   },
   {
+    key: 'locate', label: 'Locate now', group: 'safe',
+    description: 'Take a fresh GPS fix right now and report it on the map. The result shows the coordinates and accuracy.',
+    request: { type: 'device.locate', requiresCapability: 'device.locate' },
+  },
+  {
     key: 'location-passive', label: 'Location: Battery-saver', group: 'safe',
     description: 'Report the device’s last-known location each check-in — near-zero battery, no active GPS.',
     request: {

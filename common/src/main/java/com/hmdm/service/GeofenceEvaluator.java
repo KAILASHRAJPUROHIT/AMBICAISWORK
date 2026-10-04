@@ -22,6 +22,7 @@ public class GeofenceEvaluator {
 
     private static final Logger logger = LoggerFactory.getLogger(GeofenceEvaluator.class);
     private static final double EARTH_RADIUS_METERS = 6_371_000.0;
+    private static final long MAX_FIX_AGE_MS = 30L * 60_000L;
 
     private final GeofenceMapper geofenceMapper;
     private final AgentCommandDAO commandDAO;
@@ -40,19 +41,37 @@ public class GeofenceEvaluator {
      * (or meaningfully slow down) the check-in it's called from.
      */
     public void evaluate(int customerId, String deviceNumber, double lat, double lon) {
+        evaluate(customerId, deviceNumber, lat, lon, null, null);
+    }
+
+    /**
+     * Same as above, but aware of fix quality. A fix older than {@link #MAX_FIX_AGE_MS} is ignored (a stale position
+     * says nothing about where the device is now), and an EXIT is only recorded when the device is outside the
+     * fence by more than the fix's own accuracy, so GPS/network jitter at the edge cannot flap enter/exit alerts.
+     */
+    public void evaluate(int customerId, String deviceNumber, double lat, double lon,
+                         Double accuracyMeters, Long capturedAtMillis) {
+        if (capturedAtMillis != null && capturedAtMillis > 0
+                && System.currentTimeMillis() - capturedAtMillis > MAX_FIX_AGE_MS) {
+            return;
+        }
         try {
             List<Geofence> geofences = geofenceMapper.listEnabled(customerId);
             for (Geofence g : geofences) {
-                evaluateOne(g, deviceNumber, lat, lon);
+                evaluateOne(g, deviceNumber, lat, lon, accuracyMeters == null ? 0.0 : accuracyMeters);
             }
         } catch (Exception e) {
             logger.warn("Geofence evaluation failed for device {}: {}", deviceNumber, e.getMessage());
         }
     }
 
-    private void evaluateOne(Geofence g, String deviceNumber, double lat, double lon) {
-        boolean nowInside = distanceMeters(g.getCenterLat(), g.getCenterLon(), lat, lon) <= g.getRadiusMeters();
+    private void evaluateOne(Geofence g, String deviceNumber, double lat, double lon, double accuracyMeters) {
+        double dist = distanceMeters(g.getCenterLat(), g.getCenterLon(), lat, lon);
         Boolean wasInside = geofenceMapper.getState(g.getId(), deviceNumber);
+        boolean nowInside = dist <= g.getRadiusMeters();
+        if (wasInside != null && wasInside && !nowInside && dist - accuracyMeters <= g.getRadiusMeters()) {
+            return; // might still be inside once the fix's uncertainty is allowed for
+        }
         if (wasInside != null && wasInside == nowInside) {
             return; // no transition
         }

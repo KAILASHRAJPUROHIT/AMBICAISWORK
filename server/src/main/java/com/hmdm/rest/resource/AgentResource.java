@@ -365,7 +365,8 @@ public class AgentResource {
             // then check it against the customer's geofences for an enter/exit transition.
             com.hmdm.persistence.domain.DeviceLocation loc = recordLocation(deviceNumber, tel);
             if (loc != null && device != null) {
-                geofenceEvaluator.evaluate(device.getCustomerId(), deviceNumber, loc.getLat(), loc.getLon());
+                geofenceEvaluator.evaluate(device.getCustomerId(), deviceNumber, loc.getLat(), loc.getLon(),
+                        loc.getAccuracy() == null ? null : Double.valueOf(loc.getAccuracy()), loc.getCapturedAt());
             }
             // Append the reported data-usage snapshot (dynamic.dataUsage) to its history.
             recordDataUsage(deviceNumber, tel);

@@ -30,6 +30,8 @@ import com.mdmesh.core.command.handlers.DeviceRebootHandler
 import com.mdmesh.core.command.handlers.DeviceWifiProfileHandler
 import com.mdmesh.core.command.handlers.DeviceRingHandler
 import com.mdmesh.core.command.handlers.DeviceLocationModeHandler
+import com.mdmesh.core.command.handlers.DeviceLocateHandler
+import com.mdmesh.core.location.LocationCollector
 import com.mdmesh.core.command.handlers.DevicePowerModeHandler
 import com.mdmesh.core.command.handlers.DeviceRingStopHandler
 import com.mdmesh.core.command.handlers.DeviceWallpaperHandler
@@ -352,6 +354,13 @@ object AgentModule {
     @IntoSet
     fun providePowerModeHandler(store: PowerModeStore): CommandHandler =
         DevicePowerModeHandler(store)
+
+    @Provides
+    @IntoSet
+    fun provideLocateHandler(
+        collector: LocationCollector,
+        @ApplicationContext context: Context,
+    ): CommandHandler = DeviceLocateHandler(collector, context)
 
     @Provides
     @IntoSet

@@ -28,6 +28,9 @@ object DeviceAction {
     /** Set how location is captured. Payload: `{ "mode": "passive" | "active" }`. */
     const val LOCATION_MODE = "device.locationMode"
 
+    /** "Locate now": take a fresh fix immediately and return it in the result. No payload. */
+    const val LOCATE = "device.locate"
+
     /** Location-mode values (see [LOCATION_MODE]). Passive = last-known (cheap); active = fresh fix. */
     const val LOCATION_PASSIVE = "passive"
     const val LOCATION_ACTIVE = "active"
@@ -88,7 +91,7 @@ object DeviceAction {
     /** Keys (after the `device.` prefix) advertised in `capabilities.device`. */
     val ADVERTISED_KEYS: List<String> = listOf(
         "lock", "reboot", "lockscreenMessage", "alert", "ring", "ringStop",
-        "passcodeReset", "wipe", "powerMode", "locationMode",
+        "passcodeReset", "wipe", "powerMode", "locationMode", "locate",
         "passwordQuality", "wifiProfile", "certificate", "wallpaper", "kioskTheme",
     )
 }

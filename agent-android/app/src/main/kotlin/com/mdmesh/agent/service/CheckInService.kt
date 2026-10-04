@@ -54,6 +54,8 @@ class CheckInService : LifecycleService() {
     @Inject lateinit var eventLog: EventLog
     @Inject lateinit var dpmHandle: DpmHandle
     @Inject lateinit var connectivityGuard: com.mdmesh.agent.net.ConnectivityGuard
+    @Inject lateinit var locationCollector: com.mdmesh.core.location.LocationCollector
+    private var motionTracker: MotionTracker? = null
 
     private var wirelessAdbKeeper: WirelessAdbKeeper? = null
 
@@ -129,6 +131,8 @@ class CheckInService : LifecycleService() {
         wirelessAdbKeeper = WirelessAdbKeeper(applicationContext, dpmHandle).also { it.start() }
         // Keep the tablet on the internet; escalate to a full-screen message and lockdown when it cannot be.
         connectivityGuard.start()
+        // Report location more often only while the device is moving (zero-cost sensor trigger).
+        motionTracker = MotionTracker(applicationContext, lifecycleScope, locationCollector, coordinator).also { it.start() }
         // Older builds set DISALLOW_CREATE_WINDOWS while in kiosk, which blocked approved apps'
         // toasts/overlays. Clear it once at startup so a device updated mid-kiosk is healed
         // immediately, not only at its next kiosk entry (see AdminReceiver.onLockTaskModeEntering).
@@ -243,6 +247,8 @@ class CheckInService : LifecycleService() {
         runCatching { unregisterReceiver(powerReceiver) }
         wirelessAdbKeeper?.stop()
         wirelessAdbKeeper = null
+        motionTracker?.stop()
+        motionTracker = null
         transport.stop()
         super.onDestroy()
     }

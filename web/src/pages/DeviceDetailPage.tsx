@@ -115,6 +115,12 @@ function NameField({
   );
 }
 
+/** A position older than this no longer says where the device is now. */
+const FIX_STALE_MS = 30 * 60_000;
+function fixIsStale(capturedAt: number): boolean {
+  return Date.now() - capturedAt > FIX_STALE_MS;
+}
+
 export function DeviceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -310,7 +316,17 @@ export function DeviceDetailPage() {
         },
         { k: 'Accuracy', v: loc!.accuracyM != null ? `±${Math.round(loc!.accuracyM)} m` : '—' },
         { k: 'Source', v: orDash(loc!.provider) },
-        { k: 'Fix age', v: loc!.capturedAt ? fmtRelative(loc!.capturedAt) : '—' },
+        {
+          k: 'Fix age',
+          v: loc!.capturedAt ? (
+            <span
+              style={fixIsStale(loc!.capturedAt) ? { color: 'var(--warn, #d9822b)' } : undefined}
+              title={fixIsStale(loc!.capturedAt) ? 'This position is old. Use Locate now for a fresh fix.' : undefined}
+            >
+              {fmtRelative(loc!.capturedAt)}{fixIsStale(loc!.capturedAt) ? ' · stale' : ''}
+            </span>
+          ) : '—',
+        },
       ]
     : [{ k: 'Location', v: 'No fix reported yet' }];
 
