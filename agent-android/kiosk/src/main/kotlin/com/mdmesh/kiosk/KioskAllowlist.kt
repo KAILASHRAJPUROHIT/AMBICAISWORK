@@ -13,12 +13,21 @@ package com.mdmesh.kiosk
  * Every entry here is a document viewer that ships on the fleet's Xiaomi/Redmi tablets:
  *  - `cn.wps.xiaomi.abroad.lite` - "Mi Doc Viewer (Powered by WPS)", preinstalled under /product, opens
  *    PDF/Word/Excel/PowerPoint, no launcher entry.
+ *  - `com.google.android.apps.docs` - Google Drive. On tablets with Google services it is the DEFAULT PDF viewer
+ *    (`PdfViewerActivity`), so a PDF opened from any allowed app lands here, not in the Mi Doc Viewer. Tab 3's log
+ *    showed "Attempted Lock Task Mode violation ... apps.docs/PdfViewerActivity" on every attempt until this was added.
+ *    Only the viewer is reachable this way; the Drive app itself is not offered in the kiosk grid.
+ *  - Google Docs / Sheets / Slides - the default handlers for Word, Excel and PowerPoint files on the same tablets.
  *
  * Allowlisting a package that is not installed is harmless.
  */
 object KioskAllowlist {
     val ALWAYS_ALLOWED: List<String> = listOf(
         "cn.wps.xiaomi.abroad.lite",
+        "com.google.android.apps.docs",
+        "com.google.android.apps.docs.editors.docs",
+        "com.google.android.apps.docs.editors.sheets",
+        "com.google.android.apps.docs.editors.slides",
         // Hosts the screen-capture consent dialog for live remote view; blocked inside lock-task otherwise.
         "com.android.systemui",
         // Xiaomi's "allow this adb install?" confirmation (AdbInstallActivity) and the stock installers.

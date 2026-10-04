@@ -14,6 +14,13 @@ class KioskAllowlistTest {
         assertTrue("com.android.chrome" in r)
     }
 
+    @Test fun `lets the Google Drive PDF viewer through`() {
+        // Regression: Tab 3 resolved PDFs to com.google.android.apps.docs/PdfViewerActivity and kiosk mode blocked it.
+        val r = KioskAllowlist.effective(listOf("com.android.chrome"), own)
+        assertTrue("com.google.android.apps.docs" in r)
+        assertTrue("com.google.android.apps.docs.editors.docs" in r)
+    }
+
     @Test fun `works when the console sends nothing`() {
         val r = KioskAllowlist.effective(emptyList(), own)
         assertEquals(setOf(own) + KioskAllowlist.ALWAYS_ALLOWED, r.toSet())
