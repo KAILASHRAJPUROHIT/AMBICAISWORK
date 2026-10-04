@@ -16,7 +16,7 @@ import { AlertRulesPanel } from '../components/AlertRulesPanel';
 import { GeofencePanel } from '../components/GeofencePanel';
 import { beginFrpRecoveryAccountConnection, listFrpRecoveryAccounts, removeFrpRecoveryAccount, type FrpRecoveryAccount } from '../api/frp';
 import { orDash, fmtRelative } from '../ui/format';
-import { getIdleSeconds, setIdleSeconds, MIN_IDLE_SECONDS, MAX_IDLE_SECONDS } from '../auth/idle';
+import { getIdleSeconds, setIdleSeconds } from '../auth/idle';
 
 const APP_VERSION = '0.1.0';
 const DEFAULT_CONFIG_KEY = 'mdmesh-default-config';
@@ -33,6 +33,18 @@ const TABS = [
 ] as const;
 type SettingsTab = (typeof TABS)[number]['key'];
 const TAB_KEY = 'mdm-settings-tab';
+
+/** Choices for the automatic sign-out. The change applies at once, to this browser. */
+const IDLE_CHOICES = [
+  { seconds: 30, label: '30 seconds' },
+  { seconds: 60, label: '1 minute' },
+  { seconds: 120, label: '2 minutes' },
+  { seconds: 300, label: '5 minutes' },
+  { seconds: 600, label: '10 minutes' },
+  { seconds: 900, label: '15 minutes' },
+  { seconds: 1800, label: '30 minutes' },
+  { seconds: 3600, label: '1 hour' },
+];
 
 function initialTab(): SettingsTab {
   const fromUrl = new URLSearchParams(window.location.search).get('tab');
@@ -369,17 +381,15 @@ export function SettingsPage() {
               <small>Signs this console out after this long with no mouse, keyboard or touch activity. Applies to this browser.</small>
             </span>
             <span className="v">
-              <input
-                type="number"
-                min={MIN_IDLE_SECONDS}
-                max={MAX_IDLE_SECONDS}
+              <select
                 value={idleSeconds}
-                aria-label="Seconds of inactivity before sign-out"
-                onChange={(e) => setIdleState(Number(e.target.value))}
-                onBlur={() => setIdleState(setIdleSeconds(idleSeconds))}
-                style={{ width: 80 }}
-              />{' '}
-              seconds
+                aria-label="Time of inactivity before automatic sign-out"
+                onChange={(e) => setIdleState(setIdleSeconds(Number(e.target.value)))}
+                style={{ padding: '6px 10px', borderRadius: 6 }}
+              >
+                {!IDLE_CHOICES.some((c) => c.seconds === idleSeconds) && <option value={idleSeconds}>{idleSeconds} seconds (custom)</option>}
+                {IDLE_CHOICES.map((c) => <option key={c.seconds} value={c.seconds}>{c.label}</option>)}
+              </select>
             </span>
           </div>
           <div className="set-row">
