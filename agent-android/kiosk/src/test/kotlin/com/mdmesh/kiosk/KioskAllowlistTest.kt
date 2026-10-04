@@ -21,6 +21,12 @@ class KioskAllowlistTest {
         assertTrue("com.google.android.apps.docs.editors.docs" in r)
     }
 
+    @Test fun `lets the China-ROM Mi Doc Viewer through`() {
+        val r = KioskAllowlist.effective(emptyList(), own)
+        assertTrue("cn.wps.moffice_eng.xiaomi.lite" in r)
+        assertTrue("cn.wps.xiaomi.abroad.lite" in r)
+    }
+
     @Test fun `works when the console sends nothing`() {
         val r = KioskAllowlist.effective(emptyList(), own)
         assertEquals(setOf(own) + KioskAllowlist.ALWAYS_ALLOWED, r.toSet())

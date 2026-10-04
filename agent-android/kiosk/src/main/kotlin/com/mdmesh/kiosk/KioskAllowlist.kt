@@ -17,6 +17,8 @@ package com.mdmesh.kiosk
  *    (`PdfViewerActivity`), so a PDF opened from any allowed app lands here, not in the Mi Doc Viewer. Tab 3's log
  *    showed "Attempted Lock Task Mode violation ... apps.docs/PdfViewerActivity" on every attempt until this was added.
  *    Only the viewer is reachable this way; the Drive app itself is not offered in the kiosk grid.
+ *  - `cn.wps.moffice_eng.xiaomi.lite` / `cn.wps.moffice_eng` - the same Mi Doc Viewer on China-ROM phones (Redmi 14R), where it is
+ *    the only PDF/Office viewer.
  *  - Google Docs / Sheets / Slides - the default handlers for Word, Excel and PowerPoint files on the same tablets.
  *
  * Allowlisting a package that is not installed is harmless.
@@ -24,6 +26,8 @@ package com.mdmesh.kiosk
 object KioskAllowlist {
     val ALWAYS_ALLOWED: List<String> = listOf(
         "cn.wps.xiaomi.abroad.lite",
+        "cn.wps.moffice_eng.xiaomi.lite",
+        "cn.wps.moffice_eng",
         "com.google.android.apps.docs",
         "com.google.android.apps.docs.editors.docs",
         "com.google.android.apps.docs.editors.sheets",

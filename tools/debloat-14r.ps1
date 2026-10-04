@@ -41,7 +41,9 @@ $Remove = @(
     'com.xiaomi.jr',                 # Mi Finance
     'com.miui.virtualsim',
     # Third-party China preloads that show on the home screen
-    'cn.wps.moffice_eng', 'cn.wps.moffice_eng.xiaomi.lite',   # WPS Office
+    # NOTE: the WPS packages (cn.wps.moffice_eng, cn.wps.moffice_eng.xiaomi.lite) are the 14R's only PDF/Office viewer (the Mi Doc
+    # Viewer on China HyperOS). They were once on this list and removing them left the phone unable to open any document, so they are
+    # now on the keep-list below and must stay there.
     'com.autonavi.minimap',          # AutoNavi / Amap
     'com.baidu.searchbox',           # Baidu
     'com.dragon.read', 'com.phoenix.read', 'com.xs.fm',        # Fanqie novels / audio
@@ -76,6 +78,7 @@ $Keep = @(
     'com.miui.securitymanager', 'com.android.providers.downloads.ui', 'com.android.deskclock', 'com.android.soundrecorder',
     'com.xiaomi.scanner', 'com.google.android.documentsui', 'com.android.fileexplorer', 'com.android.mms', 'com.android.browser',
     'com.miui.notes', 'com.miui.password', 'com.miui.screenrecorder', 'com.miui.mediaeditor', 'com.android.calendar',
+    'cn.wps.moffice_eng', 'cn.wps.moffice_eng.xiaomi.lite', 'cn.wps.xiaomi.abroad.lite', 'com.google.android.apps.docs',
     'com.baidu.input_mi', 'com.iflytek.inputmethod.miui', 'com.sohu.inputmethod.sogou.xiaomi', 'com.miui.cleanmaster'
 )
 
