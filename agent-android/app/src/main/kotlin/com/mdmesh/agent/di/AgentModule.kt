@@ -213,14 +213,21 @@ object AgentModule {
 
     @Provides
     @Singleton
-    fun provideKioskController(handle: DpmHandle): KioskController =
-        if (handle.dpm.isDeviceOwnerApp(handle.admin.packageName)) {
-            LockTaskKioskController(handle.dpm, handle.admin)
-        } else {
-            // "Lite" tier (Device Admin only, no factory reset) — see SoftPinKioskController's
-            // doc comment for exactly what this trades away vs. the Device-Owner path.
-            SoftPinKioskController()
+    fun provideKioskController(handle: DpmHandle): KioskController {
+        // Re-decided on every call: the agent can become Device Owner while its process is already running (adb
+        // `dpm set-device-owner` does not restart it), and a controller fixed at startup would stay the no-op Lite one.
+        val lockTask = LockTaskKioskController(handle.dpm, handle.admin)
+        val softPin = SoftPinKioskController()
+        fun current(): KioskController =
+            if (handle.dpm.isDeviceOwnerApp(handle.admin.packageName)) lockTask else softPin
+        return object : KioskController {
+            override fun enter(homeComponent: ComponentName, allowedPackages: List<String>, features: Int) =
+                current().enter(homeComponent, allowedPackages, features)
+            override fun exit() = current().exit()
+            override fun isLocked(context: Context) = current().isLocked(context)
+            override fun allowedPackages() = current().allowedPackages()
         }
+    }
 
     @Provides
     @Singleton

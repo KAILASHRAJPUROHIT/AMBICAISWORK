@@ -180,7 +180,16 @@ class MainActivity : ComponentActivity() {
      */
     private fun reenterKiosk() {
         lifecycleScope.launch {
-            val p = kioskStateStore.loadLastKnown() ?: return@launch
+            val p = kioskStateStore.loadLastKnown()
+            if (p == null) {
+                // A re-enrolled or freshly reset device has no saved kiosk setup to restore. Say so instead of doing nothing.
+                android.widget.Toast.makeText(
+                    this@MainActivity,
+                    "No kiosk has been set up on this device yet. In the console open this device and choose Enter kiosk.",
+                    android.widget.Toast.LENGTH_LONG,
+                ).show()
+                return@launch
+            }
             val features = lockTaskFeatures(
                 KioskToggles(
                     home = p.features.home,
