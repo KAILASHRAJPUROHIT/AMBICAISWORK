@@ -45,6 +45,7 @@ public class PublicRestModule extends ServletModule {
         this.bind(AgentResource.class);
         this.bind(com.hmdm.rest.resource.RemoteSnapshotUploadResource.class);
         this.bind(FrpOAuthResource.class);
+        this.bind(LockdownUnlockResource.class);
         this.bind(com.hmdm.rest.resource.ClientBrandingPublicResource.class);
         this.bind(com.hmdm.rest.resource.LeaderboardIngestResource.class);
         this.bind(com.hmdm.rest.resource.LeaderboardReadResource.class);

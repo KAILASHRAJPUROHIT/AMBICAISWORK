@@ -40,6 +40,7 @@ class BootReceiver : BroadcastReceiver() {
     @Inject lateinit var kioskStateStore: KioskStateStore
     @Inject lateinit var kioskController: KioskController
     @Inject lateinit var dpmHandle: DpmHandle
+    @Inject lateinit var connectivityGuard: com.mdmesh.agent.net.ConnectivityGuard
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
@@ -54,6 +55,11 @@ class BootReceiver : BroadcastReceiver() {
                 // Android 12+. The FGS start below is best-effort (restores the instant socket when
                 // the OS allows it from this broadcast).
                 runCatching { CheckInWorker.scheduleNow(context) }
+                // Wi-Fi back on at boot, and a saved lockdown shown at once.
+                runCatching {
+                    if (intent.action == Intent.ACTION_BOOT_COMPLETED) connectivityGuard.onBoot()
+                    connectivityGuard.start()
+                }
                 // Re-enable our Accessibility service (screen share / screen control) first thing
                 // after a reboot or self-update; an update can drop it from the enabled list.
                 runCatching {

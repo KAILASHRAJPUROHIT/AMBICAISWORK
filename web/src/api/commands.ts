@@ -195,6 +195,12 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     request: { type: 'device.reboot', requiresCapability: 'device.reboot' },
   },
   {
+    key: 'lockdown-release', label: 'Release lockdown', group: 'disruptive',
+    description: 'Lift the offline lockdown on this tablet. A tablet locks itself after 30 minutes without internet; this reaches it only once an administrator has connected it to Wi-Fi.',
+    confirm: 'simple',
+    request: { type: 'device.lockdownRelease' },
+  },
+  {
     key: 'passcode-reset', label: 'Reset passcode', group: 'destructive', danger: true,
     description: 'Set or clear the device passcode (empty clears it).', confirm: 'simple',
     params: [{ key: 'newPassword', label: 'New passcode (blank to clear)', kind: 'password' }],

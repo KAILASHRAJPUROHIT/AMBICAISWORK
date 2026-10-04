@@ -148,6 +148,22 @@
             android:stateNotNeeded="true"
             android:lockTaskMode="if_whitelisted" />
 
+        <!-- Connectivity guard screens: 10 min without internet = full-screen message, 30 min = lockdown. -->
+        <activity
+            android:name=".net.ConnectivityBlockActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:stateNotNeeded="true"
+            android:lockTaskMode="if_whitelisted" />
+        <activity
+            android:name=".net.LockdownActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:stateNotNeeded="true"
+            android:lockTaskMode="if_whitelisted" />
+
         <!-- HOME claim, disabled by default. kiosk.enter enables it + pins it as the persistent
              preferred HOME; kiosk.exit disables it so HOME falls back to the OEM launcher. -->
         <activity-alias

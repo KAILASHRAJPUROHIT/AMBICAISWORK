@@ -9,6 +9,7 @@ const LABELS: Record<string, string> = {
   appUninstalled: 'App uninstalled',
   commandResult: 'Command',
   connectivityChange: 'Network',
+  offlineReport: 'Offline report',
   lowBattery: 'Low battery',
   enrolled: 'Enrolled',
   // Activity log (agent v0.2.71+)
@@ -35,7 +36,7 @@ const FILTERS: { key: Filter; label: string; types?: string[] }[] = [
   { key: 'all', label: 'All' },
   { key: 'apps', label: 'App usage', types: ['appUsage', 'appInstalled', 'appUninstalled'] },
   { key: 'screen', label: 'Screen & power', types: ['screenOn', 'screenOff', 'unlock', 'powerConnected', 'powerDisconnected', 'lowBattery', 'boot'] },
-  { key: 'network', label: 'Network', types: ['connectivityChange'] },
+  { key: 'network', label: 'Network', types: ['connectivityChange', 'offlineReport'] },
   { key: 'mdm', label: 'MDM & kiosk', types: ['commandResult', 'kioskEnter', 'kioskExit', 'quickControl', 'enrolled', 'crash', 'logcat', 'kioskCrashLoop', 'selfUninstall'] },
 ];
 

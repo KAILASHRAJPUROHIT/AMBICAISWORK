@@ -53,6 +53,7 @@ class CheckInService : LifecycleService() {
     @Inject lateinit var powerModeStore: PowerModeStore
     @Inject lateinit var eventLog: EventLog
     @Inject lateinit var dpmHandle: DpmHandle
+    @Inject lateinit var connectivityGuard: com.mdmesh.agent.net.ConnectivityGuard
 
     private var wirelessAdbKeeper: WirelessAdbKeeper? = null
 
@@ -126,6 +127,8 @@ class CheckInService : LifecycleService() {
         ContextCompat.registerReceiver(this, powerReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         // Keep wireless debugging on across Wi-Fi drops and reboots -- see WirelessAdbKeeper.
         wirelessAdbKeeper = WirelessAdbKeeper(applicationContext, dpmHandle).also { it.start() }
+        // Keep the tablet on the internet; escalate to a full-screen message and lockdown when it cannot be.
+        connectivityGuard.start()
         // Older builds set DISALLOW_CREATE_WINDOWS while in kiosk, which blocked approved apps'
         // toasts/overlays. Clear it once at startup so a device updated mid-kiosk is healed
         // immediately, not only at its next kiosk entry (see AdminReceiver.onLockTaskModeEntering).

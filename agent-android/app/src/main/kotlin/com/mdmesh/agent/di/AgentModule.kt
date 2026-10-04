@@ -25,6 +25,7 @@ import com.mdmesh.core.command.handlers.DeviceLockscreenMessageHandler
 import com.mdmesh.core.command.handlers.DevicePasscodeResetHandler
 import com.mdmesh.core.command.handlers.DevicePasswordQualityHandler
 import com.mdmesh.core.command.handlers.DeviceEnableWirelessAdbHandler
+import com.mdmesh.core.command.handlers.DeviceLockdownReleaseHandler
 import com.mdmesh.core.command.handlers.DeviceRebootHandler
 import com.mdmesh.core.command.handlers.DeviceWifiProfileHandler
 import com.mdmesh.core.command.handlers.DeviceRingHandler
@@ -292,6 +293,11 @@ object AgentModule {
     @IntoSet
     fun provideDeviceRebootHandler(handle: DpmHandle): CommandHandler =
         DeviceRebootHandler(handle)
+
+    @Provides
+    @IntoSet
+    fun provideDeviceLockdownReleaseHandler(guard: com.mdmesh.agent.net.ConnectivityGuard): CommandHandler =
+        DeviceLockdownReleaseHandler(guard)
 
     @Provides
     @IntoSet

@@ -28,10 +28,11 @@ class LocationCollector @Inject constructor(
     @ApplicationContext private val context: Context,
     private val modeStore: LocationModeStore,
 ) {
-    fun collect(): LocationDto? {
+    /** @param forceActive ask the OS for a FRESH fix even when the fleet is in passive mode (used while a tablet is lost offline). */
+    fun collect(forceActive: Boolean = false): LocationDto? {
         if (!hasPermission()) return null
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
-        val loc = if (modeStore.isActive()) (currentFix(lm) ?: lastKnown(lm)) else lastKnown(lm)
+        val loc = if (forceActive || modeStore.isActive()) (currentFix(lm) ?: lastKnown(lm)) else lastKnown(lm)
         return loc?.let {
             LocationDto(
                 lat = it.latitude,

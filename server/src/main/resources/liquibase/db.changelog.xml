@@ -2969,6 +2969,27 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.10.04-device-unlock-otp" author="ambic" context="common">
+        <comment>One-time codes that let an administrator lift a tablet's offline lockdown. The code is stored only as a salted SHA-256 digest.</comment>
+        <sql>
+            CREATE TABLE deviceUnlockOtp (
+                id           SERIAL PRIMARY KEY,
+                deviceNumber VARCHAR(160) NOT NULL,
+                salt         VARCHAR(64) NOT NULL,
+                codeHash     CHAR(64) NOT NULL,
+                createdAt    BIGINT NOT NULL,
+                expiresAt    BIGINT NOT NULL,
+                attempts     INT NOT NULL DEFAULT 0,
+                usedAt       BIGINT
+            );
+            CREATE INDEX deviceUnlockOtp_lookup_idx ON deviceUnlockOtp (deviceNumber, createdAt);
+        </sql>
+        <rollback>
+            DROP INDEX deviceUnlockOtp_lookup_idx;
+            DROP TABLE deviceUnlockOtp;
+        </rollback>
+    </changeSet>
+
     <changeSet id="26.10.04-console-device-binding" author="ambic" context="common">
         <comment>Console sign-in allow-list. A computer is identified by a SHA-256 digest of its browser fingerprint (never the raw value). New computers need an emailed one-time code; the code is stored only as a salted digest.</comment>
         <sql>
