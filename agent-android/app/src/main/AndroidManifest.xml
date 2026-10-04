@@ -227,6 +227,11 @@
             android:exported="false"
             android:foregroundServiceType="camera" />
 
+        <service
+            android:name=".service.LiveMicService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <activity
             android:name=".service.ProjectionConsentActivity"
             android:exported="false"

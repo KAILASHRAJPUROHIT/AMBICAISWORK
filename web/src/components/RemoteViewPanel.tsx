@@ -6,12 +6,13 @@ import {
 import { useToast } from '../ui/toast';
 import { fmtRelative } from '../ui/format';
 import { LiveScreenCanvas } from './LiveScreenCanvas';
+import { LiveAudioPlayer } from './LiveAudioPlayer';
 
 const KINDS: Array<{ key: RemoteKind; label: string }> = [
   { key: 'screen', label: 'Screen' },
   { key: 'cameraFront', label: 'Front camera' },
   { key: 'cameraBack', label: 'Back camera' },
-  { key: 'mic', label: 'Microphone' },
+  { key: 'mic', label: 'Microphone (listen live)' },
 ];
 
 /** Admin-only, time-boxed latest-capture view and full remote control. */
@@ -21,7 +22,6 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
   const [intervalSec, setIntervalSec] = useState(0.5);
   const [kinds, setKinds] = useState<RemoteKind[]>(['screen']);
   const [liveMode, setLiveMode] = useState(true);
-  const [autoConsent, setAutoConsent] = useState(true);
   const [streamNonce, setStreamNonce] = useState(0);
   const [session, setSession] = useState<RemoteSession | null>(null);
   const [snapshots, setSnapshots] = useState<RemoteSnapshotMeta[]>([]);
@@ -68,8 +68,8 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
         durationSec,
         intervalSec: Math.max(1, Math.round(intervalSec)),
         kinds,
-        live: liveMode && kinds.some((k) => k !== 'mic'),
-        autoConsent,
+        live: liveMode,
+        autoConsent: true,
       });
       setSession(started);
       setStreamNonce(Date.now());
@@ -116,7 +116,10 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
 
     try {
       if (dist < 0.03) {
-        await sendRemoteInput(deviceId, { action: 'tap', x: dragStart.x, y: dragStart.y });
+        // Held in place for half a second or more is a long-press, not a tap.
+        await sendRemoteInput(deviceId, duration >= 500
+          ? { action: 'tap', x: dragStart.x, y: dragStart.y, durationMs: Math.min(duration, 1500) }
+          : { action: 'tap', x: dragStart.x, y: dragStart.y });
       } else {
         await sendRemoteInput(deviceId, {
           action: 'swipe',
@@ -129,6 +132,42 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
       }
     } catch (err) {
       toast.push('err', 'Input injection failed', err instanceof Error ? err.message : '');
+    }
+  };
+
+  /** Mouse wheel over the screen scrolls the tablet (a short swipe in the opposite direction). */
+  const handleWheel = (e: React.WheelEvent<HTMLElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const dy = Math.max(-0.4, Math.min(0.4, e.deltaY / rect.height));
+    const dx = Math.max(-0.4, Math.min(0.4, e.deltaX / rect.width));
+    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
+    void sendRemoteInput(deviceId, {
+      action: 'swipe', x, y,
+      endX: Math.max(0, Math.min(1, x - dx)), endY: Math.max(0, Math.min(1, y - dy)), durationMs: 180,
+    }).catch(() => undefined);
+  };
+
+  /** Typing while the screen is focused goes to the tablet's focused field: letters as text, Backspace/Enter as keys. */
+  const typed = useRef('');
+  const typedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const flushTyped = () => {
+    const text = typed.current;
+    typed.current = '';
+    if (text) void sendRemoteInput(deviceId, { action: 'text', text }).catch(() => undefined);
+  };
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Backspace' || e.key === 'Enter') {
+      e.preventDefault();
+      flushTyped();
+      void sendRemoteInput(deviceId, { action: 'key', key: e.key === 'Enter' ? 'enter' : 'backspace' }).catch(() => undefined);
+    } else if (e.key.length === 1) {
+      e.preventDefault();
+      typed.current += e.key;
+      clearTimeout(typedTimer.current);
+      typedTimer.current = setTimeout(flushTyped, 250);
     }
   };
 
@@ -185,14 +224,11 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
             onChange={(e) => setLiveMode(e.target.value === 'live')}
             style={{ padding: '4px 8px', borderRadius: 4 }}
           >
-            <option value="live">Live video (up to 60 fps)</option>
+            <option value="live">Live (video up to 60 fps, microphone in real time)</option>
             <option value="snap">Screenshots (2-3 fps, no prompt)</option>
           </select>
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }} title="Off: the tablet shows Android's screen-share prompt and waits for someone to tap it.">
-          <input type="checkbox" checked={autoConsent} disabled={busy || !!session || !liveMode} onChange={(e) => setAutoConsent(e.target.checked)} />
-          Auto-accept screen-share prompt
-        </label>
+        <span className="muted" title="The tablet's screen-share prompt is accepted automatically the moment it appears.">Screen-share prompt: accepted automatically</span>
         <label>
           Snapshot interval{' '}
           <select
@@ -288,7 +324,11 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
                 {snapshot ? fmtRelative(snapshot.capturedAt) : 'No capture yet'}
               </small>
 
-              {snapshot && key === 'mic' && (
+              {key === 'mic' && session?.live && session.kinds.includes('mic') && (
+                <LiveAudioPlayer deviceId={deviceId} nonce={streamNonce} />
+              )}
+
+              {snapshot && key === 'mic' && !(session?.live && session.kinds.includes('mic')) && (
                 <audio controls src={snapshotUrl(deviceId, key, snapshot.capturedAt)} style={{ width: '100%' }} />
               )}
 
@@ -297,7 +337,7 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
               )}
 
               {isScreen && session?.live && session.kinds.includes('screen') && (
-                <div style={{ position: 'relative', width: '100%', overflow: 'hidden' }}>
+                <div tabIndex={0} onWheel={handleWheel} onKeyDown={handleKeyDown} title="Click the screen, then type or scroll to operate the tablet" style={{ position: 'relative', width: '100%', overflow: 'hidden', outline: 'none' }}>
                   <LiveScreenCanvas deviceId={deviceId} nonce={streamNonce} onMouseDown={handleMouseDown} onMouseUp={handleMouseUp} />
                   {ripple && (
                     <span

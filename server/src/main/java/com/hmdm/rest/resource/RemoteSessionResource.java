@@ -75,6 +75,8 @@ public class RemoteSessionResource {
     private static final Logger logger = LoggerFactory.getLogger(RemoteSessionResource.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final java.util.Set<String> KNOWN_KINDS = java.util.Set.of("screen", "cameraFront", "cameraBack", "mic");
+    /** Channels the live relay carries; "audio" is the live microphone. */
+    private static final java.util.Set<String> LIVE_KINDS = java.util.Set.of("screen", "cameraFront", "cameraBack", "audio");
 
     private UnsecureDAO unsecureDAO;
     private AgentCommandDAO commandDAO;
@@ -204,8 +206,8 @@ public class RemoteSessionResource {
         payload.put("durationSec", durationSec);
         payload.put("intervalSec", intervalSec);
         payload.put("expiresAt", now + durationSec * 1000L);
-        boolean live = body != null && Boolean.TRUE.equals(body.getLive())
-                && kinds.stream().anyMatch(k -> !"mic".equals(k));
+        // Live now covers the microphone too (streamed as the "audio" channel), so any chosen source can be live.
+        boolean live = body != null && Boolean.TRUE.equals(body.getLive());
         payload.put("live", live);
         payload.put("autoConsent", body == null || body.getAutoConsent() == null || body.getAutoConsent());
         com.fasterxml.jackson.databind.node.ArrayNode kindsArray = payload.putArray("kinds");
@@ -303,7 +305,7 @@ public class RemoteSessionResource {
             return javax.ws.rs.core.Response.status(javax.ws.rs.core.Response.Status.FORBIDDEN).build();
         }
         final String kind = kindParam == null || kindParam.isEmpty() ? "screen" : kindParam;
-        if (!KNOWN_KINDS.contains(kind) || "mic".equals(kind)) {
+        if (!LIVE_KINDS.contains(kind)) {
             return javax.ws.rs.core.Response.status(javax.ws.rs.core.Response.Status.BAD_REQUEST).build();
         }
         final String hubKey = deviceId + "|" + kind;

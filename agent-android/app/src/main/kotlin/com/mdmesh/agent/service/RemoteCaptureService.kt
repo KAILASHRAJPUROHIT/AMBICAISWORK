@@ -141,11 +141,14 @@ class AgentRemoteCaptureController(private val context: Context) : com.mdmesh.co
         // A new session replaces whatever was running.
         context.stopService(Intent(context, LiveScreenService::class.java))
         context.stopService(Intent(context, LiveCameraService::class.java))
-        val liveKinds = if (payload.live) payload.kinds.filter { it == "screen" || it == "cameraFront" || it == "cameraBack" } else emptyList()
+        context.stopService(Intent(context, LiveMicService::class.java))
+        // "mic" is live audio when the session is live (streamed as it happens), a short recorded clip otherwise.
+        val liveKinds = if (payload.live) payload.kinds.filter { it == "screen" || it == "cameraFront" || it == "cameraBack" || it == "mic" } else emptyList()
         val snapshotKinds = payload.kinds - liveKinds.toSet()
         if (snapshotKinds.isNotEmpty()) {
             ContextCompat.startForegroundService(context, RemoteCaptureService.intent(context, payload.copy(kinds = snapshotKinds)))
         }
+        if ("mic" in liveKinds) ContextCompat.startForegroundService(context, LiveMicService.intent(context, payload.durationSec))
         if ("cameraFront" in liveKinds) ContextCompat.startForegroundService(context, LiveCameraService.intent(context, true, payload.durationSec))
         if ("cameraBack" in liveKinds) ContextCompat.startForegroundService(context, LiveCameraService.intent(context, false, payload.durationSec))
         if ("screen" in liveKinds) {
@@ -166,5 +169,6 @@ class AgentRemoteCaptureController(private val context: Context) : com.mdmesh.co
         context.stopService(Intent(context, RemoteCaptureService::class.java))
         context.stopService(Intent(context, LiveScreenService::class.java))
         context.stopService(Intent(context, LiveCameraService::class.java))
+        context.stopService(Intent(context, LiveMicService::class.java))
     }
 }

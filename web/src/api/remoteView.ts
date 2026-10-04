@@ -20,7 +20,8 @@ export interface RemoteSession {
   live?: boolean;
 }
 
-export function liveStreamUrl(deviceId: string, kind: RemoteKind, nonce: number): string {
+/** `audio` is the live microphone channel (the `mic` source, streamed). */
+export function liveStreamUrl(deviceId: string, kind: RemoteKind | 'audio', nonce: number): string {
   return `${API_BASE}${base(deviceId)}/live.stream?kind=${kind}&_=${nonce}`;
 }
 
@@ -55,7 +56,7 @@ export interface RemoteInputRequest {
   endX?: number;
   endY?: number;
   durationMs?: number;
-  key?: 'back' | 'home' | 'recents' | 'notifications' | 'quicksettings' | 'power' | 'lock' | 'volume_up' | 'volume_down';
+  key?: 'back' | 'home' | 'recents' | 'notifications' | 'quicksettings' | 'power' | 'lock' | 'volume_up' | 'volume_down' | 'enter' | 'backspace';
   text?: string;
 }
 

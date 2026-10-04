@@ -32,7 +32,7 @@ class RemoteInputHandler : CommandHandler {
         val success = when (p.action.lowercase()) {
             "tap" -> {
                 if (x == null || y == null) false
-                else ScreenCaptureAccessibilityService.injectTap(x, y)
+                else ScreenCaptureAccessibilityService.injectTap(x, y, p.durationMs ?: 50L)
             }
             "swipe" -> {
                 if (x == null || y == null || endX == null || endY == null) false

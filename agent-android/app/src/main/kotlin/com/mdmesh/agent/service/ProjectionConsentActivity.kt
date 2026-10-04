@@ -51,7 +51,7 @@ class ProjectionConsentActivity : Activity() {
             Log.e(TAG, "could not request screen capture", it)
             fallbackAndFinish()
         }
-        handler.postDelayed({ fallbackAndFinish() }, if (autoConsent) 30_000L else 120_000L)
+        handler.postDelayed({ fallbackAndFinish() }, if (autoConsent) 45_000L else 120_000L)
     }
 
     @Deprecated("Deprecated in Java")

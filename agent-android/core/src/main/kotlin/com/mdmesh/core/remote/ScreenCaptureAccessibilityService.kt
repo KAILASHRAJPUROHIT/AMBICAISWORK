@@ -135,9 +135,13 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
         }
         for (root in roots) {
             val pkg = root.packageName?.toString() ?: continue
-            if (pkg != "com.android.systemui" && pkg != "com.miui.securitycenter") continue
-            // Android 14+ lets the user pick "one app" vs "entire screen"; choose entire screen first.
-            root.findAccessibilityNodeInfosByText("Entire screen").firstOrNull()?.let { clickUp(it) }
+            if (pkg !in CONSENT_PACKAGES) continue
+            // Android 14+ opens on "Share one app"; open that menu, then choose the entire screen (the next poll presses Start).
+            val oneApp = ONE_APP_LABELS.firstNotNullOfOrNull { l -> root.findAccessibilityNodeInfosByText(l).firstOrNull() }
+            if (oneApp != null && root.findAccessibilityNodeInfosByText("Entire screen").isEmpty() && root.findAccessibilityNodeInfosByText("entire screen").isEmpty()) {
+                if (clickUp(oneApp)) return
+            }
+            (root.findAccessibilityNodeInfosByText("Entire screen").firstOrNull() ?: root.findAccessibilityNodeInfosByText("entire screen").firstOrNull())?.let { clickUp(it) }
             val byId = root.findAccessibilityNodeInfosByViewId("android:id/button1").firstOrNull()
             if (byId != null && clickUp(byId)) return
             for (label in ACCEPT_LABELS) {
@@ -145,6 +149,21 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
                 if (node != null && clickUp(node)) return
             }
         }
+    }
+
+    private val pollHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val pollTick = object : Runnable {
+        override fun run() {
+            if (System.currentTimeMillis() >= consentUntilMs) return
+            runCatching { acceptProjectionDialog() }
+            pollHandler.postDelayed(this, 250L)
+        }
+    }
+
+    /** Events alone can be missed while the prompt animates in, so while armed the dialog is also checked 4 times a second. */
+    private fun startConsentPolling() {
+        pollHandler.removeCallbacks(pollTick)
+        pollHandler.post(pollTick)
     }
 
     private fun clickUp(start: AccessibilityNodeInfo): Boolean {
@@ -159,11 +178,18 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
     companion object {
         @Volatile private var instance: ScreenCaptureAccessibilityService? = null
         @Volatile private var consentUntilMs = 0L
-        private val ACCEPT_LABELS = listOf("Start now", "Share screen", "Start", "Share", "Allow")
+        private val ACCEPT_LABELS = listOf("Start now", "Share screen", "Share entire screen", "Start", "Share", "Allow")
+        /** Only these system windows are ever touched by the consent clicker. */
+        private val CONSENT_PACKAGES = setOf(
+            "com.android.systemui", "com.miui.securitycenter", "android",
+            "com.android.permissioncontroller", "com.google.android.permissioncontroller",
+        )
+        private val ONE_APP_LABELS = listOf("Share one app", "A single app", "Single app")
 
         /** Auto-press the projection consent button for the next [windowMs]. */
-        fun armProjectionConsent(windowMs: Long = 25_000L) {
+        fun armProjectionConsent(windowMs: Long = 40_000L) {
             consentUntilMs = System.currentTimeMillis() + windowMs
+            instance?.startConsentPolling()
         }
 
         fun disarmProjectionConsent() {
@@ -186,13 +212,13 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
         }
 
         /** Inject a tap gesture at relative coordinates (0.0 to 1.0). */
-        fun injectTap(xRatio: Float, yRatio: Float): Boolean {
+        fun injectTap(xRatio: Float, yRatio: Float, durationMs: Long = 50L): Boolean {
             val svc = instance ?: return false
             val dm = svc.resources.displayMetrics
             val x = (xRatio * dm.widthPixels).coerceIn(0f, dm.widthPixels.toFloat())
             val y = (yRatio * dm.heightPixels).coerceIn(0f, dm.heightPixels.toFloat())
             val path = android.graphics.Path().apply { moveTo(x, y) }
-            val stroke = android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 50)
+            val stroke = android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, durationMs.coerceIn(20L, 2000L))
             val gesture = android.accessibilityservice.GestureDescription.Builder().addStroke(stroke).build()
             return svc.dispatchGesture(gesture, null, null)
         }
@@ -251,6 +277,28 @@ class ScreenCaptureAccessibilityService : AccessibilityService() {
                 "lock" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     svc.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
                 } else false
+                "backspace" -> {
+                    val node = svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+                    val text = node.text?.toString() ?: ""
+                    val end = if (node.textSelectionEnd >= 0) node.textSelectionEnd else text.length
+                    val start = if (node.textSelectionStart >= 0) node.textSelectionStart else end
+                    val cut = if (start != end) start to end else (if (end > 0) end - 1 to end else return true)
+                    val next = text.removeRange(cut.first, cut.second)
+                    node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, android.os.Bundle().apply {
+                        putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, next)
+                    })
+                    node.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, android.os.Bundle().apply {
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, cut.first)
+                        putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, cut.first)
+                    })
+                    true
+                }
+                "enter" -> {
+                    val node = svc.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+                    } else false
+                }
                 "volume_up" -> {
                     val am = svc.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
                     am?.adjustVolume(android.media.AudioManager.ADJUST_RAISE, android.media.AudioManager.FLAG_SHOW_UI)

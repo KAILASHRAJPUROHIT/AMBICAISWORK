@@ -62,6 +62,8 @@ public class RemoteSnapshotUploadResource {
 
     private static final Logger logger = LoggerFactory.getLogger(RemoteSnapshotUploadResource.class);
     private static final Set<String> KNOWN_KINDS = Set.of("screen", "cameraFront", "cameraBack", "mic");
+    /** Channels the live relay carries. "audio" is the live microphone (PCM), distinct from the "mic" snapshot clip. */
+    private static final Set<String> LIVE_KINDS = Set.of("screen", "cameraFront", "cameraBack", "audio");
     // Generous for a compressed JPEG screenshot/photo or a short audio clip, small enough that a
     // misbehaving/malicious client can't use this as an unbounded upload sink.
     private static final int MAX_BYTES = 8 * 1024 * 1024;
@@ -155,7 +157,7 @@ public class RemoteSnapshotUploadResource {
             return Response.PERMISSION_DENIED();
         }
         String kind = liveKind == null || liveKind.isEmpty() ? "screen" : liveKind;
-        if (!KNOWN_KINDS.contains(kind) || "mic".equals(kind)) {
+        if (!LIVE_KINDS.contains(kind)) {
             return Response.ERROR("error.remote.kind.invalid");
         }
         if (body == null) {
@@ -173,7 +175,7 @@ public class RemoteSnapshotUploadResource {
             int type = data[pos] & 0xff;
             int len = ((data[pos + 9] & 0xff) << 24) | ((data[pos + 10] & 0xff) << 16)
                     | ((data[pos + 11] & 0xff) << 8) | (data[pos + 12] & 0xff);
-            if (type < 1 || type > 4 || len < 0 || pos + hdr + len > data.length) {
+            if (type < 1 || type > 5 || len < 0 || pos + hdr + len > data.length) {
                 return Response.ERROR("error.remote.file.read");
             }
             liveHub.publish(deviceNumber + "|" + kind, type, java.util.Arrays.copyOfRange(data, pos, pos + hdr + len));

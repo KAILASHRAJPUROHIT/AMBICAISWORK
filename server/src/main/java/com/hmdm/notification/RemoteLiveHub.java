@@ -12,14 +12,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * joining mid-stream starts cleanly on a keyframe, and a slow viewer skips forward to the newest
  * keyframe instead of building latency.
  *
- * <p>Packet framing (identical on both legs): type(1: 1=config, 2=key, 3=delta, 4=meta JSON) | ptsUs(8, BE) |
- * length(4, BE) | payload.</p>
+ * <p>Packet framing (identical on both legs): type(1: 1=config, 2=key, 3=delta, 4=meta JSON, 5=audio PCM) | ptsUs(8, BE) |
+ * length(4, BE) | payload. Audio (type 5) has no keyframes: the hub keeps only the last few hundred milliseconds so a listener joins live.</p>
  */
 @Singleton
 public class RemoteLiveHub {
 
     public static final int HEADER = 13;
     private static final int MAX_GOP_PACKETS = 900;
+    /** Audio packets kept per device (about 120 ms each): enough for a short jitter buffer, never a growing delay. */
+    private static final int MAX_AUDIO_PACKETS = 40;
+    private static final int AUDIO_JOIN_BACKLOG = 2;
 
     public static final class Batch {
         public final List<byte[]> packets;
@@ -39,11 +42,12 @@ public class RemoteLiveHub {
         long baseSeq = 1;   // sequence number of gop.get(0)
         long nextSeq = 1;   // sequence number the next packet will get
         long updatedAt;
+        boolean audio;
     }
 
     private final ConcurrentHashMap<String, Slot> slots = new ConcurrentHashMap<>();
 
-    /** @param type 1 config, 2 key, 3 delta, 4 meta; {@code framed} is the complete packet including header. */
+    /** @param type 1 config, 2 key, 3 delta, 4 meta, 5 audio PCM; {@code framed} is the complete packet including header. */
     public void publish(String deviceNumber, int type, byte[] framed) {
         Slot slot = slots.computeIfAbsent(deviceNumber, k -> new Slot());
         synchronized (slot.lock) {
@@ -51,6 +55,14 @@ public class RemoteLiveHub {
                 slot.config = framed;
             } else if (type == 4) {
                 slot.meta = framed;
+            } else if (type == 5) {
+                slot.audio = true;
+                slot.gop.add(framed);
+                slot.nextSeq++;
+                while (slot.gop.size() > MAX_AUDIO_PACKETS) {
+                    slot.gop.remove(0);
+                    slot.baseSeq++;
+                }
             } else {
                 if (type == 2 || slot.gop.size() >= MAX_GOP_PACKETS) {
                     slot.gop.clear();
@@ -86,6 +98,8 @@ public class RemoteLiveHub {
     public long startCursor(String deviceNumber) {
         Slot slot = slots.computeIfAbsent(deviceNumber, k -> new Slot());
         synchronized (slot.lock) {
+            // Audio has no keyframe to wait for: a new listener starts almost at the live edge.
+            if (slot.audio) return Math.max(slot.baseSeq, slot.nextSeq - AUDIO_JOIN_BACKLOG);
             return slot.baseSeq;
         }
     }

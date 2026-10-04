@@ -86,6 +86,8 @@ export function KioskEnterModal({
   const [busy, setBusy] = useState(false);
   const [kioskActive, setKioskActive] = useState<boolean | null>(null);
   const [restored, setRestored] = useState(false);
+  /** True while the password field holds the one saved with this device's last kiosk setup (kept as-is on OK). */
+  const [passwordSaved, setPasswordSaved] = useState(false);
 
   // Library (default source) — the app catalog / uploaded apps.
   const [lib, setLib] = useState<Application[] | null>(null);
@@ -130,6 +132,9 @@ export function KioskEnterModal({
         if (payload.exitMode === 'visible' || payload.exitMode === 'remote' || payload.exitMode === 'gesture') {
           setExitMode(payload.exitMode);
         }
+        // Re-entering kiosk keeps the exit password this device already has; the person only types one to change it.
+        const saved = typeof payload.password === 'string' ? payload.password : '';
+        if (saved) { setPassword(saved); setPasswordSaved(true); }
         setRestored(true);
       })
       .catch(() => { if (alive) setKioskActive(false); });
@@ -353,11 +358,17 @@ export function KioskEnterModal({
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => { setPassword(e.target.value); setPasswordSaved(false); }}
               placeholder="optional"
               autoComplete="new-password"
               name="kiosk-exit-password"
             />
+            {passwordSaved && password ? (
+              <small className="muted">
+                Saved password kept as it is.{' '}
+                <button type="button" className="btn btn-sm" onClick={() => { setPassword(''); setPasswordSaved(false); }}>Remove it</button>
+              </small>
+            ) : null}
           </label>
         </div>
 
