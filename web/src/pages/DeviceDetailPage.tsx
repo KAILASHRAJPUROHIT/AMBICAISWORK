@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { AppShell } from '../ui/AppShell';
 import { DeviceGlyph } from '../ui/DeviceGlyph';
 import {
-  searchDevices, updateDeviceDescription, type DeviceView, type ConfigurationLookup,
+  searchDevices, updateDeviceDescription, deleteDevicesBulk, type DeviceView, type ConfigurationLookup,
 } from '../api/devices';
 import { ActionConsole } from '../components/ActionConsole';
 import { TelemetryCard } from '../components/TelemetryCard';
@@ -126,6 +126,9 @@ export function DeviceDetailPage() {
   const [tele, setTele] = useState<TelemetrySnapshot | null>(null);
   const [ds, setDs] = useState<DeviceState | null>(null);
   const [tab, setTab] = useState<Tab>('control');
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removeText, setRemoveText] = useState('');
+  const [removing, setRemoving] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -364,6 +367,9 @@ export function DeviceDetailPage() {
             <button className="sec" disabled={busy} onClick={() => void installConfigApps()}>
               Install config apps
             </button>
+            <button className="sec" disabled={busy} style={{ color: 'var(--bad, #ef4444)' }} onClick={() => { setRemoveText(''); setRemoveOpen(true); }}>
+              Remove from fleet
+            </button>
           </div>
 
           {groups.map((g) => (
@@ -416,6 +422,38 @@ export function DeviceDetailPage() {
           </div>
         </section>
       </div>
+      {removeOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" onClick={() => !removing && setRemoveOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Remove {device.description || device.number} from the fleet?</h3>
+            <p className="muted" style={{ marginTop: 2 }}>
+              This deletes the device's record from the console: its history, events and settings here. It does <b>not</b> wipe the
+              phone or remove the agent from it. A device that is still enrolled and online will simply appear again the next time it
+              checks in, so wipe or release it first if you are retiring it.
+            </p>
+            <label className="field">
+              <span>Type <b>{device.number}</b> to confirm</span>
+              <input className="input" value={removeText} onChange={(e) => setRemoveText(e.target.value)} autoFocus />
+            </label>
+            <div className="modal-actions">
+              <button className="btn" disabled={removing} onClick={() => setRemoveOpen(false)}>Cancel</button>
+              <button
+                className="btn btn-danger"
+                disabled={removing || removeText.trim() !== device.number}
+                onClick={() => {
+                  setRemoving(true);
+                  deleteDevicesBulk([device.id])
+                    .then(() => { toast.push('ok', 'Device removed', `${device.description || device.number} is no longer in the fleet.`); navigate('/devices'); })
+                    .catch((e) => toast.push('err', 'Could not remove the device', e instanceof Error ? e.message : ''))
+                    .finally(() => setRemoving(false));
+                }}
+              >
+                {removing ? 'Removing…' : 'Remove from fleet'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
