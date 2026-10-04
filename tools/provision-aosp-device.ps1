@@ -19,6 +19,14 @@ $Package = 'com.mdmesh.agent'
 $Admin = "$Package/.admin.AdminReceiver"
 $Bootstrap = "$Package/.provisioning.AospUsbBootstrapActivity"
 
+# Runs adb and returns everything it printed (stdout and stderr) as text. Under $ErrorActionPreference='Stop', PowerShell turns any
+# native stderr line into a terminating error, which would hide adb's own message, so this relaxes it for the call.
+function Get-AdbText([string[]] $Arguments) {
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { return ((& adb -s $Serial @Arguments 2>&1 | ForEach-Object { "$_" }) -join "`n") } finally { $ErrorActionPreference = $old }
+}
+
 function Invoke-Adb([string[]] $Arguments) {
     & adb -s $Serial @Arguments
     if ($LASTEXITCODE -ne 0) { throw "adb failed: $($Arguments -join ' ')" }
@@ -36,7 +44,7 @@ if (-not $state) { throw "Device $Serial is not connected/authorized in adb." }
 
 # `dpm list-owners` throws "Calling identity is not authorized" on HyperOS until "USB debugging (Security settings)" is on,
 # so read the owner from the device-policy dump instead.
-$dump = (& adb -s $Serial shell dumpsys device_policy 2>&1) -join "`n"
+$dump = Get-AdbText @('shell', 'dumpsys', 'device_policy')
 $ownerBlock = [regex]::Match($dump, 'Device Owner:[\s\S]{0,300}')
 if ($ownerBlock.Success -and $ownerBlock.Value -match 'admin=ComponentInfo\{([^/}]+)') {
     if ($Matches[1] -ne $Package) {
@@ -45,15 +53,15 @@ if ($ownerBlock.Success -and $ownerBlock.Value -match 'admin=ComponentInfo\{([^/
     Write-Host 'AMBIC agent is already Device Owner; not reassigning it.'
 } else {
     if (-not $SkipInstall) { Invoke-Adb @('install', '-r', $ApkPath) }
-    $installed = (& adb -s $Serial shell pm list packages $Package 2>&1) -join "`n"
+    $installed = Get-AdbText @('shell', 'pm', 'list', 'packages', $Package)
     if ($installed -notmatch [regex]::Escape("package:$Package")) {
         throw "The agent is not installed. Install the APK from the phone's Files app, then run this again with -SkipInstall."
     }
-    $accounts = (& adb -s $Serial shell dumpsys account 2>&1) -join "`n"
+    $accounts = Get-AdbText @('shell', 'dumpsys', 'account')
     if ($accounts -match 'Accounts: ([1-9]\d*)') {
         throw "The phone still has $($Matches[1]) account(s) (Mi Account / Google). Sign out and remove them all first; Device Owner setup refuses while any exist."
     }
-    $out = (& adb -s $Serial shell dpm set-device-owner $Admin 2>&1) -join "`n"
+    $out = Get-AdbText @('shell', 'dpm', 'set-device-owner', $Admin)
     if ($out -match 'Calling identity is not authorized') {
         throw "Xiaomi is blocking adb. On the phone turn on Developer options > 'USB debugging (Security settings)' (needs a Mi Account; sign out again afterwards), then run this again."
     }
