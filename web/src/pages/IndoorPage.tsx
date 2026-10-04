@@ -61,7 +61,7 @@ export function IndoorPage() {
   const edit = (p: IndoorPlan) => { setPlan(p); setDirty(true); };
 
   const save = async () => {
-    if (!(plan.widthM > 0 && plan.heightM > 0)) { toast.push('err', 'Enter the store width and depth in metres'); return; }
+    if (!(plan.widthM > 0 && plan.heightM > 0)) { toast.push('err', 'Enter the store width and depth in metres', ''); return; }
     setSaving(true);
     try {
       await saveIndoorMap(plan, imageChanged ? image : undefined);
