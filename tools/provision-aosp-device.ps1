@@ -6,8 +6,12 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $Serial,
-    [Parameter(Mandatory)] [string] $ApkPath,
-    [string] $ServerUrl = 'https://mdm.ambicdigital.in'
+    # Not needed with -SkipInstall.
+    [string] $ApkPath,
+    [string] $ServerUrl = 'https://mdm.ambicdigital.in',
+    # Use when the agent is ALREADY installed. Xiaomi/HyperOS refuses `adb install` (INSTALL_FAILED_USER_RESTRICTED) unless
+    # "Install via USB" is on, so install the APK from the phone's own Files app instead and run this with -SkipInstall.
+    [switch] $SkipInstall
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,7 +24,7 @@ function Invoke-Adb([string[]] $Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "adb failed: $($Arguments -join ' ')" }
 }
 
-if (-not (Test-Path -LiteralPath $ApkPath -PathType Leaf)) {
+if (-not $SkipInstall -and -not (Test-Path -LiteralPath $ApkPath -PathType Leaf)) {
     throw "APK not found: $ApkPath"
 }
 if ($ServerUrl -notmatch '^https://[^/]+') {
@@ -30,15 +34,31 @@ if ($ServerUrl -notmatch '^https://[^/]+') {
 $state = (& adb devices) -match "^$([regex]::Escape($Serial))\s+device$"
 if (-not $state) { throw "Device $Serial is not connected/authorized in adb." }
 
-$owners = (& adb -s $Serial shell dpm list-owners 2>&1) -join "`n"
-if ($owners -match 'Device Owner:') {
-    if ($owners -notmatch [regex]::Escape($Package)) {
-        throw "Refusing: device already has another Device Owner. No changes made."
+# `dpm list-owners` throws "Calling identity is not authorized" on HyperOS until "USB debugging (Security settings)" is on,
+# so read the owner from the device-policy dump instead.
+$dump = (& adb -s $Serial shell dumpsys device_policy 2>&1) -join "`n"
+$ownerBlock = [regex]::Match($dump, 'Device Owner:[\s\S]{0,300}')
+if ($ownerBlock.Success -and $ownerBlock.Value -match 'admin=ComponentInfo\{([^/}]+)') {
+    if ($Matches[1] -ne $Package) {
+        throw "Refusing: device already has another Device Owner ($($Matches[1])). No changes made."
     }
     Write-Host 'AMBIC agent is already Device Owner; not reassigning it.'
 } else {
-    Invoke-Adb @('install', '-r', $ApkPath)
-    Invoke-Adb @('shell', 'dpm', 'set-device-owner', $Admin)
+    if (-not $SkipInstall) { Invoke-Adb @('install', '-r', $ApkPath) }
+    $installed = (& adb -s $Serial shell pm list packages $Package 2>&1) -join "`n"
+    if ($installed -notmatch [regex]::Escape("package:$Package")) {
+        throw "The agent is not installed. Install the APK from the phone's Files app, then run this again with -SkipInstall."
+    }
+    $accounts = (& adb -s $Serial shell dumpsys account 2>&1) -join "`n"
+    if ($accounts -match 'Accounts: ([1-9]\d*)') {
+        throw "The phone still has $($Matches[1]) account(s) (Mi Account / Google). Sign out and remove them all first; Device Owner setup refuses while any exist."
+    }
+    $out = (& adb -s $Serial shell dpm set-device-owner $Admin 2>&1) -join "`n"
+    if ($out -match 'Calling identity is not authorized') {
+        throw "Xiaomi is blocking adb. On the phone turn on Developer options > 'USB debugging (Security settings)' (needs a Mi Account; sign out again afterwards), then run this again."
+    }
+    if ($out -notmatch 'Success') { throw "set-device-owner failed: $out" }
+    Write-Host 'AMBIC agent is now Device Owner.'
 }
 
 # Initial grant of the WRITE_SETTINGS appop -- needed ONLY for auto-rotation. Android resets it on
