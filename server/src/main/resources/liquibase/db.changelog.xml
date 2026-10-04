@@ -2969,6 +2969,16 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.10.04-admin-email" author="ambic" context="common">
+        <comment>Replace the project's placeholder address on the default admin account. Only touches a row that still has the placeholder, so an address set by hand is never overwritten.</comment>
+        <sql>
+            UPDATE users SET email = 'ambicdigital@gmail.com' WHERE login = 'admin' AND email = 'fast.daemon@gmail.com';
+        </sql>
+        <rollback>
+            UPDATE users SET email = 'fast.daemon@gmail.com' WHERE login = 'admin' AND email = 'ambicdigital@gmail.com';
+        </rollback>
+    </changeSet>
+
     <changeSet id="26.10.04-device-unlock-otp" author="ambic" context="common">
         <comment>One-time codes that let an administrator lift a tablet's offline lockdown. The code is stored only as a salted SHA-256 digest.</comment>
         <sql>
