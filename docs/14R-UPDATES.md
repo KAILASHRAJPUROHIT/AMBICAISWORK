@@ -46,3 +46,36 @@ this laptop is on, on the same network, and the phone is awake and reachable.
   can no longer be updated in place and must be reset and re-provisioned with the release key.
 * The clean long-term alternative is to factory-reset the 14R once and re-provision it with the **release-signed** China
   build, after which it follows the normal release rollout like the tablets. That needs your explicit approval (it wipes the phone).
+
+## Re-provisioning runbook (the permanent fix)
+
+Goal: move the 14R from the laptop's debug key to the normal release key, so it follows console rollouts like the tablets.
+**This wipes the phone.** Back up anything you want from it first.
+
+**A. Before the reset (console, phone still enrolled and online)**
+1. Console > the 14R > Control: run **Factory reset protection: off** (Safe group). Wait until its command shows Done.
+2. On the phone: remove every Google account and sign out of the **Mi Account**, and turn off **Find device** (Settings > Xiaomi
+   Account). Otherwise Xiaomi's own activation lock asks for that account after the reset.
+3. Run **Wipe device** (type to confirm). A Device Owner can only be removed by a wipe; this removes the old DPC and resets the phone
+   in one step. If the phone will not accept it: power off, hold Volume Up + Power for Recovery, choose Wipe data.
+
+**B. After the reset (phone)**
+4. Setup wizard: choose language and region, Wi-Fi is optional. **Skip the Mi Account and Google sign-in.** Do not add any account.
+5. Settings > About phone: tap the OS version 7 times; then Additional settings > Developer options: turn on **USB debugging**,
+   **Install via USB** and, if offered, **USB debugging (Security settings)**. If Xiaomi insists on a Mi Account to enable these,
+   sign in, switch them on, then **sign out and remove the account again**: provisioning fails while any account exists.
+6. Plug in by USB, tap **Allow** (tick Always allow). `adb devices` should list it as `device`.
+
+**C. Debloat (laptop)**
+7. `powershell tools\debloat-14r.ps1 -Serial <serial>` previews the list. When happy: add `-Apply`. Undo with `-Restore`.
+
+**D. Provision (laptop)**
+8. Console > Enrollment: create a fresh single-use token. Get the release APK: `gh release download vX.Y.Z --repo KAILASHRAJPUROHIT/AMBICAISWORK -p mdmesh-agent.apk`.
+9. `powershell tools\provision-aosp-device.ps1 -Serial <serial> -ApkPath mdmesh-agent.apk` and paste the token when asked.
+10. Check the console lists the 14R, online, Device Owner = yes, version = the release.
+11. On the phone: Developer options > Wireless debugging > on, accept **Always allow on this network**, *Pair device with pairing code*,
+    then on the laptop `adb pair <ip>:<port> <code>`. (The reconnect task then keeps it connected.)
+
+**E. Clean up**
+12. Remove the interim updater, which no longer applies to a release-signed phone:
+    `Unregister-ScheduledTask -TaskName 'MDM 14R Updater' -Confirm:$false`. Update `tools/KNOWN-DEVICES.md` with the new serial.
