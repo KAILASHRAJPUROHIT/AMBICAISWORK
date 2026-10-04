@@ -24,7 +24,9 @@ package com.hmdm.service;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import com.hmdm.event.EventService;
+import com.hmdm.persistence.SmtpOverrideDAO;
 import com.hmdm.persistence.domain.Customer;
+import com.hmdm.persistence.domain.SmtpOverride;
 import com.hmdm.util.StringUtil;
 import liquibase.util.FileUtil;
 import org.apache.commons.io.FileUtils;
@@ -60,6 +62,7 @@ public class EmailService {
     private final String smtpUsername;
     private final String smtpPassword;
     private final String smtpFrom;
+    private final SmtpOverrideDAO overrides;
 
     private final String appName;
     private final String baseUrl;
@@ -81,6 +84,7 @@ public class EmailService {
                         @Named("smtp.username") String smtpUsername,
                         @Named("smtp.password") String smtpPassword,
                         @Named("smtp.from") String smtpFrom,
+                        SmtpOverrideDAO overrides,
                         @Named("rebranding.name") String appName,
                         @Named("base.url") String baseUrl,
                         @Named("email.recovery.subj") String recoveryEmailSubj,
@@ -98,6 +102,7 @@ public class EmailService {
         this.smtpUsername = smtpUsername;
         this.smtpPassword = smtpPassword;
         this.smtpFrom = smtpFrom;
+        this.overrides = overrides;
         if (appName.equals("")) {
             appName = "Headwind MDM";
         }
@@ -111,8 +116,39 @@ public class EmailService {
         this.signupCompleteEmailBody = signupCompleteEmailBody;
     }
 
+    /** The settings in force right now: those entered in the console if any, otherwise the server's SMTP_* values. */
+    private static final class Cfg {
+        String host; int port; boolean ssl; boolean startTls; String user; String pass; String from;
+    }
+
+    private Cfg cfg() {
+        Cfg c = new Cfg();
+        SmtpOverride o = overrides == null ? null : overrides.effective();
+        if (o != null && o.getHost() != null && !o.getHost().trim().isEmpty()) {
+            c.host = o.getHost().trim();
+            c.port = o.getPort();
+            c.ssl = "ssl".equals(o.getSecurity());
+            c.startTls = "starttls".equals(o.getSecurity());
+            c.user = o.getUsername() == null ? "" : o.getUsername();
+            c.pass = o.getPassword() == null ? "" : o.getPassword();
+            c.from = o.getFromAddress() != null && !o.getFromAddress().trim().isEmpty() ? o.getFromAddress().trim()
+                    : (!c.user.isEmpty() ? c.user : smtpFrom);
+        } else {
+            c.host = smtpHost; c.port = smtpPort; c.ssl = sslEnabled; c.startTls = startTlsEnabled;
+            c.user = smtpUsername; c.pass = smtpPassword; c.from = smtpFrom;
+        }
+        return c;
+    }
+
     public boolean isConfigured() {
-        return !smtpHost.equals("");
+        return !cfg().host.equals("");
+    }
+
+    /** "console" when the settings were entered in the console, "server" when they come from the environment, "none" otherwise. */
+    public String configSource() {
+        SmtpOverride o = overrides == null ? null : overrides.effective();
+        if (o != null && o.getHost() != null && !o.getHost().trim().isEmpty()) return "console";
+        return smtpHost.equals("") ? "none" : "server";
     }
 
 
@@ -121,16 +157,26 @@ public class EmailService {
     }
 
     public boolean sendEmail(String to, String subj, String body, String replyTo) {
-        if (smtpHost.equals("")) {
-            return false;
+        return sendEmailReport(to, subj, body, replyTo) == null;
+    }
+
+    /** Sends an email and returns null on success, or a short reason on failure (used by the console's "send test email"). */
+    public String sendEmailReport(String to, String subj, String body, String replyTo) {
+        final Cfg c = cfg();
+        if (c.host.equals("")) {
+            return "Outgoing email is not configured";
         }
         try {
             Properties properties = new Properties();
-            properties.put("mail.smtp.host", smtpHost);
-            properties.put("mail.smtp.port", smtpPort);
-            properties.put("mail.smtp.auth", !smtpUsername.equals(""));
-            properties.put("mail.smtp.ssl.enable", sslEnabled);
-            properties.put("mail.smtp.starttls.enable", startTlsEnabled);
+            properties.put("mail.smtp.host", c.host);
+            properties.put("mail.smtp.port", c.port);
+            properties.put("mail.smtp.auth", !c.user.equals(""));
+            properties.put("mail.smtp.ssl.enable", c.ssl);
+            properties.put("mail.smtp.starttls.enable", c.startTls);
+            // A mail server that does not answer must never hang a request (sign-in sends its code through here).
+            properties.put("mail.smtp.connectiontimeout", "10000");
+            properties.put("mail.smtp.timeout", "15000");
+            properties.put("mail.smtp.writetimeout", "15000");
             if (!StringUtil.isEmpty(sslProtocols)) {
                 properties.put("mail.smtp.ssl.protocols", sslProtocols);
             }
@@ -138,17 +184,17 @@ public class EmailService {
                 properties.put("mail.smtp.ssl.trust", sslTrust);
             }
 
-            logger.info("SMTP connection: " + smtpHost + ":" + smtpPort + ", ssl:" + sslEnabled + ", startTls:" + startTlsEnabled);
+            logger.info("SMTP connection: " + c.host + ":" + c.port + ", ssl:" + c.ssl + ", startTls:" + c.startTls);
 
             Session session = Session.getInstance(properties, new Authenticator() {
                 @Override
                 protected PasswordAuthentication getPasswordAuthentication() {
-                    return new PasswordAuthentication(smtpUsername, smtpPassword);
+                    return new PasswordAuthentication(c.user, c.pass);
                 }
             });
 
             Message message = new MimeMessage(session);
-            message.setFrom(new InternetAddress(smtpFrom));
+            message.setFrom(new InternetAddress(c.from));
             message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
             if (replyTo != null && !replyTo.equals("")) {
                 message.addHeader("Reply-To", replyTo);
@@ -165,11 +211,12 @@ public class EmailService {
 
             Transport.send(message);
 
-            return true;
+            return null;
 
         } catch (Exception e) {
             logger.warn(e.getMessage());
-            return false;
+            String reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            return reason.length() > 300 ? reason.substring(0, 300) : reason;
         }
     }
 

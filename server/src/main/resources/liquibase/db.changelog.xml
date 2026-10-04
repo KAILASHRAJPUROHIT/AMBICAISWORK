@@ -2969,6 +2969,26 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.10.04-smtp-override" author="ambic" context="common">
+        <comment>Outgoing-email settings entered in the console (override the server's SMTP_* values). One row; the password is AES-GCM encrypted under a key derived from hash.secret.</comment>
+        <sql>
+            CREATE TABLE smtpOverride (
+                id          INT PRIMARY KEY CHECK (id = 1),
+                host        VARCHAR(255) NOT NULL,
+                port        INT NOT NULL,
+                security    VARCHAR(10) NOT NULL,
+                username    VARCHAR(255) NOT NULL DEFAULT '',
+                passwordEnc TEXT,
+                fromAddress VARCHAR(320),
+                updatedAt   BIGINT NOT NULL,
+                updatedBy   VARCHAR(100)
+            );
+        </sql>
+        <rollback>
+            DROP TABLE smtpOverride;
+        </rollback>
+    </changeSet>
+
     <changeSet id="26.10.04-admin-email" author="ambic" context="common">
         <comment>Replace the project's placeholder address on the default admin account. Only touches a row that still has the placeholder, so an address set by hand is never overwritten.</comment>
         <sql>

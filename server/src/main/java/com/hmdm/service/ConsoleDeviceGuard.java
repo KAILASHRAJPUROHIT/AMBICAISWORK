@@ -61,6 +61,7 @@ public class ConsoleDeviceGuard {
     }
 
     public String mode() { return mode; }
+    public String recipient() { return recipient; }
     public String maskedRecipient() { return mask(recipient); }
 
     public Outcome check(User user, String fingerprint, String otp, String label, String ip, String userAgent) {

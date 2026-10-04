@@ -17,6 +17,7 @@ import { GeofencePanel } from '../components/GeofencePanel';
 import { beginFrpRecoveryAccountConnection, listFrpRecoveryAccounts, removeFrpRecoveryAccount, type FrpRecoveryAccount } from '../api/frp';
 import { orDash, fmtRelative } from '../ui/format';
 import { getIdleSeconds, setIdleSeconds } from '../auth/idle';
+import { SmtpPanel } from '../components/SmtpPanel';
 
 const APP_VERSION = '0.1.0';
 const DEFAULT_CONFIG_KEY = 'mdmesh-default-config';
@@ -66,6 +67,8 @@ export function SettingsPage() {
   const [consoleDevices, setConsoleDevices] = useState<ConsoleDeviceList | null>(null);
   const [consoleDevicesErr, setConsoleDevicesErr] = useState<string | null>(null);
   const [idleSeconds, setIdleState] = useState<number>(getIdleSeconds);
+  const [idleDraft, setIdleDraft] = useState<number>(getIdleSeconds);
+  const [idleSaved, setIdleSaved] = useState(false);
   const [tab, setTabState] = useState<SettingsTab>(initialTab);
   const setTab = (t: SettingsTab) => {
     setTabState(t);
@@ -347,12 +350,13 @@ export function SettingsPage() {
           <div className="panel-head">
             <h2 className="panel-title">Security</h2>
           </div>
+          <SmtpPanel />
           <div className="set-row">
             <span className="k">
               Allowed computers
               <small>
                 A computer you have not signed in from before needs a code emailed to {consoleDevices?.sentTo || 'the owner'}; once entered it is listed here and signs in without one.
-                {consoleDevices && !consoleDevices.enforcing ? ' The check is OFF right now: outgoing email is not configured on the server (set SMTP_HOST).' : ''}
+                {consoleDevices && !consoleDevices.enforcing ? ' NOT ACTIVE: set up Outgoing email above, then new computers will be asked for a code.' : ''}
               </small>
             </span>
             <span className="v" style={{ display: 'grid', gap: 6, justifyItems: 'end' }}>
@@ -382,14 +386,22 @@ export function SettingsPage() {
             </span>
             <span className="v">
               <select
-                value={idleSeconds}
+                value={idleDraft}
                 aria-label="Time of inactivity before automatic sign-out"
-                onChange={(e) => setIdleState(setIdleSeconds(Number(e.target.value)))}
+                onChange={(e) => { setIdleDraft(Number(e.target.value)); setIdleSaved(false); }}
                 style={{ padding: '6px 10px', borderRadius: 6 }}
               >
-                {!IDLE_CHOICES.some((c) => c.seconds === idleSeconds) && <option value={idleSeconds}>{idleSeconds} seconds (custom)</option>}
+                {!IDLE_CHOICES.some((c) => c.seconds === idleDraft) && <option value={idleDraft}>{idleDraft} seconds (custom)</option>}
                 {IDLE_CHOICES.map((c) => <option key={c.seconds} value={c.seconds}>{c.label}</option>)}
-              </select>
+              </select>{' '}
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={idleDraft === idleSeconds}
+                onClick={() => { setIdleState(setIdleSeconds(idleDraft)); setIdleSaved(true); }}
+              >
+                Save
+              </button>
+              {idleSaved && <small className="muted"> Saved: signs out after {IDLE_CHOICES.find((c) => c.seconds === idleSeconds)?.label ?? idleSeconds + ' seconds'} of no activity.</small>}
             </span>
           </div>
           <div className="set-row">
