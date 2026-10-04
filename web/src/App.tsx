@@ -12,6 +12,7 @@ import { AppsPage } from './pages/AppsPage';
 import { ConfigurationsPage } from './pages/ConfigurationsPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { IndoorPage } from './pages/IndoorPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { FleetPulseLayout } from './data/FleetPulse';
 
@@ -33,6 +34,7 @@ export default function App() {
               <Route path="/configs" element={<ConfigurationsPage />} />
               <Route path="/enroll" element={<EnrollPage />} />
               <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/indoor" element={<IndoorPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               </Route>
             </Route>

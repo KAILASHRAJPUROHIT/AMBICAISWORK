@@ -31,6 +31,9 @@ import com.mdmesh.core.command.handlers.DeviceWifiProfileHandler
 import com.mdmesh.core.command.handlers.DeviceRingHandler
 import com.mdmesh.core.command.handlers.DeviceLocationModeHandler
 import com.mdmesh.core.command.handlers.DeviceLocateHandler
+import com.mdmesh.core.command.handlers.DeviceIndoorLocateHandler
+import com.mdmesh.core.command.handlers.DeviceIndoorSurveyHandler
+import com.mdmesh.core.indoor.IndoorEngine
 import com.mdmesh.core.location.LocationCollector
 import com.mdmesh.core.command.handlers.DevicePowerModeHandler
 import com.mdmesh.core.command.handlers.DeviceRingStopHandler
@@ -354,6 +357,14 @@ object AgentModule {
     @IntoSet
     fun providePowerModeHandler(store: PowerModeStore): CommandHandler =
         DevicePowerModeHandler(store)
+
+    @Provides
+    @IntoSet
+    fun provideIndoorLocateHandler(engine: IndoorEngine): CommandHandler = DeviceIndoorLocateHandler(engine)
+
+    @Provides
+    @IntoSet
+    fun provideIndoorSurveyHandler(engine: IndoorEngine): CommandHandler = DeviceIndoorSurveyHandler(engine)
 
     @Provides
     @IntoSet

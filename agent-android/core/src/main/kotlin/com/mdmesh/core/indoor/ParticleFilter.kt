@@ -62,11 +62,11 @@ class ParticleFilter(
     }
 
     /** Correct the position with a live Wi-Fi scan (BSSID -> dBm). */
-    fun observe(scan: Map<String, Int>) {
+    fun observe(scan: Map<String, Int>, magneticUt: Double? = null) {
         if (scan.isEmpty()) return
         var total = 0.0
         for (i in 0 until count) {
-            w[i] *= survey.likelihood(Pt(xs[i], ys[i]), scan)
+            w[i] *= survey.likelihood(Pt(xs[i], ys[i]), scan, magneticUt)
             total += w[i]
         }
         if (total <= 1e-300) { scatter(); return }

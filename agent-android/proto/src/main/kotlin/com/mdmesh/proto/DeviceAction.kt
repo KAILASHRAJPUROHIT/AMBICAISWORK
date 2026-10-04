@@ -31,6 +31,12 @@ object DeviceAction {
     /** "Locate now": take a fresh fix immediately and return it in the result. No payload. */
     const val LOCATE = "device.locate"
 
+    /** "Locate in store": estimate the indoor position now from Wi-Fi. No payload. */
+    const val INDOOR_LOCATE = "device.indoorLocate"
+
+    /** Record a survey point where the device is standing. Payload: `{ "x": metres, "y": metres, "samples": 1..5 }`. */
+    const val INDOOR_SURVEY = "device.indoorSurvey"
+
     /** Location-mode values (see [LOCATION_MODE]). Passive = last-known (cheap); active = fresh fix. */
     const val LOCATION_PASSIVE = "passive"
     const val LOCATION_ACTIVE = "active"
@@ -91,7 +97,7 @@ object DeviceAction {
     /** Keys (after the `device.` prefix) advertised in `capabilities.device`. */
     val ADVERTISED_KEYS: List<String> = listOf(
         "lock", "reboot", "lockscreenMessage", "alert", "ring", "ringStop",
-        "passcodeReset", "wipe", "powerMode", "locationMode", "locate",
+        "passcodeReset", "wipe", "powerMode", "locationMode", "locate", "indoorLocate", "indoorSurvey",
         "passwordQuality", "wifiProfile", "certificate", "wallpaper", "kioskTheme",
     )
 }

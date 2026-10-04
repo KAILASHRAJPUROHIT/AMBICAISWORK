@@ -82,6 +82,16 @@ class FakeMdmApi : MdmApi {
         deviceId: String,
     ): ResponseEnvelope<com.mdmesh.proto.LeaderboardResponse> = leaderboardResponse
 
+    override suspend fun indoorBundle(
+        authorization: String,
+        deviceId: String,
+    ): ResponseEnvelope<com.mdmesh.proto.IndoorBundleDto> = ResponseEnvelope(status = "OK", data = null)
+
+    override suspend fun indoorSurvey(
+        authorization: String,
+        request: com.mdmesh.proto.IndoorSurveyRequest,
+    ): ResponseEnvelope<Unit> = ResponseEnvelope(status = "OK", data = null)
+
     override suspend fun enroll(request: AgentEnrollRequest): ResponseEnvelope<AgentEnrollResponse> {
         enrollRequests += request
         enrollGate?.await()

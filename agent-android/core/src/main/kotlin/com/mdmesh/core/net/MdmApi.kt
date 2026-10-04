@@ -11,6 +11,8 @@ import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Query
 import com.mdmesh.proto.LeaderboardResponse
+import com.mdmesh.proto.IndoorBundleDto
+import com.mdmesh.proto.IndoorSurveyRequest
 
 /**
  * Retrofit contract for the device <-> server agent v1 protocol.
@@ -50,4 +52,18 @@ interface MdmApi {
         @Header("Authorization") authorization: String,
         @Query("deviceId") deviceId: String,
     ): ResponseEnvelope<LeaderboardResponse>
+
+    /** The store floor plan + Wi-Fi survey for this device's customer (`data` is null when no plan exists). */
+    @GET("rest/public/agent/v1/indoor")
+    suspend fun indoorBundle(
+        @Header("Authorization") authorization: String,
+        @Query("deviceId") deviceId: String,
+    ): ResponseEnvelope<IndoorBundleDto>
+
+    /** Uploads one surveyed point (plan position + Wi-Fi readings). */
+    @POST("rest/public/agent/v1/indoor/survey")
+    suspend fun indoorSurvey(
+        @Header("Authorization") authorization: String,
+        @Body request: IndoorSurveyRequest,
+    ): ResponseEnvelope<Unit>
 }

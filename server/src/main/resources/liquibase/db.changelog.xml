@@ -3157,4 +3157,31 @@
         <rollback>ALTER TABLE settings DROP COLUMN kioskSections;</rollback>
     </changeSet>
 
+    <changeSet id="26.10.05-indoor-positioning" author="ambic" context="common">
+        <comment>Tables,new: indoorMap (one floor plan per customer: geometry JSON + picture) and indoorFingerprint (surveyed Wi-Fi readings per plan point) for in-store positioning.</comment>
+        <sql>
+            CREATE TABLE indoorMap (
+                customerId INT PRIMARY KEY REFERENCES customers(id) ON DELETE CASCADE,
+                plan       TEXT NOT NULL,
+                image      TEXT,
+                updatedAt  BIGINT NOT NULL
+            );
+            CREATE TABLE indoorFingerprint (
+                id         SERIAL PRIMARY KEY,
+                customerId INT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+                x          DOUBLE PRECISION NOT NULL,
+                y          DOUBLE PRECISION NOT NULL,
+                rssi       TEXT NOT NULL,
+                mag        DOUBLE PRECISION,
+                createdAt  BIGINT NOT NULL,
+                createdBy  VARCHAR(64)
+            );
+            CREATE INDEX indoorFingerprint_customer_idx ON indoorFingerprint (customerId);
+        </sql>
+        <rollback>
+            DROP TABLE indoorFingerprint;
+            DROP TABLE indoorMap;
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

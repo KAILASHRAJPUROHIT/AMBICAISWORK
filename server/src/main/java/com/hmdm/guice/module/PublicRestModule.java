@@ -49,5 +49,6 @@ public class PublicRestModule extends ServletModule {
         this.bind(com.hmdm.rest.resource.ClientBrandingPublicResource.class);
         this.bind(com.hmdm.rest.resource.LeaderboardIngestResource.class);
         this.bind(com.hmdm.rest.resource.LeaderboardReadResource.class);
+        this.bind(com.hmdm.rest.resource.IndoorAgentResource.class);
     }
 }

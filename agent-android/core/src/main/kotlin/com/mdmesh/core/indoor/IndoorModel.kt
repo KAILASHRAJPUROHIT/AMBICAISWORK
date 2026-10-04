@@ -32,7 +32,7 @@ class FloorPlan(val widthM: Double, val heightM: Double, val walls: List<Wall> =
 }
 
 /** One surveyed point: where it is on the plan and the signal strengths (dBm) heard there, keyed by BSSID. */
-data class Fingerprint(val at: Pt, val rssi: Map<String, Int>)
+data class Fingerprint(val at: Pt, val rssi: Map<String, Int>, val mag: Double? = null)
 
 /** The survey: every [Fingerprint] recorded while walking the store. */
 class FingerprintMap(val points: List<Fingerprint>) {
@@ -57,11 +57,27 @@ class FingerprintMap(val points: List<Fingerprint>) {
         return sums.mapValues { (k, v) -> v / weights.getValue(k) }
     }
 
+    /** Expected magnetic field strength (µT) at [p] from the nearest surveyed points that recorded one, or null. */
+    fun expectedMagAt(p: Pt): Double? {
+        val withMag = points.filter { it.mag != null }
+        if (withMag.isEmpty()) return null
+        val nearest = withMag.sortedBy { hypot(it.at.x - p.x, it.at.y - p.y) }.take(K)
+        var sum = 0.0
+        var wsum = 0.0
+        for (fp in nearest) {
+            val d = hypot(fp.at.x - p.x, fp.at.y - p.y)
+            val w = 1.0 / (d * d + 0.25)
+            sum += w * fp.mag!!
+            wsum += w
+        }
+        return sum / wsum
+    }
+
     /**
      * How well a live [scan] (BSSID -> dBm) agrees with what the survey expects at [p]. Higher is better; the value is
      * a likelihood in (0, 1], softened so a single bad reading cannot wipe out a good position.
      */
-    fun likelihood(p: Pt, scan: Map<String, Int>): Double {
+    fun likelihood(p: Pt, scan: Map<String, Int>, mag: Double? = null): Double {
         val expected = expectedAt(p) ?: return 1.0
         var sumSq = 0.0
         var used = 0
@@ -77,9 +93,15 @@ class FingerprintMap(val points: List<Fingerprint>) {
             sumSq += diff * diff
             used++
         }
-        if (used == 0) return 1.0
+        // The magnetic field is a weak, secondary cue: it only nudges, and never outweighs the Wi-Fi evidence.
+        val magFactor = if (mag != null) {
+            expectedMagAt(p)?.let { Math.exp(-0.5 * ((mag - it) / MAG_SIGMA_UT).let { z -> z * z }) }?.coerceAtLeast(0.2)
+        } else {
+            null
+        } ?: 1.0
+        if (used == 0) return magFactor
         // Tempered Gaussian: readings are correlated, so treating them as independent would make the filter overconfident.
-        return Math.exp(-TEMPER * sumSq / (2.0 * SIGMA * SIGMA * used.coerceAtLeast(1)) * used.coerceAtMost(MAX_EFFECTIVE))
+        return magFactor * Math.exp(-TEMPER * sumSq / (2.0 * SIGMA * SIGMA * used.coerceAtLeast(1)) * used.coerceAtMost(MAX_EFFECTIVE))
     }
 
     private companion object {
@@ -89,5 +111,6 @@ class FingerprintMap(val points: List<Fingerprint>) {
         const val AUDIBLE = -85
         const val TEMPER = 1.0
         const val MAX_EFFECTIVE = 6
+        const val MAG_SIGMA_UT = 8.0
     }
 }

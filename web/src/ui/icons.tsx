@@ -121,6 +121,13 @@ export const IconReport = (p: P) => (
   </Svg>
 );
 
+export const IconIndoor = (p: P) => (
+  <Svg {...p}>
+    <path d="M2 4.5 6 3l4 1.5L14 3v8.5L10 13l-4-1.5L2 13z" />
+    <path d="M6 3v8.5M10 4.5V13" />
+  </Svg>
+);
+
 export const IconSearch = (p: P) => (
   <Svg {...p}>
     <circle cx="7" cy="7" r="4.5" />

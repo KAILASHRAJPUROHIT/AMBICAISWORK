@@ -24,6 +24,7 @@ import javax.inject.Singleton
 class DynamicStateCollector @Inject constructor(
     @ApplicationContext private val context: Context,
     private val locationCollector: LocationCollector,
+    private val indoorEngine: com.mdmesh.core.indoor.IndoorEngine,
     private val networkUsageCollector: NetworkUsageCollector,
 ) {
     @Suppress("DEPRECATION")
@@ -68,6 +69,7 @@ class DynamicStateCollector @Inject constructor(
             lastBootAt = System.currentTimeMillis() - SystemClock.elapsedRealtime(),
             location = runCatching { locationCollector.collect() }.getOrNull(),
             dataUsage = runCatching { networkUsageCollector.collect() }.getOrNull(),
+            indoor = runCatching { indoorEngine.fix(INDOOR_FIX_MAX_AGE_MS) }.getOrNull(),
             writeSettingsGranted = runCatching { android.provider.Settings.System.canWrite(context) }.getOrNull(),
             wirelessDebuggingOn = runCatching {
                 // Hidden SDK constant Settings.Global.ADB_WIFI_ENABLED; literal key, see WirelessAdbEnabler.
@@ -136,6 +138,9 @@ class DynamicStateCollector @Inject constructor(
     }
 
     companion object {
+        /** An in-store position older than this is not reported. */
+        const val INDOOR_FIX_MAX_AGE_MS = 10 * 60_000L
+
         fun batteryPercent(level: Int, scale: Int): Int =
             if (scale <= 0 || level < 0) -1 else (level * 100 / scale)
 
