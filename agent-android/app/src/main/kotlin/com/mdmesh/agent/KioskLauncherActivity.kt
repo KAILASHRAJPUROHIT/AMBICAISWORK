@@ -455,6 +455,17 @@ class KioskLauncherActivity : FragmentActivity() {
 
     // --- Exit flow ---------------------------------------------------------------------------
 
+    /**
+     * Whether the header shows the ⋮ admin menu button. A "visible" kiosk always does; a "gesture" kiosk does too, as long as
+     * an exit password or fleet passcode exists, because without one a tap would leave kiosk with no check. A "remote"-only
+     * kiosk never offers an on-device exit.
+     */
+    private fun showAdminMenuButton(p: KioskApplyPayload): Boolean = when (p.exitMode) {
+        "remote" -> false
+        "visible" -> true
+        else -> !p.password.isNullOrBlank() || !fleetPasscodeHash.isNullOrBlank()
+    }
+
     private fun promptExit(p: KioskApplyPayload) {
         val pw = p.password
         val fleetHash = fleetPasscodeHash
@@ -1684,7 +1695,7 @@ class KioskLauncherActivity : FragmentActivity() {
         )
     }
 
-    /** Battery ring + %, Wi-Fi bars + network name, and (exitMode "visible") the admin menu button. */
+    /** Battery ring + %, Wi-Fi bars + network name, and the admin menu button when [showAdminMenuButton]. */
     private fun topRow(p: KioskApplyPayload, pal: Palette, m: Metrics, showPills: Boolean = true): View {
         val s = KioskStatusSource.read(this)
         val row = LinearLayout(this).apply {
@@ -1726,7 +1737,7 @@ class KioskLauncherActivity : FragmentActivity() {
         }
         row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
 
-        if (p.exitMode == "visible") {
+        if (showAdminMenuButton(p)) {
             row.addView(
                 ImageView(this).apply {
                     setImageResource(R.drawable.ic_ob_menu)
@@ -2096,7 +2107,7 @@ class KioskLauncherActivity : FragmentActivity() {
 
         val wifi = text("", 12f, color).apply { text = formatWifi(s); gravity = Gravity.CENTER_VERTICAL }
         wifiText = wifi
-        val endExtra = if (p.exitMode == "visible") dp(52) else 0
+        val endExtra = if (showAdminMenuButton(p)) dp(52) else 0
         parent.addView(
             FrameWrap(
                 this, wifi, Gravity.TOP or Gravity.END, dp(16),
