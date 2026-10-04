@@ -11,6 +11,7 @@ import {
   logout as apiLogout,
   type AuthUser,
 } from '../api/auth';
+import { IdleWarning, useIdleLogout } from './idle';
 
 // Auth is session based on the server, but the SPA still needs to remember
 // "am I logged in" across reloads. The session cookie is HttpOnly and not
@@ -62,12 +63,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Signed in and idle too long: end the session. The route guard then returns the person to the sign-in page.
+  const idleLeft = useIdleLogout(user !== null, () => { void signOut(); });
+
   const value = useMemo<AuthContextValue>(
     () => ({ user, isAuthenticated: user !== null, signIn, signOut }),
     [user, signIn, signOut],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {user !== null && idleLeft !== null ? <IdleWarning seconds={idleLeft} /> : null}
+    </AuthContext.Provider>
+  );
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

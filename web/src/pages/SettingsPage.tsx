@@ -16,11 +16,34 @@ import { AlertRulesPanel } from '../components/AlertRulesPanel';
 import { GeofencePanel } from '../components/GeofencePanel';
 import { beginFrpRecoveryAccountConnection, listFrpRecoveryAccounts, removeFrpRecoveryAccount, type FrpRecoveryAccount } from '../api/frp';
 import { orDash, fmtRelative } from '../ui/format';
+import { getIdleSeconds, setIdleSeconds, MIN_IDLE_SECONDS, MAX_IDLE_SECONDS } from '../auth/idle';
 
 const APP_VERSION = '0.1.0';
 const DEFAULT_CONFIG_KEY = 'mdmesh-default-config';
 
 type Conn = 'checking' | 'ok' | 'down';
+
+/** Settings are grouped by what the person is trying to do, not by when each feature was added. */
+const TABS = [
+  { key: 'general', label: 'General' },
+  { key: 'security', label: 'Security' },
+  { key: 'fleet', label: 'Devices & fleet' },
+  { key: 'kiosk', label: 'Kiosk & branding' },
+  { key: 'system', label: 'System & updates' },
+] as const;
+type SettingsTab = (typeof TABS)[number]['key'];
+const TAB_KEY = 'mdm-settings-tab';
+
+function initialTab(): SettingsTab {
+  const fromUrl = new URLSearchParams(window.location.search).get('tab');
+  if (TABS.some((t) => t.key === fromUrl)) return fromUrl as SettingsTab;
+  if (window.location.hash === '#rollout-anchor') return 'fleet';
+  try {
+    const saved = localStorage.getItem(TAB_KEY);
+    if (TABS.some((t) => t.key === saved)) return saved as SettingsTab;
+  } catch { /* storage unavailable */ }
+  return 'general';
+}
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -28,6 +51,12 @@ export function SettingsPage() {
   const { theme, setTheme, density, setDensity } = useTheme();
   const [configList, setConfigList] = useState<ConfigurationSummary[]>([]);
   const [conn, setConn] = useState<Conn>('checking');
+  const [idleSeconds, setIdleState] = useState<number>(getIdleSeconds);
+  const [tab, setTabState] = useState<SettingsTab>(initialTab);
+  const setTab = (t: SettingsTab) => {
+    setTabState(t);
+    try { localStorage.setItem(TAB_KEY, t); } catch { /* storage unavailable */ }
+  };
   const [upd, setUpd] = useState<UpdateStatus | null>(null);
   const [autoSaving, setAutoSaving] = useState(false);
   const [autoErr, setAutoErr] = useState<string | null>(null);
@@ -194,7 +223,17 @@ export function SettingsPage() {
         <h1>Settings</h1>
       </div>
 
+      <div className="tabs" role="tablist" aria-label="Settings sections">
+        {TABS.map((t) => (
+          <button key={t.key} role="tab" aria-selected={tab === t.key} className={tab === t.key ? 'on' : ''} onClick={() => setTab(t.key)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       <div className="settings">
+        {tab === 'general' && (
+        <>
         {/* Account & session */}
         <section className="panel">
           <div className="panel-head">
@@ -252,7 +291,11 @@ export function SettingsPage() {
             </span>
           </div>
         </section>
+        </>
+        )}
 
+        {tab === 'system' && (
+        <>
         {/* Server & connection */}
         <section className="panel">
           <div className="panel-head">
@@ -276,11 +319,34 @@ export function SettingsPage() {
             <span className="v mono">AMBIC Digital MDM {APP_VERSION}</span>
           </div>
         </section>
+        </>
+        )}
 
+        {tab === 'security' && (
+        <>
         {/* Security */}
         <section className="panel">
           <div className="panel-head">
             <h2 className="panel-title">Security</h2>
+          </div>
+          <div className="set-row">
+            <span className="k">
+              Automatic sign-out
+              <small>Signs this console out after this long with no mouse, keyboard or touch activity. Applies to this browser.</small>
+            </span>
+            <span className="v">
+              <input
+                type="number"
+                min={MIN_IDLE_SECONDS}
+                max={MAX_IDLE_SECONDS}
+                value={idleSeconds}
+                aria-label="Seconds of inactivity before sign-out"
+                onChange={(e) => setIdleState(Number(e.target.value))}
+                onBlur={() => setIdleState(setIdleSeconds(idleSeconds))}
+                style={{ width: 80 }}
+              />{' '}
+              seconds
+            </span>
           </div>
           <div className="set-row">
             <span className="k">
@@ -324,11 +390,19 @@ export function SettingsPage() {
             </span>
           </div>
         </section>
+        </>
+        )}
 
+        {tab === 'kiosk' && (
+        <>
         <WallpaperPanel />
       <KioskSectionsPanel />
       <ClientBrandingPanel />
+        </>
+        )}
 
+        {tab === 'system' && (
+        <>
         {/* Updates */}
         {upd && (
           <section className="panel">
@@ -451,7 +525,11 @@ export function SettingsPage() {
             )}
           </section>
         )}
+        </>
+        )}
 
+        {tab === 'fleet' && (
+        <>
         {/* Staged agent-APK rollout (renders itself only when there's an apk to roll out or an active rollout) */}
         <div id="rollout-anchor">
           <RolloutPanel />
@@ -500,7 +578,11 @@ export function SettingsPage() {
             </div>
           )}
         </section>
+        </>
+        )}
 
+        {tab === 'general' && (
+        <>
         {/* Appearance */}
         <section className="panel">
           <div className="panel-head">
@@ -551,6 +633,8 @@ export function SettingsPage() {
             </span>
           </div>
         </section>
+        </>
+        )}
       </div>
     </AppShell>
   );

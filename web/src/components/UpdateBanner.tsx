@@ -87,7 +87,7 @@ export function UpdateBanner() {
         </button>
       ) : (
         // Source-built (native) deployments can't self-apply — Settings › Updates has the steps.
-        <a className="btn btn-sm" href="/settings">Details…</a>
+        <a className="btn btn-sm" href="/settings?tab=system">Details…</a>
       )}
     </div>
   );
