@@ -39,7 +39,31 @@ $Remove = @(
     'com.xiaomi.vipaccount',         # Mi Community
     'com.xiaomi.gamecenter',
     'com.xiaomi.jr',                 # Mi Finance
-    'com.miui.virtualsim'
+    'com.miui.virtualsim',
+    # Third-party China preloads that show on the home screen
+    'cn.wps.moffice_eng', 'cn.wps.moffice_eng.xiaomi.lite',   # WPS Office
+    'com.autonavi.minimap',          # AutoNavi / Amap
+    'com.baidu.searchbox',           # Baidu
+    'com.dragon.read', 'com.phoenix.read', 'com.xs.fm',        # Fanqie novels / audio
+    'com.eg.android.AlipayGphone',   # Alipay
+    'com.mipay.wallet',              # Mi Pay wallet
+    'com.quark.browser',             # Quark browser
+    'com.sankuai.meituan',           # Meituan
+    'com.sina.weibo',                # Weibo
+    'com.smile.gifmaker',            # Kuaishou
+    'com.ss.android.article.news',   # Toutiao
+    'com.ss.android.ugc.aweme',      # Douyin
+    'com.taobao.idlefish', 'com.taobao.taobao',
+    'com.xunmeng.pinduoduo',         # Pinduoduo
+    'com.xunlei.downloadprovider',   # Xunlei
+    'com.xiaomi.smarthome',          # Mi Home
+    'com.xiaomi.tinygame',           # mini games
+    'com.xiaomi.market',             # App Store
+    'com.miui.themestore',           # Themes
+    'com.miui.voiceassistProxy',     # Xiao AI voice assistant
+    'com.miui.newmidrive',           # Mi Drive
+    'com.miui.greenguard',           # Kids space
+    'com.android.email'
 )
 
 # Never removed, even if someone adds them to the list above.
@@ -48,16 +72,20 @@ $Keep = @(
     'com.android.systemui', 'com.android.settings', 'com.miui.home', 'com.miui.securitycenter',
     'com.miui.packageinstaller', 'com.android.packageinstaller', 'com.android.permissioncontroller',
     'com.android.phone', 'com.android.contacts', 'com.android.camera', 'com.android.chrome',
-    'com.miui.gallery', 'com.miui.calculator', 'com.xiaomi.xmsf', 'com.xiaomi.account', 'com.android.providers.settings'
+    'com.miui.gallery', 'com.miui.calculator', 'com.xiaomi.xmsf', 'com.xiaomi.account', 'com.android.providers.settings',
+    'com.miui.securitymanager', 'com.android.providers.downloads.ui', 'com.android.deskclock', 'com.android.soundrecorder',
+    'com.xiaomi.scanner', 'com.google.android.documentsui', 'com.android.fileexplorer', 'com.android.mms', 'com.android.browser',
+    'com.miui.notes', 'com.miui.password', 'com.miui.screenrecorder', 'com.miui.mediaeditor', 'com.android.calendar',
+    'com.baidu.input_mi', 'com.iflytek.inputmethod.miui', 'com.sohu.inputmethod.sogou.xiaomi', 'com.miui.cleanmaster'
 )
 
-function Adb([string[]] $a) { & adb -s $Serial @a 2>&1 }
+function Invoke-Adb([string[]] $a) { & adb.exe -s $Serial @a 2>&1 }
 
 if (-not ((& adb devices) -match "^$([regex]::Escape($Serial))\s+device$")) { throw "Device $Serial is not connected/authorized in adb." }
-$model = (Adb @('shell', 'getprop', 'ro.product.model')) -join ''
+$model = (Invoke-Adb @('shell', 'getprop', 'ro.product.model')) -join ''
 if ($model.Trim() -ne '2411DRN47C') { throw "Refusing: this is '$($model.Trim())', not the Redmi 14R (2411DRN47C)." }
 
-$installed = (Adb @('shell', 'pm', 'list', 'packages')) | ForEach-Object { ($_ -replace '^package:', '').Trim() }
+$installed = (Invoke-Adb @('shell', 'pm', 'list', 'packages')) | ForEach-Object { ($_ -replace '^package:', '').Trim() }
 $targets = $Remove | Where-Object { ($_ -notin $Keep) -and ($installed -contains $_) }
 $absent = $Remove | Where-Object { $installed -notcontains $_ }
 
@@ -67,16 +95,23 @@ Write-Host ("Installed and on the list: {0}   Not present on this phone: {1}" -f
 if ($Restore) {
     foreach ($p in $Remove) {
         if ($p -in $Keep) { continue }
-        $r = (Adb @('shell', 'cmd', 'package', 'install-existing', $p)) -join ' '
-        Write-Host ("  restore {0,-34} {1}" -f $p, $r.Trim())
+        $r = (Invoke-Adb @('shell', 'cmd', 'package', 'install-existing', $p)) -join ' '
+        $e = (Invoke-Adb @('shell', 'pm', 'enable', '--user', '0', $p)) -join ' '
+        Write-Host ("  restore {0,-34} {1} | {2}" -f $p, $r.Trim(), $e.Trim())
     }
     return
 }
 
 foreach ($p in $targets) {
     if ($Apply) {
-        $r = (Adb @('shell', 'pm', 'uninstall', '-k', '--user', '0', $p)) -join ' '
-        Write-Host ("  removed {0,-34} {1}" -f $p, $r.Trim())
+        $r = (Invoke-Adb @('shell', 'pm', 'uninstall', '-k', '--user', '0', $p)) -join ' '
+        if ($r -notmatch 'Success') {
+            # Updated system apps cannot be uninstalled for good; disabling hides them and stops them running.
+            $d = (Invoke-Adb @('shell', 'pm', 'disable-user', '--user', '0', $p)) -join ' '
+            Write-Host ("  hidden  {0,-34} {1}" -f $p, $d.Trim())
+        } else {
+            Write-Host ("  removed {0,-34} {1}" -f $p, $r.Trim())
+        }
     } else {
         Write-Host ("  would remove {0}" -f $p)
     }
