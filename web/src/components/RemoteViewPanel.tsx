@@ -337,23 +337,28 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
               )}
 
               {isScreen && session?.live && session.kinds.includes('screen') && (
-                <div tabIndex={0} onWheel={handleWheel} onKeyDown={handleKeyDown} title="Click the screen, then type or scroll to operate the tablet" style={{ position: 'relative', width: '100%', overflow: 'hidden', outline: 'none' }}>
-                  <LiveScreenCanvas deviceId={deviceId} nonce={streamNonce} onMouseDown={handleMouseDown} onMouseUp={handleMouseUp} />
-                  {ripple && (
-                    <span
-                      key={ripple.id}
-                      style={{
-                        position: 'absolute', left: `${ripple.x}%`, top: `${ripple.y}%`, width: 16, height: 16,
-                        borderRadius: '50%', background: 'rgba(59, 130, 246, 0.7)', border: '2px solid #fff',
-                        transform: 'translate(-50%, -50%)', pointerEvents: 'none',
-                      }}
-                    />
-                  )}
+                <div tabIndex={0} onKeyDown={handleKeyDown} title="Click the screen, then type or scroll to operate the device" style={{ textAlign: 'center', outline: 'none' }}>
+                  <LiveScreenCanvas
+                    deviceId={deviceId}
+                    nonce={streamNonce}
+                    onMouseDown={handleMouseDown}
+                    onMouseUp={handleMouseUp}
+                    onWheel={handleWheel}
+                    overlay={ripple ? <span
+                key={ripple.id}
+                style={{
+                  position: 'absolute', left: `${ripple.x}%`, top: `${ripple.y}%`, width: 16, height: 16,
+                  borderRadius: '50%', background: 'rgba(59, 130, 246, 0.7)', border: '2px solid #fff',
+                  transform: 'translate(-50%, -50%)', pointerEvents: 'none',
+                }}
+              /> : null}
+                  />
                 </div>
               )}
 
               {snapshot && key !== 'mic' && !(session?.live && session.kinds.includes(key)) && (
-                <div style={{ position: 'relative', display: 'inline-block', width: '100%', overflow: 'hidden' }}>
+                <div style={{ textAlign: 'center' }}>
+                <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', verticalAlign: 'top' }}>
                   <img
                     ref={isScreen ? imgRef : undefined}
                     alt={`Latest ${label.toLowerCase()} capture`}
@@ -363,9 +368,10 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
                     draggable={false}
                     style={{
                       display: 'block',
-                      width: '100%',
-                      maxHeight: 380,
-                      objectFit: 'contain',
+                      width: 'auto',
+                      height: 'auto',
+                      maxWidth: '100%',
+                      maxHeight: 'min(60vh, 520px)',
                       background: '#000',
                       cursor: isScreen ? 'crosshair' : 'default',
                       userSelect: 'none',
@@ -388,6 +394,7 @@ export function RemoteViewPanel({ deviceId, isDeviceOwner }: { deviceId: string;
                       }}
                     />
                   )}
+                </div>
                 </div>
               )}
 

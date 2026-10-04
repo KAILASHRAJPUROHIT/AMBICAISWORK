@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { liveStreamUrl, type RemoteKind } from '../api/remoteView';
 
 /** Packet header: type(1) | ptsUs(8) | length(4). Types: 1 codec config, 2 keyframe, 3 delta. */
@@ -23,13 +23,16 @@ function codecFromAnnexB(data: Uint8Array): string | null {
  * events from the canvas, so callers can map clicks to relative device coordinates.
  */
 export function LiveScreenCanvas({
-  deviceId, kind = 'screen', nonce, onMouseDown, onMouseUp,
+  deviceId, kind = 'screen', nonce, onMouseDown, onMouseUp, onWheel, overlay,
 }: {
   deviceId: string;
   kind?: RemoteKind;
   nonce: number;
   onMouseDown?: (e: React.MouseEvent<HTMLElement>) => void;
   onMouseUp?: (e: React.MouseEvent<HTMLElement>) => void;
+  onWheel?: (e: React.WheelEvent<HTMLElement>) => void;
+  /** Drawn on top of the picture, positioned in percent of the PICTURE (not of the surrounding box). */
+  overlay?: ReactNode;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [status, setStatus] = useState('Connecting…');
@@ -151,15 +154,19 @@ export function LiveScreenCanvas({
   }, [deviceId, kind, nonce]);
 
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    // The box is exactly the size of the picture, so a click's position inside it maps straight onto the device screen. A tall
+    // phone screen is limited by height; a wide tablet by width. Nothing is letterboxed.
+    <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', verticalAlign: 'top' }}>
       <canvas
         ref={canvasRef}
         width={1280}
         height={800}
         onMouseDown={onMouseDown}
         onMouseUp={onMouseUp}
-        style={{ display: 'block', width: '100%', maxHeight: 520, objectFit: 'contain', background: '#000', cursor: 'crosshair', userSelect: 'none' }}
+        onWheel={onWheel}
+        style={{ display: 'block', width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: 'min(72vh, 680px)', background: '#000', cursor: 'crosshair', userSelect: 'none' }}
       />
+      {overlay}
       {status && (
         <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#cbd5e1', fontSize: 14, textAlign: 'center', padding: 16, pointerEvents: 'none' }}>
           {status}

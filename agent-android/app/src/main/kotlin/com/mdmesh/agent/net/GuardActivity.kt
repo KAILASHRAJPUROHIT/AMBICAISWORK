@@ -37,6 +37,10 @@ abstract class GuardActivity : ComponentActivity() {
 
     protected fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
+    /** A phone (shortest side under 600 dp, like the Redmi 14R) gets smaller type, tighter margins and a full-width button. */
+    protected val isPhone: Boolean get() = resources.configuration.smallestScreenWidthDp < 600
+    protected val textScale: Float get() = if (isPhone) 0.82f else 1f
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -49,7 +53,8 @@ abstract class GuardActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setBackgroundColor(backgroundColor)
-            setPadding(dp(40), dp(40), dp(40), dp(40))
+            val pad = if (isPhone) 24 else 40
+            setPadding(dp(pad), dp(pad), dp(pad), dp(pad))
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
         setContentView(column)
@@ -89,7 +94,7 @@ abstract class GuardActivity : ComponentActivity() {
     protected fun text(value: String, sizeSp: Float, color: Int = Color.WHITE, bold: Boolean = false, topDp: Int = 0): TextView =
         TextView(this).apply {
             text = value
-            textSize = sizeSp
+            textSize = sizeSp * textScale
             setTextColor(color)
             gravity = Gravity.CENTER
             if (bold) setTypeface(typeface, Typeface.BOLD)

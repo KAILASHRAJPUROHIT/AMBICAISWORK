@@ -48,7 +48,7 @@ class LockdownActivity : GuardActivity() {
             text = "Administrator"
             textSize = 18f
             setOnClickListener { askPassword() }
-            layoutParams = LinearLayout.LayoutParams(dp(260), ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(40); gravity = Gravity.CENTER_HORIZONTAL }
+            layoutParams = LinearLayout.LayoutParams(if (isPhone) ViewGroup.LayoutParams.MATCH_PARENT else dp(260), ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(if (isPhone) 28 else 40); gravity = Gravity.CENTER_HORIZONTAL }
         })
     }
 
