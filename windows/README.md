@@ -5,9 +5,9 @@ kept in this repository so it is versioned, released and sold with the rest of A
 
 ## Status
 
-Phase 1 is under way. The upstream source is imported unchanged under `upstream/` and **all six Windows components compile** with `build.ps1`
-(agent, agent updater, agent worker, certificate manager, OCSP responder, console). Nothing is branded, installed on a PC, or released yet,
-and the console has not been run (it needs PostgreSQL, a NATS server and certificates).
+Phase 1 is under way. The upstream source is imported unchanged under `upstream/` and **all six Windows components compile** with
+`build.ps1` (agent, agent updater, agent worker, certificate manager, OCSP responder, console). Nothing is branded, installed on a PC,
+or released yet, and the console has not been run (it needs PostgreSQL, a NATS server and certificates).
 
 | Phase | What | State |
 |---|---|---|
@@ -22,17 +22,18 @@ Settings > Accounts > Access work or school.
 ## Build
 
 ```
-pwsh -File windowsuild.ps1
+pwsh -File windows\build.ps1
 ```
 
-Uses a portable Go in `C:AradhanaSystems	oolsgo` (downloaded and checksum-verified if missing; nothing is installed into Windows), generates
-the console templates, and writes the executables to `windowsdist` (git-ignored). Needs Go 1.26.2 or newer.
+Uses a portable Go in `C:\AradhanaSystems\tools\go` (downloaded and checksum-verified if missing; nothing is installed into Windows),
+generates the console templates, and writes the executables to `windows\dist` (git-ignored). Needs Go 1.26.2 or newer.
 
 ## Layout
 
 - `upstream/<repo>` — OpenUEM repositories exactly as imported (see `UPSTREAM.txt` for the commit of each). Their own `LICENSE`
   files are kept. **Do not edit these in place without recording it in `MODIFICATIONS.md`** (Apache 2.0 section 4 requires modified
   files to carry notices of the change).
+- `build.ps1` — reproducible build of the Windows executables into `dist/`.
 - `THIRD-PARTY-NOTICES.md` — what was taken from where, and under which licence.
 - `UPSTREAM.txt` — upstream repository, commit and licence.
 
