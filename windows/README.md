@@ -7,11 +7,12 @@ kept in this repository so it is versioned, released and sold with the rest of A
 
 Phase 1 is under way. The upstream source is imported unchanged under `upstream/` and **all six Windows components compile** with
 `build.ps1` (agent, agent updater, agent worker, certificate manager, OCSP responder, console). Nothing is branded, installed on a PC,
-or released yet, and the console has not been run (it needs PostgreSQL, a NATS server and certificates).
+or released yet, and our agent build has been run against a local OpenUEM server on ARADHANA (see `LOCAL-EVAL.md`): it registered and uploaded hardware, OS and
+installed-app inventory. Not yet verified: console sign-in in a browser, admitting the agent, and running commands from the console.
 
 | Phase | What | State |
 |---|---|---|
-| 1 | AMBIC Windows agent + console integration (inventory, software install, scripts, restart/lock, update and antivirus status, remote assistance) | source imported, **builds**; local stack + branding next |
+| 1 | AMBIC Windows agent + console integration (inventory, software install, scripts, restart/lock, update and antivirus status, remote assistance) | source imported, **builds**, agent registers and reports inventory against a local server; branding and console integration next |
 | 2 | Windows MDM enrolment (policy, BitLocker, kiosk, update rings) using AMBIC's own endpoint; the MIT-licensed SyncML / enrolment code from Fleet may be reused with attribution | not started |
 | 3 | Windows Server: the Phase 1 agent plus Group Policy (servers do not use the MDM protocol) | not started |
 
@@ -34,6 +35,8 @@ generates the console templates, and writes the executables to `windows\dist` (g
   files are kept. **Do not edit these in place without recording it in `MODIFICATIONS.md`** (Apache 2.0 section 4 requires modified
   files to carry notices of the change).
 - `build.ps1` — reproducible build of the Windows executables into `dist/`.
+- `LOCAL-EVAL.md` — the throw-away local server used for testing, and the agent settings it needed.
+- `MODIFICATIONS.md` — every change made under `upstream/`.
 - `THIRD-PARTY-NOTICES.md` — what was taken from where, and under which licence.
 - `UPSTREAM.txt` — upstream repository, commit and licence.
 
