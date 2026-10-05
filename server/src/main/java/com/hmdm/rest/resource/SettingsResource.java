@@ -329,6 +329,38 @@ public class SettingsResource {
         }
     }
 
+    /**
+     * Sets the shop-closed hours used by every device's offline guard. Body: {"quietHours": "22:00-08:00"} (may wrap past
+     * midnight), {"quietHours": "off"} to disable, or an empty value to restore the default. While the shop is closed and a
+     * tablet is sitting still, a switched-off router does not trigger the full-screen block or the lockdown.
+     */
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Path("/guardQuietHours")
+    public Response updateGuardQuietHours(java.util.Map<String, String> request) {
+        if (!SecurityContext.get().hasPermission("settings")) {
+            log.error("Unauthorized attempt to update guard quiet hours by user " +
+                    SecurityContext.get().getCurrentUserName());
+            return Response.PERMISSION_DENIED();
+        }
+        try {
+            String v = request == null ? null : request.get("quietHours");
+            v = v == null ? "" : v.trim();
+            if (!v.isEmpty() && !v.equalsIgnoreCase("off")
+                    && !v.matches("^([01]\\d|2[0-3]):[0-5]\\d-([01]\\d|2[0-3]):[0-5]\\d$")) {
+                return Response.ERROR("Use the form HH:MM-HH:MM (for example 22:00-08:00), or off");
+            }
+            Settings settings = new Settings();
+            settings.setGuardQuietHours(v.isEmpty() ? null : (v.equalsIgnoreCase("off") ? "off" : v));
+            this.commonDAO.saveGuardQuietHours(settings);
+            return Response.OK();
+        } catch (Exception e) {
+            log.error("Unexpected error when saving guard quiet hours", e);
+            return Response.INTERNAL_ERROR();
+        }
+    }
+
     private static String trimOrNull(String v, int max) {
         if (v == null || v.trim().isEmpty()) return null;
         String t = v.trim();

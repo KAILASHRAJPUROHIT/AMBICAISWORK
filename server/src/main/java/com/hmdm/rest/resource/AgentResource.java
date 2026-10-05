@@ -460,6 +460,7 @@ public class AgentResource {
             checkInResponse.setClientLogoUrl(settings.getClientLogoUrl());
             checkInResponse.setClientMarkUrl(settings.getClientMarkUrl());
             checkInResponse.setKioskSections(settings.getKioskSections());
+            checkInResponse.setGuardQuietHours(settings.getGuardQuietHours());
         }
         return Response.OK(checkInResponse);
     }

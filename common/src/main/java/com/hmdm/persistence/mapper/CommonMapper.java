@@ -199,6 +199,17 @@ public interface CommonMapper {
     })
     void saveKioskSections(Settings settings);
 
+    @Insert({
+            "INSERT INTO settings (guardQuietHours, customerId" +
+                    ") VALUES (" +
+                    "#{guardQuietHours}, #{customerId} " +
+                    ") " +
+                    "ON CONFLICT ON CONSTRAINT settings_customer_unique DO " +
+                    "UPDATE SET " +
+                    "guardQuietHours = EXCLUDED.guardQuietHours "
+    })
+    void saveGuardQuietHours(Settings settings);
+
     @Select({"SELECT COUNT(*) FROM settings"})
     int getSettingsCount();
 

@@ -14,6 +14,9 @@ import android.net.wifi.WifiNetworkSuggestion
 import android.os.Build
 import android.util.Log
 import com.mdmesh.core.location.LocationCollector
+import com.mdmesh.core.net.MotionState
+import com.mdmesh.core.net.QuietHours
+import com.mdmesh.core.store.GuardScheduleStore
 import com.mdmesh.core.net.ConnectivityPolicy
 import com.mdmesh.core.net.GuardActions
 import com.mdmesh.core.net.GuardInput
@@ -103,7 +106,11 @@ class ConnectivityGuard @Inject constructor(
         val wifiOn = wifi?.isWifiEnabled ?: true
         val online = isOnline()
         val before = load()
-        val step = ConnectivityPolicy.step(before, GuardInput(now, wifiOn, online))
+        val quiet = QuietHours.parse(GuardScheduleStore.read(context))?.let { q ->
+            val cal = java.util.Calendar.getInstance()
+            q.contains(cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE))
+        } ?: false
+        val step = ConnectivityPolicy.step(before, GuardInput(now, wifiOn, online, quiet = quiet, moved = MotionState.sustained(now)))
         save(step.state)
         val a = step.actions
 
@@ -264,6 +271,7 @@ class ConnectivityGuard @Inject constructor(
         lastHuntAt = prefs.getLong(K_LAST_HUNT, 0L),
         lastReportAt = prefs.getLong(K_LAST_REPORT, 0L),
         reconnectAttempts = prefs.getInt(K_ATTEMPTS, 0),
+        suspended = prefs.getBoolean(K_SUSPENDED, false),
     )
 
     private fun save(s: GuardState) {
@@ -277,6 +285,7 @@ class ConnectivityGuard @Inject constructor(
             .putLong(K_LAST_HUNT, s.lastHuntAt)
             .putLong(K_LAST_REPORT, s.lastReportAt)
             .putInt(K_ATTEMPTS, s.reconnectAttempts)
+            .putBoolean(K_SUSPENDED, s.suspended)
             .apply()
     }
 
@@ -295,6 +304,7 @@ class ConnectivityGuard @Inject constructor(
         const val K_LAST_HUNT = "lastHuntAt"
         const val K_LAST_REPORT = "lastReportAt"
         const val K_ATTEMPTS = "attempts"
+        const val K_SUSPENDED = "suspended"
 
         /** No password and no enterprise/enhanced-open encryption in the advertised capabilities. */
         fun isOpen(capabilities: String?): Boolean {

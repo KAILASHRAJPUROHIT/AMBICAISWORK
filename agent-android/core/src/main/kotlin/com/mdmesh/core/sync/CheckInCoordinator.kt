@@ -52,6 +52,7 @@ class CheckInCoordinator @Inject constructor(
     private val activityLogger: com.mdmesh.core.telemetry.ActivityLogger? = null,
     private val clientBrandingStore: com.mdmesh.core.store.ClientBrandingStore? = null,
     private val kioskSectionsStore: com.mdmesh.core.store.KioskSectionsStore? = null,
+    private val guardScheduleStore: com.mdmesh.core.store.GuardScheduleStore? = null,
 ) {
 
     private val mutex = Mutex()
@@ -124,6 +125,7 @@ class CheckInCoordinator @Inject constructor(
         // and a failed download never fails the check-in.
         runCatching { clientBrandingStore?.apply(data.clientName, data.clientLogoUrl, data.clientMarkUrl) }
         runCatching { kioskSectionsStore?.apply(data.kioskSections) }
+        runCatching { guardScheduleStore?.apply(data.guardQuietHours) }
 
         val results = data.commands.map { dispatcher.dispatch(it) }
         pending.add(results)

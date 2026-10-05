@@ -25,9 +25,19 @@ data class GuardState(
     val lastHuntAt: Long = 0L,
     val lastReportAt: Long = 0L,
     val reconnectAttempts: Int = 0,
+    /** The previous tick was inside the shop-closed window with the tablet sitting still (nothing was counting). */
+    val suspended: Boolean = false,
 )
 
-data class GuardInput(val now: Long, val wifiEnabled: Boolean, val online: Boolean)
+data class GuardInput(
+    val now: Long,
+    val wifiEnabled: Boolean,
+    val online: Boolean,
+    /** Inside the shop-closed window (see [QuietHours]). */
+    val quiet: Boolean = false,
+    /** The tablet has been carried (repeated motion) recently, so quiet hours do not excuse it. */
+    val moved: Boolean = false,
+)
 
 data class GuardActions(
     val enableWifi: Boolean = false,
@@ -49,6 +59,15 @@ object ConnectivityPolicy {
     fun step(previous: GuardState, input: GuardInput): GuardStep {
         val now = input.now
         var st = previous
+
+        // Shop closed and the tablet is sitting still (its router is typically switched off): nothing escalates and no timer
+        // runs, so the tablets are not blocked or locked by morning. A tablet that is being carried is still guarded.
+        if (input.quiet && !input.moved) {
+            st = st.copy(wifiOffSince = null, offlineSince = null, reconnectAttempts = 0, suspended = true)
+            return GuardStep(st, GuardActions(lockdownWanted = st.lockdown))
+        }
+        // The quiet window just ended: switch Wi-Fi on straight away and count offline time from now, not from last night.
+        if (st.suspended) st = st.copy(suspended = false, bootPending = true)
 
         // 1. The Wi-Fi radio.
         st = st.copy(wifiOffSince = if (input.wifiEnabled) null else (st.wifiOffSince ?: now))

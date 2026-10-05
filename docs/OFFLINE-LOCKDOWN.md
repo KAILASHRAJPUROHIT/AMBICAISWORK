@@ -25,3 +25,23 @@ What a tablet does when it has no internet (agent v0.2.93 and later). The rules 
 * Location reports need Location permission and location switched on (the agent switches it on as Device Owner). They are *logged*; the tablet cannot upload while it has no internet.
 * Open-network hunting: Android only joins an open network that actually gives internet (captive-portal networks fail validation). Mobile data and SMS fallbacks are not built.
 * Not yet tested on a real tablet.
+
+## Shop closed hours (overnight Wi-Fi off)
+
+The shop's router is switched off at night, so without an exception every tablet would show the full-screen "no internet" message
+after 10 minutes and lock down after 30, and nobody could unlock them in the morning without the admin OTP.
+
+**Console → Settings → Security → "Shop closed hours"** (default **22:00 to 08:00**, "Use shop hours" can be switched off).
+
+- During those hours a tablet that is **sitting still** does not count time without internet: no full-screen message, no
+  lockdown, no Wi-Fi hunting, no location reports. Nothing escalates.
+- A tablet that is **carried away** (repeated motion from the motion sensor within 10 minutes) is guarded exactly as before, so
+  a thief at night is not helped by the quiet window.
+- When the shop opens, Wi-Fi is switched on immediately and the 10/30-minute clocks start from that moment, not from last night.
+- A lockdown that has **already** happened is never released by this; it still needs the admin OTP.
+- The server's "device stopped reporting" alert follows the same hours (and, in the morning, counts from opening time). The
+  clock used is `MDM_SHOP_TZ` (default `Asia/Kolkata`); the devices use their own clock.
+- Delivered to devices on their check-in (`guardQuietHours`), cached for offline use.
+
+Code: `core/.../net/QuietHours.kt` and `ConnectivityPolicy` (agent), `common/.../util/QuietWindow.java` and `DeviceSilentTask`
+(server), `GuardHoursPanel.tsx` (console). The timing rules are covered by `QuietHoursTest`.

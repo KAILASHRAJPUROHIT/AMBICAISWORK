@@ -3195,4 +3195,10 @@
         <rollback>DROP TABLE deviceSilentState;</rollback>
     </changeSet>
 
+    <changeSet id="26.10.05-settings-guard-quiet-hours" author="ambic" context="common">
+        <comment>Column,new: settings#guardQuietHours — shop-closed hours (HH:MM-HH:MM, "off", or null = default 22:00-08:00) during which a sitting-still tablet's offline guard does not escalate. Delivered to devices on check-in.</comment>
+        <sql>ALTER TABLE settings ADD COLUMN guardQuietHours VARCHAR(16);</sql>
+        <rollback>ALTER TABLE settings DROP COLUMN guardQuietHours;</rollback>
+    </changeSet>
+
 </databaseChangeLog>

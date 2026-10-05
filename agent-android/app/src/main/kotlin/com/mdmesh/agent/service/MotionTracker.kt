@@ -37,6 +37,7 @@ class MotionTracker(
     private val listener = object : TriggerEventListener() {
         override fun onTrigger(event: TriggerEvent?) {
             armed = false // trigger sensors are one-shot
+            com.mdmesh.core.net.MotionState.record() // tells the offline guard this device is being carried
             movingUntil = System.currentTimeMillis() + MOVING_WINDOW_MS
             startLoop()
             arm()

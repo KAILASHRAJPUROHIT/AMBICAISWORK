@@ -105,4 +105,6 @@ data class AgentCheckInResponse(
     val clientMarkUrl: String? = null,
     /** JSON map of kiosk sections the admin switched off (`{"leaderboard":false}`); null = all on. */
     val kioskSections: String? = null,
+    /** Shop-closed hours for the offline guard: `HH:MM-HH:MM`, `off`, or null for the default (22:00-08:00). */
+    val guardQuietHours: String? = null,
 )

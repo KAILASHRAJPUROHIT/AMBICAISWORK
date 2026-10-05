@@ -115,6 +115,9 @@ public class Settings implements CustomerData, Serializable {
     // JSON map {"leaderboard":false,...} of kiosk sections switched off/on; null = everything on.
     private String kioskSections;
 
+    // Shop-closed hours for the devices' offline guard: "HH:MM-HH:MM", "off", or null for the default (22:00-08:00).
+    private String guardQuietHours;
+
     // This property is not stored in the database, it is a transient field used by the Settings resource
     @ApiModelProperty(hidden = true)
     private boolean singleCustomer;
@@ -380,6 +383,9 @@ public class Settings implements CustomerData, Serializable {
     @ApiModelProperty("Whether a fleet-wide admin passcode is currently configured")
     public String getKioskSections() { return kioskSections; }
     public void setKioskSections(String kioskSections) { this.kioskSections = kioskSections; }
+
+    public String getGuardQuietHours() { return guardQuietHours; }
+    public void setGuardQuietHours(String guardQuietHours) { this.guardQuietHours = guardQuietHours; }
 
     public String getClientName() { return clientName; }
     public void setClientName(String clientName) { this.clientName = clientName; }

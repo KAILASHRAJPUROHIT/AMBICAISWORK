@@ -118,3 +118,15 @@ export async function getKioskSections(): Promise<KioskSectionMap> {
 export async function saveKioskSections(map: KioskSectionMap): Promise<void> {
   await apiClient.post<void>('/private/settings/kioskSections', map);
 }
+
+/** Shop-closed hours for the offline guard. `quietHours` is HH:MM-HH:MM, 'off', or '' for the default. */
+export const DEFAULT_QUIET_HOURS = '22:00-08:00';
+
+export async function getGuardQuietHours(): Promise<string> {
+  const d = await apiClient.get<{ guardQuietHours?: string | null }>('/private/settings');
+  return d?.guardQuietHours?.trim() || DEFAULT_QUIET_HOURS;
+}
+
+export async function saveGuardQuietHours(quietHours: string): Promise<void> {
+  await apiClient.post<void>('/private/settings/guardQuietHours', { quietHours });
+}

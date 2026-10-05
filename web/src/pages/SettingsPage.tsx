@@ -18,6 +18,7 @@ import { beginFrpRecoveryAccountConnection, listFrpRecoveryAccounts, removeFrpRe
 import { orDash, fmtRelative } from '../ui/format';
 import { getIdleSeconds, setIdleSeconds } from '../auth/idle';
 import { SmtpPanel } from '../components/SmtpPanel';
+import { GuardHoursPanel } from '../components/GuardHoursPanel';
 
 const APP_VERSION = '0.1.0';
 const DEFAULT_CONFIG_KEY = 'mdmesh-default-config';
@@ -351,6 +352,7 @@ export function SettingsPage() {
             <h2 className="panel-title">Security</h2>
           </div>
           <SmtpPanel />
+          <GuardHoursPanel />
           <div className="set-row">
             <span className="k">
               Allowed computers

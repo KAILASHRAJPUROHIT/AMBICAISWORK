@@ -54,6 +54,9 @@ public class AgentCheckInResponse {
     /** JSON map of kiosk sections switched off/on (see Settings#kioskSections); null = all on. */
     private String kioskSections;
 
+    /** Shop-closed hours for the offline guard (Settings#guardQuietHours): HH:MM-HH:MM, off, or null for the default. */
+    private String guardQuietHours;
+
     public AgentCheckInResponse() {
     }
 
