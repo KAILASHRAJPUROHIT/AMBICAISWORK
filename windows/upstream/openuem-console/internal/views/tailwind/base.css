@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+#errorPage {
+    font-size: 3rem;
+}
+
+.my-indicator{
+    display:none;
+}
+.htmx-request .my-indicator{
+    display:inline;
+}
+.htmx-request.my-indicator{
+    display:inline;
+}
+
+.markdown-body ol {
+    list-style: inherit;
+}
+
+.markdown-body ul {
+    list-style: inherit;
+}
+
+.markdown-body menu {
+    list-style: inherit;
+}

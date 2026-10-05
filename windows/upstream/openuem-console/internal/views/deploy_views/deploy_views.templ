@@ -1,0 +1,499 @@
+package deploy_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"github.com/open-uem/ent"
+	"github.com/open-uem/openuem-console/internal/views/filters"
+	"github.com/open-uem/openuem-console/internal/views/layout"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+	"strconv"
+	"strings"
+)
+
+templ Deploy(c echo.Context, install bool, successMessage string, commonInfo *partials.CommonInfo) {
+	if install {
+		<title>OpenUEM | { i18n.T(ctx, "Deploy") } | { i18n.T(ctx, "Install") } </title>
+		@partials.Header(c, []partials.Breadcrumb{{Title: i18n.T(ctx, "Deploy"), Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy")))}, {Title: "Install", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/install")))}}, commonInfo)
+	} else {
+		<title>OpenUEM | { i18n.T(ctx, "Deploy") } | { i18n.T(ctx, "Uninstall") } </title>
+		@partials.Header(c, []partials.Breadcrumb{{Title: i18n.T(ctx, "Deploy"), Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy")))}, {Title: "Uninstall", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/uninstall")))}}, commonInfo)
+	}
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				if install {
+					@DeployNavbar("install", commonInfo)
+				} else {
+					@DeployNavbar("uninstall", commonInfo)
+				}
+				if successMessage != "" {
+					@partials.SuccessMessage(successMessage)
+				} else {
+					<div id="success" class="hidden"></div>
+				}
+				<div id="error" class="hidden"></div>
+				<div class="uk-width-1-2@m uk-card uk-card-default">
+					<div class="uk-card-header">
+						<h3 class="uk-card-title">
+							if install {
+								{ i18n.T(ctx, "install.title") }
+							} else {
+								{ i18n.T(ctx, "uninstall.title") }
+							}
+						</h3>
+						<p class="uk-margin-small-top uk-text-small">
+							if install {
+								{ i18n.T(ctx, "install.phase_1") }
+							} else {
+								{ i18n.T(ctx, "uninstall.phase_1") }
+							}
+						</p>
+					</div>
+					<div class="uk-card-body mt-8 mb-2">
+						<div class="w-1/3">
+							<form
+								class="uk-search uk-search-default w-full flex items-center gap-4"
+								_="on load
+										set emptyArray to [] as Array
+										set sessionStorage.checkedItems to emptyArray as JSONString
+									end
+								"
+							>
+								<span uk-search-icon></span>
+								<input
+									name="filterByAppName"
+									class="uk-search-input"
+									autocomplete="off"
+									type="search"
+									placeholder={ i18n.T(ctx, "Search") }
+									aria-label="Search"
+									_="on keyup
+										if my value's length > 1 then
+											remove @disabled from #search-packages
+										else
+											add @disabled to #search-packages
+										end
+									end"
+								/>
+								<button
+									id="search-packages"
+									type="submit"
+									class="uk-button uk-button-primary"
+									if install {
+										hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/searchinstall"))) }
+									} else {
+										hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/searchuninstall"))) }
+									}
+									hx-push-url="true"
+									hx-target="#deploy-search-results"
+									hx-swap="innerHTML"
+									hx-include="input[name^='filterBy']"
+									disabled
+								>
+									{ i18n.T(ctx, "Search") }
+								</button>
+							</form>
+						</div>
+						<div id="deploy-search-results"></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
+}
+
+templ DeployNavbar(active string, commonInfo *partials.CommonInfo) {
+	<ul class="uk-tab">
+		<li class={ templ.KV("uk-active", active == "install") }>
+			<a
+				href={ templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/install")) }
+				hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/install"))) }
+				hx-push-url="true"
+				hx-target="#main"
+				hx-swap="outerHTML"
+			>
+				{ i18n.T(ctx, "Install") }
+			</a>
+		</li>
+		<li class={ templ.KV("uk-active", active == "uninstall") }>
+			<a
+				href={ templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/uninstall")) }
+				hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/uninstall"))) }
+				hx-push-url="true"
+				hx-target="#main"
+				hx-swap="outerHTML"
+			>
+				{ i18n.T(ctx, "Uninstall") }
+			</a>
+		</li>
+	</ul>
+}
+
+templ DeployIndex(title string, cmp templ.Component, commonInfo *partials.CommonInfo) {
+	@layout.Base("deploy", commonInfo) {
+		@cmp
+	}
+}
+
+templ SearchPacketResult(install bool, packages []*ent.SoftwarePackage, c echo.Context, p partials.PaginationAndSort, f filters.DeployPackageFilter, allSources []string, itemsPerPage int, commonInfo *partials.CommonInfo) {
+	if len(packages) > 0 {
+		<table class="uk-table uk-table-divider uk-table-small uk-table-striped  mt-6">
+			<thead>
+				<tr>
+					<th class="sr-only w-1/12">Logo</th>
+					<th>
+						<div class="flex gap-1 items-center w-5/6">
+							<span>{ i18n.T(ctx, "Name") }</span>
+							@partials.SortByColumnIcon(c, p, i18n.T(ctx, "Name"), "name", "alpha", "#deploy-search-results", "innerHTML", "post")
+						</div>
+					</th>
+					<th>
+						<div class="flex gap-1 items-center w-5/6">
+							<span>{ i18n.T(ctx, "OS") }</span>
+							@partials.SortByColumnIcon(c, p, i18n.T(ctx, "OS"), "source", "alpha", "#deploy-search-results", "innerHTML", "post")
+							@filters.FilterBySource(c, p, "Source", "agents.filter_by_source", allSources, f.Sources, "#deploy-search-results", "innerHTML", false, func() bool {
+								return len(f.Sources) == 0
+							})
+						</div>
+					</th>
+					<th class="w-1/12">{ i18n.T(ctx, "Actions") }</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, p := range packages {
+					<tr>
+						<td class="text-center !align-middle">
+							@partials.Brand(strings.ToLower(p.Name), "")
+						</td>
+						<td class="!align-middle">
+							@partials.SoftwarePackageDescription(p.PackageID, p.Name, p.Branch, p.Verified)
+						</td>
+						<td class="!align-middle">
+							@partials.PackageManagementTool(p.Source)
+						</td>
+						<td class="!align-middle">
+							<form
+								hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/selectpackagedeployment"))) }
+								hx-push-url="true"
+								hx-target="#main"
+								hx-swap="outerHTML"
+							>
+								<input type="hidden" name="filterByPackageId" value={ p.PackageID }/>
+								<input type="hidden" name="filterByPackageName" value={ p.Name }/>
+								<input type="hidden" name="filterByPackageBranch" value={ p.Branch }/>
+								<input type="hidden" name="filterByPackageBrewType" value={ p.BrewType }/>
+								<input type="hidden" name="filterByPackageVerified" value={ strconv.FormatBool(p.Verified) }/>
+								<input type="hidden" name="filterBySource" value={ p.Source }/>
+								if install {
+									<input type="hidden" name="filterByInstallationType" value="true"/>
+								} else {
+									<input type="hidden" name="filterByInstallationType" value="false"/>
+								}
+								<button
+									class={ templ.KV("text-green-600", install), templ.KV("text-red-600", !install) }
+									if install {
+										title={ i18n.T(ctx, "agents.install_package") }
+									} else {
+										title={ i18n.T(ctx, "agents.uninstall_package") }
+									}
+									type="submit"
+								>
+									if install {
+										<uk-icon hx-history="false" icon="package-plus" custom-class="h-6 w-6" uk-cloack></uk-icon>
+									} else {
+										<uk-icon hx-history="false" icon="package-minus" custom-class="h-6 w-6" uk-cloack></uk-icon>
+									}
+								</button>
+							</form>
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+		if install {
+			@partials.Pagination(c, p, "post", "#deploy-search-results", "innerHTML", string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/searchinstall"))), itemsPerPage)
+		} else {
+			@partials.Pagination(c, p, "post", "#deploy-search-results", "innerHTML", string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/searchuninstall"))), itemsPerPage)
+		}
+	} else {
+		<p class="uk-text-small uk-text-muted mt-8 mb-2">
+			{ i18n.T(ctx, "install.no_packages") }
+		</p>
+	}
+}
+
+templ SelectPackageDeployment(c echo.Context, p partials.PaginationAndSort, f filters.AgentFilter, packageId, packageName, packageSource, packageBranch, packageBrewType string, packageVerified bool, agents []*ent.Agent, install bool, refresh int, itemsPerPage int, commonInfo *partials.CommonInfo) {
+	if install {
+		<title>OpenUEM | { i18n.T(ctx, "Deploy") } | { i18n.T(ctx, "Install") } </title>
+		@partials.Header(c, []partials.Breadcrumb{{Title: i18n.T(ctx, "Deploy"), Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy")))}, {Title: "Install", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/install")))}, {Title: packageName, Url: ""}}, commonInfo)
+	} else {
+		<title>OpenUEM | { i18n.T(ctx, "Deploy") } | { i18n.T(ctx, "Uninstall") } </title>
+		@partials.Header(c, []partials.Breadcrumb{{Title: i18n.T(ctx, "Deploy"), Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy")))}, {Title: "Uninstall", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/uninstall")))}, {Title: packageName, Url: ""}}, commonInfo)
+	}
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				if install {
+					@DeployNavbar("install", commonInfo)
+				} else {
+					@DeployNavbar("uninstall", commonInfo)
+				}
+				<div id="error" class="hidden"></div>
+				<div id="success" class="hidden"></div>
+				<div class="uk-width-1-2@m uk-card uk-card-default">
+					<div class="uk-card-header">
+						<h3 class="uk-card-title">
+							if install {
+								{ i18n.T(ctx, "install.title") }
+							} else {
+								{ i18n.T(ctx, "uninstall.title") }
+							}
+						</h3>
+						<p class="uk-margin-small-top uk-text-small">
+							if install {
+								{ i18n.T(ctx, "install.phase_2") + " " }
+							} else {
+								{ i18n.T(ctx, "uninstall.phase_2") + " " }
+							}
+							<span class="uk-text-bolder">{ packageName }</span>
+						</p>
+						<form
+							hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/selectpackagedeployment"))) }
+							hx-target="#main"
+							hx-push-url="true"
+							hx-target="#main"
+							hx-swap="outerHTML"
+							htmx-indicator="#update-spinner"
+							_="on htmx:configRequest
+								set storedItems to [] as Array
+								if sessionStorage.selectedAgents exists then														
+									set storedItems to sessionStorage.selectedAgents as Object
+									get storedItems.toString() put it into event.detail.parameters['selectedAgents']
+								end
+							end"
+						>
+							<input type="hidden" name="filterByInstallationType" value={ strconv.FormatBool(install) }/>
+							<input type="hidden" name="filterByPackageId" value={ packageId }/>
+							<input type="hidden" name="filterByPackageName" value={ packageName }/>
+							<input type="hidden" name="filterByPackageBranch" value={ packageBranch }/>
+							<input type="hidden" name="filterByPackageBrewType" value={ packageBrewType }/>
+							<input type="hidden" name="filterBySource" value={ packageSource }/>
+							<input type="hidden" name="filterByPackageVerified" value={ strconv.FormatBool(packageVerified) }/>
+							<input id="filterBySelectedItems" type="hidden" name="filterBySelectedItems" value={ strconv.Itoa(f.SelectedItems) }/>
+							<input id="selectedAgents" type="hidden" name="selectedAgents"/>
+							<button
+								id="deploy-package"
+								if install {
+									title={ i18n.T(ctx, "Install") }
+								} else {
+									title={ i18n.T(ctx, "Uninstall") }
+								}
+								type="submit"
+								class={ "uk-button mt-4", templ.KV("uk-button-primary", install), templ.KV("uk-button-danger", !install) }
+								disabled?={ f.SelectedItems == 0 }
+							>
+								<uk-icon hx-history="false" icon="package-plus" custom-class="h-5 w-5 mr-4" uk-cloak></uk-icon>
+								if install {
+									{ i18n.T(ctx, "Install") }
+								} else {
+									{ i18n.T(ctx, "Uninstall") }
+								}
+								<div id="update-spinner" class="ml-2 htmx-indicator" hx-history="false" uk-spinner="ratio: 0.5" uk-spinner></div>
+							</button>
+						</form>
+					</div>
+					<div class="uk-card-body mt-8 mb-2">
+						<div class="flex items-center gap-4">
+							@filters.ClearFilters(string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/selectpackagedeployment"))), "#main", "outerHTML", func() bool {
+								return f.Nickname == "" && len(f.Versions) == 0 && len(f.AgentOSVersions) == 0 && len(f.Tags) == 0
+							})
+							if len(agents) > 0 {
+								<button
+									id="select-all"
+									title={ i18n.T(ctx, "SelectAll") }
+									type="button"
+									class="uk-button uk-button-default flex items-center gap-2"
+									_={ fmt.Sprintf(`on click 
+												repeat in <input[type='checkbox']/>
+													if it.checked is false then
+														it.click()
+													end
+												end
+												set storedItems to %s as Array
+												set sessionStorage.selectedAgents to storedItems as JSONString
+												set #filterBySelectedItems.value to '%d'
+												set #items-selected.innerHTML to '%d'
+												remove @disabled from #deploy-package
+											end`, f.SelectedAllAgents, p.NItems, p.NItems) }
+								>
+									{ i18n.T(ctx, "SelectAll") }
+								</button>
+								<button
+									id="deselect-all"
+									title={ i18n.T(ctx, "DeselectAll") }
+									type="button"
+									class="uk-button uk-button-default flex items-center gap-2"
+									_="on click 
+												repeat in <input[type='checkbox']/>
+													if it.checked is true then
+														it.click()
+													end
+												end
+												set storedItems to [] as Array
+												set sessionStorage.selectedAgents to storedItems as JSONString
+												set #filterBySelectedItems.value to '0'
+												set #items-selected.innerHTML to '0'
+												add @disabled to #deploy-package
+											end"
+								>
+									{ i18n.T(ctx, "DeselectAll") }
+								</button>
+								<p class="uk-text-small"><span id="items-selected" class="uk-text-bold">{ strconv.Itoa(f.SelectedItems) }</span> { i18n.T(ctx, "Items") }</p>
+							}
+						</div>
+						if len(agents) > 0 {
+							<div class="flex flex-col gap-2">
+								<table
+									class="uk-table uk-table-divider uk-table-small uk-table-hover uk-table-striped  mt-4"
+									_="on load
+											if #filterBySelectedItems.value is '0' then
+												set storedItems to [] as Array
+												set sessionStorage.selectedAgents to storedItems as JSONString
+											end
+										end"
+								>
+									<thead>
+										<tr>
+											<th>
+												<input
+													id="select-all-in-page"
+													name="select-all-in-page"
+													class="uk-checkbox"
+													type="checkbox"
+													_="on click
+														repeat in <input[title='check-agent']/>																
+															if it.checked !== #select-all-in-page.checked then
+																it.click()
+															end
+														end
+
+														if ((<input[title='check-agent']:checked/>).length > 0) then
+															remove @disabled from #deploy-package
+														else
+															add @disabled to #deploy-package
+														end
+													"
+												/>
+											</th>
+											<th>
+												<div class="flex gap-1 items-center">
+													<span>{ i18n.T(ctx, "agents.nickname") }</span>
+													@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.nickname"), "nickname", "alpha", "#main", "outerHTML", "get")
+												</div>
+											</th>
+											<th>
+												<div class="flex gap-1 items-center">
+													<span>{ i18n.T(ctx, "agents.os") }</span>
+													@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.os"), "os", "alpha", "#main", "outerHTML", "get")
+												</div>
+											</th>
+										</tr>
+									</thead>
+									for _, agent := range agents {
+										<tr>
+											<td class="!align-middle">
+												<input
+													title="check-agent"
+													name={ agent.ID }
+													class="uk-checkbox"
+													type="checkbox"
+													_={ fmt.Sprintf(`
+														on click
+															set storedItems to [] as Array
+															if sessionStorage.selectedAgents exists then														
+																set storedItems to sessionStorage.selectedAgents as Object
+															end																								
+
+															set index to storedItems.indexOf(my name)		
+															if me.checked then
+																increment #filterBySelectedItems.value by 1
+																set #items-selected.innerHTML to #filterBySelectedItems.value
+																if index < 0 then 															
+																	append my name to storedItems
+																	set sessionStorage.selectedAgents to storedItems as JSONString
+																end														
+															else
+																decrement #filterBySelectedItems.value by 1
+																set #items-selected.innerHTML to #filterBySelectedItems.value
+																set index to storedItems.indexOf(my name)														
+																if index >= 0 then 															
+																	get storedItems.splice(index, 1)															
+																end															
+																
+																if no storedItems then 
+																	set storedItems to [] as Array
+																	set #filterBySelectedItems.value to '0'
+																end
+
+																set sessionStorage.selectedAgents to storedItems as JSONString 
+															end
+
+															if ((<input[title='check-agent']:checked/>).length > 0 or storedItems.length > 0) then
+																remove @disabled from #deploy-package
+															else
+																add @disabled to #deploy-package
+															end
+
+															if #select-all-in-page.checked is true and me.checked is false then
+																set #select-all-in-page.checked to false
+															end
+
+															if #select-all-in-page.checked is false and (<input[title='check-agent']:checked/>).length === %d then
+																set #select-all-in-page.checked to true
+															end
+
+															set #selectedAgents.value to storedItems.length
+														end
+
+														on load
+															set storedItems to [] as Array
+															if sessionStorage.selectedAgents exists then
+																set storedItems to sessionStorage.selectedAgents as Object												
+															end
+
+															set index to storedItems.indexOf(my name)														
+															if index >= 0 then
+																set me.checked to true
+															end
+
+															if ((<input[title='check-agent']:checked/>).length == (<input[title='check-agent']/>).length) then
+																set #select-all-in-page.checked to true
+															end
+
+															set #selectedAgents.value to storedItems.length
+														end
+													`,p.PageSize) }
+												/>
+											</td>
+											<td class="!align-middle">{ agent.Nickname }</td>
+											<td class="!align-middle">
+												@partials.OSBadge(agent.Os)
+											</td>
+										</tr>
+									}
+								</table>
+							</div>
+							@partials.Pagination(c, p, "get", "#main", "outerHTML", string(templ.URL(partials.GetNavigationUrl(commonInfo, "/deploy/selectpackagedeployment"))), itemsPerPage)
+						} else {
+							<p class="uk-text-small uk-text-muted mt-4">
+								{ i18n.T(ctx, "agents.no_agents") }
+							</p>
+						}
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
+}

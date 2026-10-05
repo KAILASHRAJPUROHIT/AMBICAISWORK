@@ -1,0 +1,44 @@
+package computers_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"github.com/open-uem/ent"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+)
+
+templ Notes(c echo.Context, p partials.PaginationAndSort, agent *ent.Agent, markdown, renderedMarkdown string, confirmDelete bool, commonInfo *partials.CommonInfo, netbird, offline bool) {
+	@partials.ComputerBreadcrumb(c, agent, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				@partials.ComputerHeader(p, agent, commonInfo, offline)
+				@ComputersNavbar(agent.ID, "notes", agent.VncProxyPort, confirmDelete, commonInfo, agent.Os, netbird, agent.Edges.Release.Version)
+				if confirmDelete {
+					@partials.ConfirmDeleteAgent(c, i18n.T(ctx, "agents.confirm_delete"), string(templ.URL(partials.GetNavigationUrl(commonInfo, "/computers"))), string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s", agent.ID)))))
+				}
+				<div id="error" class="hidden"></div>
+				<div id="success" class="hidden"></div>
+				<div class="uk-card uk-card-default">
+					<div class="uk-card-header">
+						<div class="flex items-center gap-2">
+							<uk-icon hx-history="false" icon="notebook-pen" custom-class="h-5 w-5" uk-cloack></uk-icon>
+							<h3 class="uk-card-title">{ i18n.T(ctx, "agents.notes_title") }</h3>
+						</div>
+						<p class="uk-margin-small-top uk-text-small">{ i18n.T(ctx, "agents.notes_description") }</p>
+					</div>
+				</div>
+				<div class="uk-card uk-card-body uk-card-default p-6">
+					<form>
+						@partials.MarkdownNavbar(agent.ID, renderedMarkdown, commonInfo)
+						<article id="rendered-markdown" class={ "markdown-body uk-textarea w-1/2 h-80 max-h-80 overflow-y-auto", templ.KV("hidden", len(renderedMarkdown) == 0) }>
+							@templ.Raw(renderedMarkdown)
+						</article>
+						<textarea id="notes" name="markdown" class={ "uk-textarea w-1/2 h-80 max-h-80 overflow-y-auto", templ.KV("hidden", len(renderedMarkdown) > 0 ) } placeholder={ i18n.T(ctx, "notes.no_notes") } spellcheck="false">{ markdown }</textarea>
+					</form>
+				</div>
+			</div>
+		</div>
+	</main>
+}

@@ -1,0 +1,45 @@
+package partials
+
+import "strings"
+
+templ Manufacturer(brand string) {
+	if strings.Contains(brand, "apple") {
+		<i class="si si-apple uk-text-default uk-cloak text-2xl"></i>
+	} else if strings.Contains(brand, "asus") {
+		<i class="si si-asus uk-text-default uk-cloak text-4xl"></i>
+	} else if strings.Contains(brand, "gigabyte") {
+		<img src="/assets/img/svg/gigabyte.svg" class="w-20"/>
+	} else if strings.Contains(brand, "hetzner") {
+		<i class="si si-hetzner si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(brand, "hp") || strings.Contains(brand, "hewlett-packard") {
+		<i class="si si-hp si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(brand, "dell") {
+		<i class="si si-dell si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(brand, "intel") {
+		<i class="si si-intel si--color uk-cloak text-4xl"></i>
+	} else if strings.Contains(brand, "kingston") {
+		<i class="si si-kingstontechnology uk-text-default uk-cloak text-2xl"></i>
+	} else if strings.Contains(brand, "samsung") {
+		<i class="si si-samsung si--color uk-cloak text-4xl"></i>
+	} else if strings.Contains(brand, "vmware") {
+		<i class="si si-vmware si--color uk-cloak text-4xl"></i>
+	} else if strings.Contains(brand, "lenovo") {
+		<i class="si si-lenovo si--color uk-cloak text-5xl"></i>
+	} else if strings.Contains(brand, "raspberry") {
+		<i class="si si-raspberrypi si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(brand, "razer") {
+		<i class="si si-razer si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(brand, "msi") || strings.Contains(brand, "micro-star") {
+		<i class="si si-msi si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(brand, "toshiba") {
+		<i class="si si-toshiba si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(brand, "acer") {
+		<i class="si si-acer si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(brand, "qemu") {
+		<i class="si si-qemu si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(brand, "microsoft") {
+		<i class="ri-windows-fill ri-2x text-blue-600"></i>
+	} else {
+		<span>{ strings.ToUpper(brand) }</span>
+	}
+}

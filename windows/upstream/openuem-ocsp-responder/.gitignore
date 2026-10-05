@@ -1,0 +1,10 @@
+*.key
+*.pem
+*.cer
+*.pfx
+*.exe
+certificates
+logs
+PIDFILE
+.vscode
+openuem-ocsp-responder

@@ -1,0 +1,300 @@
+package computers_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"github.com/open-uem/ent"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+	"strconv"
+	"strings"
+)
+
+templ ComputerDeploy(c echo.Context, p partials.PaginationAndSort, agent *ent.Agent, deployments []*ent.Deployment, successMessage string, confirmDelete bool, refreshTime int, itemsPerPage int, commonInfo *partials.CommonInfo, netbird, offline bool) {
+	@partials.ComputerBreadcrumb(c, agent, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				@partials.ComputerHeader(p, agent, commonInfo, offline)
+				@ComputersNavbar(agent.ID, "deploy", agent.VncProxyPort, confirmDelete, commonInfo, agent.Os, netbird, agent.Edges.Release.Version)
+				if confirmDelete {
+					@partials.ConfirmDeleteAgent(c, i18n.T(ctx, "agents.confirm_delete"), string(templ.URL(partials.GetNavigationUrl(commonInfo, "/computers"))), string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s", agent.ID)))))
+				}
+				<div id="error" class="hidden"></div>
+				if successMessage != "" {
+					@partials.SuccessMessage(successMessage)
+				} else {
+					<div id="success" class="hidden"></div>
+				}
+				<div class="uk-card uk-card-default">
+					<div class="uk-card-header">
+						<div class="flex items-center gap-2">
+							<uk-icon hx-history="false" icon="package-plus" custom-class="h-5 w-5" uk-cloack></uk-icon>
+							<h3 class="uk-card-title">{ i18n.T(ctx, "Deploy") }</h3>
+						</div>
+						<p class="uk-margin-small-top uk-text-small">{ i18n.T(ctx, "agents.deploy_description") }</p>
+					</div>
+				</div>
+				if !strings.Contains(agent.Edges.Operatingsystem.Version, "Windows Server ") {
+					<div class="uk-flex gap-8">
+						<div class="uk-card uk-card-body uk-card-default w-5/12 p-6">
+							<div class="flex flex-col gap-4">
+								<div>
+									<form
+										class="uk-search uk-search-default w-full flex items-center gap-4"
+										hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/deploy/searchinstall", agent.ID)))) }
+										hx-target="#deploy-search-results"
+										hx-push-url="false"
+										hx-swap="innerHTML"
+										_="on load
+										set emptyArray to [] as Array
+										set sessionStorage.checkedItems to emptyArray as JSONString
+									end
+								"
+									>
+										<span uk-search-icon></span>
+										<input
+											name="filterByAppName"
+											class="uk-search-input"
+											autocomplete="off"
+											type="search"
+											placeholder={ i18n.T(ctx, "agents.deploy_search") }
+											aria-label="Search"
+											_="on keyup
+										if my.value.length > 1 then
+											remove @disabled from #search-packages
+										else
+											add @disabled to #search-packages
+										end
+									end"
+										/>
+										<button
+											id="search-packages"
+											type="submit"
+											class="uk-button uk-button-primary"
+											disabled
+										>
+											{ i18n.T(ctx, "Search") }
+										</button>
+									</form>
+								</div>
+								<div id="deploy-search-results"></div>
+							</div>
+						</div>
+						<div class="uk-card uk-card-body uk-card-default w-7/12 p-6">
+							<div class="flex flex-col gap-4">
+								<div class="flex justify-between items-center">
+									<p class="uk-text-small uk-text-muted">
+										if p.NItems > 0 {
+											{ i18n.T(ctx, "agents.deploy_list") }
+										} else {
+											{ i18n.T(ctx, "agents.no_deployments") }
+										}
+									</p>
+									@partials.RefreshPage(commonInfo.Translator, refreshTime, true)
+								</div>
+								<div>
+									if p.NItems > 0 {
+										<div id="deployments-results">
+											@DeploymentsTable(c, p, agent.ID, deployments, itemsPerPage, commonInfo)
+										</div>
+									}
+								</div>
+							</div>
+						</div>
+					</div>
+				} else {
+					<div class="uk-card uk-card-body uk-card-default">
+						<p class="uk-text-small uk-text-muted">
+							{ i18n.T(ctx, "agents.sw_deploy_not_supported") }
+						</p>
+					</div>
+				}
+			</div>
+		</div>
+	</main>
+}
+
+templ SearchPacketResult(c echo.Context, agentId string, packages []*ent.SoftwarePackage, p partials.PaginationAndSort, itemsPerPage int, commonInfo *partials.CommonInfo) {
+	if len(packages) > 0 {
+		<table class="uk-table uk-table-divider uk-table-small uk-table-striped ">
+			<thead>
+				<tr>
+					<th class="sr-only w-1/12">Logo</th>
+					<th>
+						<div class="flex gap-1 items-center">
+							<span>{ i18n.T(ctx, "Name") }</span>
+							@partials.SortByColumnIcon(c, p, i18n.T(ctx, "Name"), "name", "alpha", "#deploy-search-results", "innerHTML", "post")
+						</div>
+					</th>
+					<th>{ i18n.T(ctx, "Actions") }</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, p := range packages {
+					<tr>
+						<td class="text-center !align-middle">
+							@partials.Brand(strings.ToLower(p.Name), "")
+						</td>
+						<td class="!align-middle">
+							<div class="flex items-center gap-4 text-left">
+								@partials.SoftwarePackageDescription(p.PackageID, p.Name, p.Branch, p.Verified)
+							</div>
+						</td>
+						<td class="!align-middle">
+							<form>
+								<input type="hidden" name="filterByPackageId" value={ p.PackageID }/>
+								<input type="hidden" name="filterByPackageName" value={ p.Name }/>
+								<input type="hidden" name="filterByPackageBranch" value={ p.Branch }/>
+								<input type="hidden" name="filterByPackageBrewType" value={ p.BrewType }/>
+								<input type="hidden" name="filterByPackageVerified" value={ strconv.FormatBool(p.Verified) }/>
+								<button
+									type="submit"
+									hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/deploy/install", agentId)))) }
+									hx-push-url="false"
+									hx-target="#main"
+									hx-swap="outerHTML"
+								>
+									<uk-icon hx-history="false" icon="package-plus" custom-class="h-6 w-6 text-green-600" uk-cloack></uk-icon>
+								</button>
+							</form>
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+		@partials.Pagination(c, p, "post", "#deploy-search-results", "innerHTML", string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/deploy/searchinstall", agentId)))), itemsPerPage)
+	} else {
+		<p class="uk-text-small uk-text-muted mt-8 mb-2">
+			{ i18n.T(ctx, "install.no_packages") }
+		</p>
+	}
+}
+
+templ DeploymentsTable(c echo.Context, p partials.PaginationAndSort, agentId string, packages []*ent.Deployment, itemsPerPage int, commonInfo *partials.CommonInfo) {
+	<table class="uk-table uk-table-divider uk-table-small uk-table-striped ">
+		<thead>
+			<tr>
+				<th>
+					<div class="flex gap-1 items-center">
+						<span class="sr-only">Logo</span>
+					</div>
+				</th>
+				<th>
+					<div class="flex gap-1 items-center">
+						<span>{ i18n.T(ctx, "Name") }</span>
+						@partials.SortByColumnIcon(c, p, i18n.T(ctx, "Name"), "name", "alpha", "#deployments-results", "innerHTML", "post")
+					</div>
+				</th>
+				<th>
+					<div class="flex gap-1 items-center">
+						<span>{ i18n.T(ctx, "agents.deploy_install_date") }</span>
+						@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.deploy_install_date"), "installation", "time", "#deployments-results", "innerHTML", "post")
+					</div>
+				</th>
+				<th>
+					<div class="flex gap-1 items-center">
+						<span>{ i18n.T(ctx, "agents.deploy_updated_date") }</span>
+						@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.deploy_updated_date"), "updated", "time", "#deployments-results", "innerHTML", "post")
+					</div>
+				</th>
+				<th>{ i18n.T(ctx, "Actions") }</th>
+			</tr>
+		</thead>
+		<tbody>
+			for _, item := range packages {
+				<tr>
+					<td class="text-center !align-middle">
+						@partials.Brand(strings.ToLower(item.Name), "")
+					</td>
+					<td class="!align-middle">
+						@partials.SoftwarePackageDescription(item.PackageID, item.Name, item.Branch, item.Verified)
+					</td>
+					<td class="!align-middle">
+						if item.Failed {
+							<span class="text-red-600">
+								if item.MoreInfo != "" {
+									{ item.MoreInfo }
+								} else {
+									{ i18n.T(ctx, "agents.could_not_deploy") }
+								}
+							</span>
+						} else {
+							if item.Installed.IsZero() {
+								{ i18n.T(ctx, "In Progress") }
+							} else {
+								{ commonInfo.Translator.FmtDateMedium(item.Installed) + " " + commonInfo.Translator.FmtTimeShort(item.Installed) }
+							}
+						}
+					</td>
+					<td class="!align-middle">
+						if !item.Installed.IsZero() {
+							if item.Updated.IsZero() {
+								{ i18n.T(ctx, "In Progress") }
+							} else {
+								{ commonInfo.Translator.FmtDateMedium(item.Updated) + " " + commonInfo.Translator.FmtTimeShort(item.Updated) }
+							}
+						}
+					</td>
+					<td class="!align-middle">
+						<div class="flex items-center gap-4">
+							if item.Installed.IsZero() && item.Failed {
+								<form>
+									<input type="hidden" name="filterByPackageId" value={ item.PackageID }/>
+									<input type="hidden" name="filterByPackageName" value={ item.Name }/>
+									<input type="hidden" name="filterByPackageBranch" value={ item.Branch }/>
+									<input type="hidden" name="filterByPackageBrewType" value={ item.BrewType }/>
+									<input type="hidden" name="filterByPackageVerified" value={ strconv.FormatBool(item.Verified) }/>
+									<button
+										type="submit"
+										hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/deploy/install", agentId)))) }
+										hx-push-url="false"
+										hx-target="#main"
+										hx-swap="outerHTML"
+									>
+										<uk-icon hx-history="false" icon="package-plus" custom-class="h-6 w-6 text-green-600" uk-cloack></uk-icon>
+									</button>
+								</form>
+							}
+							if !item.Installed.IsZero() {
+								<form>
+									<input type="hidden" name="filterByPackageId" value={ item.PackageID }/>
+									<input type="hidden" name="filterByPackageName" value={ item.Name }/>
+									<input type="hidden" name="filterByPackageBranch" value={ item.Branch }/>
+									<input type="hidden" name="filterByPackageBrewType" value={ item.BrewType }/>
+									<input type="hidden" name="filterByPackageVerified" value={ strconv.FormatBool(item.Verified) }/>
+									<button
+										type="submit"
+										hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/deploy/update", agentId)))) }
+										hx-push-url="false"
+										hx-target="#main"
+										hx-swap="outerHTML"
+									>
+										<uk-icon hx-history="false" icon="package-check" custom-class="h-6 w-6 text-blue-600" uk-cloack></uk-icon>
+									</button>
+								</form>
+							}
+							<form>
+								<input type="hidden" name="filterByPackageId" value={ item.PackageID }/>
+								<input type="hidden" name="filterByPackageName" value={ item.Name }/>
+								<input type="hidden" name="filterByPackageBranch" value={ item.Branch }/>
+								<input type="hidden" name="filterByPackageBrewType" value={ item.BrewType }/>
+								<input type="hidden" name="filterByPackageVerified" value={ strconv.FormatBool(item.Verified) }/>
+								<button
+									type="submit"
+									hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/deploy/uninstall", agentId)))) }
+									hx-push-url="false"
+									hx-target="#main"
+									hx-swap="outerHTML"
+								>
+									<uk-icon hx-history="false" icon="package-minus" custom-class="h-6 w-6 text-red-600" uk-cloack></uk-icon>
+								</button>
+							</form>
+						</div>
+					</td>
+				</tr>
+			}
+		</tbody>
+	</table>
+	@partials.Pagination(c, p, "post", "#deployments-results", "innerHTML", string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/deploy", agentId)))), itemsPerPage)
+}

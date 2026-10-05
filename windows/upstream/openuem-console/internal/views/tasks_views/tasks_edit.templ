@@ -1,0 +1,168 @@
+package tasks_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"github.com/open-uem/ent"
+	"github.com/open-uem/ent/task"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+)
+
+templ EditTask(c echo.Context, profileID int, t *ent.Task, commonInfo *partials.CommonInfo) {
+	@partials.Header(c, []partials.Breadcrumb{{Title: i18n.T(ctx, "Tasks")}}, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div id="error" class="hidden"></div>
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-header">
+				<div class="flex justify-between items-center">
+					<div class="flex flex-col my-4 mx-1">
+						<h3 class="uk-card-title">{ i18n.T(ctx, "tasks.edit.title") }</h3>
+						<p class="uk-margin-small-top uk-text-small">
+							{ i18n.T(ctx, "tasks.description") }
+						</p>
+					</div>
+				</div>
+			</div>
+			<div class="uk-card-body">
+				<form
+					class="flex flex-col gap-4 my-6"
+					hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/tasks/%d", t.ID)))) }
+					hx-target="#main"
+					hx-swap="outerHTML"
+					hx-push-url="false"
+				>
+					<div class="flex flex-col gap-4 w-1/2">
+						<div>
+							<label class="uk-form-label" for="task-description">
+								{ i18n.T(ctx, "tasks.new.name") }
+							</label>
+							<div class="uk-form-controls">
+								<textarea
+									id="task-description"
+									name="task-description"
+									class="uk-textarea"
+									rows="2"
+									placeholder={ i18n.T(ctx, "tasks.new.text") }
+									aria-label="Task description"
+									autocomplete="off"
+									autocorrect="off"
+									autocapitalize="off"
+									spellcheck="false"
+								>
+									{ t.Name }
+								</textarea>
+							</div>
+						</div>
+						@partials.SelectTaskAgentType(t)
+						<div id="select-task-type">
+							@partials.SelectTaskType(t, t.AgentType.String())
+						</div>
+						<div id="select-task-subtype">
+							switch t.Type {
+								case task.TypeWingetInstall, task.TypeWingetDelete:
+									@partials.SelectWinGetPackageTaskSubtype(t)
+								case task.TypeAddRegistryKey, task.TypeAddRegistryKeyValue, task.TypeUpdateRegistryKeyDefaultValue, task.TypeRemoveRegistryKey, task.TypeRemoveRegistryKeyValue:
+									@partials.SelectRegistryTaskSubtype(t)
+								case task.TypeAddLocalUser, task.TypeRemoveLocalUser:
+									@partials.SelectLocalUserTaskSubtype(t)
+								case task.TypeAddLocalGroup, task.TypeRemoveLocalGroup, task.TypeAddUsersToLocalGroup, task.TypeRemoveUsersFromLocalGroup:
+									@partials.SelectWindowsLocalGroupTaskSubtype(t)
+								case task.TypeAddUnixLocalGroup, task.TypeRemoveUnixLocalGroup:
+									@partials.SelectUnixLocalGroupTaskSubtype(t)
+								case task.TypeAddUnixLocalUser, task.TypeRemoveUnixLocalUser:
+									@partials.SelectUnixLocalUserTaskSubtype(t)
+								case task.TypeMsiInstall, task.TypeMsiUninstall:
+									@partials.SelectMSITaskSubtype(t)
+								case task.TypeFlatpakInstall, task.TypeFlatpakUninstall:
+									@partials.SelectFlatpakPackageTaskSubtype(t)
+								case task.TypeBrewFormulaInstall, task.TypeBrewFormulaUninstall, task.TypeBrewFormulaUpgrade:
+									@partials.SelectHomeBrewFormulaTaskSubtype(t)
+								case task.TypeBrewCaskInstall, task.TypeBrewCaskUninstall, task.TypeBrewCaskUpgrade:
+									@partials.SelectHomeBrewCaskTaskSubtype(t)
+								case task.TypeNetbirdInstall, task.TypeNetbirdUninstall, task.TypeNetbirdRegister:
+									@partials.SelectNetbirdTaskSubtype(t)
+									// Future APT subtype
+									// case task.TypeAptInstall, task.TypeAptRemove, task.TypeAptUpdate, task.TypeAptUpdateAll, task.TypeAptUpgradeOs:
+									// 	@partials.SelectAPTTaskSubtype(t)
+							}
+						</div>
+						if t != nil {
+							<input type="hidden" name="selected-task-type" value={ t.Type.String() }/>
+						}
+					</div>
+					if partials.IsWinGetPackageTask(t) {
+						<div class="w-1/2" id="package-partial">
+							@partials.WingetPackageSearch(t)
+						</div>
+					}
+					if partials.IsRegistryTask(t) {
+						<div class="w-1/2" id="registry-partial">
+							@partials.RegistryComponent(t)
+						</div>
+					}
+					if partials.IsLocalUserTask(t) {
+						<div class="w-1/2" id="local-user-partial">
+							@partials.LocalUserComponent(t)
+						</div>
+					}
+					if partials.IsUnixLocalUserTask(t) {
+						<div class="w-1/2" id="local-user-partial">
+							@partials.UnixLocalUserComponent(t)
+						</div>
+					}
+					if partials.IsWindowsLocalGroupTask(t) {
+						<div class="w-1/2" id="local-group-partial">
+							@partials.WindowsLocalGroupComponent(t)
+						</div>
+					}
+					if partials.IsUnixLocalGroupTask(t) {
+						<div class="w-1/2" id="local-group-partial">
+							@partials.UnixLocalGroupComponent(t)
+						</div>
+					}
+					if partials.IsMSITask(t) {
+						<div class="w-1/2" id="msi-partial">
+							@partials.MSIComponent(t)
+						</div>
+					}
+					if partials.IsPowerShellTask(t) {
+						<div class="w-1/2" id="powershell-partial">
+							@partials.PowerShellComponent(t)
+						</div>
+					}
+					if partials.IsUnixScriptTask(t) {
+						<div class="w-1/2" id="unix-script-partial">
+							@partials.UnixScriptComponent(t)
+						</div>
+					}
+					if partials.IsFlatpakTask(t) {
+						<div class="w-1/2" id="flatpak-partial">
+							@partials.FlatpakPackageManagement(t)
+						</div>
+					}
+					if partials.IsHomeBrewFormulaTask(t) || partials.IsHomeBrewCaskTask(t) {
+						<div class="w-1/2" id="brew-partial">
+							@partials.HomeBrewPackageManagement(t)
+						</div>
+					}
+					<div class="flex gap-4 my-4">
+						<button type="submit" class="uk-button uk-button-primary">
+							{ i18n.T(ctx, "tasks.edit.save") }
+						</button>
+						<button
+							type="button"
+							class="uk-button uk-button-default"
+							hx-get={ partials.GetCurrentUrl(c, string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/profiles/%d", profileID))))) }
+							hx-push-url="true"
+							hx-target="#main"
+							hx-swap="outerHTML"
+						>
+							{ i18n.T(ctx, "Cancel") }
+						</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</main>
+}

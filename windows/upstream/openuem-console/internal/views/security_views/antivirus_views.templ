@@ -1,0 +1,167 @@
+package security_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"github.com/open-uem/openuem-console/internal/models"
+	"github.com/open-uem/openuem-console/internal/views/filters"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+)
+
+type FilterOptions struct {
+	AvailableOSes             []string
+	AvailableEDRNames         []string
+	AvailableEDREnabledStatus []string
+	AvailableEDRUpdatedStatus []string
+}
+
+templ EDR(c echo.Context, p partials.PaginationAndSort, f filters.AgentFilter, antiviri []models.Antivirus, options *FilterOptions, refresh int, itemsPerPage int, commonInfo *partials.CommonInfo) {
+	@partials.Header(c, []partials.Breadcrumb{{Title: i18n.T(ctx, "Security"), Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/security/updates")))}, {Title: "EDR", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/security/antivirus")))}}, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				@SecurityNavbar("antivirus", commonInfo)
+				<div id="success" class="hidden"></div>
+				<div id="error" class="hidden"></div>
+				<div class="uk-width-1-2@m uk-card uk-card-default">
+					<div class="uk-card-header">
+						<div class="flex justify-between items-center">
+							<div class="flex flex-col">
+								<h3 class="flex gap-2 items-center uk-card-title"><i class="ri-virus-fill ri-xl uk-cloak"></i><span>{ i18n.T(ctx, "antivirus.title") }</span></h3>
+								<p class="uk-margin-small-top uk-text-small">
+									{ i18n.T(ctx, "antivirus.description") }
+								</p>
+							</div>
+							<div class="flex gap-4">
+								@partials.CSVReportButton(p, string(templ.URL(partials.GetNavigationUrl(commonInfo, "/reports/antivirus/csv"))), "reports.agents")
+								@partials.PDFReportButton(p, string(templ.URL(partials.GetNavigationUrl(commonInfo, "/reports/antivirus"))), "reports.agents")
+							</div>
+						</div>
+					</div>
+					<div class="uk-card-body flex flex-col gap-4">
+						<div class="flex justify-between mt-8">
+							<div class="flex gap-4 w-1/3">
+								@filters.Search(c, p, f.Search, "#main", "outerHTML")
+								@filters.ClearFilters(string(templ.URL(partials.GetNavigationUrl(commonInfo, "/security"))), "#main", "outerHTML", func() bool {
+									return len(f.Nickname) == 0 && len(f.AgentOSVersions) == 0 && len(f.AntivirusNameOptions) == 0 &&
+										len(f.AntivirusEnabledOptions) == 0 && len(f.AntivirusUpdatedOptions) == 0 && len(f.Search) == 0
+								
+								})
+							</div>
+							@partials.RefreshPage(commonInfo.Translator, refresh, true)
+						</div>
+						if len(antiviri) > 0 {
+							<table class="uk-table uk-table-divider uk-table-small uk-table-striped ">
+								<thead>
+									<tr>
+										<th>
+											<div class="flex gap-1 items-center">
+												<span>{ i18n.T(ctx, "antivirus.nickname") }</span>
+												@partials.SortByColumnIcon(c, p, i18n.T(ctx, "antivirus.nickname"), "nickname", "alpha", "#main", "outerHTML", "get")
+												@filters.FilterByText(c, p, "Nickname", f.Nickname, "agents.filter_by_nickname", "#main", "outerHTML")
+											</div>
+										</th>
+										<th>
+											<div class="flex gap-1 items-center">
+												<span>{ i18n.T(ctx, "antivirus.os") }</span>
+												@partials.SortByColumnIcon(c, p, i18n.T(ctx, "antivirus.os"), "agentOS", "alpha", "#main", "outerHTML", "get")
+												@filters.FilterByOptions(c, p, "AgentOS", "agents.filter_by_agent_os", options.AvailableOSes, f.AgentOSVersions, "#main", "outerHTML", false, func() bool {
+													return len(f.AgentOSVersions) == 0
+												})
+											</div>
+										</th>
+										<th>
+											<div class="flex gap-1 items-center">
+												<span>{ i18n.T(ctx, "antivirus.title") }</span>
+												@partials.SortByColumnIcon(c, p, i18n.T(ctx, "antivirus.title"), "antivirusName", "alpha", "#main", "outerHTML", "get")
+												@filters.FilterByOptions(c, p, "AntivirusName", "antivirus.filter_by_name", options.AvailableEDRNames, f.AntivirusNameOptions, "#main", "outerHTML", false, func() bool {
+													return len(f.AntivirusNameOptions) == 0
+												})
+											</div>
+										</th>
+										<th>
+											<div class="flex gap-2 items-center justify-center">
+												<span>{ i18n.T(ctx,"antivirus.enabled") }</span>
+												@partials.SortByColumnIcon(c, p, i18n.T(ctx, "antivirus.enabled"), "antivirusEnabled", "alpha", "#main", "outerHTML", "get")
+												@filters.FilterByOptions(c, p, "AntivirusEnabled", "antivirus.filter_by_enabled", options.AvailableEDREnabledStatus, f.AntivirusEnabledOptions, "#main", "outerHTML", true, func() bool {
+													return len(f.AntivirusEnabledOptions) == 0
+												})
+											</div>
+										</th>
+										<th>
+											<div class="flex gap-2 items-center justify-center">
+												<span>{ i18n.T(ctx,"antivirus.updated") }</span>
+												@partials.SortByColumnIcon(c, p, i18n.T(ctx, "antivirus.updated"), "antivirusUpdated", "alpha", "#main", "outerHTML", "get")
+												@filters.FilterByOptions(c, p, "AntivirusUpdated", "antivirus.filter_by_updated", options.AvailableEDRUpdatedStatus, f.AntivirusUpdatedOptions, "#main", "outerHTML", true, func() bool {
+													return len(f.AntivirusUpdatedOptions) == 0
+												})
+											</div>
+										</th>
+									</tr>
+								</thead>
+								<tbody>
+									for _, antivirus := range antiviri {
+										<tr>
+											<td
+												class="!align-middle"
+											>
+												<a
+													href={ templ.URL(fmt.Sprintf("/tenant/%s/site/%d/computers/%s", commonInfo.TenantID, antivirus.SiteID, antivirus.ID)) }
+													hx-get={ string(templ.URL(fmt.Sprintf("/tenant/%s/site/%d/computers/%s", commonInfo.TenantID, antivirus.SiteID, antivirus.ID))) }
+													hx-push-url="true"
+													hx-target="#main"
+													hx-swap="outerHTML"
+													class="underline cursor-pointer"
+												>
+													{ antivirus.Nickname }
+												</a>
+											</td>
+											<td class="!align-middle">
+												@partials.OSBadge(antivirus.OS)
+											</td>
+											<td class="!align-middle">
+												if len(antivirus.Name) == 0 {
+													if antivirus.OS == "windows" {
+														{ i18n.T(ctx, "Not Found") }
+													} else {
+														{ i18n.T(ctx, "Unsupported") }
+													}
+												} else {
+													{ antivirus.Name }
+												}
+											</td>
+											if antivirus.IsActive {
+												<td class="!align-middle"><uk-icon hx-history="false" icon="shield-check" custom-class="mx-auto h-5 w-5 text-green-600" uk-cloack></uk-icon></td>
+											} else {
+												if len(antivirus.Name) == 0 {
+													<td class="!align-middle"><uk-icon hx-history="false" icon="shield-off" custom-class="mx-auto h-5 w-5 text-gray-600" uk-cloack></uk-icon></td>
+												} else {
+													<td class="!align-middle"><uk-icon hx-history="false" icon="shield-x" custom-class="mx-auto h-5 w-5 text-red-600" uk-cloack></uk-icon></td>
+												}
+											}
+											if antivirus.IsUpdated {
+												<td class="!align-middle"><uk-icon hx-history="false" icon="shield-check" custom-class="mx-auto h-5 w-5 text-green-600" uk-cloack></uk-icon></td>
+											} else {
+												if len(antivirus.Name) == 0 {
+													<td class="!align-middle"><uk-icon hx-history="false" icon="shield-off" custom-class="mx-auto h-5 w-5 text-gray-600" uk-cloack></uk-icon></td>
+												} else {
+													<td class="!align-middle"><uk-icon hx-history="false" icon="shield-x" custom-class="mx-auto h-5 w-5 text-red-600" uk-cloack></uk-icon></td>
+												}
+											}
+										</tr>
+									}
+								</tbody>
+							</table>
+							@partials.Pagination(c, p, "get", "#main", "outerHTML", string(templ.URL(partials.GetNavigationUrl(commonInfo, "/security/antivirus"))), itemsPerPage)
+						} else {
+							<p class="uk-text-small uk-text-muted">
+								{ i18n.T(ctx, "antivirus.no_antivirus_yet") }
+							</p>
+						}
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
+}

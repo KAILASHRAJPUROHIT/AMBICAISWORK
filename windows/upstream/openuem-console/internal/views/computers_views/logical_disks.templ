@@ -1,0 +1,126 @@
+package computers_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	ent "github.com/open-uem/ent"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+	"strconv"
+)
+
+templ LogicalDisks(c echo.Context, p partials.PaginationAndSort, agent *ent.Agent, confirmDelete bool, commonInfo *partials.CommonInfo, netbird, offline bool) {
+	@partials.ComputerBreadcrumb(c, agent, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				@partials.ComputerHeader(p, agent, commonInfo, offline)
+				@ComputersNavbar(agent.ID, "logical-disks", agent.VncProxyPort, confirmDelete, commonInfo, agent.Os, netbird, agent.Edges.Release.Version)
+				if confirmDelete {
+					@partials.ConfirmDeleteAgent(c, i18n.T(ctx, "agents.confirm_delete"), string(templ.URL(partials.GetNavigationUrl(commonInfo, "/computers"))), string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s", agent.ID)))))
+				}
+				<div id="error" class="hidden"></div>
+				<div class="uk-width-1-2@m uk-card uk-card-default">
+					<div class="uk-card-header">
+						<div class="flex items-center gap-2">
+							<uk-icon hx-history="false" icon="hard-drive" custom-class="h-5 w-5" uk-cloack></uk-icon>
+							<h3 class="uk-card-title">{ i18n.T(ctx, "inventory.logical_disk.title") }</h3>
+						</div>
+						<p class="uk-margin-small-top uk-text-small">
+							{ i18n.T(ctx, "inventory.logical_disk.description") }
+						</p>
+					</div>
+				</div>
+				<div class="uk-card uk-card-body uk-card-default">
+					if len(agent.Edges.Logicaldisks) > 0 {
+						<table class="uk-table uk-table-divider uk-table-small uk-table-striped -mt-4">
+							<thead>
+								<tr>
+									if agent.Os == "windows" {
+										<th>{ i18n.T(ctx, "inventory.logical_disk.label") }</th>
+									} else {
+										<th>{ i18n.T(ctx, "inventory.logical_disk.mount_point") }</th>
+									}
+									if agent.Os == "windows" {
+										<th>{ i18n.T(ctx, "inventory.logical_disk.volume_name") }</th>
+									} else {
+										<th>{ i18n.T(ctx, "inventory.logical_disk.filesystem") }</th>
+									}
+									if agent.Os == "windows" {
+										<th>{ i18n.T(ctx, "inventory.logical_disk.filesystem") }</th>
+									} else {
+										<th>{ i18n.T(ctx, "inventory.logical_disk.filesystem_type") }</th>
+									}
+									<th>{ i18n.T(ctx, "inventory.logical_disk.usage") }</th>
+									<th>{ i18n.T(ctx, "inventory.logical_disk.remaining_space") }</th>
+									<th>{ i18n.T(ctx, "inventory.logical_disk.total_size") }</th>
+									<th>{ i18n.T(ctx, "inventory.logical_disk.bitlocker") }</th>
+									if  agent.SftpPort != "" {
+										<th>{ i18n.T(ctx, "inventory.file_browser.title") }</th>
+									}
+								</tr>
+							</thead>
+							for i, disk := range agent.Edges.Logicaldisks {
+								<tr>
+									<td class="!align-middle">{ disk.Label }</td>
+									if disk.VolumeName == "" {
+										<td class="!align-middle">-</td>
+									} else {
+										<td class="!align-middle">{ disk.VolumeName }</td>
+									}
+									<td class="!align-middle">{ disk.Filesystem }</td>
+									<td class="!align-middle">
+										<progress
+											class="uk-progress !mb-0"
+											uk-tooltip={ fmt.Sprintf("title: %s", i18n.T(ctx, "agents.free_space", 100-int(disk.Usage))) }
+											value={ strconv.Itoa(int(disk.Usage)) }
+											max="100"
+										></progress>
+									</td>
+									<td class="!align-middle">{ disk.RemainingSpaceInUnits }</td>
+									<td class="!align-middle">{ disk.SizeInUnits }</td>
+									<td class="!align-middle">
+										@partials.BitlockerStatus(disk.BitlockerStatus)
+									</td>
+									if agent.SftpPort != "" && agent.SftpService && (!commonInfo.DetectRemoteAgents || (commonInfo.DetectRemoteAgents && !agent.IsRemote)) {
+										<td class="!align-middle">
+											<form>
+												if agent.Os == "windows" {
+													<input type="hidden" name="cwd" value={ disk.Label + "\\" }/>
+												} else {
+													<input type="hidden" name="cwd" value={ disk.Label }/>
+												}
+												<button
+													class="flex gap-2 items-center"
+													type="button"
+													hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/logical-disks", agent.ID)))) }
+													hx-target="#main"
+													hx-push-url="false"
+													hx-swap="outerHTML"
+													hx-indicator={ fmt.Sprintf("#file-browser-%d", i) }
+												>
+													<uk-icon icon="folder-open" custom-class="h-5 w-5 text-yellow-700 fill-yellow-500" hx-history="false" uk-cloak></uk-icon>
+													<div id={ fmt.Sprintf("file-browser-%d", i) } class="ml-2 htmx-indicator" hx-history="false" uk-spinner="ratio: 0.5" uk-spinner></div>
+												</button>
+											</form>
+										</td>
+									} else {
+										<td class="!align-middle">
+											<span uk-tooltip={ fmt.Sprintf("title: %s", i18n.T(ctx, "agents.sftp_not_available")) }>
+												<uk-icon icon="folder-x" custom-class="h-5 w-5 text-red-700 fill-red-500" hx-history="false" uk-cloak></uk-icon>
+											</span>
+										</td>
+									}
+								</tr>
+							}
+						</table>
+					} else {
+						<p class="uk-text-small uk-text-muted">
+							{ i18n.T(ctx, "inventory.logical_disk.no_logical_disks") }
+						</p>
+					}
+				</div>
+			</div>
+		</div>
+	</main>
+}

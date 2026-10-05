@@ -1,0 +1,29 @@
+package filters
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+)
+
+templ ClearFilter(c echo.Context, field, target, swap string, disableFunc func() bool) {
+	<button
+		type="button"
+		class="uk-button uk-button-default mx-2 w-full"
+		hx-push-url="true"
+		hx-get={ GetPaginationUrl(c) }
+		hx-target={ target }
+		hx-swap={ swap }
+		hx-include="input[name^='filterBy']"
+		disabled?={ disableFunc() }
+		_={ fmt.Sprintf(`
+        on htmx:configRequest
+            repeat for f in <input[name^='%s']/>                
+                set event.detail.parameters[f.name] to ''
+            end
+			set event.detail.parameters['filterBySelectedItems'] to '0'
+        end`,field) }
+	>
+		{ i18n.T(ctx, "Clear.one") }<uk-icon hx-history="false" icon="filter-x" custom-class="h-5 w-5 ml-3" uk-cloack></uk-icon>
+	</button>
+}

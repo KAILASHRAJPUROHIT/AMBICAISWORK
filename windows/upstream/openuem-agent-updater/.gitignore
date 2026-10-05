@@ -1,0 +1,4 @@
+*.exe
+certificates
+agent-updater
+openuem-agent-updater

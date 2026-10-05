@@ -1,0 +1,241 @@
+package partials
+
+import "strings"
+
+templ Brand(name, publisher string) {
+	if strings.Contains(name, "7-zip") {
+		<i class="si si-7zip uk-text-default uk-cloak text-3xl"></i>
+	} else if strings.Contains(name, "acrobat") {
+		<uk-icon hx-history="false" icon="file-text" custom-class="mx-auto h-6 w-6 text-red-600" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "adobe acrobat") {
+		<uk-icon hx-history="false" icon="file-text" custom-class="mx-auto h-6 w-6 text-red-600" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "adobe") {
+		<uk-icon hx-history="false" icon="file-text" custom-class="mx-auto h-6 w-6 text-red-600" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "apple") {
+		<i class="si si-apple uk-text-default uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "autofirma") {
+		<uk-icon hx-history="false" icon="shield-check" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "db browser") {
+		<uk-icon hx-history="false" icon="database" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "fnmt") {
+		<uk-icon hx-history="false" icon="shield-check" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, ".net") {
+		<i class="si si-dotnet si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "nvidia") {
+		<i class="si si-nvidia si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(publisher, "nvidia") {
+		<i class="si si-nvidia si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(publisher, "anydesk") {
+		<i class="si si-anydesk uk-text-default uk-cloak text-4xl"></i>
+	} else if strings.Contains(name, "asus") {
+		<i class="si si-asus uk-text-default uk-cloak text-4xl"></i>
+	} else if strings.Contains(publisher, "asus") {
+		<i class="si si-asus uk-text-default uk-cloak text-4xl"></i>
+	} else if strings.Contains(name, "beekeeper studio") {
+		<i class="si si-beekeeperstudio si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "bitwarden") {
+		<i class="si si-bitwarden si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "brave") {
+		<i class="si si-brave si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "bitdefender") {
+		<i class="si si-bitdefender si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "chromium") {
+		<i class="si si-googlechrome si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "cisco") || strings.Contains(publisher, "cisco") {
+		<i class="si si-cisco si--color uk-cloak text-4xl"></i>
+	} else if strings.Contains(name, "citrix") || strings.Contains(publisher, "citrix") {
+		<i class="si si-citrix si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "dell") {
+		<i class="si si-dell si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "discord") {
+		<i class="si si-discord si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "dnie") {
+		<uk-icon hx-history="false" icon="id-card" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "docker") {
+		<i class="si si-docker si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "fedora") {
+		<i class="si si-fedora si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "filezilla") {
+		<i class="si si-filezilla si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "fortinet") || strings.Contains(publisher, "fortinet") {
+		<i class="si si-fortinet si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(publisher, "git") {
+		<i class="si si-git si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "gmail") {
+		<i class="si si-gmail si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "google chrome") {
+		<i class="si si-googlechrome si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "google") || strings.Contains(publisher, "google") {
+		<i class="si si-google si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(publisher, "go") {
+		<i class="si si-go si--color uk-cloak text-4xl"></i>
+	} else if strings.Contains(name, "gimp") {
+		<i class="si si-gimp si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(name, "greenshot") {
+		<uk-icon hx-history="false" icon="brush" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(publisher, "hp") || strings.Contains(publisher, "hewlett-packard") {
+		<i class="si si-hp si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "insomnia") {
+		<i class="si si-insomnia si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(name, "winrt") {
+		<i class="ri-microsoft-fill ri-2x text-blue-600"></i>
+	} else if strings.Contains(publisher, "intel") {
+		<i class="si si-intel si--color uk-cloak text-4xl"></i>
+	} else if strings.Contains(name, "inkscape") {
+		<i class="si si-inkscape uk-text-default uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "inno setup") {
+		<uk-icon hx-history="false" icon="package" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "irfanview") {
+		<uk-icon hx-history="false" icon="image" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "iterm") {
+		<i class="si si-iterm2 uk-text-default uk-cloak text-3xl"></i>
+	} else if strings.Contains(name, "java") || strings.Contains(name, "openjdk") {
+		<uk-icon hx-history="false" icon="coffee" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(publisher, "jetbrains") {
+		<i class="si si-jetbrains uk-text-default uk-cloak text-3xl"></i>
+	} else if strings.Contains(name, "keepass") {
+		<uk-icon hx-history="false" icon="folder-key" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "keeweb") {
+		<i class="si si-keeweb si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(name, "kingston") {
+		<i class="si si-kingstontechnology uk-text-default uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "libreoffice") {
+		<i class="si si-libreoffice si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "firefox") {
+		<i class="si si-firefoxbrowser si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "mozilla") {
+		<i class="si si-mozilla uk-text-default uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "microclaudia") {
+		<uk-icon hx-history="false" icon="shield-check" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "microsoft edge") {
+		<i class="ri-edge-new-fill ri-2x text-blue-600"></i>
+	} else if strings.Contains(name, "microsoft") {
+		<i class="ri-microsoft-fill ri-2x text-blue-600"></i>
+	} else if strings.Contains(name, "node") {
+		<i class="si si-nodedotjs si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "notepad++") {
+		<i class="si si-notepadplusplus text-green-700 uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "obsidian") {
+		<i class="si si-obsidian si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "office") {
+		<i class="ri-microsoft-fill ri-2x text-blue-600"></i>
+	} else if strings.Contains(name, "opensuse") {
+		<i class="si si-opensuse si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "openuem") {
+		<img src="/favicon.ico" class="h-6 w-6 mx-auto" alt="openuem"/>
+	} else if strings.Contains(name, "openvpn") {
+		<i class="ri-microsoft-fill ri-2x text-blue-600"></i>
+	} else if strings.Contains(name, "opera") {
+		<i class="si si-opera si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "palo alto") || strings.Contains(publisher, "palo alto") {
+		<i class="si si-paloaltonetworks si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "plex") {
+		<i class="si si-plex si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "pgadmin") {
+		<i class="si si-postgresql si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "postgresql") {
+		<i class="si si-postgresql si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "putty") {
+		<uk-icon hx-history="false" icon="globe-lock" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "python") {
+		<i class="si si-python si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "pdf24") {
+		<i class="ri-file-pdf-2-fill ri-2x text-red-600"></i>
+	} else if strings.Contains(name, "qgis") {
+		<i class="si si-qgis si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "qemu") {
+		<i class="si si-qemu si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "rancher") {
+		<i class="si si-rancher si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "rancher") {
+		<i class="si si-rancher si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "rocket.chat") {
+		<i class="si si-rocketdotchat si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "rustdesk") {
+		<i class="si si-rustdesk si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "samsung") {
+		<i class="si si-samsung si--color uk-cloak text-4xl"></i>
+	} else if strings.Contains(name, "shazam") {
+		<i class="si si-shazam si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "slack") {
+		<i class="si si-slack si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "sophos") {
+		<uk-icon hx-history="false" icon="shield-check" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "spotify") {
+		<i class="si si-spotify si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "sqlite") {
+		<i class="si si-sqlite si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "steam") {
+		<i class="si si-steam uk-text-default uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "sublime text") {
+		<i class="si si-sublimetext si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(publisher, "sublime") {
+		<i class="si si-sublimetext si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "telegram") {
+		<i class="si si-telegram si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "thunderbird") {
+		<i class="si si-thunderbird si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "ubuntu") {
+		<i class="si si-ubuntu si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "unarchiver") {
+		<uk-icon hx-history="false" icon="package-open" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "vim") {
+		<i class="si si-vim si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "vlc media player") || strings.Contains(name, "vlc") {
+		<i class="si si-vlcmediaplayer si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "vmware") || strings.Contains(publisher, "vmware") {
+		<i class="si si-vmware si--color uk-cloak text-4xl"></i>
+	} else if strings.Contains(name, "windows") {
+		<i class="ri-windows-fill ri-2x text-blue-600"></i>
+	} else if strings.Contains(name, "wireshark") {
+		<i class="si si-wireshark si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "xcode") {
+		<i class="si si-xcode si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "yast") {
+		<i class="si si-opensuse si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "youtube") {
+		<i class="si si-youtube si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "zap") {
+		<i class="si si-zap si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "zettlr") {
+		<i class="si si-zettlr si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "zoom") {
+		<i class="si si-zoom si--color uk-cloak text-4xl"></i>
+	} else if strings.Contains(name, "amd") || strings.Contains(publisher, "amd") {
+		<i class="si si-amd si--color uk-cloak text-4xl"></i>
+	} else if strings.Contains(name, "audio") {
+		<uk-icon hx-history="false" icon="headphones" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	} else if strings.Contains(name, "razer") || strings.Contains(publisher, "razer") {
+		<i class="si si-razer si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "toshiba") || strings.Contains(publisher, "toshiba") {
+		<i class="si si-toshiba si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "acer") || strings.Contains(publisher, "acer") {
+		<i class="si si-acer si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(publisher, "apple") {
+		<i class="si si-apple uk-text-default uk-cloak text-2xl"></i>
+	} else if strings.Contains(publisher, "microsoft") {
+		<i class="ri-microsoft-fill ri-2x text-blue-600"></i>
+	} else if strings.Contains(name, "msi") || strings.Contains(publisher, "msi") {
+		<i class="si si-msi si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "kde") || strings.Contains(publisher, "kde") {
+		<i class="si si-kde si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "flatpak") || strings.Contains(publisher, "flatpak") {
+		<i class="si si-flatpak si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(name, "gnome") || strings.Contains(publisher, "gnome") || strings.Contains(name, "zenity") {
+		<i class="si si-gnome si--color uk-cloak text-3xl"></i>
+	} else if strings.Contains(publisher, "fedora") {
+		<i class="si si-fedora si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(publisher, "debian") {
+		<i class="si si-debian si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(publisher, "suse") {
+		<i class="si si-opensuse si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(publisher, "neon ci") {
+		<i class="si si-kdeneon si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(publisher, "ubuntu") {
+		<i class="si si-ubuntu si--color uk-cloak text-2xl"></i>
+	} else if strings.Contains(publisher, "snap") {
+		<i class="si si-snapcraft si--color uk-cloak text-2xl"></i>
+	} else {
+		<uk-icon hx-history="false" icon="app-window" custom-class="mx-auto h-6 w-6" uk-cloack></uk-icon>
+	}
+}

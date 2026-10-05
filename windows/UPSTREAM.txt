@@ -1,0 +1,14 @@
+openuem-console 5604db7e4b4ac0fef5f95aad0ef279722966bd9d |                                  Apache License
+openuem-worker c852d70f9eb783330664f96ee7ca0c65fe951a02 |                                  Apache License
+openuem-agent ee23c21f11464b9c130445d017b413385b6d0d9c |                                  Apache License
+openuem-cert-manager 6b136eb42b64f058fc9f581e40b0da936ae169ac |                                  Apache License
+openuem-nats-service 4c6e8123b20c3f68bdcaeabae66ee829ab401a9d |                                  Apache License
+openuem-ocsp-responder 9e19683e5f304c53c351a156728295371f4f984e |                                  Apache License
+ent 6f7d005adb1d036046963ed7b0c6e20023b91937 |                                  Apache License
+utils 91c07c6c24cb5be0c63ebc0894357c8db91a50ea |                                  Apache License
+nats 98373a46adcff00efc936e26440048bfae5d8c6c |                                  Apache License
+wingetcfg 80e823d91ea5a3474ddce10374b591e1550e05dd |                                  Apache License
+openuem-agent-updater 3e25917a8508329f09f6b4868d84c544c5172199 |                                  Apache License
+openuem-server-updater c09e6450cc46463f99489b77479c558d71e26601 |                                  Apache License
+openuem-messenger 1d3f12d6cb6d817886061dcb615cda3806658361 |                                  Apache License
+openuem-docker 28ede14ab5e2add40c5c10fb5ff4415df6c4d2e4 |                                  Apache License

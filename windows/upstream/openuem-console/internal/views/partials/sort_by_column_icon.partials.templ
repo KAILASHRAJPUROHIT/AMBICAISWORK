@@ -1,0 +1,68 @@
+package partials
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"strconv"
+	"strings"
+)
+
+templ SortByColumnIcon(c echo.Context, p PaginationAndSort, title, sortBy, sortIcon, target, swap, method string) {
+	<form
+		class="flex items-center"
+		if method == "post" {
+			hx-post={ c.Request().URL.Path }
+		} else {
+			hx-get={ c.Request().URL.Path }
+		}
+		hx-push-url="true"
+		hx-target={ target }
+		hx-swap={ swap }
+		hx-include="input[name^='filterBy']"
+		_={ fmt.Sprintf(`
+			on htmx:configRequest			
+				set event.detail.parameters['sortBy'] to '%s'
+				set event.detail.parameters['sortOrder'] to '%s'
+			end
+		`, sortBy, newSortOrder(p.SortOrder)) }
+	>
+		<input type="hidden" name="page" value={ strconv.Itoa(p.CurrentPage) }/>
+		<input type="hidden" name="pageSize" value={ strconv.Itoa(p.PageSize) }/>
+		<input type="hidden" name="sortBy" value={ p.SortBy }/>
+		<input type="hidden" name="sortOrder" value={ p.SortOrder }/>
+		<button
+			type="submit"
+			title={ i18n.T(ctx, "SortBy", strings.ToLower(title)) }
+		>
+			<div class={ "p-1 text-muted-foreground", templ.KV("bg-muted", sortBy == p.SortBy) }>
+				if sortBy != p.SortBy || newSortOrder(p.SortOrder) == "asc" && sortBy == p.SortBy {
+					switch sortIcon {
+						case "alpha":
+							<uk-icon hx-history="false" icon="arrow-up-a-z" custom-class="h-5 w-5" uk-cloack></uk-icon>
+						case "numeric":
+							<uk-icon hx-history="false" icon="arrow-down-0-1" custom-class="h-5 w-5" uk-cloack></uk-icon>
+						case "time":
+							<uk-icon hx-history="false" icon="clock-arrow-down" custom-class="h-5 w-5" uk-cloack></uk-icon>
+					}
+				} else {
+					switch sortIcon {
+						case "alpha":
+							<uk-icon hx-history="false" icon="arrow-down-z-a" custom-class="h-5 w-5" uk-cloack></uk-icon>
+						case "numeric":
+							<uk-icon hx-history="false" icon="arrow-up-1-0" custom-class="h-5 w-5" uk-cloack></uk-icon>
+						case "time":
+							<uk-icon hx-history="false" icon="clock-arrow-up" custom-class="h-5 w-5" uk-cloack></uk-icon>
+					}
+				}
+			</div>
+		</button>
+	</form>
+}
+
+func newSortOrder(sortOrder string) string {
+	if sortOrder == "asc" {
+		return "desc"
+	}
+	return "asc"
+}

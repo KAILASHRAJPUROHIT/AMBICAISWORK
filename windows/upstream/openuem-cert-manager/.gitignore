@@ -1,0 +1,9 @@
+*.key
+*.pem
+*.cer
+*.pfx
+*.exe
+certificates
+PIDFILE
+.vscode
+openuem-cert-manager

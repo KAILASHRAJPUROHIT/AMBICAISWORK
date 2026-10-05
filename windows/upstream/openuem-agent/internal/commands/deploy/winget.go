@@ -1,0 +1,329 @@
+//go:build windows
+
+package deploy
+
+import (
+	"bytes"
+	"fmt"
+	"io/fs"
+	"log"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/commands/runtime"
+	"github.com/open-uem/wingetcfg/wingetcfg"
+	"golang.org/x/sys/windows"
+)
+
+func InstallPackage(action nats.DeployAction, keepUpdated bool, debug bool) (string, string, error) {
+	var cmd *exec.Cmd
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	wgPath, err := locateWinGet()
+	if err != nil {
+		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
+		return "", "", err
+	}
+
+	log.Printf("[INFO]: received a request to install package %s using winget", action.PackageId)
+
+	// Fix 194: Remove spinner, blank lines and progress bar from output
+	// Ref: https://github.com/microsoft/winget-cli/issues/3494#issuecomment-1933874691
+	removeChars := `^.+Ô.+$|^.+\█.+$|^.+\▒.+$|^\s*$|^\s*\\\s*$|^\s*\/\s*$|^\s*\|\s*$|^\s*\-\s*$`
+
+	installCommand := fmt.Sprintf("&'%s' install %s --scope machine --silent --accept-package-agreements --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, action.PackageId, removeChars)
+	if action.PackageVersion != "" {
+		installCommand = fmt.Sprintf("&'%s' install %s --version %s --scope machine --silent --accept-package-agreements --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, action.PackageId, action.PackageVersion, removeChars)
+	}
+
+	cmd = exec.Command("Powershell", "-command", installCommand)
+
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Start()
+	if err != nil {
+		log.Printf("[ERROR]: could not start winget.exe command %v", err)
+		return "", "", err
+	}
+
+	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
+	}
+
+	if debug {
+		log.Printf("[DEBUG]: winget.exe is installing an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", action.PackageId, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	}
+	err = cmd.Wait()
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); !ok {
+			log.Printf("[ERROR]: there was an error running winget.exe: %v", err)
+			return "", "", err
+		}
+		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
+		errMessage, ok := wingetcfg.ErrorCodes[errCode]
+		if !ok {
+			errMessage = err.Error() + " " + stderr.String()
+		}
+
+		// Package is already installed and no applicable update is found
+		if errCode == "0x8A15002B" {
+			log.Printf("[INFO]: %s cannot be updated. %s", action.PackageId, errMessage)
+			if !keepUpdated {
+				return "", "", nil
+			}
+		}
+
+		log.Printf("[ERROR]: there was an error running winget.exe: %v", errMessage)
+		return stdout.String(), stderr.String(), nil
+	}
+	log.Printf("[INFO]: winget.exe has installed an application: %s", action.PackageId)
+
+	return stdout.String(), stderr.String(), nil
+}
+
+func UpdatePackage(action nats.DeployAction) (string, string, error) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	wgPath, err := locateWinGet()
+	if err != nil {
+		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
+		return "", "", err
+	}
+
+	// Fix 194: Remove spinner, blank lines and progress bar from output
+	// Ref: https://github.com/microsoft/winget-cli/issues/3494#issuecomment-1933874691
+	removeChars := `^.+Ô.+$|^.+\█.+$|^.+\▒.+$|^\s*$|^\s*\\\s*$|^\s*\/\s*$|^\s*\|\s*$|^\s*\-\s*$`
+
+	upgradeCommand := fmt.Sprintf("&'%s' upgrade %s --scope machine --silent --accept-package-agreements --accept-source-agreements | Select-String -NotMatch '%s'", wgPath, action.PackageId, removeChars)
+	cmd := exec.Command("Powershell", "-command", upgradeCommand)
+
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Start()
+	if err != nil {
+		log.Printf("[ERROR]: could not start winget.exe command %v", err)
+		return "", "", err
+	}
+
+	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
+	}
+
+	log.Printf("[INFO]: winget.exe is upgrading an app, using command %s %s %s %s %s %s %s %s\n", wgPath, "install", action.PackageId, "--scope", "machine", "--silent", "--accept-package-agreements", "--accept-source-agreements")
+	err = cmd.Wait()
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); !ok {
+			log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", err)
+			return "", "", err
+		}
+
+		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
+		errMessage, ok := wingetcfg.ErrorCodes[errCode]
+		if !ok {
+			errMessage = err.Error()
+		}
+
+		log.Printf("[ERROR]: there was an error waiting for winget.exe to finish %v", errMessage)
+		return stdout.String(), stderr.String(), nil
+	}
+	log.Println("[INFO]: winget.exe has upgraded an application", wgPath)
+
+	return stdout.String(), stderr.String(), nil
+}
+
+func UninstallPackage(action nats.DeployAction) (string, string, error) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	log.Printf("[INFO]: received a request to remove package %s using winget", action.PackageId)
+
+	wgPath, err := locateWinGet()
+	if err != nil {
+		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
+		return "", "", err
+	}
+
+	// Fix 194: Remove spinner, blank lines and progress bar from output
+	// Ref: https://github.com/microsoft/winget-cli/issues/3494#issuecomment-1933874691
+	removeChars := `^.+Ô.+$|^.+\█.+$|^.+\▒.+$|^\s*$|^\s*\\\s*$|^\s*\/\s*$|^\s*\|\s*$|^\s*\-\s*$`
+
+	removeCommand := fmt.Sprintf("&'%s' remove %s --all-versions | Select-String -NotMatch '%s'", wgPath, action.PackageId, removeChars)
+	cmd := exec.Command("Powershell", "-command", removeCommand)
+
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err = cmd.Start()
+	if err != nil {
+		log.Printf("[ERROR]: could not start winget.exe command %v", err)
+		return "", "", err
+	}
+
+	err = runtime.SetPriorityWindows(cmd.Process.Pid, windows.IDLE_PRIORITY_CLASS)
+	if err != nil {
+		log.Println("[ERROR]: could not change process priority")
+	}
+
+	log.Printf("[INFO]: winget.exe is uninstalling the app %s\n", action.PackageId)
+	err = cmd.Wait()
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); !ok {
+			log.Printf("[ERROR]: there was an error running winget.exe: %v", err)
+			return "", "", err
+		}
+		errCode := strings.ReplaceAll(strings.ToUpper(strings.TrimSpace(strings.TrimPrefix(err.Error(), "exit status "))), "0X", "0x")
+		errMessage, ok := wingetcfg.ErrorCodes[errCode]
+		if !ok {
+			errMessage = err.Error()
+		}
+
+		if errCode == "0x8A150014" {
+			log.Printf("[INFO]: %s cannot be uninstalled. %s", action.PackageId, errMessage)
+			return stdout.String(), stderr.String(), nil
+		}
+
+		log.Printf("[ERROR]: there was an error running winget.exe: %v", errMessage)
+		return stdout.String(), stderr.String(), nil
+	}
+	log.Println("[INFO]: winget.exe has uninstalled an application")
+
+	return stdout.String(), stderr.String(), nil
+}
+
+func locateWinGet() (string, error) {
+	// We must find the location for winget.exe for local system user
+	// Ref: https://github.com/microsoft/winget-cli/discussions/962#discussioncomment-1561274
+	desktopAppInstallerPath := ""
+	if err := filepath.WalkDir("C:\\Program Files\\WindowsApps", func(path string, d fs.DirEntry, err error) error {
+		if d.IsDir() && strings.HasPrefix(d.Name(), "Microsoft.DesktopAppInstaller_") && strings.HasSuffix(d.Name(), "_x64__8wekyb3d8bbwe") {
+			desktopAppInstallerPath = path
+		}
+		return nil
+	}); err != nil {
+		return "", err
+	}
+
+	if desktopAppInstallerPath == "" {
+		return "", fmt.Errorf("desktopAppInstaller path not found")
+	}
+
+	// We must locate winget.exe
+	wgPath, err := exec.LookPath(filepath.Join(desktopAppInstallerPath, "winget.exe"))
+	if err != nil {
+		return "", err
+	}
+
+	return wgPath, nil
+}
+
+func GetExplicitelyDeletedPackages(deployments []string, installed string) []string {
+	deleted := []string{}
+
+	for _, d := range deployments {
+		if !strings.Contains(installed, d) {
+			deleted = append(deleted, d)
+		}
+	}
+
+	return deleted
+}
+
+func GetWinGetInstalledPackagesList() (string, error) {
+	wgPath, err := locateWinGet()
+	if err != nil {
+		log.Printf("[ERROR]: could not locate the winget.exe command %v", err)
+		return "", err
+	}
+
+	out, err := exec.Command(wgPath, "list").Output()
+	if err != nil {
+		return "", err
+	}
+
+	return string(out), nil
+}
+
+func RemovePackagesFromCfg(cfg *wingetcfg.WinGetCfg, explicitelyDeleted []string, exclusions []string, installed string, debug bool) error {
+	if debug {
+		log.Println("[DEBUG]: Installed packages ", installed)
+	}
+
+	validResources := []*wingetcfg.WinGetResource{}
+	for _, r := range cfg.Properties.Resources {
+		if r.Resource == wingetcfg.WinGetPackageResource {
+			isPackageExcluded := slices.Contains(exclusions, r.Settings["id"].(string))
+			isPackageExplicitelyDeleted := slices.Contains(explicitelyDeleted, r.Settings["id"].(string))
+			isAlreadyInstalled := strings.Contains(installed, r.Settings["id"].(string))
+			isInstallAction := r.Settings["Ensure"].(string) == "Present"
+
+			if debug {
+				log.Printf("[DEBUG]: Package %s, Is installed? %t, Excluded? %t, Explicitely Deleted %t,", r.Settings["id"], isAlreadyInstalled, isPackageExcluded, isPackageExplicitelyDeleted)
+			}
+
+			if !isPackageExcluded && !isPackageExplicitelyDeleted &&
+				((isInstallAction && !isAlreadyInstalled) || (!isInstallAction && isAlreadyInstalled)) {
+				validResources = append(validResources, r)
+			}
+
+		} else {
+			validResources = append(validResources, r)
+		}
+	}
+
+	cfg.Properties.Resources = validResources
+
+	return nil
+}
+
+type PowerShellTask struct {
+	ID        string
+	Script    string
+	RunConfig string
+}
+
+func RemovePowershellScriptsFromCfg(cfg *wingetcfg.WinGetCfg) map[string]PowerShellTask {
+	scripts := map[string]PowerShellTask{}
+	validResources := []*wingetcfg.WinGetResource{}
+	for _, r := range cfg.Properties.Resources {
+		if r.Resource == wingetcfg.OpenUEMPowershell {
+			script, ok := r.Settings["Script"]
+			if ok {
+				name, ok := r.Settings["Name"]
+				if ok {
+					id, ok := r.Settings["ID"]
+					if ok {
+						scriptRun, ok := r.Settings["ScriptRun"]
+						if ok {
+							scripts[name.(string)] = PowerShellTask{
+								Script:    script.(string),
+								RunConfig: scriptRun.(string),
+								ID:        id.(string),
+							}
+						} else {
+							scripts[name.(string)] = PowerShellTask{
+								Script:    script.(string),
+								RunConfig: "once",
+								ID:        id.(string),
+							}
+						}
+					}
+
+				}
+			}
+		} else {
+			validResources = append(validResources, r)
+		}
+	}
+
+	cfg.Properties.Resources = validResources
+
+	return scripts
+}

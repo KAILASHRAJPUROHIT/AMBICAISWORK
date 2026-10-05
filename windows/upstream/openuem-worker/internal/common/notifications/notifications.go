@@ -1,0 +1,111 @@
+package notifications
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"fmt"
+	"strings"
+
+	"github.com/open-uem/ent"
+	smtpsettings "github.com/open-uem/ent/settings"
+	"github.com/open-uem/nats"
+	"github.com/open-uem/utils"
+	"github.com/wneessen/go-mail"
+)
+
+func PrepareMessage(notification *nats.Notification, settings *ent.Settings) (*mail.Msg, error) {
+	if notification.From == "" {
+		if settings.MessageFrom != "" {
+			notification.From = settings.MessageFrom
+		} else {
+			return nil, fmt.Errorf("from cannot be empty")
+		}
+	}
+
+	m := mail.NewMsg()
+	if err := m.From(settings.MessageFrom); err != nil {
+		return nil, fmt.Errorf("failed to set From address: %v", err)
+	}
+	if err := m.To(notification.To); err != nil {
+		return nil, fmt.Errorf("failed to set To address: %v", err)
+	}
+
+	m.Subject(notification.Subject)
+	templateBuffer := new(bytes.Buffer)
+	if err := EmailTemplate(notification).Render(context.Background(), templateBuffer); err != nil {
+		return nil, fmt.Errorf("failed to set To address: %v", err)
+	}
+	m.SetBodyString(mail.TypeTextHTML, templateBuffer.String())
+
+	if notification.MessageAttachFileName != "" {
+		data, err := base64.StdEncoding.DecodeString(notification.MessageAttachFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode file content: %v", err)
+		}
+		reader := bytes.NewReader(data)
+		err = m.AttachReader(notification.MessageAttachFileName, reader)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach file: %v", err)
+		}
+	}
+
+	if notification.MessageAttachFileName2 != "" {
+		data, err := base64.StdEncoding.DecodeString(notification.MessageAttachFile2)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode file content: %v", err)
+		}
+		reader := bytes.NewReader(data)
+		err = m.AttachReader(notification.MessageAttachFileName2, reader)
+		if err != nil {
+			return nil, fmt.Errorf("failed to attach file: %v", err)
+		}
+	}
+	return m, nil
+}
+
+func PrepareSMTPClient(settings *ent.Settings, encryptionMasterKey string) (*mail.Client, error) {
+	var err error
+	var c *mail.Client
+
+	smtpServer := strings.TrimSpace(settings.SMTPServer)
+
+	if settings.SMTPAuth == "NOAUTH" || (settings.SMTPUser == "" && settings.SMTPPassword == "") {
+		c, err = mail.NewClient(smtpServer, mail.WithPort(settings.SMTPPort))
+	} else {
+		// if smtp password is not empty check if we have the key to decrypt it
+		if settings.SMTPPassword != "" {
+			if encryptionMasterKey != "" {
+				isSMTPPasswordEncrypted, err := utils.IsSensitiveFieldEncrypted(settings.SMTPPassword, encryptionMasterKey)
+				if err != nil {
+					return nil, err
+				}
+
+				if isSMTPPasswordEncrypted {
+					settings.SMTPPassword, err = utils.DecryptSensitiveField(settings.SMTPPassword, encryptionMasterKey)
+					if err != nil {
+						return nil, err
+					}
+				}
+			}
+		}
+
+		c, err = mail.NewClient(smtpServer, mail.WithPort(settings.SMTPPort), mail.WithSMTPAuth(mail.SMTPAuthType(settings.SMTPAuth)),
+			mail.WithUsername(settings.SMTPUser), mail.WithPassword(settings.SMTPPassword))
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// manage encryption type
+	if settings.SMTPEncryptionType == smtpsettings.SMTPEncryptionTypeSmtps {
+		c.SetSSL(true)
+	}
+
+	if settings.SMTPEncryptionType == smtpsettings.SMTPEncryptionTypeStarttls {
+		c.SetTLSPortPolicy(mail.TLSMandatory)
+	}
+
+	return c, nil
+}

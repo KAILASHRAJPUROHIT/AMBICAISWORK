@@ -1,0 +1,335 @@
+package partials
+
+import (
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"slices"
+	"strconv"
+	"strings"
+)
+
+type PaginationAndSort struct {
+	CurrentPage   int
+	PageSize      int
+	NItems        int
+	SortBy        string
+	SortOrder     string
+	CurrentSortBy string
+}
+
+type page struct {
+	Number   string
+	Active   bool
+	Disabled bool
+}
+
+templ Pagination(c echo.Context, p PaginationAndSort, method, target, swap, url string, itemsPerPage int) {
+	<nav aria-label="Pagination" class="py-4 px-2 uk-flex uk-flex-between items-center">
+		<div class="uk-flex uk-width-1-4 gap-2 items-center">
+			<span class="uk-text-small uk-text-muted text-center">{ i18n.T(ctx, "pagination.title") }</span>
+			<form
+				if method == "get" {
+					hx-get={ GetPaginationUrl(c, url) }
+				}
+				if method == "post" {
+					hx-post={ GetPaginationUrl(c, url) }
+				}
+				if target == "innerHTML" {
+					hx-push-url="false"
+				} else {
+					hx-push-url="true"
+				}
+				hx-target={ target }
+				hx-swap={ swap }
+				hx-include="input[name^='filterBy']"
+				hx-trigger="change"
+			>
+				<input type="hidden" name="page" value="1"/>
+				<input type="hidden" name="sortBy" value={ p.SortBy }/>
+				<input type="hidden" name="sortOrder" value={ p.SortOrder }/>
+				<select
+					id="pagesize"
+					name="pageSize"
+					title={ i18n.T(ctx, "pagination.title") }
+					class="uk-select"
+					aria-label="Select items per page"
+				>
+					<option value={ strconv.Itoa(itemsPerPage) } selected?={ itemsPerPage == p.PageSize }>{ strconv.Itoa(itemsPerPage) }</option>
+					<option value={ strconv.Itoa(itemsPerPage * 2) } selected?={ itemsPerPage * 2 == p.PageSize }>{ strconv.Itoa(itemsPerPage * 2) }</option>
+					<option value={ strconv.Itoa(itemsPerPage * 3) } selected?={ itemsPerPage * 3 == p.PageSize }>{ strconv.Itoa(itemsPerPage * 3) }</option>
+					<option value={ strconv.Itoa(itemsPerPage * 4) } selected?={ itemsPerPage * 4 == p.PageSize }>{ strconv.Itoa(itemsPerPage * 4 ) }</option>
+					<option value={ strconv.Itoa(itemsPerPage * 5) } selected?={ itemsPerPage * 5 == p.PageSize }>{ strconv.Itoa(itemsPerPage * 5) }</option>
+				</select>
+			</form>
+		</div>
+		if p.NItems > p.PageSize {
+			<ul class="uk-flex-center uk-pagination uk-width-1-2" uk-margin>
+				if p.CurrentPage > 1 {
+					<li class="cursor-pointer">
+						<form
+							if method == "get" {
+								hx-get={ GetPaginationUrl(c, url) }
+							}
+							if method == "post" {
+								hx-post={ GetPaginationUrl(c, url) }
+							}
+							if target == "innerHTML" {
+								hx-push-url="false"
+							} else {
+								hx-push-url="true"
+							}
+							hx-target={ target }
+							hx-swap={ swap }
+							hx-include="input[name^='filterBy']"
+							hx-trigger="click"
+						>
+							<input type="hidden" name="page" value={ strconv.Itoa(p.CurrentPage - 1) }/>
+							<input type="hidden" name="pageSize" value={ strconv.Itoa(p.PageSize) }/>
+							<input type="hidden" name="sortBy" value={ p.SortBy }/>
+							<input type="hidden" name="sortOrder" value={ p.SortOrder }/>
+							<button
+								class="flex items-center"
+								type="submit"
+							>
+								<span uk-pagination-previous></span>
+							</button>
+						</form>
+					</li>
+				} else {
+					<li>
+						<form>
+							<button type="button" class="flex items-center" disabled>
+								<span uk-pagination-previous class="uk-text-muted uk-disabled"></span>
+							</button>
+						</form>
+					</li>
+				}
+				for _, page := range p.GetPaginationEntries() {
+					<li
+						class={ "cursor-pointer", templ.KV("uk-disabled", page.Disabled), 
+					templ.KV("uk-active", page.Active) }
+					>
+						<form
+							if method == "get" {
+								hx-get={ GetPaginationUrl(c, url) }
+							}
+							if method == "post" {
+								hx-post={ GetPaginationUrl(c, url) }
+							}
+							if target == "innerHTML" {
+								hx-push-url="false"
+							} else {
+								hx-push-url="true"
+							}
+							hx-target={ target }
+							hx-swap={ swap }
+							hx-include="input[name^='filterBy']"
+							hx-trigger="click"
+						>
+							<input type="hidden" name="page" value={ page.Number }/>
+							<input type="hidden" name="pageSize" value={ strconv.Itoa(p.PageSize) }/>
+							<input type="hidden" name="sortBy" value={ p.SortBy }/>
+							<input type="hidden" name="sortOrder" value={ p.SortOrder }/>
+							<button
+								type="submit"
+							>
+								{ page.Number }
+							</button>
+						</form>
+					</li>
+				}
+				if p.CurrentPage * p.PageSize < p.NItems {
+					<li class="cursor-pointer">
+						<form
+							if method == "get" {
+								hx-get={ GetPaginationUrl(c, url) }
+							}
+							if method == "post" {
+								hx-post={ GetPaginationUrl(c, url) }
+							}
+							if target == "innerHTML" {
+								hx-push-url="false"
+							} else {
+								hx-push-url="true"
+							}
+							hx-target={ target }
+							hx-swap={ swap }
+							hx-include="input[name^='filterBy']"
+							hx-trigger="click"
+						>
+							<input type="hidden" name="page" value={ strconv.Itoa(p.CurrentPage + 1) }/>
+							<input type="hidden" name="pageSize" value={ strconv.Itoa(p.PageSize) }/>
+							<input type="hidden" name="sortBy" value={ p.SortBy }/>
+							<input type="hidden" name="sortOrder" value={ p.SortOrder }/>
+							<button
+								class="flex items-center"
+								type="submit"
+							>
+								<span uk-pagination-next></span>
+							</button>
+						</form>
+					</li>
+				} else {
+					<li>
+						<form>
+							<button class="flex items-center" type="button" disabled>
+								<span uk-pagination-next class="uk-text-muted uk-disabled"></span>
+							</button>
+						</form>
+					</li>
+				}
+			</ul>
+		}
+		if p.NItems > p.PageSize {
+			<span class="uk-text-small uk-text-muted uk-width-1-4 text-center">
+				{ i18n.T(ctx, "pagination.showing", 
+				i18n.M{
+					"firstItem": strconv.Itoa(1 + (p.CurrentPage - 1) * p.PageSize),
+					"lastItem": strconv.Itoa(p.CurrentPage * p.PageSize),
+					"totalItems": strconv.Itoa(p.NItems),
+				}) }
+			</span>
+		} else {
+			<span class="uk-text-small uk-text-muted uk-width-1-3 text-center">
+				{ i18n.T(ctx, "pagination.showing", 
+				i18n.M{
+					"firstItem": strconv.Itoa(1),
+					"lastItem": strconv.Itoa(p.NItems),
+					"totalItems": strconv.Itoa(p.NItems),
+				}) }
+			</span>
+		}
+	</nav>
+}
+
+func NewPaginationAndSort(itemsPerPage int) PaginationAndSort {
+	return PaginationAndSort{
+		CurrentPage: 1,
+		PageSize:    itemsPerPage,
+	}
+}
+
+func (p *PaginationAndSort) GetPaginationAndSortParams(page, pageSize, sortBy, sortOrder, currentSortBy string, itemsPerPage int) {
+	var err error
+
+	if p.CurrentPage, err = strconv.Atoi(page); err != nil {
+		p.CurrentPage = 1
+	}
+
+	if p.CurrentPage == 0 {
+		p.CurrentPage = 1
+	}
+
+	if p.PageSize, err = strconv.Atoi(pageSize); err != nil {
+		p.PageSize = itemsPerPage
+	}
+
+	p.PageSize = min(p.PageSize, itemsPerPage*5)
+	p.SortBy = sortBy
+	p.SortOrder = sortOrder
+	p.CurrentSortBy = currentSortBy
+	if !slices.Contains([]string{"asc", "desc"}, p.SortOrder) {
+		p.SortOrder = "desc"
+	}
+}
+
+func (p *PaginationAndSort) GetPaginationEntries() []page {
+	pages := []page{}
+	nPages := p.NItems / p.PageSize
+	if p.NItems%p.PageSize != 0 {
+		nPages++
+	}
+
+	// First page
+	pages = append(pages, page{
+		Number:   "1",
+		Active:   p.CurrentPage == 1,
+		Disabled: false,
+	})
+
+	if p.CurrentPage < 8 || nPages <= 10 {
+		// TODO let's see what we can do with that 8
+		maxPages := 8
+		if nPages <= 10 {
+			maxPages = nPages - 1
+		}
+
+		for i := 2; i <= maxPages; i++ {
+			newPage := page{
+				Number:   strconv.Itoa(i),
+				Active:   p.CurrentPage == i,
+				Disabled: false,
+			}
+			pages = append(pages, newPage)
+		}
+		if nPages > 10 {
+			pages = append(pages, page{
+				Number:   "...",
+				Active:   false,
+				Disabled: true,
+			})
+		}
+	} else if p.CurrentPage >= 8 && nPages-p.CurrentPage >= 7 {
+		pages = append(pages, page{
+			Number:   "...",
+			Active:   false,
+			Disabled: true,
+		})
+
+		for i := p.CurrentPage - 3; i <= p.CurrentPage+2; i++ {
+			newPage := page{
+				Number:   strconv.Itoa(i),
+				Active:   p.CurrentPage == i,
+				Disabled: false,
+			}
+			pages = append(pages, newPage)
+		}
+
+		pages = append(pages, page{
+			Number:   "...",
+			Active:   false,
+			Disabled: true,
+		})
+	} else if nPages-p.CurrentPage < 7 {
+		pages = append(pages, page{
+			Number:   "...",
+			Active:   false,
+			Disabled: true,
+		})
+		for i := nPages - 7; i <= nPages-1; i++ {
+			newPage := page{
+				Number:   strconv.Itoa(i),
+				Active:   p.CurrentPage == i,
+				Disabled: false,
+			}
+			pages = append(pages, newPage)
+		}
+	}
+
+	// Last page
+	pages = append(pages, page{
+		Number:   strconv.Itoa(nPages),
+		Active:   p.CurrentPage == nPages,
+		Disabled: false,
+	})
+
+	return pages
+}
+
+func GetCurrentUrl(c echo.Context, url string) string {
+	currentUrl := c.Request().Header.Get("Hx-Current-Url")
+
+	if currentUrl != "" && strings.Contains(currentUrl, url) {
+		return currentUrl
+	}
+
+	return url
+}
+
+func GetPaginationUrl(c echo.Context, url string) string {
+	if url != "" {
+		return string(templ.URL(url))
+	}
+
+	return c.Request().URL.Path
+}

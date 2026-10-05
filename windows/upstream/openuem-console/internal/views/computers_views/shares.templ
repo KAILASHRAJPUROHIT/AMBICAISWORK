@@ -1,0 +1,63 @@
+package computers_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	ent "github.com/open-uem/ent"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+)
+
+templ Shares(c echo.Context, p partials.PaginationAndSort, agent *ent.Agent, confirmDelete bool, commonInfo *partials.CommonInfo, netbird, offline bool) {
+	@partials.ComputerBreadcrumb(c, agent, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				@partials.ComputerHeader(p, agent, commonInfo, offline)
+				@ComputersNavbar(agent.ID, "shares", agent.VncProxyPort, confirmDelete, commonInfo, agent.Os, netbird, agent.Edges.Release.Version)
+				if confirmDelete {
+					@partials.ConfirmDeleteAgent(c, i18n.T(ctx, "agents.confirm_delete"), string(templ.URL(partials.GetNavigationUrl(commonInfo, "/computers"))), string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s", agent.ID)))))
+				}
+				<div class="uk-width-1-2@m uk-card uk-card-default">
+					<div class="uk-card-header">
+						<div class="flex items-center gap-2">
+							<uk-icon hx-history="false" icon="folder-output" custom-class="h-5 w-5" uk-cloack></uk-icon>
+							<h3 class="uk-card-title">{ i18n.T(ctx, "inventory.share.title") }</h3>
+						</div>
+						<p class="uk-margin-small-top uk-text-small">
+							{ i18n.T(ctx, "inventory.share.description") }
+						</p>
+					</div>
+				</div>
+				<div class="uk-card uk-card-body uk-card-default">
+					if len(agent.Edges.Shares) > 0 {
+						<table class="uk-table uk-table-divider uk-table-small uk-table-striped -mt-4">
+							<thead>
+								<tr>
+									<th>{ i18n.T(ctx, "inventory.share.name") }</th>
+									<th>{ i18n.T(ctx, "inventory.share.descr") }</th>
+									<th>{ i18n.T(ctx, "inventory.share.path") }</th>
+								</tr>
+							</thead>
+							for _, share := range agent.Edges.Shares {
+								<tr>
+									<td>{ share.Name }</td>
+									<td>{ share.Description }</td>
+									if share.Path == "" {
+										<td>-</td>
+									} else {
+										<td>{ share.Path }</td>
+									}
+								</tr>
+							}
+						</table>
+					} else {
+						<p class="uk-text-small uk-text-muted">
+							{ i18n.T(ctx, "inventory.share.no_shares") }
+						</p>
+					}
+				</div>
+			</div>
+		</div>
+	</main>
+}

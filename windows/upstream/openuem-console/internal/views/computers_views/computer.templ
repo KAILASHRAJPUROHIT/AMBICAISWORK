@@ -1,0 +1,151 @@
+package computers_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	ent "github.com/open-uem/ent"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+	"strconv"
+	"strings"
+)
+
+templ Computer(c echo.Context, p partials.PaginationAndSort, agent *ent.Agent, confirmDelete bool, commonInfo *partials.CommonInfo, netbird, offline bool) {
+	@partials.ComputerBreadcrumb(c, agent, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div id="error" class="hidden"></div>
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				@partials.ComputerHeader(p, agent, commonInfo, offline)
+				@ComputersNavbar(agent.ID, "hardware", agent.VncProxyPort, confirmDelete, commonInfo, agent.Os, netbird, agent.Edges.Release.Version)
+				if confirmDelete {
+					@partials.ConfirmDeleteAgent(c, i18n.T(ctx, "agents.confirm_delete"), string(templ.URL(partials.GetNavigationUrl(commonInfo, "/computers"))), string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s", agent.ID)))))
+				}
+				<div class="uk-width-1-2@m uk-card uk-card-default">
+					<div class="uk-card-header">
+						<div class="flex items-center gap-2">
+							<uk-icon hx-history="false" icon="microchip" custom-class="h-5 w-5" uk-cloack></uk-icon>
+							<h3 class="uk-card-title">{ i18n.T(ctx, "inventory.hardware.title") }</h3>
+						</div>
+						<p class="uk-margin-small-top uk-text-small">
+							{ i18n.T(ctx, "inventory.hardware.description") }
+						</p>
+					</div>
+				</div>
+				<div class="uk-child-width-1-2 uk-text-left" uk-grid>
+					<div>
+						<div class="uk-card uk-card-body uk-card-default">
+							<table class="uk-table uk-table-small uk-table-divider uk-table-justify">
+								<tr>
+									<th>{ i18n.T(ctx, "inventory.hardware.manufacturer") }</th>
+									<td>
+										if agent.Edges.Computer.Manufacturer != "Unknown" || !strings.Contains(strings.ToLower(agent.Edges.Computer.Model),"raspberry") {
+											@partials.Manufacturer(strings.ToLower(agent.Edges.Computer.Manufacturer))
+										} else {
+											@partials.Manufacturer(strings.ToLower(agent.Edges.Computer.Model))
+										}
+									</td>
+								</tr>
+								<tr>
+									<th>{ i18n.T(ctx, "inventory.hardware.model") }</th>
+									<td>
+										if agent.Edges.Computer.Model == "Unknown" {
+											{ i18n.T(ctx, "Unknown") }
+										} else {
+											{ agent.Edges.Computer.Model }
+										}
+									</td>
+								</tr>
+								<tr>
+									<th>{ i18n.T(ctx, "inventory.hardware.serial") }</th>
+									<td>
+										if agent.Edges.Computer.Serial == "Unknown" || agent.Edges.Computer.Serial == "" {
+											{ i18n.T(ctx, "Unknown") }
+										} else {
+											{ agent.Edges.Computer.Serial }
+										}
+									</td>
+								</tr>
+							</table>
+						</div>
+					</div>
+					<div>
+						<div class="uk-card uk-card-body uk-card-default">
+							<table class="uk-table uk-table-small uk-table-divider uk-table-justify">
+								<tr>
+									<th>{ i18n.T(ctx, "inventory.hardware.processor") }</th>
+									<td>{ agent.Edges.Computer.Processor }</td>
+								</tr>
+								<tr>
+									<th>{ i18n.T(ctx, "inventory.hardware.architecture") }</th>
+									<td>{ agent.Edges.Computer.ProcessorArch }</td>
+								</tr>
+								<tr>
+									<th># Cores</th>
+									<td>{ strconv.Itoa(int(agent.Edges.Computer.ProcessorCores)) }</td>
+								</tr>
+							</table>
+						</div>
+					</div>
+					<div>
+						<div class="uk-card uk-card-body uk-card-default">
+							<table class="uk-table uk-table-small uk-table-divider uk-table-justify">
+								<tr>
+									<th>{ i18n.T(ctx, "inventory.hardware.memory") }</th>
+									<td class="font-bold">{ fmt.Sprintf("%d MB", agent.Edges.Computer.Memory) }</td>
+								</tr>
+								for _, slot := range agent.Edges.Memoryslots {
+									<tr>
+										<th>{ slot.Slot }</th>
+										<td>
+											if slot.Manufacturer != "" {
+												{ slot.Manufacturer }
+											} else {
+												{ " - " }
+											}
+										</td>
+										<td>
+											if slot.Size != "" {
+												{ slot.Size }
+											} else {
+												{ " - " }
+											}
+										</td>
+										<td>
+											if slot.Type != "" {
+												{ slot.Type }
+											} else {
+												{ " - " }
+											}
+										</td>
+										<td>
+											if slot.Speed != "" {
+												{ slot.Speed }
+											} else {
+												{ " - " }
+											}
+										</td>
+										<td>
+											if slot.SerialNumber != "" {
+												{ fmt.Sprintf("S/N: %s",slot.SerialNumber) }
+											} else {
+												{ " - " }
+											}
+										</td>
+										<td>
+											if slot.PartNumber != "" {
+												{ fmt.Sprintf("P/N: %s",slot.PartNumber) }
+											} else {
+												{ " - " }
+											}
+										</td>
+									</tr>
+								}
+							</table>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
+}

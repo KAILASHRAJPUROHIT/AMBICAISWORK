@@ -1,0 +1,518 @@
+package partials
+
+import (
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/open-uem/ent"
+	"github.com/open-uem/ent/task"
+	"slices"
+)
+
+templ SelectTaskAgentType(t *ent.Task) {
+	<div>
+		<label class="uk-form-label" for="task-agent-type">
+			{ i18n.T(ctx, "tasks.task_agent") }
+		</label>
+		<select
+			id="task-agent-type"
+			name="task-agent-type"
+			class="uk-select"
+			disabled?={ t != nil }
+			hx-trigger="change"
+			hx-get="/profiles/task-types"
+			hx-target="#select-task-type"
+			hx-swap="innerHTML"
+			_="on change      
+                add .hidden to #select-task-subtype
+                add .hidden to #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.task_agent_description") }</option>
+			<option value="windows" selected?={ t != nil && task.AgentType("windows") == t.AgentType }>Windows</option>
+			<option value="linux" selected?={ t != nil && task.AgentType("linux") == t.AgentType }>Linux</option>
+			<option value="macos" selected?={ t != nil && task.AgentType("macos") == t.AgentType }>MacOS</option>
+			<option value="any" selected?={ t != nil && task.AgentType("any") == t.AgentType }>{ i18n.T(ctx,"Any") }</option>
+		</select>
+	</div>
+}
+
+templ SelectTaskType(t *ent.Task, agentType string) {
+	<div>
+		<label class="uk-form-label" for="task-type">
+			{ i18n.T(ctx, "tasks.task_type") }
+		</label>
+		<select
+			id="task-type"
+			name="task-type"
+			class="uk-select"
+			disabled?={ t != nil }
+			hx-trigger="change"
+			hx-get="/profiles/task-subtypes"
+			hx-target="#select-task-subtype"
+			hx-swap="innerHTML"
+			_="on change      
+                if my.value == 'powershell_type' or my.value == 'unix_script_type' then
+                    remove .hidden from #task-definition
+					add .hidden to #select-task-subtype
+                else
+                    add .hidden to #task-definition
+               		remove .hidden from #select-task-subtype
+                end
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_type") }</option>
+			if agentType == "windows" {
+				<option value="package_type" selected?={ IsWinGetPackageTask(t) }>
+					{ i18n.T(ctx, "tasks.package_winget_subtype") }
+				</option>
+			}
+			if agentType == "windows" {
+				<option value="registry_type" selected?={ IsRegistryTask(t) }>
+					{ i18n.T(ctx, "tasks.registry_subtype") }
+				</option>
+			}
+			if agentType == "windows" {
+				<option value="local_user_subtype" selected?={ IsLocalUserTask(t) }>
+					{ i18n.T(ctx, "tasks.local_user_subtype") }
+				</option>
+			}
+			if agentType == "linux" || agentType == "macos" {
+				<option value="unix_local_user_subtype" selected?={ IsUnixLocalUserTask(t) }>
+					{ i18n.T(ctx, "tasks.local_user_subtype") }
+				</option>
+			}
+			if agentType == "windows" {
+				<option value="local_group_subtype" selected?={ IsWindowsLocalGroupTask(t) }>
+					{ i18n.T(ctx, "tasks.local_group_subtype") }
+				</option>
+			}
+			if agentType == "linux" || agentType == "macos" {
+				<option value="unix_local_group_subtype" selected?={ IsUnixLocalGroupTask(t) }>
+					{ i18n.T(ctx, "tasks.local_group_subtype") }
+				</option>
+			}
+			if agentType == "windows" {
+				<option value="msi_type" selected?={ IsMSITask(t) }>
+					{ i18n.T(ctx, "tasks.msi_subtype") }
+				</option>
+			}
+			if agentType == "windows" {
+				<option value="powershell_type" selected?={ IsPowerShellTask(t) }>
+					{ i18n.T(ctx, "tasks.powershell_subtype") }
+				</option>
+			}
+			if agentType == "linux" || agentType == "macos" {
+				<option value="unix_script_type" selected?={ IsUnixScriptTask(t) }>
+					{ i18n.T(ctx, "tasks.unix_script_subtype") }
+				</option>
+			}
+			if agentType == "linux" {
+				<option value="flatpak_type" selected?={ IsFlatpakTask(t) }>
+					{ i18n.T(ctx, "tasks.flatpak_subtype") }
+				</option>
+			}
+			if agentType == "macos" {
+				<option value="brew_formula_type" selected?={ IsHomeBrewFormulaTask(t) }>
+					{ i18n.T(ctx, "tasks.brew_formula_subtype") }
+				</option>
+			}
+			if agentType == "macos" {
+				<option value="brew_cask_type" selected?={ IsHomeBrewCaskTask(t) }>
+					{ i18n.T(ctx, "tasks.brew_cask_subtype") }
+				</option>
+			}
+			if agentType == "any" {
+				<option value="netbird_type" selected?={ IsNetbirdTask(t) }>
+					{ i18n.T(ctx, "tasks.netbird") }
+				</option>
+			}
+			// TODO - Future apt subtype
+			// if agentType == "linux" {
+			// 	<option value="apt_type" selected?={ IsAPTTask(t) }>
+			// 		{ i18n.T(ctx, "tasks.apt_subtype") }
+			// 	</option>
+			// }
+		</select>
+	</div>
+}
+
+templ SelectWinGetPackageTaskSubtype(t *ent.Task) {
+	<div id="package-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeWingetInstall.String() } selected?={ t != nil && t.Type == task.TypeWingetInstall }>{ i18n.T(ctx, "tasks.winget_install") }</option>
+			<option value={ task.TypeWingetDelete.String() } selected?={ t != nil && t.Type == task.TypeWingetDelete }>{ i18n.T(ctx, "tasks.winget_delete") }</option>
+		</select>
+	</div>
+}
+
+templ SelectRegistryTaskSubtype(t *ent.Task) {
+	<div id="registry-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeAddRegistryKey.String() } selected?={  t != nil && t.Type == task.TypeAddRegistryKey }>{ i18n.T(ctx, "tasks.add_registry_key") }</option>
+			<option value={ task.TypeAddRegistryKeyValue.String() } selected?={  t != nil && t.Type == task.TypeAddRegistryKeyValue }>{ i18n.T(ctx, "tasks.add_registry_key_value") }</option>
+			<option value={ task.TypeUpdateRegistryKeyDefaultValue.String() } selected?={  t != nil && t.Type ==  task.TypeUpdateRegistryKeyDefaultValue }>{ i18n.T(ctx, "tasks.update_registry_key_default_value") }</option>
+			<option value={ task.TypeRemoveRegistryKey.String() } selected?={  t != nil && t.Type == task.TypeRemoveRegistryKey }>{ i18n.T(ctx, "tasks.remove_registry_key") }</option>
+			<option value={ task.TypeRemoveRegistryKeyValue.String() } selected?={  t != nil && t.Type == task.TypeRemoveRegistryKeyValue }>{ i18n.T(ctx, "tasks.remove_registry_key_value") }</option>
+		</select>
+	</div>
+}
+
+templ SelectLocalUserTaskSubtype(t *ent.Task) {
+	<div id="local-user-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeAddLocalUser.String() } selected?={ t != nil && t.Type == task.TypeAddLocalUser }>{ i18n.T(ctx, "tasks.local_user_add") }</option>
+			<option value={ task.TypeRemoveLocalUser.String() } selected?={  t != nil && t.Type == task.TypeRemoveLocalUser }>{ i18n.T(ctx, "tasks.local_user_remove") }</option>
+		</select>
+	</div>
+}
+
+templ SelectWindowsLocalGroupTaskSubtype(t *ent.Task) {
+	<div id="local-group-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeAddLocalGroup.String() } selected?={ t != nil && t.Type == task.TypeAddLocalGroup }>{ i18n.T(ctx, "tasks.add_local_group") }</option>
+			<option value={ task.TypeRemoveLocalGroup.String() } selected?={  t != nil && t.Type == task.TypeRemoveLocalGroup }>{ i18n.T(ctx, "tasks.remove_local_group") }</option>
+			<option value={ task.TypeAddUsersToLocalGroup.String() } selected?={ t != nil && t.Type ==  task.TypeAddUsersToLocalGroup }>{ i18n.T(ctx, "tasks.add_users_to_local_group") }</option>
+			<option value={ task.TypeRemoveUsersFromLocalGroup.String() } selected?={  t != nil && t.Type == task.TypeRemoveUsersFromLocalGroup }>{ i18n.T(ctx, "tasks.remove_users_from_local_group") }</option>
+		</select>
+	</div>
+}
+
+templ SelectUnixLocalGroupTaskSubtype(t *ent.Task) {
+	<div id="local-group-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeAddUnixLocalGroup.String() } selected?={ t != nil && t.Type == task.TypeAddUnixLocalGroup }>{ i18n.T(ctx, "tasks.add_local_group") }</option>
+			<option value={ task.TypeRemoveUnixLocalGroup.String() } selected?={  t != nil && t.Type == task.TypeRemoveUnixLocalGroup }>{ i18n.T(ctx, "tasks.remove_local_group") }</option>
+		</select>
+	</div>
+}
+
+templ SelectUnixLocalUserTaskSubtype(t *ent.Task) {
+	<div id="local-user-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeAddUnixLocalUser.String() } selected?={ t != nil && t.Type == task.TypeAddUnixLocalUser }>{ i18n.T(ctx, "tasks.local_linux_user_add") }</option>
+			<option value={ task.TypeRemoveUnixLocalUser.String() } selected?={  t != nil && t.Type == task.TypeRemoveUnixLocalUser }>{ i18n.T(ctx, "tasks.local_user_remove") }</option>
+		</select>
+	</div>
+}
+
+templ SelectMSITaskSubtype(t *ent.Task) {
+	<div id="msi-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeMsiInstall.String() } selected?={ t != nil && t.Type == task.TypeMsiInstall }>{ i18n.T(ctx, "tasks.msi_install") }</option>
+			<option value={ task.TypeMsiUninstall.String() } selected?={  t != nil && t.Type == task.TypeMsiUninstall }>{ i18n.T(ctx, "tasks.msi_uninstall") }</option>
+		</select>
+	</div>
+}
+
+templ SelectFlatpakPackageTaskSubtype(t *ent.Task) {
+	<div id="flatpak-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeFlatpakInstall.String() } selected?={ t != nil && t.Type == task.TypeFlatpakInstall }>{ i18n.T(ctx, "tasks.flatpak_install") }</option>
+			<option value={ task.TypeFlatpakUninstall.String() } selected?={ t != nil && t.Type == task.TypeFlatpakUninstall }>{ i18n.T(ctx, "tasks.flatpak_uninstall") }</option>
+		</select>
+	</div>
+}
+
+templ SelectHomeBrewFormulaTaskSubtype(t *ent.Task) {
+	<div id="homebrew-formula-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeBrewFormulaInstall.String() } selected?={ t != nil && t.Type == task.TypeBrewFormulaInstall }>{ i18n.T(ctx, "tasks.brew_formula_install") }</option>
+			<option value={ task.TypeBrewFormulaUpgrade.String() } selected?={ t != nil && t.Type == task.TypeBrewFormulaUpgrade }>{ i18n.T(ctx, "tasks.brew_formula_upgrade") }</option>
+			<option value={ task.TypeBrewFormulaUninstall.String() } selected?={ t != nil && t.Type ==  task.TypeBrewFormulaUninstall }>{ i18n.T(ctx, "tasks.brew_formula_uninstall") }</option>
+		</select>
+	</div>
+}
+
+templ SelectHomeBrewCaskTaskSubtype(t *ent.Task) {
+	<div id="homebrew-cask-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeBrewCaskInstall.String() } selected?={ t != nil && t.Type == task.TypeBrewCaskInstall }>{ i18n.T(ctx, "tasks.brew_cask_install") }</option>
+			<option value={ task.TypeBrewCaskUpgrade.String() } selected?={ t != nil && t.Type == task.TypeBrewCaskUpgrade }>{ i18n.T(ctx, "tasks.brew_cask_upgrade") }</option>
+			<option value={ task.TypeBrewCaskUninstall.String() } selected?={ t != nil && t.Type == task.TypeBrewCaskUninstall }>{ i18n.T(ctx, "tasks.brew_cask_uninstall") }</option>
+		</select>
+	</div>
+}
+
+templ SelectAPTTaskSubtype(t *ent.Task) {
+	<div id="local-apt-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeAptInstall.String() } selected?={ t != nil && t.Type == task.TypeAptInstall }>{ i18n.T(ctx, "tasks.apt_install") }</option>
+			<option value={ task.TypeAptRemove.String() } selected?={  t != nil && t.Type == task.TypeAptRemove }>{ i18n.T(ctx, "tasks.apt_remove") }</option>
+			<option value={ task.TypeAptUpdate.String() } selected?={  t != nil && t.Type == task.TypeAptUpdate }>{ i18n.T(ctx, "tasks.apt_update") }</option>
+			<option value={ task.TypeAptUpdateAll.String() } selected?={  t != nil && t.Type == task.TypeAptUpdateAll }>{ i18n.T(ctx, "tasks.apt_update_all") }</option>
+			<option value={ task.TypeAptUpgradeOs.String() } selected?={  t != nil && t.Type == task.TypeAptUpgradeOs }>{ i18n.T(ctx, "tasks.apt_upgrade_os") }</option>
+		</select>
+	</div>
+}
+
+templ SelectNetbirdTaskSubtype(t *ent.Task) {
+	<div id="netbird-subtask">
+		<label class="uk-form-label" for="task-subtype">
+			{ i18n.T(ctx, "tasks.subtask_type") }
+		</label>
+		<select
+			class="uk-select"
+			id="task-subtype"
+			name="task-subtype"
+			hx-trigger="change"
+			hx-get="/profiles/task-definition"
+			hx-target="#task-definition"
+			hx-swap="innerHTML"
+			disabled?={ t != nil }
+			_="on change      
+                remove .hidden from #task-definition
+            end"
+		>
+			<option value="">{ i18n.T(ctx, "tasks.choose_task_subtype") }</option>
+			<option value={ task.TypeNetbirdInstall.String() } selected?={ t != nil && t.Type == task.TypeNetbirdInstall }>{ i18n.T(ctx, "tasks.netbird_install") }</option>
+			<option value={ task.TypeNetbirdUninstall.String() } selected?={ t != nil && t.Type == task.TypeNetbirdUninstall }>{ i18n.T(ctx, "tasks.netbird_uninstall") }</option>
+			<option value={ task.TypeNetbirdRegister.String() } selected?={ t != nil && t.Type == task.TypeNetbirdRegister }>{ i18n.T(ctx, "tasks.netbird_register") }</option>
+		</select>
+	</div>
+}
+
+func IsWinGetPackageTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeWingetInstall), string(task.TypeWingetDelete)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsRegistryTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeAddRegistryKey), string(task.TypeAddRegistryKeyValue), string(task.TypeUpdateRegistryKeyDefaultValue),
+		string(task.TypeRemoveRegistryKeyValue), string(task.TypeRemoveRegistryKeyValue)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsLocalUserTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeAddLocalUser), string(task.TypeRemoveLocalUser)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsWindowsLocalGroupTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeAddLocalGroup), string(task.TypeRemoveLocalGroup), string(task.TypeAddUsersToLocalGroup), string(task.TypeRemoveUsersFromLocalGroup)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsUnixLocalGroupTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeAddUnixLocalGroup), string(task.TypeRemoveUnixLocalGroup)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsUnixLocalUserTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeAddUnixLocalUser), string(task.TypeRemoveUnixLocalUser)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsMSITask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeMsiInstall), string(task.TypeMsiUninstall)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsPowerShellTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypePowershellScript)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsUnixScriptTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeUnixScript)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsFlatpakTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeFlatpakInstall), string(task.TypeFlatpakUninstall)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsHomeBrewFormulaTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeBrewFormulaInstall), string(task.TypeBrewFormulaUninstall), string(task.TypeBrewFormulaUpgrade)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsHomeBrewCaskTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeBrewCaskInstall), string(task.TypeBrewCaskUpgrade), string(task.TypeBrewCaskUninstall)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsAPTTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeAptInstall), string(task.TypeAptRemove), string(task.TypeAptUpdate), string(task.TypeAptUpdateAll), string(task.TypeAptUpgradeOs)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}
+
+func IsNetbirdTask(t *ent.Task) bool {
+	tasks := []string{string(task.TypeNetbirdInstall), string(task.TypeNetbirdUninstall), string(task.TypeNetbirdRegister)}
+	return t != nil && slices.Contains(tasks, t.Type.String())
+}

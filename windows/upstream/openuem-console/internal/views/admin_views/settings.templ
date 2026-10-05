@@ -1,0 +1,697 @@
+package admin_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"github.com/open-uem/ent"
+	openuem_ent "github.com/open-uem/ent"
+	"github.com/open-uem/openuem-console/internal/views/layout"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+	"math"
+	"strconv"
+)
+
+templ GeneralSettings(c echo.Context, settings *openuem_ent.Settings, agentsExists, serversExists bool, tags []*ent.Tag, commonInfo *partials.CommonInfo, tenantName string, successMessage string) {
+	if commonInfo.TenantID == "-1" {
+		@partials.Header(c, []partials.Breadcrumb{{Title: i18n.T(ctx, "Global Config"), Url: "/admin/users"}, {Title: i18n.T(ctx, "General Settings"), Url: "/admin/settings"}}, commonInfo)
+	} else {
+		@partials.Header(c, []partials.Breadcrumb{{Title: tenantName, Url: string(templ.URL(fmt.Sprintf("/tenant/%s/admin/tags", commonInfo.TenantID)))}, {Title: i18n.T(ctx, "General Settings"), Url: string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID)))}}, commonInfo)
+	}
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				@ConfigNavbar("settings", agentsExists, serversExists, commonInfo)
+				if successMessage != "" {
+					@partials.SuccessMessage(successMessage)
+				} else {
+					<div id="success" class="hidden"></div>
+				}
+				<div id="error" class="hidden"></div>
+				<div class="uk-width-1-2@m uk-card uk-card-default">
+					<div class="uk-card-header">
+						<h3 class="uk-card-title">{ i18n.T(ctx, "settings.title") } </h3>
+						<p class="uk-margin-small-top uk-text-small">
+							{ i18n.T(ctx, "settings.description") }
+							if commonInfo.TenantID != "-1" {
+								{ i18n.T(ctx, "settings.tenant") }
+							} else {
+								{ i18n.T(ctx, "settings.global") }
+							}
+						</p>
+						if commonInfo.TenantID != "-1" {
+							<button
+								class="flex items-center my-4 uk-button uk-button-primary"
+								type="submit"
+								hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/inherit", commonInfo.TenantID))) }
+								hx-push-url="false"
+								hx-target="#main"
+								hx-swap="outerHTML"
+							>
+								{ i18n.T(ctx,"settings.apply_global") }
+							</button>
+						}
+					</div>
+					<div class="uk-card-body">
+						<table class="uk-table uk-table-divider uk-table-small uk-table-hover uk-table-striped  mt-6">
+							if commonInfo.TenantID == "-1" {
+								<tr>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.country_title") }</td>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.country_description") }</td>
+									<td class="w-1/5 !align-middle">
+										<form class="flex gap-2">
+											<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+											@partials.Countries(c, settings.Country)
+											<button
+												class="flex items-center gap-2"
+												type="submit"
+												hx-post="/admin/settings"
+												hx-push-url="false"
+												hx-target="#main"
+												hx-swap="outerHTML"
+												htmx-indicator="#save-settings-1"
+												_="on click scroll to the top of main"
+											>
+												<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+												<uk-icon id="save-settings-1" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+											</button>
+										</form>
+									</td>
+								</tr>
+							}
+							if commonInfo.TenantID == "-1" {
+								<tr>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.nats_timeout_title") }</td>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.nats_timeout_description") } </td>
+									<td class="!align-middle">
+										<form class="flex gap-2">
+											<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+											<input class="uk-input" type="number" name="nats-timeout" value={ strconv.Itoa(settings.NatsRequestTimeoutSeconds) }/>
+											<button
+												class="flex items-center gap-2"
+												type="submit"
+												hx-post="/admin/settings"
+												hx-push-url="false"
+												hx-target="#main"
+												hx-swap="outerHTML"
+												htmx-indicator="#save-settings-2"
+												_="on click scroll to the top of main"
+											>
+												<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+												<uk-icon id="save-settings-2" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+											</button>
+										</form>
+									</td>
+								</tr>
+							}
+							if commonInfo.TenantID == "-1" {
+								<tr>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.max_upload_title") }</td>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.max_upload_description") }</td>
+									<td class="!align-middle">
+										<form class="flex gap-2">
+											<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+											<input class="uk-input" type="text" name="max-upload-size" value={ settings.MaxUploadSize } spellcheck="false"/>
+											<button
+												class="flex items-center gap-2"
+												type="submit"
+												hx-post="/admin/settings"
+												hx-push-url="false"
+												hx-target="#main"
+												hx-swap="outerHTML"
+												htmx-indicator="#save-settings-3"
+												_="on click scroll to the top of main"
+											>
+												<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+												<uk-icon id="save-settings-3" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+											</button>
+										</form>
+									</td>
+								</tr>
+							}
+							if commonInfo.TenantID == "-1" {
+								<tr>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.user_cert_years_title") }</td>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.user_cert_years_description") }</td>
+									<td class="!align-middle">
+										<form class="flex gap-2">
+											<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+											<input class="uk-input" type="number" name="cert-years" value={ strconv.Itoa(settings.UserCertYearsValid) }/>
+											<button
+												class="flex items-center gap-2"
+												type="submit"
+												hx-post="/admin/settings"
+												hx-push-url="false"
+												hx-target="#main"
+												hx-swap="outerHTML"
+												htmx-indicator="#save-settings-4"
+												_="on click scroll to the top of main"
+											>
+												<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+												<uk-icon id="save-settings-4" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+											</button>
+										</form>
+									</td>
+								</tr>
+							}
+							if commonInfo.TenantID == "-1" {
+								<tr>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.refresh_title") }</td>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.refresh_description") }</td>
+									<td class="!align-middle">
+										<form class="flex gap-2">
+											<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+											<input class="uk-input" type="number" name="refresh" value={ strconv.Itoa(settings.RefreshTimeInMinutes) }/>
+											<button
+												class="flex items-center gap-2"
+												type="submit"
+												hx-post="/admin/settings"
+												hx-push-url="false"
+												hx-target="#main"
+												hx-swap="outerHTML"
+												htmx-indicator="#save-settings-5"
+												_="on click scroll to the top of main"
+											>
+												<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+												<uk-icon id="save-settings-5" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+											</button>
+										</form>
+									</td>
+								</tr>
+							}
+							if commonInfo.TenantID == "-1" {
+								<tr>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.session_lifetime_title") }</td>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.session_lifetime_description") }</td>
+									<td class="!align-middle">
+										<form class="flex gap-2">
+											<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+											<input class="uk-input" type="number" name="session-lifetime" value={ strconv.Itoa(settings.SessionLifetimeInMinutes) }/>
+											<button
+												class="flex items-center gap-2"
+												type="submit"
+												hx-post="/admin/settings"
+												hx-push-url="false"
+												hx-target="#main"
+												hx-swap="outerHTML"
+												htmx-indicator="#save-settings-6"
+												_="on click scroll to the top of main"
+											>
+												<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+												<uk-icon id="save-settings-6" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+											</button>
+										</form>
+									</td>
+								</tr>
+							}
+							if commonInfo.TenantID == "-1" {
+								<tr>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.update_channel_title") }</td>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.update_channel_description") }</td>
+									<td class="!align-middle">
+										<form class="flex gap-2">
+											<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+											<select name="update-channel" class="uk-select">
+												<option value="stable" selected?={ settings.UpdateChannel == "stable" }>{ i18n.T(ctx,"Stable") }</option>
+												<option value="devel" selected?={ settings.UpdateChannel == "devel" }>{ i18n.T(ctx,"Devel") }</option>
+												<option value="testing" selected?={ settings.UpdateChannel == "testing" }>{ i18n.T(ctx,"Testing") }</option>
+											</select>
+											<button
+												class="flex items-center gap-2"
+												type="submit"
+												hx-post="/admin/settings"
+												hx-push-url="false"
+												hx-target="#main"
+												hx-swap="outerHTML"
+												htmx-indicator="#save-settings-7"
+												_="on click scroll to the top of main"
+											>
+												<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+												<uk-icon id="save-settings-7" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+											</button>
+										</form>
+									</td>
+								</tr>
+							}
+							<tr>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.agent_frequency_title") }</td>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.agent_frequency_description") }</td>
+								<td class="!align-middle">
+									<form class="flex gap-2">
+										<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+										<input class="uk-input" type="number" name="agent-frequency" value={ strconv.Itoa(settings.AgentReportFrequenceInMinutes) }/>
+										<button
+											class="flex items-center gap-2"
+											type="submit"
+											if commonInfo.TenantID == "-1" {
+												hx-post="/admin/settings"
+											} else {
+												hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID))) }
+											}
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											htmx-indicator="#save-settings-8"
+											_="on click scroll to the top of main"
+										>
+											<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+											<uk-icon id="save-settings-8" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+										</button>
+									</form>
+								</td>
+							</tr>
+							<tr>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.request_pin_title") }</td>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.request_pin_description") }</td>
+								<td class="!align-middle">
+									<form class="flex gap-2">
+										<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+										<select class="uk-select" name="request-pin">
+											<option value="true" selected?={ settings.RequestVncPin }>{ i18n.T(ctx, "Yes") }</option>
+											<option value="false" selected?={ !settings.RequestVncPin }>{ i18n.T(ctx, "No") }</option>
+										</select>
+										<button
+											class="flex items-center gap-2"
+											type="submit"
+											if commonInfo.TenantID == "-1" {
+												hx-post="/admin/settings"
+											} else {
+												hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID))) }
+											}
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											htmx-indicator="#save-settings-9"
+											_="on click scroll to the top of main"
+										>
+											<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+											<uk-icon id="save-settings-9" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+										</button>
+									</form>
+								</td>
+							</tr>
+							<tr>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.add_tag_admitted_title") }</td>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.add_tag_admitted_description") }</td>
+								<td class="!align-middle">
+									<form class="flex gap-2">
+										<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+										<select class="uk-select" name="admitted-agent-tag">
+											<option value="-1"></option>
+											for _, tag := range tags {
+												if settings.Edges.Tag != nil {
+													<option value={ strconv.Itoa(tag.ID) } selected?={ tag.ID == settings.Edges.Tag.ID }>{ tag.Tag }</option>
+												} else {
+													<option value={ strconv.Itoa(tag.ID) }>{ tag.Tag }</option>
+												}
+											}
+										</select>
+										<button
+											class="flex items-center gap-2"
+											type="submit"
+											if commonInfo.TenantID == "-1" {
+												hx-post="/admin/settings"
+											} else {
+												hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID))) }
+											}
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											htmx-indicator="#save-settings-10"
+											_="on click scroll to the top of main"
+										>
+											<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+											<uk-icon id="save-settings-10" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+										</button>
+									</form>
+								</td>
+							</tr>
+							<tr>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.winget_configure_frequency_title") }</td>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.winget_configure_frequency_description") }</td>
+								<td class="!align-middle">
+									<form class="flex gap-2">
+										<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+										<input class="uk-input" type="number" name="winget-configure-frequency" value={ strconv.Itoa(settings.ProfilesApplicationFrequenceInMinutes) }/>
+										<button
+											class="flex items-center gap-2"
+											type="submit"
+											if commonInfo.TenantID == "-1" {
+												hx-post="/admin/settings"
+											} else {
+												hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID))) }
+											}
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											htmx-indicator="#save-settings-11"
+											_="on click scroll to the top of main"
+										>
+											<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+											<uk-icon id="save-settings-11" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+										</button>
+									</form>
+								</td>
+							</tr>
+							<tr>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.use_winget_title") }</td>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.use_winget_description") }</td>
+								<td class="!align-middle">
+									<form class="flex gap-2">
+										<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+										<select class="uk-select" name="use-winget">
+											<option value="true" selected?={ settings.UseWinget }>{ i18n.T(ctx, "Yes") }</option>
+											<option value="false" selected?={ !settings.UseWinget }>{ i18n.T(ctx, "No") }</option>
+										</select>
+										<button
+											class="flex items-center gap-2"
+											type="submit"
+											if commonInfo.TenantID == "-1" {
+												hx-post="/admin/settings"
+											} else {
+												hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID))) }
+											}
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											htmx-indicator="#save-settings-12"
+											_="on click scroll to the top of main"
+										>
+											<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+											<uk-icon id="save-settings-12" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+										</button>
+									</form>
+								</td>
+							</tr>
+							<tr>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.use_flatpak_title") }</td>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.use_flatpak_description") }</td>
+								<td class="!align-middle">
+									<form class="flex gap-2">
+										<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+										<select class="uk-select" name="use-flatpak">
+											<option value="true" selected?={ settings.UseFlatpak }>{ i18n.T(ctx, "Yes") }</option>
+											<option value="false" selected?={ !settings.UseFlatpak }>{ i18n.T(ctx, "No") }</option>
+										</select>
+										<button
+											class="flex items-center gap-2"
+											type="submit"
+											if commonInfo.TenantID == "-1" {
+												hx-post="/admin/settings"
+											} else {
+												hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID))) }
+											}
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											htmx-indicator="#save-settings-13"
+											_="on click scroll to the top of main"
+										>
+											<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+											<uk-icon id="save-settings-13" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+										</button>
+									</form>
+								</td>
+							</tr>
+							<tr>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.use_brew_title") }</td>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.use_brew_description") }</td>
+								<td class="!align-middle">
+									<form class="flex gap-2">
+										<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+										<select class="uk-select" name="use-brew">
+											<option value="true" selected?={ settings.UseBrew }>{ i18n.T(ctx, "Yes") }</option>
+											<option value="false" selected?={ !settings.UseBrew }>{ i18n.T(ctx, "No") }</option>
+										</select>
+										<button
+											class="flex items-center gap-2"
+											type="submit"
+											if commonInfo.TenantID == "-1" {
+												hx-post="/admin/settings"
+											} else {
+												hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID))) }
+											}
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											htmx-indicator="#save-settings-14"
+											_="on click scroll to the top of main"
+										>
+											<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+											<uk-icon id="save-settings-14" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+										</button>
+									</form>
+								</td>
+							</tr>
+							<tr>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.disable_sftp_title") }</td>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.disable_sftp_description") }</td>
+								<td class="!align-middle">
+									<form class="flex gap-2">
+										<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+										<select class="uk-select" name="disable-sftp">
+											<option value="true" selected?={ settings.DisableSftp }>{ i18n.T(ctx, "Yes") }</option>
+											<option value="false" selected?={ !settings.DisableSftp }>{ i18n.T(ctx, "No") }</option>
+										</select>
+										<button
+											class="flex items-center gap-2"
+											type="submit"
+											if commonInfo.TenantID == "-1" {
+												hx-post="/admin/settings"
+											} else {
+												hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID))) }
+											}
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											htmx-indicator="#save-settings-15"
+											_="on click scroll to the top of main"
+										>
+											<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+											<uk-icon id="save-settings-15" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+										</button>
+									</form>
+								</td>
+							</tr>
+							<tr>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.disable_remote_assistance_title") }</td>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.disable_remote_assistance_description") }</td>
+								<td class="!align-middle">
+									<form class="flex gap-2">
+										<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+										<select class="uk-select" name="disable-remote-assistance">
+											<option value="true" selected?={ settings.DisableRemoteAssistance }>{ i18n.T(ctx, "Yes") }</option>
+											<option value="false" selected?={ !settings.DisableRemoteAssistance }>{ i18n.T(ctx, "No") }</option>
+										</select>
+										<button
+											class="flex items-center gap-2"
+											type="submit"
+											if commonInfo.TenantID == "-1" {
+												hx-post="/admin/settings"
+											} else {
+												hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID))) }
+											}
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											htmx-indicator="#save-settings-16"
+											_="on click scroll to the top of main"
+										>
+											<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+											<uk-icon id="save-settings-16" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+										</button>
+									</form>
+								</td>
+							</tr>
+							<tr>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.detect_remote_agents_title") }</td>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.detect_remote_agents_description") }</td>
+								<td class="!align-middle">
+									<form class="flex gap-2">
+										<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+										<select class="uk-select" name="detect-remote-agents">
+											<option value="true" selected?={ settings.DetectRemoteAgents }>{ i18n.T(ctx, "Yes") }</option>
+											<option value="false" selected?={ !settings.DetectRemoteAgents }>{ i18n.T(ctx, "No") }</option>
+										</select>
+										<button
+											class="flex items-center gap-2"
+											type="submit"
+											if commonInfo.TenantID == "-1" {
+												hx-post="/admin/settings"
+											} else {
+												hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID))) }
+											}
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											htmx-indicator="#save-settings-17"
+											_="on click scroll to the top of main"
+										>
+											<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+											<uk-icon id="save-settings-17" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+										</button>
+									</form>
+								</td>
+							</tr>
+							<tr>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.auto_admit_agents_title") }</td>
+								<td class="!align-middle">{ i18n.T(ctx, "settings.auto_admit_agents_description") }</td>
+								<td class="!align-middle">
+									<form class="flex gap-2">
+										<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+										<select class="uk-select" name="auto-admit-agents">
+											<option value="true" selected?={ settings.AutoAdmitAgents }>{ i18n.T(ctx, "Yes") }</option>
+											<option value="false" selected?={ !settings.AutoAdmitAgents }>{ i18n.T(ctx, "No") }</option>
+										</select>
+										<button
+											class="flex items-center gap-2"
+											type="submit"
+											if commonInfo.TenantID == "-1" {
+												hx-post="/admin/settings"
+											} else {
+												hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/settings", commonInfo.TenantID))) }
+											}
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											htmx-indicator="#save-settings-18"
+											_="on click scroll to the top of main"
+										>
+											<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+											<uk-icon id="save-settings-18" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+										</button>
+									</form>
+								</td>
+							</tr>
+							if commonInfo.TenantID == "-1" {
+								<tr>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.items_per_page_title") }</td>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.items_per_page_description") }</td>
+									<td class="!align-middle">
+										<form class="flex gap-2">
+											<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+											<input class="uk-input" type="number" name="items-per-page" value={ strconv.Itoa(settings.DefaultItemsPerPage) }/>
+											<button
+												class="flex items-center gap-2"
+												type="submit"
+												hx-post="/admin/settings"
+												hx-push-url="false"
+												hx-target="#main"
+												hx-swap="outerHTML"
+												htmx-indicator="#save-settings-19"
+												_="on click scroll to the top of main"
+											>
+												<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+												<uk-icon id="save-settings-19" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+											</button>
+										</form>
+									</td>
+								</tr>
+							}
+							if commonInfo.TenantID == "-1" {
+								<tr>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.register_rate_limit_title") }</td>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.register_rate_limit_description") }</td>
+									<td class="!align-middle">
+										<form class="flex gap-2">
+											<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+											<input class="uk-input" type="number" name="register-rate-limit" value={ strconv.Itoa(int(math.Ceil(settings.RegisterRateLimit * 3600))) }/>
+											<button
+												class="flex items-center gap-2"
+												type="submit"
+												hx-post="/admin/settings"
+												hx-push-url="false"
+												hx-target="#main"
+												hx-swap="outerHTML"
+												htmx-indicator="#save-settings-20"
+												_="on click scroll to the top of main"
+											>
+												<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+												<uk-icon id="save-settings-20" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+											</button>
+										</form>
+									</td>
+								</tr>
+							}
+							if commonInfo.TenantID == "-1" {
+								<tr>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.turnstile_site_key_title") }</td>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.turnstile_site_key_description") }</td>
+									<td class="!align-middle">
+										<form class="flex gap-2">
+											<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+											<input class="uk-input" type="text" name="turnstile-site-key" value={ settings.TurnstileSiteKey }/>
+											<button
+												class="flex items-center gap-2"
+												type="submit"
+												hx-post="/admin/settings"
+												hx-push-url="false"
+												hx-target="#main"
+												hx-swap="outerHTML"
+												htmx-indicator="#save-settings-21"
+												_="on click scroll to the top of main"
+											>
+												<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+												<uk-icon id="save-settings-21" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+											</button>
+										</form>
+									</td>
+								</tr>
+							}
+							if commonInfo.TenantID == "-1" {
+								<tr>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.turnstile_secret_key_title") }</td>
+									<td class="!align-middle">{ i18n.T(ctx, "settings.turnstile_secret_key_description") }</td>
+									<td class="!align-middle">
+										<form class="flex gap-2">
+											<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+											<div class="uk-inline w-full">
+												<input id="password" class="uk-input pr-10" type="password" name="turnstile-secret-key" value={ settings.TurnstileSecretKey }/>
+												<button
+													class="uk-form-icon uk-form-icon-flip"
+													type="button"
+													_="
+													on click 
+														if #reveal-password@icon is 'eye' then
+															set #reveal-password@icon to 'eye-off'
+															set #password@type to 'text'
+														else
+															set #reveal-password@icon to 'eye'
+															set #password@type to 'password'
+														end
+													end
+												"
+												>
+													<uk-icon id="reveal-password" icon="eye" class="uk-text-muted"></uk-icon>
+												</button>
+											</div>
+											<button
+												class="flex items-center gap-2"
+												type="submit"
+												hx-post="/admin/settings"
+												hx-push-url="false"
+												hx-target="#main"
+												hx-swap="outerHTML"
+												htmx-indicator="#save-settings-21"
+												_="on click scroll to the top of main"
+											>
+												<uk-icon hx-history="false" icon="save" custom-class="h-7 w-7 text-blue-600" uk-cloack></uk-icon>
+												<uk-icon id="save-settings-21" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+											</button>
+										</form>
+									</td>
+								</tr>
+							}
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
+}
+
+templ GeneralSettingsIndex(title string, cmp templ.Component, commonInfo *partials.CommonInfo) {
+	@layout.Base("admin", commonInfo) {
+		@cmp
+	}
+}

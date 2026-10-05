@@ -1,0 +1,466 @@
+package admin_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"github.com/open-uem/ent"
+	"github.com/open-uem/ent/server"
+	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-console/internal/views/filters"
+	"github.com/open-uem/openuem-console/internal/views/layout"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+	"golang.org/x/mod/semver"
+	"strconv"
+)
+
+templ UpdateServers(c echo.Context, p partials.PaginationAndSort, f filters.UpdateServersFilter, servers []*ent.Server, allServers []string, higherRelease *ent.Server, latestServerRelease *openuem_nats.OpenUEMRelease, appliedReleases []string, allReleases []string, allStatus []string, refresh int, itemsPerPage int, successMessage, errorMessage string, agentsExists, serversExists bool, commonInfo *partials.CommonInfo) {
+	@partials.Header(c, []partials.Breadcrumb{{Title: i18n.T(ctx, "Global Config"), Url: "/admin/users"}, {Title: i18n.T(ctx, "admin.update.servers.title"), Url: "admin/update-servers"}}, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				@ConfigNavbar("update-servers", agentsExists, serversExists, commonInfo)
+				if successMessage != "" {
+					@partials.SuccessMessage(successMessage)
+				} else {
+					<div id="success" class="hidden"></div>
+				}
+				if errorMessage != "" {
+					@partials.ErrorMessage(errorMessage, true)
+				} else {
+					<div id="error" class="hidden"></div>
+				}
+				<div id="confirm" class="hidden"></div>
+				<div class="uk-width-1-2@m uk-card uk-card-default">
+					<div class="uk-card-header">
+						<h3 class="uk-card-title">{ i18n.T(ctx, "admin.update.servers.title") } </h3>
+						<p class="uk-margin-small-top uk-text-small">
+							{ i18n.T(ctx, "admin.update.servers.description") }
+						</p>
+					</div>
+					<div class="uk-card-body">
+						if len(servers) > 0 {
+							<div class="flex flex-col gap-4 mt-4">
+								if latestServerRelease == nil {
+									@GetServerVersionError()
+								}
+								if latestServerRelease != nil {
+									<div class="flex items-center justify-between">
+										if newServerReleaseAvailable(latestServerRelease.Version, higherRelease) {
+											<p class={ "rounded-full px-4 py-1 text-white", templ.KV("bg-red-500", latestServerRelease.IsCritical), templ.KV("bg-blue-700", !latestServerRelease.IsCritical) }>
+												if latestServerRelease.IsCritical {
+													{ i18n.T(ctx, "admin.update.servers.critical") }
+												} else {
+													{ i18n.T(ctx, "admin.update.servers.available") }
+												}
+											</p>
+										} else {
+											<p class="rounded-full px-4 py-1 text-white bg-green-600">{ i18n.T(ctx, "admin.update.servers.current") }</p>
+										}
+									</div>
+									<p class="uk-text-small">
+										if newServerReleaseAvailable(latestServerRelease.Version, higherRelease) {
+											{ i18n.T(ctx, "admin.update.servers.new_version_available") }
+										} else {
+											{ i18n.T(ctx, "admin.update.servers.no_new_version_available") }
+										}
+										<a href={ templ.URL(latestServerRelease.ReleaseNotesURL) } class="underline uk-text-default uk-text-bold text-blue-700" target="_blank" rel="noopener">{ latestServerRelease.Version }</a>
+									</p>
+									if newServerReleaseAvailable(latestServerRelease.Version, higherRelease) {
+										<p class="uk-text-small">
+											{ i18n.T(ctx, "admin.update.servers.new_version_date") }
+											{ commonInfo.Translator.FmtDateMedium(latestServerRelease.ReleaseDate) }
+										</p>
+									}
+									<p class="uk-text-small uk-text-italic">{ latestServerRelease.Summary } </p>
+								}
+								<hr class="uk-divider-icon"/>
+								<div class="flex justify-between">
+									<div class="flex items-center gap-4">
+										@partials.RefreshPage(commonInfo.Translator, refresh, false)
+										@filters.ClearFilters("/admin/update-servers", "#main", "outerHTML", func() bool {
+											return f.Hostname == "" && len(f.Releases) == 0 &&
+												len(f.UpdateStatus) == 0 && f.UpdateMessage == "" &&
+												len(f.UpdateWhenFrom) == 0 && len(f.UpdateWhenTo) == 0
+										})
+										<button
+											id="select-all"
+											title={ i18n.T(ctx, "SelectAll") }
+											type="button"
+											class="uk-button uk-button-default flex items-center gap-2"
+											_={ fmt.Sprintf(`on click 
+												repeat in <input[id^='check-']/>
+													if it.checked is false then
+														it.click()
+													end
+												end
+												set storedItems to %s as Array
+												set sessionStorage.selectedServers to storedItems as JSONString
+												set #filterBySelectedItems.value to '%d'
+												set #items-selected.innerHTML to '%d'
+												if #filterBySelectedRelease.value is not empty then
+													remove @disabled from #update-all-button
+												end
+											end`, f.SelectedAllServers, p.NItems, p.NItems) }
+										>
+											{ i18n.T(ctx, "SelectAll") }
+										</button>
+										<button
+											id="deselect-all"
+											title={ i18n.T(ctx, "DeselectAll") }
+											type="button"
+											class="uk-button uk-button-default flex items-center gap-2"
+											_="on click 
+										repeat in <input[type='checkbox']/>
+											if it.checked is true then
+												it.click()
+											end
+										end
+										set storedItems to [] as Array
+										set sessionStorage.selectedServers to storedItems as JSONString
+										set #filterBySelectedItems.value to '0'
+										set #items-selected.innerHTML to '0'
+										add @disabled to #update-all-button
+									end"
+										>
+											{ i18n.T(ctx, "DeselectAll") }
+										</button>
+										<p class="uk-text-small"><span id="items-selected" class="uk-text-bold">{ strconv.Itoa(f.SelectedItems) }</span> { i18n.T(ctx, "Items") }</p>
+									</div>
+									<form class="flex items-center gap-4">
+										<input id="filterBySelectedItems" type="hidden" name="filterBySelectedItems" value={ strconv.Itoa(f.SelectedItems) }/>
+										<input id="selectedServers" type="hidden" name="selectedServers"/>
+										<input id="filterBySelectedRelease" type="hidden" name="filterBySelectedRelease" value={ f.SelectedRelease }/>
+										<select
+											class="uk-select"
+											_="on change
+											if sessionStorage.selectedServers exists then														
+												set storedItems to sessionStorage.selectedServers as Object
+											end		
+
+											set #filterBySelectedRelease.value to my.value
+											if #filterBySelectedRelease.value is not empty and ((<input[title='check-server']:checked/>).length > 0 or storedItems.length > 0) then
+												remove @disabled from #update-all-button
+											else
+												add @disabled to #update-all-button
+											end
+										end"
+											title={ i18n.T(ctx, "admin.update.servers.select_release") }
+										>
+											<option value="">{ i18n.T(ctx, "admin.update.servers.select_release") }</option>
+											for _,r := range allReleases {
+												<option value={ r } selected?={ r == f.SelectedRelease }>{ r }</option>
+											}
+										</select>
+										<button
+											id="update-all-button"
+											title={ i18n.T(ctx, "UpdateAll") }
+											type="button"
+											class="uk-button uk-button-primary"
+											hx-post="/admin/update-servers/confirm"
+											hx-push-url="false"
+											hx-target="#main"
+											hx-swap="outerHTML"
+											disabled?={ f.SelectedItems == 0 || len(f.SelectedRelease) == 0 }
+										>
+											<div class="flex items-center gap-2">
+												<uk-icon hx-history="false" icon="arrows-up-from-line" custom-class="h-5 w-5" uk-cloack></uk-icon>
+												{ i18n.T(ctx, "Update") }
+											</div>
+										</button>
+									</form>
+								</div>
+								<div class="flex flex-col gap-2">
+									<table
+										class="uk-table uk-table-divider uk-table-small uk-table-hover uk-table-striped  mt-4"
+										_="on load
+											if #filterBySelectedItems.value is '0' then
+												set storedItems to [] as Array
+												set sessionStorage.selectedServers to storedItems as JSONString
+											end
+										end"
+									>
+										<thead>
+											<tr>
+												<th>
+													<input
+														id="check-all-in-page"
+														name="check-all-in-page"
+														class="uk-checkbox"
+														type="checkbox"
+														_="on click
+															repeat in <input[title='check-server']/>																
+																if it.checked !== #check-all-in-page.checked then
+																	it.click()
+																end
+															end
+
+															if ((<input[title='check-server']:checked/>).length > 0) and #filterBySelectedRelease.value is not empty then
+																remove @disabled from #update-all-button
+															else
+																add @disabled to #update-all-button
+															end
+														"
+													/>
+												</th>
+												<th>
+													<div class="flex gap-1 items-center">
+														<span>{ i18n.T(ctx, "admin.update.servers.hostname") }</span>
+														@partials.SortByColumnIcon(c, p, i18n.T(ctx, "admin.update.servers.hostname"), "hostname", "alpha", "#main", "outerHTML", "get")
+														@filters.FilterByText(c, p, "Hostname", f.Hostname, "admin.update.servers.filter_by_hostname", "#main", "outerHTML")
+													</div>
+												</th>
+												<th>
+													<div class="flex gap-1 items-center">
+														<span>{ i18n.T(ctx, "admin.update.servers.version") }</span>
+														@partials.SortByColumnIcon(c, p, i18n.T(ctx, "admin.update.servers.version"), "version", "alpha", "#main", "outerHTML", "get")
+														@filters.FilterByOptions(c, p, "Release", "admin.update.servers.filter_by_release", appliedReleases, f.Releases, "#main", "outerHTML", false, func() bool {
+															return len(f.Releases) == 0
+														})
+													</div>
+												</th>
+												<th>
+													<div class="flex gap-1 items-center">
+														<span>{ i18n.T(ctx, "admin.update.servers.update_status") }</span>
+														@partials.SortByColumnIcon(c, p, i18n.T(ctx, "admin.update.servers.update_status"), "status", "alpha", "#main", "outerHTML", "get")
+														@filters.FilterByOptions(c, p, "UpdateStatus", "admin.update.servers.filter_by_status", allStatus, f.UpdateStatus, "#main", "outerHTML", true, func() bool {
+															return len(f.Releases) == 0
+														})
+													</div>
+												</th>
+												<th>
+													<div class="flex gap-1 items-center">
+														<span>{ i18n.T(ctx, "admin.update.servers.update_info") }</span>
+														@partials.SortByColumnIcon(c, p, i18n.T(ctx, "admin.update.servers.update_info"), "info", "alpha", "#main", "outerHTML", "get")
+														@filters.FilterByText(c, p, "UpdateMessage", f.UpdateMessage, "admin.update.servers.filter_by_message", "#main", "outerHTML")
+													</div>
+												</th>
+												<th>
+													<div class="flex gap-1 items-center">
+														<span>{ i18n.T(ctx, "admin.update.servers.update_when") }</span>
+														@partials.SortByColumnIcon(c, p, i18n.T(ctx, "admin.update.servers.filter_by_when"), "when", "alpha", "#main", "outerHTML", "get")
+														@filters.FilterByDate(c, p, "UpdateWhen", "admin.update.servers.filter_by_when", f.UpdateWhenFrom, f.UpdateWhenTo, "#main", "outerHTML", func() bool { return f.UpdateWhenFrom == "" && f.UpdateWhenTo == "" })
+													</div>
+												</th>
+												<th>
+													<div class="flex gap-1 items-center">
+														<span>{ i18n.T(ctx, "Components") }</span>
+													</div>
+												</th>
+											</tr>
+										</thead>
+										for i, s := range servers {
+											<tr class="h-16">
+												<td class="!align-middle">
+													<input
+														id={ "check-server-" + strconv.Itoa(s.ID) }
+														title="check-server"
+														name={ strconv.Itoa(s.ID) }
+														class="uk-checkbox"
+														type="checkbox"
+														_={ fmt.Sprintf(`
+															on click
+																set storedItems to [] as Array
+																if sessionStorage.selectedServers exists then														
+																	set storedItems to sessionStorage.selectedServers as Object
+																end																								
+
+																set index to storedItems.indexOf(my name)		
+																if me.checked then
+																	increment #filterBySelectedItems.value by 1
+																	set #items-selected.innerHTML to #filterBySelectedItems.value
+																	if index < 0 then 															
+																		append my name to storedItems
+																		set sessionStorage.selectedServers to storedItems as JSONString
+																	end														
+																else
+																	decrement #filterBySelectedItems.value by 1
+																	set #items-selected.innerHTML to #filterBySelectedItems.value
+																	set index to storedItems.indexOf(my name)														
+																	if index >= 0 then 															
+																		get storedItems.splice(index, 1)															
+																	end															
+																	
+																	if no storedItems then 
+																		set storedItems to [] as Array
+																		set #filterBySelectedItems.value to '0'
+																	end
+
+																	set sessionStorage.selectedServers to storedItems as JSONString 
+																end
+
+																if ((<input[title='check-server']:checked/>).length > 0 or storedItems.length > 0) and #filterBySelectedRelease.value is not empty then
+																	remove @disabled from #update-all-button
+																else
+																	add @disabled to #update-all-button
+																end
+
+																if #check-all-in-page.checked is true and me.checked is false then
+																	set #check-all-in-page.checked to false
+																end
+
+																if #check-all-in-page.checked is false and (<input[title='check-server']:checked/>).length === %d then
+																	set #check-all-in-page.checked to true
+																end
+
+																set #selectedServers.value to storedItems.length
+															end
+
+															on load
+																set storedItems to [] as Array
+																if sessionStorage.selectedServers exists then
+																	set storedItems to sessionStorage.selectedServers as Object												
+																end
+
+																set index to storedItems.indexOf(my name)														
+																if index >= 0 then
+																	set me.checked to true
+																end
+
+																if ((<input[title='check-server']:checked/>).length == (<input[title='check-server']/>).length) then
+																	set #check-all-in-page.checked to true
+																end
+
+																set #selectedServers.value to storedItems.length
+															end
+														`,p.PageSize) }
+													/>
+												</td>
+												<td class="!align-middle">{ s.Hostname }</td>
+												<td class="!align-middle">
+													<div class="flex items-center gap-2">
+														{ s.Version }
+														if semver.Compare("v" + s.Version, "v"+ higherRelease.Version) < 0 {
+															@partials.AlertIcon(i18n.T(ctx, "admin.update.servers.outdated"))
+														}
+													</div>
+												</td>
+												<td class="!align-middle">
+													if s.UpdateStatus != "" {
+														<span
+															class={
+																"!align-middle uk-text-bold",
+																templ.KV("text-red-600", s.UpdateStatus == server.UpdateStatusError),
+																templ.KV("text-orange-600", s.UpdateStatus == server.UpdateStatusPending),
+																templ.KV("text-green-600", s.UpdateStatus == server.UpdateStatusSuccess),
+															}
+														>
+															{ i18n.T(ctx, s.UpdateStatus.String()) }
+														</span>
+													} else {
+														{ "-" }
+													}
+												</td>
+												<td class="!align-middle">
+													if s.UpdateMessage != "" {
+														{ s.UpdateMessage }
+													} else {
+														{ "-" }
+													}
+												</td>
+												<td class="!align-middle">
+													if !s.UpdateWhen.IsZero() {
+														{ commonInfo.Translator.FmtDateMedium(s.UpdateWhen.Local()) + " " + commonInfo.Translator.FmtTimeShort(s.UpdateWhen.Local()) }
+													} else {
+														{ "-" }
+													}
+												</td>
+												<td class="!align-middle">
+													<div class="flex items-center gap-2">
+														if s.NatsComponent {
+															<div uk-tooltip="NATS"><uk-icon hx-history="false" icon="messages-square" custom-class="h-4 w-4" uk-cloack></uk-icon></div>
+														}
+														if s.OcspComponent {
+															<div uk-tooltip="OCSP"><uk-icon hx-history="false" icon="ticket-check" custom-class="h-4 w-4" uk-cloack></uk-icon></div>
+														}
+														if s.ConsoleComponent {
+															<div uk-tooltip="Console"><uk-icon hx-history="false" icon="monitor-cog" custom-class="h-4 w-4" uk-cloack></uk-icon></div>
+														}
+														if s.AgentWorkerComponent {
+															<div uk-tooltip="Agent Worker"><uk-icon hx-history="false" icon="satellite-dish" custom-class="h-4 w-4" uk-cloack></uk-icon></div>
+														}
+														if s.NotificationWorkerComponent {
+															<div uk-tooltip="Notification Worker"><uk-icon hx-history="false" icon="megaphone" custom-class="h-4 w-4" uk-cloack></uk-icon></div>
+														}
+														if s.CertManagerWorkerComponent {
+															<div uk-tooltip="Cert Manager Worker"><uk-icon hx-history="false" icon="book-key" custom-class="h-4 w-4" uk-cloack></uk-icon></div>
+														}
+													</div>
+												</td>
+												<td class="!align-middle">
+													@addServerActionsButtons(s.ID, i, commonInfo)
+												</td>
+											</tr>
+										}
+										if len(servers) < p.PageSize {
+											for i:=0; i < p.PageSize - len(servers); i++ {
+												<tr class="h-16">
+													<td class="!align-middle"></td>
+													<td class="!align-middle">-</td>
+													<td class="!align-middle">-</td>
+													<td class="!align-middle">-</td>
+													<td class="!align-middle">-</td>
+													<td class="!align-middle">-</td>
+													<td class="!align-middle">-</td>
+													<td class="!align-middle"></td>
+												</tr>
+											}
+										}
+									</table>
+								</div>
+								@partials.Pagination(c, p, "get", "#main", "outerHTML", "/admin/update-servers", itemsPerPage)
+							</div>
+						} else {
+							<p class="uk-text-small uk-text-muted mt-4">
+								{ i18n.T(ctx, "admin.update.servers.no_servers") }
+							</p>
+						}
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
+}
+
+templ UpdateServersIndex(title string, cmp templ.Component, commonInfo *partials.CommonInfo) {
+	@layout.Base("admin", commonInfo) {
+		@cmp
+	}
+}
+
+templ GetServerVersionError() {
+	<div id="error-getting-version" class="mt-6">
+		<div
+			class="uk-alert uk-animation-fade  border-red-700 bg-red-600 text-white "
+			uk-alert="animation:true"
+		>
+			<a href class="uk-alert-close" uk-close _="on click toggle .hidden on #error-getting-version"></a>
+			<div class="flex gap-2 items-center uk-alert-description">
+				<uk-icon hx-history="false" icon="triangle-alert" custom-class="h-8 w-8 pr-2" uk-cloack></uk-icon>
+				<span>{ i18n.T(ctx, "admin.update.servers.get_version_error") }</span>
+			</div>
+		</div>
+	</div>
+}
+
+func newServerReleaseAvailable(newReleaseVersion string, higherRelease *ent.Server) bool {
+	if higherRelease.UpdateStatus.String() == "Pending" {
+		return true
+	}
+	return semver.Compare("v"+newReleaseVersion, "v"+higherRelease.Version) == 1
+}
+
+templ addServerActionsButtons(serverId, index int, commonInfo *partials.CommonInfo) {
+	@partials.MoreButton(index)
+	<div class="uk-drop uk-dropdown" uk-dropdown="mode: click">
+		<ul class="uk-dropdown-nav uk-nav" _={ fmt.Sprintf("on click call #moreButton%d.click()", index) }>
+			<li>
+				<a
+					hx-post={ string(templ.URL(fmt.Sprintf("/admin/confirm-delete-server/%d", serverId))) }
+					hx-target="#main"
+					hx-swap="outerHTML"
+				><uk-icon hx-history="false" icon="trash-2" custom-class="h-6 w-6 pr-2 text-red-600" uk-cloack></uk-icon>{ i18n.T(ctx, "Delete") }</a>
+			</li>
+		</ul>
+	</div>
+}

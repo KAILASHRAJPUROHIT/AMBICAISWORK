@@ -1,0 +1,286 @@
+package computers_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"github.com/open-uem/ent"
+	"github.com/open-uem/openuem-console/internal/models"
+	"github.com/open-uem/openuem-console/internal/views/filters"
+	"github.com/open-uem/openuem-console/internal/views/layout"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+	"strings"
+	"time"
+)
+
+templ Computers(c echo.Context, p partials.PaginationAndSort, f filters.AgentFilter, agents []models.Computer, versions, vendors, models []string, availableTags []*ent.Tag, availableOSes []string, refreshTime int, itemsPerPage int, successMessage string, commonInfo *partials.CommonInfo) {
+	@partials.Header(c, []partials.Breadcrumb{{Title: "Computers", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/computers")))}}, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		if successMessage != "" {
+			@partials.SuccessMessage(successMessage)
+		} else {
+			<div id="success" class="hidden"></div>
+		}
+		<div id="error" class="hidden"></div>
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-header">
+				<div class="flex justify-between items-center">
+					<div class="flex flex-col">
+						<h3 class="uk-card-title"><span>{ i18n.T(ctx, "Computers") }</span></h3>
+						<p class="uk-margin-small-top uk-text-small">
+							{ i18n.T(ctx, "computers.description") }
+						</p>
+						if len(f.WithApplication) > 0 {
+							<p class="uk-text-small uk-text-bold underline">{ i18n.T(ctx, "computers.filter_by_application", f.WithApplication) }</p>
+						}
+					</div>
+					<div class="flex gap-4">
+						@partials.CSVReportButton(p, string(templ.URL(partials.GetNavigationUrl(commonInfo, "/reports/computers/csv"))), "reports.agents")
+						@partials.PDFReportButton(p, string(templ.URL(partials.GetNavigationUrl(commonInfo, "/reports/computers"))), "reports.agents")
+					</div>
+				</div>
+			</div>
+			<div class="uk-card-body flex flex-col gap-4">
+				<div class="flex justify-between mt-8">
+					<div class="flex gap-4 w-1/3">
+						@filters.Search(c, p, f.Search, "#main", "outerHTML")
+						@filters.ClearFilters(string(templ.URL(partials.GetNavigationUrl(commonInfo, "/computers"))), "#main", "outerHTML", func() bool {
+							return f.Nickname == "" && len(f.AgentOSVersions) == 0 &&
+								len(f.OSVersions) == 0 && f.Username == "" && len(f.ComputerManufacturers) == 0 &&
+								len(f.ComputerModels) == 0 && len(f.Tags) == 0 && len(f.WithApplication) == 0 && len(f.IsRemote) == 0 &&
+								len(f.Search) == 0
+						
+						})
+					</div>
+					@partials.RefreshPage(commonInfo.Translator, refreshTime, true)
+				</div>
+				if len(agents) > 0 {
+					<form class="mt-5 mb-2">
+						<input id="filterByApplication" type="hidden" name="filterByApplication" value={ f.WithApplication }/>
+					</form>
+					<table class="uk-table uk-table-divider uk-table-small uk-table-striped ">
+						<thead>
+							@ComputersHeader(c, p, f, versions, vendors, models, availableTags, availableOSes)
+						</thead>
+						<tbody>
+							@ComputersBody(p, agents, availableTags, commonInfo)
+						</tbody>
+					</table>
+					@partials.Pagination(c, p, "get", "#main", "outerHTML", string(templ.URL(partials.GetNavigationUrl(commonInfo, "/computers"))), itemsPerPage)
+				} else {
+					<p class="uk-text-small uk-text-muted">
+						{ i18n.T(ctx, "agents.no_endpoints") }
+					</p>
+				}
+			</div>
+		</div>
+	</main>
+}
+
+templ ComputersHeader(c echo.Context, p partials.PaginationAndSort, f filters.AgentFilter, versions, vendors, models []string, availableTags []*ent.Tag, availableOSes []string) {
+	<tr>
+		<th>
+			<div class="flex gap-1 items-center">
+				<span>{ i18n.T(ctx, "agents.nickname") }</span>
+				@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.nickname"), "nickname", "alpha", "#main", "outerHTML", "get")
+				@filters.FilterByText(c, p, "Nickname", f.Nickname, "agents.filter_by_nickname", "#main", "outerHTML")
+			</div>
+		</th>
+		<th>
+			<div class="flex gap-1 items-center">
+				<span>{ i18n.T(ctx, "agents.os") }</span>
+				@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.os"), "os", "alpha", "#main", "outerHTML", "get")
+				@filters.FilterByOptions(c, p, "AgentOS", "agents.filter_by_agent_os", availableOSes, f.AgentOSVersions, "#main", "outerHTML", false, func() bool {
+					return len(f.AgentOSVersions) == 0
+				})
+			</div>
+		</th>
+		<th>
+			<div class="flex gap-1 items-center">
+				<span>{ i18n.T(ctx, "agents.version") }</span>
+				@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.version"), "version", "alpha", "#main", "outerHTML", "get")
+				@filters.FilterByOptions(c, p, "OSVersion", "computers.filter_by_os_version", versions, f.OSVersions, "#main", "outerHTML", false, func() bool {
+					return len(f.OSVersions) == 0
+				})
+			</div>
+		</th>
+		<th>
+			<div class="flex gap-1 items-center">
+				<span>{ i18n.T(ctx, "agents.username") }</span>
+				@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.username"), "username", "alpha", "#main", "outerHTML", "get")
+				@filters.FilterByText(c, p, "Username", f.Username, "computers.filter_by_username", "#main", "outerHTML")
+			</div>
+		</th>
+		<th>
+			<div class="flex gap-2 items-center justify-center">
+				<span>{ i18n.T(ctx, "agents.manufacturer") }</span>
+				@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.manufacturer"), "manufacturer", "alpha", "#main", "outerHTML", "get")
+				@filters.FilterByOptions(c, p, "ComputerManufacturer", "computers.filter_by_manufacturer", vendors, f.ComputerManufacturers, "#main", "outerHTML", false, func() bool {
+					return len(f.ComputerManufacturers) == 0
+				})
+			</div>
+		</th>
+		<th class="flex gap-2 items-center">
+			<span>{ i18n.T(ctx, "agents.model") }</span>
+			@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.model"), "model", "alpha", "#main", "outerHTML", "get")
+			@filters.FilterByOptions(c, p, "ComputerModel", "computers.filter_by_model", models, f.ComputerModels, "#main", "outerHTML", false, func() bool {
+				return len(f.ComputerModels) == 0
+			})
+		</th>
+		<th>
+			<div class="flex gap-1 items-center">
+				{ i18n.T(ctx, "Tag.other") }
+				@filters.FilterByTags(c, p, f.Tags, "#main", "outerHTML", availableTags, func() bool { return len(f.Tags) == 0 })
+			</div>
+		</th>
+		<th><span class="sr-only">{ i18n.T(ctx, "Actions") }</span></th>
+	</tr>
+}
+
+templ ComputersBody(p partials.PaginationAndSort, agents []models.Computer, availableTags []*ent.Tag, commonInfo *partials.CommonInfo) {
+	for index, agent := range agents {
+		<tr class="h-16">
+			<td
+				class="!align-middle cursor-pointer"
+				hx-get={ string(templ.URL(fmt.Sprintf("/tenant/%s/site/%d/computers/%s", commonInfo.TenantID, agent.SiteID, agent.ID))) }
+				hx-push-url="true"
+				hx-target="#main"
+				hx-swap="outerHTML"
+			>
+				<div class="flex items-center gap-2">
+					<span class="underline">{ agent.Nickname }</span>
+					if (time.Since(time.Now()).Hours()) > 24 {
+						<div uk-tooltip={ i18n.T(ctx, "agents.no_contact_in_last_day") }>
+							<uk-icon hx-history="false" icon="clock-8" custom-class="h-5 w-5 text-red-600" uk-cloack></uk-icon>
+						</div>
+					}
+					if agent.IsRemote && commonInfo.DetectRemoteAgents {
+						<span uk-tooltip={ fmt.Sprintf("title: %s", i18n.T(ctx, "agents.is_remote")) }>
+							<uk-icon hx-history="false" icon="plane" custom-class="h-6 w-6 text-blue-600" uk-cloack></uk-icon>
+						</span>
+					}
+				</div>
+			</td>
+			<td class="!align-middle">
+				@partials.OSBadge(agent.OS)
+			</td>
+			<td class="!align-middle">{ strings.Title(agent.Version) } </td>
+			<td class="!align-middle">{ agent.Username } </td>
+			<td class="!align-middle">
+				if agent.Manufacturer != "Unknown" || !strings.Contains(strings.ToLower(agent.Model),"raspberry") {
+					<div class="flex justify-center">
+						@partials.Manufacturer(strings.ToLower(agent.Manufacturer))
+					</div>
+				} else {
+					@partials.Manufacturer(strings.ToLower(agent.Model))
+				}
+			</td>
+			<td class="!align-middle">
+				if agent.Model == "Unknown" {
+					{ i18n.T(ctx, "Unknown") }
+				} else {
+					{ agent.Model }
+				}
+			</td>
+			<td class="!align-middle">
+				<div class="flex flex-wrap gap-2">
+					@partials.ShowAppliedTags(agent.Tags, agent.ID, p, string(templ.URL(partials.GetNavigationUrl(commonInfo, "/computers"))), "#main", "outerHTML")
+					@partials.AddTagButton(p, availableTags, agent.Tags, agent.ID, string(templ.URL(partials.GetNavigationUrl(commonInfo, "/computers"))), "post", "#main", "outerHTML", commonInfo)
+				</div>
+			</td>
+			<td class="!align-middle">
+				@ComputerActions(index, agent, commonInfo)
+			</td>
+		</tr>
+	}
+	if len(agents) < p.PageSize {
+		@EmptyComputerRows(p.PageSize, len(agents))
+	}
+}
+
+templ ComputerActions(index int, agent models.Computer, commonInfo *partials.CommonInfo) {
+	@partials.MoreButton(index)
+	<div class="uk-drop uk-dropdown" uk-dropdown="mode: click">
+		<ul class="uk-dropdown-nav uk-nav" _={ fmt.Sprintf("on click call #moreButton%d.click()", index) }>
+			<li>
+				<a
+					hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s", agent.ID)))) }
+					hx-push-url="true"
+					hx-target="#main"
+					hx-swap="outerHTML"
+				><uk-icon hx-history="false" icon="eye" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon> { i18n.T(ctx, "View") }</a>
+			</li>
+			<li>
+				<a
+					hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s?delete=true", agent.ID)))) }
+					hx-push-url="false"
+					hx-target="#main"
+					hx-swap="outerHTML"
+				><uk-icon hx-history="false" icon="trash-2" custom-class="h-6 w-6 pr-2 text-red-600" uk-cloack></uk-icon> { i18n.T(ctx, "Delete") }</a>
+			</li>
+			if agent.IP != "" && agent.OS != "macOS" {
+				<li>
+					<a
+						hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/remote-assistance", agent.ID)))) }
+						hx-push-url="true"
+						hx-target="#main"
+						hx-swap="outerHTML"
+					><uk-icon hx-history="false" icon="monitor-play" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon> { i18n.T(ctx, "Remote Assistance") }</a>
+				</li>
+			}
+			if len(agent.MAC) > 0 {
+				<li>
+					<a
+						hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/power", agent.ID)))) }
+						hx-target="#main"
+						hx-swap="outerHTML"
+					>
+						<uk-icon hx-history="false" icon="alarm-clock" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon>
+						{ i18n.T(ctx, "agents.wol_title") }
+					</a>
+				</li>
+			}
+			<li>
+				<a
+					hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/power", agent.ID)))) }
+					hx-target="#main"
+					hx-swap="outerHTML"
+				>
+					<uk-icon hx-history="false" icon="rotate-cw" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon>
+					{ i18n.T(ctx, "agents.reboot") }
+				</a>
+			</li>
+			<li>
+				<a
+					hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s/power", agent.ID)))) }
+					hx-target="#main"
+					hx-swap="outerHTML"
+				>
+					<uk-icon hx-history="false" icon="power-off" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon>
+					{ i18n.T(ctx, "agents.shutdown") }
+				</a>
+			</li>
+		</ul>
+	</div>
+}
+
+templ EmptyComputerRows(pageSize, nItems int) {
+	for i:=0; i < pageSize - nItems; i++ {
+		<tr class="h-16">
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle text-center">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+		</tr>
+	}
+}
+
+templ InventoryIndex(title string, cmp templ.Component, commonInfo *partials.CommonInfo) {
+	@layout.Base("computers", commonInfo) {
+		@cmp
+	}
+}

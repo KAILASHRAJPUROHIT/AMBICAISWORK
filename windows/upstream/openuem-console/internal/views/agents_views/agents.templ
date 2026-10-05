@@ -1,0 +1,832 @@
+package agents_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	ent "github.com/open-uem/ent"
+	"github.com/open-uem/openuem-console/internal/views/filters"
+	"github.com/open-uem/openuem-console/internal/views/layout"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+	"strconv"
+	"time"
+)
+
+var AgentStatus = []string{"WaitingForAdmission", "Enabled", "Disabled", "No Contact"}
+
+templ Agents(c echo.Context, p partials.PaginationAndSort, f filters.AgentFilter, agents []*ent.Agent, availableTags, appliedTags []*ent.Tag, availableOSes []string, sftpDisabled bool, successMessage, errMessage string, refresh int, itemsPerPage int, commonInfo *partials.CommonInfo) {
+	@partials.Header(c, []partials.Breadcrumb{{Title: "Agents", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents")))}}, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		if successMessage != "" {
+			@partials.SuccessMessage(successMessage)
+		} else {
+			<div id="success" class="hidden"></div>
+		}
+		<div id="confirm" class="hidden"></div>
+		if errMessage != "" {
+			@partials.ErrorMessage(errMessage, true)
+		} else {
+			<div id="error" class="hidden"></div>
+		}
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-header">
+				<div class="flex justify-between items-center">
+					<div class="flex flex-col">
+						<h3 class="uk-card-title">{ i18n.T(ctx, "Agents") }</h3>
+						<p class="uk-margin-small-top uk-text-small">
+							{ i18n.T(ctx, "agents.description") }
+						</p>
+					</div>
+					<div class="flex gap-4">
+						@partials.CSVReportButton(p, string(templ.URL(partials.GetNavigationUrl(commonInfo, "/reports/agents/csv"))), "reports.agents")
+						@partials.PDFReportButton(p, string(templ.URL(partials.GetNavigationUrl(commonInfo, "/reports/agents"))), "reports.agents")
+					</div>
+				</div>
+			</div>
+			<div class="uk-card-body flex flex-col gap-4">
+				<div class="flex justify-between mt-8">
+					<div class="flex items-center gap-4">
+						@filters.ClearFilters(string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents"))), "#main", "outerHTML", func() bool {
+							return f.Nickname == "" && len(f.AgentStatusOptions) == 0 &&
+								len(f.AgentOSVersions) == 0 && len(f.Tags) == 0 &&
+								f.ContactFrom == "" && f.ContactTo == "" && len(f.IsRemote) == 0
+						})
+						<button
+							id="select-all"
+							title={ i18n.T(ctx, "SelectAll") }
+							type="button"
+							class="uk-button uk-button-default flex items-center gap-2"
+							_={ fmt.Sprintf(`on click 
+												repeat in <input[id^='check-']/>
+													if it.checked is false then
+														it.click()
+													end
+												end
+												set storedItems to %s as Array
+												set sessionStorage.selectedAgentsFromList to storedItems as JSONString
+												set #filterBySelectedItems.value to '%d'
+												set #items-selected.innerHTML to '%d'
+												
+												remove @disabled from #admit-all-button
+												remove @disabled from #enable-all-button
+												remove @disabled from #disable-all-button
+												
+											end`, f.SelectedAllAgents, p.NItems, p.NItems) }
+						>
+							{ i18n.T(ctx, "SelectAll") }
+						</button>
+						<button
+							id="deselect-all"
+							title={ i18n.T(ctx, "DeselectAll") }
+							type="button"
+							class="uk-button uk-button-default flex items-center gap-2"
+							_="on click 
+										repeat in <input[type='checkbox']/>
+											if it.checked is true then
+												it.click()
+											end
+										end
+										set storedItems to [] as Array
+										set sessionStorage.selectedAgentsFromList to storedItems as JSONString
+										set #filterBySelectedItems.value to '0'
+										set #items-selected.innerHTML to '0'
+										add @disabled to #admit-all-button
+										add @disabled to #enable-all-button
+										add @disabled to #disable-all-button
+									end"
+						>
+							{ i18n.T(ctx, "DeselectAll") }
+						</button>
+						<p class="uk-text-small"><span id="items-selected" class="uk-text-bold">{ strconv.Itoa(f.SelectedItems) }</span> { i18n.T(ctx, "Items") }</p>
+						<form class="flex items-center gap-4">
+							<input id="filterBySelectedItems" type="hidden" name="filterBySelectedItems" value={ strconv.Itoa(f.SelectedItems) }/>
+							<input id="selectedAgents" type="hidden" name="selectedAgents"/>
+							<button
+								id="admit-all-button"
+								title={ i18n.T(ctx, "Admit") }
+								type="button"
+								class="uk-button uk-button-default"
+								hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents/admit"))) }
+								hx-push-url="false"
+								hx-target="#main"
+								hx-swap="outerHTML"
+								disabled?={ f.SelectedItems == 0 }
+							>
+								<div class="flex items-center gap-2">
+									<uk-icon hx-history="false" icon="check" custom-class="h-5 w-5" uk-cloack></uk-icon>
+									{ i18n.T(ctx, "Admit") }
+								</div>
+							</button>
+							<button
+								id="enable-all-button"
+								title={ i18n.T(ctx, "Enable") }
+								type="button"
+								class="uk-button uk-button-default"
+								hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents/enable"))) }
+								hx-push-url="false"
+								hx-target="#main"
+								hx-swap="outerHTML"
+								disabled?={ f.SelectedItems == 0 }
+							>
+								<div class="flex items-center gap-2">
+									<uk-icon hx-history="false" icon="megaphone" custom-class="h-5 w-5" uk-cloack></uk-icon>
+									{ i18n.T(ctx, "Enable") }
+								</div>
+							</button>
+							<button
+								id="disable-all-button"
+								title={ i18n.T(ctx, "Disable") }
+								type="button"
+								class="uk-button uk-button-default"
+								hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents/disable"))) }
+								hx-push-url="false"
+								hx-target="#main"
+								hx-swap="outerHTML"
+								disabled?={ f.SelectedItems == 0 }
+							>
+								<div class="flex items-center gap-2">
+									<uk-icon hx-history="false" icon="monitor-off" custom-class="h-5 w-5" uk-cloack></uk-icon>
+									{ i18n.T(ctx, "Disable") }
+								</div>
+							</button>
+						</form>
+					</div>
+					@partials.RefreshPage(commonInfo.Translator, refresh, true)
+				</div>
+				if len(agents) > 0 {
+					<table
+						class="uk-table uk-table-divider uk-table-small uk-table-hover uk-table-striped "
+						_="on load
+							if #filterBySelectedItems.value is '0' then
+								set storedItems to [] as Array
+								set sessionStorage.selectedAgentsFromList to storedItems as JSONString
+							end
+						end"
+					>
+						@AgentsTableHead(c, p, f, appliedTags, availableOSes)
+						@AgentsTableBody(p, agents, availableTags, sftpDisabled, commonInfo)
+					</table>
+					@partials.Pagination(c, p, "get", "#main", "outerHTML", string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents"))), itemsPerPage)
+				} else {
+					<p class="uk-text-small uk-text-muted">
+						{ i18n.T(ctx, "agents.no_agents") }
+					</p>
+				}
+			</div>
+		</div>
+	</main>
+}
+
+templ AgentsConfirmDelete(c echo.Context, agent *ent.Agent, commonInfo *partials.CommonInfo) {
+	@partials.Header(c, []partials.Breadcrumb{{Title: "Agents", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents")))}, {Title: agent.ID, Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s", agent.ID))))}}, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 bg-muted">
+		<div id="error" class="hidden"></div>
+		<div class="flex flex-col gap-4 my-4">
+			@partials.ConfirmDeleteAgent(c, i18n.T(ctx, "confirm.agent_delete"), string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents"))), string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s", agent.ID)))))
+			@AgentInfo(agent)
+		</div>
+	</main>
+}
+
+templ AgentsConfirmDisable(c echo.Context, agent *ent.Agent, commonInfo *partials.CommonInfo) {
+	@partials.Header(c, []partials.Breadcrumb{{Title: "Agents", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents")))}, {Title: agent.ID, Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s", agent.ID))))}}, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 bg-muted">
+		@partials.ConfirmDisable(c, i18n.T(ctx, "confirm.agent_disable"), string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents"))), string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/disable", agent.ID)))))
+		@AgentInfo(agent)
+	</main>
+}
+
+templ AgentConfirmAdmission(c echo.Context, agent *ent.Agent, commonInfo *partials.CommonInfo) {
+	@partials.Header(c, []partials.Breadcrumb{{Title: "Agents", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents")))}, {Title: agent.ID, Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s", agent.ID))))}}, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8 bg-muted">
+		<div class="mt-4 mb-2">
+			@partials.ConfirmAdmission(c, i18n.T(ctx, "confirm.agent_disable"), string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents"))), string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/admit", agent.ID)))))
+		</div>
+		@AgentInfo(agent)
+	</main>
+}
+
+templ AgentInfo(agent *ent.Agent) {
+	<div class="uk-width-1-2@m uk-card uk-card-default">
+		<div class="uk-card-body">
+			<table class="uk-table uk-table-striped  mt-2">
+				<tr><th>{ i18n.T(ctx, "agents.hostname") }</th><td>{ agent.Hostname }</td></tr>
+				<tr><th>{ i18n.T(ctx, "agents.manufacturer") }</th><td>{ agent.Edges.Computer.Manufacturer }</td></tr>
+				<tr><th>{ i18n.T(ctx, "Serial") }</th><td>{ agent.Edges.Computer.Serial }</td></tr>
+				<tr><th>{ i18n.T(ctx, "inventory.network_adapters.mac_address") }</th><td>{ agent.MAC }</td></tr>
+				<tr><th>{ i18n.T(ctx, "inventory.network_adapters.ip_address") }</th><td>{ agent.IP }</td></tr>
+				<tr><th>{ i18n.T(ctx, "OperatingSystem") }</th><td>{ agent.Os }</td></tr>
+				<tr><th>{ i18n.T(ctx, "agents.version") }</th><td>{ agent.Edges.Operatingsystem.Version }</td></tr>
+				<tr><th>{ i18n.T(ctx, "agents.username") }</th><td>{ agent.Edges.Operatingsystem.Username }</td></tr>
+			</table>
+		</div>
+	</div>
+}
+
+templ AgentsIndex(title string, cmp templ.Component, commonInfo *partials.CommonInfo) {
+	@layout.Base("agents", commonInfo) {
+		@cmp
+	}
+}
+
+templ AgentsTableHead(c echo.Context, p partials.PaginationAndSort, f filters.AgentFilter, tags []*ent.Tag, availableOSes []string) {
+	<thead>
+		<tr>
+			<th>
+				<input
+					id="check-all-in-page"
+					name="check-all-in-page"
+					class="uk-checkbox"
+					type="checkbox"
+					_="on click
+						repeat in <input[title='check-agent']/>																
+							if it.checked !== #check-all-in-page.checked then
+								it.click()
+							end
+						end
+
+						if (#filterBySelectedItems.value is '0') then
+							add @disabled to #admit-all-button
+							add @disabled to #enable-all-button
+							add @disabled to #disable-all-button
+						else
+							remove @disabled from #admit-all-button
+							remove @disabled from #enable-all-button
+							remove @disabled from #disable-all-button
+						end
+					"
+				/>
+			</th>
+			<th>
+				<div class="flex gap-1 items-center">
+					<span>{ i18n.T(ctx, "agents.nickname") }</span>
+					@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.nickname"), "nickname", "alpha", "#main", "outerHTML", "get")
+					@filters.FilterByText(c, p, "Nickname", f.Nickname, "agents.filter_by_nickname", "#main", "outerHTML")
+				</div>
+			</th>
+			<th>
+				<div class="flex gap-1 items-center">
+					<span>{ i18n.T(ctx, "Status") }</span>
+					<div>
+						@partials.SortByColumnIcon(c, p, i18n.T(ctx, "Status"), "status", "alpha", "#main", "outerHTML", "get")
+					</div>
+					<div>
+						@filters.FilterBySingleChoice(c, p, "StatusAgent", "agents.filter_by_status", AgentStatus, f.AgentStatusOptions, "#main", "outerHTML", true, func() bool {
+							return len(f.AgentStatusOptions) == 0
+						})
+					</div>
+				</div>
+			</th>
+			<th>
+				<div class="flex gap-1 items-center">
+					<span>{ i18n.T(ctx, "agents.os") }</span>
+					@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.os"), "os", "alpha", "#main", "outerHTML", "get")
+					@filters.FilterByOptions(c, p, "AgentOS", "agents.filter_by_agent_os", availableOSes, f.AgentOSVersions, "#main", "outerHTML", false, func() bool {
+						return len(f.AgentOSVersions) == 0
+					})
+				</div>
+			</th>
+			<th>
+				<div class="flex gap-1 items-center">
+					<span>{ i18n.T(ctx, "agents.version") }</span>
+					@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.version"), "version", "alpha", "#main", "outerHTML", "get")
+				</div>
+			</th>
+			<th>
+				<div class="flex gap-1 items-center">
+					<span>{ i18n.T(ctx, "IP Address") }</span>
+					@partials.SortByColumnIcon(c, p, i18n.T(ctx, "IP Address"), "ip_address", "alpha", "#main", "outerHTML", "get")
+				</div>
+			</th>
+			<th>
+				<div class="flex gap-1 items-center">
+					{ i18n.T(ctx, "Tag.other") }
+					@filters.FilterByTags(c, p, f.Tags, "#main", "outerHTML", tags, func() bool { return len(f.Tags) == 0 })
+				</div>
+			</th>
+			<th>
+				<div class="flex gap-1 items-center">
+					<span>{ i18n.T(ctx, "agents.last_contact") }</span>
+					@partials.SortByColumnIcon(c, p, i18n.T(ctx, "agents.last_contact"), "last_contact", "time", "#main", "outerHTML", "get")
+					@filters.FilterByDate(c, p, "Contact", "agents.filter_by_last_contact", f.ContactFrom, f.ContactTo, "#main", "outerHTML", func() bool { return f.ContactFrom == "" && f.ContactTo == "" })
+				</div>
+			</th>
+			<th>
+				<div class="flex gap-1 items-center">
+					<span class="sr-only">{ i18n.T(ctx, "Actions") }</span>
+				</div>
+			</th>
+		</tr>
+	</thead>
+}
+
+templ AgentsTableBody(p partials.PaginationAndSort, agents []*ent.Agent, tags []*ent.Tag, sftpDisabled bool, commonInfo *partials.CommonInfo) {
+	for index, agent := range agents {
+		<tr>
+			<td class="!align-middle">
+				<input
+					id={ "check-agent-" + agent.ID }
+					title="check-agent"
+					name={ agent.ID }
+					class="uk-checkbox"
+					type="checkbox"
+					_={ fmt.Sprintf(`
+						on click
+							set storedItems to [] as Array
+							if sessionStorage.selectedAgentsFromList exists then														
+								set storedItems to sessionStorage.selectedAgentsFromList as Object
+							end																								
+
+							set index to storedItems.indexOf(my name)		
+							if me.checked then
+								increment #filterBySelectedItems.value by 1
+								set #items-selected.innerHTML to #filterBySelectedItems.value
+								if index < 0 then 															
+									append my name to storedItems
+									set sessionStorage.selectedAgentsFromList to storedItems as JSONString
+								end														
+							else
+								decrement #filterBySelectedItems.value by 1
+								set #items-selected.innerHTML to #filterBySelectedItems.value
+								set index to storedItems.indexOf(my name)														
+								if index >= 0 then 															
+									get storedItems.splice(index, 1)															
+								end															
+								
+								if no storedItems then 
+									set storedItems to [] as Array
+									set #filterBySelectedItems.value to '0'
+								end
+
+								set sessionStorage.selectedAgentsFromList to storedItems as JSONString 
+							end
+
+							if ((<input[title='check-agent']:checked/>).length > 0 or storedItems.length > 0) then
+								remove @disabled from #admit-all-button
+								remove @disabled from #enable-all-button
+								remove @disabled from #disable-all-button
+							else
+								add @disabled to #admit-all-button
+								add @disabled to #enable-all-button
+								add @disabled to #disable-all-button
+							end
+
+							if #check-all-in-page.checked is true and me.checked is false then
+								set #check-all-in-page.checked to false
+							end
+
+							if #check-all-in-page.checked is false and (<input[title='check-agent']:checked/>).length === %d then
+								set #check-all-in-page.checked to true
+							end
+
+							set #selectedAgents.value to storedItems.length
+						end
+
+						on load
+							set storedItems to [] as Array
+							if sessionStorage.selectedAgentsFromList exists then
+								set storedItems to sessionStorage.selectedAgentsFromList as Object												
+							end
+
+							set index to storedItems.indexOf(my name)														
+							if index >= 0 then
+								set me.checked to true
+							end
+
+							if ((<input[title='check-agent']:checked/>).length == (<input[title='check-agent']/>).length) then
+								set #check-all-in-page.checked to true
+							end
+
+							set #selectedAgents.value to storedItems.length
+						end
+					`,p.PageSize) }
+				/>
+			</td>
+			<td
+				class="!align-middle hover:cursor-pointer"
+				if len(agent.Edges.Site) == 1 {
+					hx-get={ string(templ.URL(fmt.Sprintf("/tenant/%s/site/%d/computers/%s", commonInfo.TenantID, agent.Edges.Site[0].ID, agent.ID))) }
+				} else {
+					hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/computers/%s", agent.ID)))) }
+				}
+				hx-push-url="true"
+				hx-target="#main"
+				hx-swap="outerHTML"
+			>
+				<div class="flex items-center gap-2">
+					<span class="underline">{ agent.Nickname }</span>
+					if agent.RestartRequired {
+						@partials.AlertIcon(i18n.T(ctx, "agents.restart_required"))
+					}
+					if agent.DebugMode {
+						<div uk-tooltip={ i18n.T(ctx, "agents.debug_has_been_enabled") }>
+							<uk-icon hx-history="false" icon="search-check" custom-class="h-5 w-5 text-red-600" uk-cloack></uk-icon>
+						</div>
+					}
+					if agent.IsRemote && commonInfo.DetectRemoteAgents {
+						<div uk-tooltip={ fmt.Sprintf("title: %s", i18n.T(ctx, "agents.is_remote")) }>
+							<uk-icon hx-history="false" icon="plane" custom-class="h-6 w-6 text-blue-600" uk-cloack></uk-icon>
+						</div>
+					}
+				</div>
+			</td>
+			<td class="!align-middle">
+				switch agent.AgentStatus {
+					case "WaitingForAdmission":
+						<div class="h-7 w-7" uk-tooltip={ i18n.T(ctx, agent.AgentStatus.String()) }>
+							<uk-icon hx-history="false" icon="monitor-pause" custom-class="h-7 w-7 text-orange-600" uk-cloack></uk-icon>
+						</div>
+					case "Enabled":
+						if (time.Since(time.Now()).Hours()) > 24 {
+							<div class="h-7 w-7" uk-tooltip={ i18n.T(ctx, "No Contact") }>
+								<uk-icon hx-history="false" icon="monitor-x" custom-class="h-7 w-7 text-red-600" uk-cloack></uk-icon>
+							</div>
+						} else {
+							<div class="h-7 w-7" uk-tooltip={ i18n.T(ctx, agent.AgentStatus.String()) }>
+								<uk-icon hx-history="false" icon="monitor-check" custom-class="h-7 w-7 text-green-600" uk-cloack></uk-icon>
+							</div>
+						}
+					case "Disabled":
+						<div class="h-7 w-7" uk-tooltip={ i18n.T(ctx, agent.AgentStatus.String()) }>
+							<uk-icon hx-history="false" icon="monitor-off" custom-class="h-7 w-7 text-gray-600" uk-cloack></uk-icon>
+						</div>
+				}
+			</td>
+			<td class="!align-middle">
+				@partials.OSBadge(agent.Os)
+			</td>
+			if agent.Edges.Release != nil {
+				<td class="!align-middle">{ agent.Edges.Release.Version }</td>
+			} else {
+				<td class="!align-middle">{ "???" }</td>
+			}
+			<td class="!align-middle">{ agent.IP }</td>
+			<td class="flex flex-wrap gap-2">
+				@partials.ShowAppliedTags(agent.Edges.Tags, agent.ID, p, string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents"))), "#main", "outerHTML")
+				@partials.AddTagButton(p, tags, agent.Edges.Tags, agent.ID, string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents"))), "post", "#main", "outerHTML", commonInfo)
+			</td>
+			<td class="!align-middle">{ commonInfo.Translator.FmtDateMedium(agent.LastContact.Local()) + " " + commonInfo.Translator.FmtTimeShort(agent.LastContact.Local()) } </td>
+			<td class="!align-middle">
+				@AddActionsButton(agent, index, sftpDisabled, commonInfo)
+			</td>
+		</tr>
+	}
+	if len(agents) < p.PageSize {
+		@EmptyAgentRows(p.PageSize, len(agents))
+	}
+}
+
+templ AddActionsButton(agent *ent.Agent, index int, sftpDisabled bool, commonInfo *partials.CommonInfo) {
+	@partials.MoreButton(index)
+	<div class="uk-drop uk-dropdown" uk-dropdown="mode: click">
+		<ul class="uk-dropdown-nav uk-nav" _={ fmt.Sprintf("on click call #moreButton%d.click()", index) }>
+			if agent.AgentStatus == "WaitingForAdmission" {
+				<li>
+					<a
+						hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/admit", agent.ID)))) }
+						hx-target="#main"
+						hx-swap="outerHTML"
+					>
+						<uk-icon hx-history="false" icon="check" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon>
+						{ i18n.T(ctx, "agents.admit") }
+					</a>
+				</li>
+			}
+			if agent.AgentStatus == "Enabled" {
+				<li>
+					<a
+						hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/forcereport", agent.ID)))) }
+						hx-target="#main"
+						hx-swap="outerHTML"
+					>
+						<uk-icon hx-history="false" icon="circle-play" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon>
+						{ i18n.T(ctx, "agents.force_run") }
+					</a>
+				</li>
+			}
+			if agent.AgentStatus == "Enabled" {
+				<li>
+					<a
+						hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/disable", agent.ID)))) }
+						hx-target="#main"
+						hx-swap="outerHTML"
+					>
+						<uk-icon hx-history="false" icon="monitor-off" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon>
+						{ i18n.T(ctx, "Disable") }
+					</a>
+				</li>
+			}
+			if agent.AgentStatus == "Enabled" {
+				<li>
+					<a
+						hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/regeneratecerts", agent.ID)))) }
+						hx-target="#main"
+						hx-swap="outerHTML"
+					>
+						<uk-icon hx-history="false" icon="key-round" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon>
+						{ i18n.T(ctx, "agents.regenerate_cert") }
+					</a>
+				</li>
+			}
+			if agent.AgentStatus == "Enabled" {
+				<li>
+					<a
+						hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/forcerestart", agent.ID)))) }
+						hx-target="#main"
+						hx-swap="outerHTML"
+						hx-indicator="#restart-spinner"
+					>
+						<uk-icon hx-history="false" icon="power" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon>
+						{ i18n.T(ctx, "agents.force_restart") }
+						<div id="restart-spinner" class="ml-2 htmx-indicator" hx-history="false" uk-spinner="ratio: 0.5" uk-spinner></div>
+					</a>
+				</li>
+			}
+			if agent.AgentStatus == "Disabled" {
+				<li>
+					<a
+						hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/enabled", agent.ID)))) }
+						hx-target="#main"
+						hx-swap="outerHTML"
+						hx-indicator="#disable-spinner"
+					>
+						<uk-icon hx-history="false" icon="megaphone" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon>
+						{ i18n.T(ctx, "Enable") }
+						<div id="disable-spinner" class="ml-2 htmx-indicator" hx-history="false" uk-spinner="ratio: 0.5" uk-spinner></div>
+					</a>
+				</li>
+			}
+			if !sftpDisabled && agent.AgentStatus == "Enabled" {
+				<li>
+					<a
+						hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/logs", agent.ID)))) }
+						hx-target="#main"
+						hx-swap="outerHTML"
+						hx-indicator="#enable-agent-log"
+						hx-push-url="true"
+					>
+						<uk-icon hx-history="false" icon="scroll-text" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon>
+						{ i18n.T(ctx, "agents.show_agent_log") }
+						<div id="enable-agent-log" class="ml-2 htmx-indicator" hx-history="false" uk-spinner="ratio: 0.5" uk-spinner></div>
+					</a>
+				</li>
+			}
+			if agent.AgentStatus != "WaitingForAdmission" {
+				<li>
+					<a
+						hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/settings", agent.ID)))) }
+						hx-target="#main"
+						hx-swap="outerHTML"
+						hx-push-url="true"
+					>
+						<uk-icon hx-history="false" icon="settings" custom-class="h-6 w-6 pr-2" uk-cloack></uk-icon>
+						{ i18n.T(ctx, "Settings") }
+					</a>
+				</li>
+			}
+			<li>
+				<a
+					hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/delete", agent.ID)))) }
+					hx-target="#main"
+					hx-swap="outerHTML"
+				><uk-icon hx-history="false" icon="trash-2" custom-class="h-6 w-6 pr-2 text-red-600" uk-cloack></uk-icon>{ i18n.T(ctx, "Delete") }</a>
+			</li>
+		</ul>
+	</div>
+}
+
+templ EmptyAgentRows(pageSize, nItems int) {
+	for i:=0; i < pageSize - nItems; i++ {
+		<tr>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+			<td class="!align-middle">-</td>
+		</tr>
+	}
+}
+
+type LogEntry struct {
+	Date     string
+	Category string
+	Text     string
+}
+
+templ AgentsLog(c echo.Context, agent *ent.Agent, agentLog, updaterLog []LogEntry, category, successMessage, errMessage string, refresh int, commonInfo *partials.CommonInfo) {
+	@partials.Header(c, []partials.Breadcrumb{{Title: "Agents", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents")))}, {Title: agent.Nickname, Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents")))}, {Title: "logs"}}, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div id="error" class="hidden"></div>
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				<div class="flex gap-2 items-center">
+					<div class="flex items-center gap-4">
+						@partials.OSBadge(agent.Os)
+						<span class="uk-text-bold uk-text-large">{ agent.Nickname }</span>
+					</div>
+				</div>
+				<div class="uk-card uk-card-default">
+					<div class="uk-card-header">
+						<div class="flex items-center gap-2">
+							<uk-icon hx-history="false" icon="scroll-text" custom-class="h-5 w-5" uk-cloack></uk-icon>
+							<h3 class="uk-card-title">{ i18n.T(ctx, "agents.log_title") }</h3>
+						</div>
+						<p class="uk-margin-small-top uk-text-small">
+							{ i18n.T(ctx, "agents.log_description") }
+						</p>
+					</div>
+				</div>
+				<div class="uk-card uk-card-body uk-card-default">
+					<div class="flex flex-col gap-4">
+						<div class="flex justify-between">
+							<form
+								class="flex gap-4 items-end"
+								hx-get={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/logs", agent.ID)))) }
+								hx-swap="outerHTML"
+								hx-target="#main"
+								hx-push-url="false"
+							>
+								<div>
+									<label class="uk-form-label" for="log-category">{ i18n.T(ctx, "agents.select_log_category") }</label>
+									<select class="uk-select" id="log-category" name="log-category">
+										<option selected?={ category == "" } value="">{ "ALL" }</option>
+										<option selected?={ category == "ERROR" } value="ERROR">{ "ERROR" }</option>
+										<option selected?={ category == "WARNING" } value="WARNING">{ "WARNING" }</option>
+										<option selected?={ category == "DEBUG" } value="DEBUG">{ "DEBUG" }</option>
+										<option selected?={ category == "INFO" } value="INFO">{ "INFO" }</option>
+									</select>
+								</div>
+								<button
+									class="uk-button uk-button-primary"
+									title={ i18n.T(ctx, "Filter") }
+									type="submit"
+								>
+									{ i18n.T(ctx, "Filter") }
+								</button>
+							</form>
+							@partials.RefreshPage(commonInfo.Translator, refresh, true)
+						</div>
+						<div class="flex flex-col gap-4">
+							<div class="flex flex-col gap-4">
+								<p class="text-sm font-bold">{ i18n.T(ctx, "agents.log_agent") }</p>
+								@LogDetail(agentLog)
+							</div>
+							<div class="flex flex-col gap-4">
+								<p class="text-sm font-bold">{ i18n.T(ctx, "agents.log_update") }</p>
+								@LogDetail(updaterLog)
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
+}
+
+templ AgentSettings(c echo.Context, agent *ent.Agent, successMessage, errMessage string, refresh int, commonInfo *partials.CommonInfo) {
+	@partials.Header(c, []partials.Breadcrumb{{Title: "Agents", Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents")))}, {Title: agent.Nickname, Url: string(templ.URL(partials.GetNavigationUrl(commonInfo, "/agents")))}, {Title: i18n.T(ctx, "Settings")}}, commonInfo)
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		if successMessage != "" {
+			@partials.SuccessMessage(successMessage)
+		} else {
+			<div id="success" class="hidden"></div>
+		}
+		<div id="error" class="hidden"></div>
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				<div class="flex gap-2 items-center">
+					<div class="flex items-center gap-4">
+						@partials.OSBadge(agent.Os)
+						<span class="uk-text-bold uk-text-large">{ agent.Nickname }</span>
+					</div>
+				</div>
+				<div class="uk-card uk-card-default">
+					<div class="uk-card-header">
+						<div class="flex items-center gap-2">
+							<uk-icon hx-history="false" icon="settings" custom-class="h-5 w-5" uk-cloack></uk-icon>
+							<h3 class="uk-card-title">{ i18n.T(ctx, "agents.settings_title") }</h3>
+						</div>
+						<p class="uk-margin-small-top uk-text-small">
+							{ i18n.T(ctx, "agents.settings_description") }
+						</p>
+					</div>
+				</div>
+				<div class="uk-card uk-card-body uk-card-default">
+					<form
+						class="flex flex-col gap-4 w-1/4"
+						hx-post={ string(templ.URL(partials.GetNavigationUrl(commonInfo, fmt.Sprintf("/agents/%s/settings", agent.ID)))) }
+						hx-push-url="false"
+						hx-target="#main"
+						hx-swap="outerHTML"
+					>
+						<div class="flex items-center justify-between space-x-2 w-full">
+							<label class="uk-form-label font-bold" for="debug-mode">{ i18n.T(ctx, "agents.debug_mode") }</label>
+							<input
+								class="uk-toggle-switch uk-toggle-switch-primary my-1"
+								id="debug-mode"
+								name="debug-mode"
+								type="checkbox"
+								checked?={ agent.DebugMode }
+							/>
+						</div>
+						<div class="flex items-center justify-between space-x-2 w-full">
+							<label class="uk-form-label font-bold" for="sftp-service">{ i18n.T(ctx, "agents.sftp_service") }</label>
+							<input
+								class="uk-toggle-switch uk-toggle-switch-primary my-1"
+								id="sftp-service"
+								name="sftp-service"
+								type="checkbox"
+								checked?={ agent.SftpService }
+								_="on change 
+									if me.checked then
+										remove @readonly from #sftp-port
+									else
+										add @readonly to #sftp-port
+									end
+								end"
+							/>
+						</div>
+						<div class="flex items-center justify-between space-x-2 w-full">
+							<label class="uk-form-label font-bold" for="sftp-port">{ i18n.T(ctx, "agents.sftp_port") }</label>
+							<input
+								id="sftp-port"
+								name="sftp-port"
+								type="text"
+								spellcheck="false"
+								value={ agent.SftpPort }
+								class={ "uk-input w-1/3 text-right", templ.KV("uk-disabled", !agent.SftpService) }
+								readonly?={ !agent.SftpService }
+							/>
+						</div>
+						<div class="flex items-center justify-between space-x-2 w-full">
+							<label class="uk-form-label font-bold" for="remote-assistance-service">{ i18n.T(ctx, "agents.remote_assistance") }</label>
+							<input
+								class="uk-toggle-switch uk-toggle-switch-primary my-1"
+								id="remote-assistance-service"
+								name="remote-assistance-service"
+								type="checkbox"
+								checked?={ agent.RemoteAssistance }
+								_="on change 
+									if me.checked then
+										remove @readonly from #vnc-proxy-port
+									else
+										add @readonly to #vnc-proxy-port
+									end
+								end"
+							/>
+						</div>
+						<div class="flex items-center justify-between space-x-2 w-full">
+							<label class="uk-form-label font-bold" for="vnc-proxy-port">{ i18n.T(ctx, "agents.vnc_proxy_port") }</label>
+							<input
+								id="vnc-proxy-port"
+								name="vnc-proxy-port"
+								type="text"
+								spellcheck="false"
+								value={ agent.VncProxyPort }
+								class="uk-input w-1/3 text-right"
+								readonly?={ !agent.SftpService }
+							/>
+						</div>
+						<div class="flex justify-end">
+							<button
+								type="submit"
+								class="uk-button uk-button-primary"
+							>
+								{ i18n.T(ctx, "Save") }
+							</button>
+						</div>
+					</form>
+				</div>
+			</div>
+		</div>
+	</main>
+}
+
+templ LogDetail(agentLog []LogEntry) {
+	<div class="uk-textarea bg-black text-white font-mono max-h-44 scroll-auto">
+		if len(agentLog) > 0 {
+			for _, logEntry := range agentLog {
+				<p>
+					<span class="text-orange-300">{ logEntry.Date }</span>
+					switch logEntry.Category {
+						case "ERROR":
+							<span class="text-red-600">{ " [ERROR]: " }</span>
+						case "WARNING":
+							<span class="text-orange-500">{ " [WARNING]: " }</span>
+						case "DEBUG":
+							<span class="text-yellow-300">{ " [DEBUG]: " }</span>
+						case "INFO":
+							<span class="text-blue-300">{ " [INFO]: " }</span>
+					}
+					<span>{ logEntry.Text }</span>
+				</p>
+			}
+		} else {
+			<p>{ i18n.T(ctx, "agents.no_log_entries") }</p>
+		}
+	</div>
+}

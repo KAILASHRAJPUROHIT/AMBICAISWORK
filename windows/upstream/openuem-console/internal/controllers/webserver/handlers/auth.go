@@ -1,0 +1,95 @@
+package handlers
+
+import (
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"github.com/open-uem/openuem-console/internal/views/register_views"
+)
+
+type MyCustomClaims struct {
+	jwt.RegisteredClaims
+}
+
+func (h *Handler) Auth(c echo.Context) error {
+	// if CloudFlare Turnstile is used, check response
+	tsSiteKey, tsSecretKey, err := h.Model.GetTurnstileSettings()
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, i18n.T(c.Request().Context(), "settings.turnstile_could_not_get_settings", err))
+	}
+
+	isTurnstileEnabled := tsSecretKey != "" && tsSiteKey != ""
+
+	if isTurnstileEnabled {
+		cfTurnStileResponse := c.QueryParam("cf-turnstile-response")
+		if cfTurnStileResponse == "" {
+			return echo.NewHTTPError(http.StatusInternalServerError, i18n.T(c.Request().Context(), "settings.turnstile_challenge_not_found"))
+		}
+		if err := h.TurnstileCheckChallenge(c, cfTurnStileResponse, tsSecretKey); err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+	}
+
+	if h.ReverseProxyServer != "" && h.ReverseProxyAuthPort != "" {
+		return c.Redirect(http.StatusFound, fmt.Sprintf("https://%s:%s/auth", h.ReverseProxyServer, h.ReverseProxyAuthPort))
+	} else {
+		return c.Redirect(http.StatusFound, fmt.Sprintf("https://%s:%s/auth", h.ServerName, h.AuthPort))
+	}
+
+}
+
+func (h *Handler) ConfirmEmail(c echo.Context) error {
+	tokenString := c.Param("token")
+
+	token, err := jwt.ParseWithClaims(tokenString, &MyCustomClaims{}, func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(h.JWTKey), nil
+	})
+
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	if claims, ok := token.Claims.(*MyCustomClaims); ok {
+		if time.Now().After(claims.ExpiresAt.Time) {
+			return echo.NewHTTPError(http.StatusBadRequest, "token has expired, please contact your administrator to request a new confirmation email")
+		}
+
+		user, err := h.Model.GetUserById(claims.ID)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+
+		if user.EmailVerified {
+			return echo.NewHTTPError(http.StatusBadRequest, "you've already confirmed your email")
+		}
+
+		if err := h.Model.ConfirmEmail(user.ID); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+
+		csrfToken, ok := c.Get("csrf").(string)
+		if !ok || csrfToken == "" {
+			return echo.NewHTTPError(http.StatusForbidden, i18n.T(c.Request().Context(), "authentication.csrf_token_not_found"))
+		}
+
+		// get Turnstile settings
+		turnstileSiteKey, turnstileSecretKey, err := h.Model.GetTurnstileSettings()
+		if err != nil {
+			return echo.NewHTTPError(http.StatusForbidden, i18n.T(c.Request().Context(), "settings.turnstile_could_not_get_settings", err))
+		}
+
+		isTurnstileEnabled := turnstileSecretKey != "" && turnstileSiteKey != ""
+
+		return RenderView(c, register_views.RegisterIndex(register_views.EmailConfirmed(), csrfToken, isTurnstileEnabled))
+
+	} else {
+		return echo.NewHTTPError(http.StatusBadRequest, "unknown claims type, cannot proceed")
+	}
+}

@@ -1,0 +1,6 @@
+.env
+*\.cer
+*\.key
+*\.log
+*\.pfx
+*\.cfg

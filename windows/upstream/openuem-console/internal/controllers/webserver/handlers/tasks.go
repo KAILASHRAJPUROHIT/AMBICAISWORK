@@ -1,0 +1,1139 @@
+package handlers
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"github.com/open-uem/ent/task"
+	"github.com/open-uem/openuem-console/internal/models"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+	"github.com/open-uem/openuem-console/internal/views/tasks_views"
+	"github.com/open-uem/utils"
+	"github.com/open-uem/wingetcfg/wingetcfg"
+)
+
+func (h *Handler) NewTask(c echo.Context) error {
+	var err error
+
+	commonInfo, err := h.GetCommonInfo(c)
+	if err != nil {
+		return err
+	}
+
+	profile := c.Param("profile")
+	if profile == "" {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.new.empty_profile"), true))
+	}
+
+	profileID, err := strconv.Atoi(profile)
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.new.invalid_profile"), true))
+	}
+
+	if c.Request().Method == "POST" {
+		t, err := validateTaskForm(c)
+		if err != nil {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%v", err), true))
+		}
+
+		// encrypt local user password if not empty
+		if h.EncryptionMasterKey != "" && t.LocalUserPassword != "" {
+			t.LocalUserPassword, err = utils.EncryptSensitiveField(t.LocalUserPassword, h.EncryptionMasterKey)
+			if err != nil {
+				return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.local_user_password_could_not_encrypt"), true))
+			}
+		}
+
+		if err := h.Model.AddTaskToProfile(c, profileID, *t); err != nil {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.new.could_not_save"), err), true))
+		}
+
+		return h.EditProfile(c, "GET", profile, i18n.T(c.Request().Context(), "tasks.new.saved"))
+	}
+
+	return RenderView(c, tasks_views.TasksIndex("| Tasks", tasks_views.NewTask(c, profileID, commonInfo), commonInfo))
+}
+
+func (h *Handler) EditTask(c echo.Context) error {
+	var err error
+
+	commonInfo, err := h.GetCommonInfo(c)
+	if err != nil {
+		return err
+	}
+
+	id := c.Param("id")
+	if id == "" {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.edit.empty_task"), true))
+	}
+
+	taskId, err := strconv.Atoi(id)
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.edit.invalid_task"), true))
+	}
+
+	task, err := h.Model.GetTasksById(taskId)
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.could_not_save"), err), true))
+	}
+
+	if task.Edges.Profile == nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.no_profile"), err), true))
+	}
+
+	if c.Request().Method == "POST" {
+		t, err := validateTaskForm(c)
+		if err != nil {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%v", err), true))
+		}
+
+		// encrypt local user password if not empty
+		if h.EncryptionMasterKey != "" && t.LocalUserPassword != "" {
+			isPasswordEncrypted, err := utils.IsSensitiveFieldEncrypted(t.LocalUserPassword, h.EncryptionMasterKey)
+			if err != nil {
+				return err
+			}
+
+			if !isPasswordEncrypted {
+				t.LocalUserPassword, err = utils.EncryptSensitiveField(t.LocalUserPassword, h.EncryptionMasterKey)
+				if err != nil {
+					return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.local_user_password_could_not_encrypt"), true))
+				}
+			}
+		}
+
+		if err := h.Model.UpdateProfileTask(c, taskId, *t); err != nil {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.could_not_save"), err), true))
+		}
+
+		return h.EditProfile(c, "GET", strconv.Itoa(task.Edges.Profile.ID), i18n.T(c.Request().Context(), "tasks.edit.saved"))
+	}
+
+	if c.Request().Method == "DELETE" {
+		if err := h.Model.DeleteTask(task.Edges.Profile.ID, taskId); err != nil {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.could_not_delete"), err), true))
+		}
+		return h.EditProfile(c, "GET", strconv.Itoa(task.Edges.Profile.ID), i18n.T(c.Request().Context(), "tasks.edit.deleted"))
+	}
+
+	// decrypt local user password
+	if h.EncryptionMasterKey != "" && task.LocalUserPassword != "" {
+		isSecretEncrypted, err := utils.IsSensitiveFieldEncrypted(task.LocalUserPassword, h.EncryptionMasterKey)
+		if err != nil {
+			return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.local_user_password_cannot_be_decrypted", err.Error()), true))
+		}
+
+		if isSecretEncrypted {
+			task.LocalUserPassword, err = utils.DecryptSensitiveField(task.LocalUserPassword, h.EncryptionMasterKey)
+			if err != nil {
+				return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.local_user_password_cannot_be_decrypted", err.Error()), true))
+			}
+		}
+	}
+
+	return RenderView(c, tasks_views.TasksIndex("| Tasks", tasks_views.EditTask(c, task.Edges.Profile.ID, task, commonInfo), commonInfo))
+}
+
+func (h *Handler) CloneTask(c echo.Context) error {
+	var err error
+
+	commonInfo, err := h.GetCommonInfo(c)
+	if err != nil {
+		return err
+	}
+
+	id := c.Param("id")
+	if id == "" {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.edit.empty_task"), true))
+	}
+
+	taskID, err := strconv.Atoi(id)
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.edit.invalid_task"), true))
+	}
+
+	task, err := h.Model.GetTasksById(taskID)
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.invalid_task"), err), true))
+	}
+
+	if task.Edges.Profile == nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.no_profile"), err), true))
+	}
+
+	// TODO-Steve we must filter which profiles are available for a role
+	allProfiles, err := h.Model.GetAllProfiles()
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.clone.all_profiles_error"), err), true))
+	}
+
+	if c.Request().Method == "POST" {
+		taskDescription := c.FormValue("task-description")
+		if taskDescription == "" {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.new.empty"), err), true))
+		}
+
+		profile := c.FormValue("profile")
+		if profile == "" {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.invalid_profile"), err), true))
+		}
+
+		profileSubstrings := strings.Split(profile, "***")
+		if len(profileSubstrings) < 2 {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.invalid_profile"), err), true))
+		}
+
+		profileID, err := strconv.Atoi(profileSubstrings[1])
+		if err != nil {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.invalid_profile"), err), true))
+		}
+
+		lastTask, err := h.Model.GetLasTaskOrderInProfile(profileID)
+		if err != nil {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.invalid_profile"), err), true))
+		}
+
+		taskOrder := lastTask.Order + 1
+		if err := h.Model.CloneTask(taskID, taskDescription, profileID, taskOrder); err != nil {
+			return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.clone.could_not_clone", err), true))
+		}
+
+		return h.EditProfile(c, "GET", profileSubstrings[1], i18n.T(c.Request().Context(), "tasks.clone.success"))
+	}
+
+	return RenderView(c, tasks_views.TasksIndex("| Tasks", tasks_views.CloneTask(c, task.Edges.Profile.ID, task, allProfiles, commonInfo), commonInfo))
+}
+
+func validateTaskForm(c echo.Context) (*models.TaskConfig, error) {
+	taskType := ""
+
+	if c.FormValue("task-subtype") != "" {
+		taskType = c.FormValue("task-subtype")
+	}
+
+	if c.FormValue("powershell-script") != "" {
+		taskType = "powershell_script"
+	}
+
+	if c.FormValue("unix-script") != "" {
+		taskType = "unix_script"
+	}
+
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskID := c.Param("id")
+	agentsType := c.FormValue("task-agent-type")
+	if taskID == "" && (agentsType == "" || !slices.Contains([]string{task.AgentTypeAny.String(), task.AgentTypeWindows.String(), task.AgentTypeLinux.String(), task.AgentTypeMacos.String()}, agentsType)) {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.wrong_agenttype"))
+	}
+
+	switch taskType {
+	case task.TypeAddLocalUser.String(), task.TypeRemoveLocalUser.String():
+		return validateWindowsLocalUser(c)
+	case task.TypeAddRegistryKey.String(), task.TypeAddRegistryKeyValue.String(), task.TypeRemoveRegistryKey.String(),
+		task.TypeRemoveRegistryKeyValue.String(), task.TypeUpdateRegistryKeyDefaultValue.String():
+		return validateWindowsRegistry(c)
+	case task.TypeAddUnixLocalUser.String():
+		return validateAddUnixLocalUser(c)
+	case task.TypeRemoveUnixLocalUser.String():
+		return validateRemoveUnixLocalUser(c)
+	case task.TypeAddLocalGroup.String(), task.TypeRemoveLocalGroup.String(),
+		task.TypeAddUsersToLocalGroup.String(), task.TypeRemoveUsersFromLocalGroup.String():
+		return validateWindowsLocalGroup(c)
+	case task.TypeAddUnixLocalGroup.String(), task.TypeRemoveUnixLocalGroup.String():
+		return validateUnixLocalGroup(c)
+	case task.TypeMsiInstall.String(), task.TypeMsiUninstall.String():
+		return validateMSI(c)
+	case task.TypeWingetDelete.String(), task.TypeWingetInstall.String(), task.TypeWingetUpdate.String():
+		return validateWinGetPackage(c)
+	case task.TypePowershellScript.String():
+		return validatePowerShellScript(c)
+	case task.TypeUnixScript.String():
+		return validateUnixScript(c)
+	case task.TypeFlatpakInstall.String(), task.TypeFlatpakUninstall.String():
+		return validateFlatpakPackage(c)
+	case task.TypeBrewFormulaInstall.String(), task.TypeBrewFormulaUninstall.String(), task.TypeBrewFormulaUpgrade.String(),
+		task.TypeBrewCaskInstall.String(), task.TypeBrewCaskUninstall.String(), task.TypeBrewCaskUpgrade.String():
+		return validateHomeBrew(c)
+	case task.TypeNetbirdInstall.String(), task.TypeNetbirdUninstall.String(), string(task.TypeNetbirdRegister):
+		return validateNetbird(c)
+	default:
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.wrong_type"))
+	}
+}
+
+func validateWindowsRegistry(c echo.Context) (*models.TaskConfig, error) {
+	taskType := c.FormValue("task-subtype")
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	taskConfig.RegistryKey = c.FormValue("registry-key")
+	if taskConfig.RegistryKey == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.registry_key_not_empty"))
+	}
+
+	if !validateRegistryKey(taskConfig.RegistryKey) {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.registry_key_no_valid_root"))
+	}
+
+	taskConfig.RegistryKeyValue = c.FormValue("registry-value-name")
+	if (taskConfig.TaskType == task.TypeAddRegistryKeyValue.String() || taskConfig.TaskType == task.TypeRemoveRegistryKeyValue.String()) && taskConfig.RegistryKeyValue == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.invalid_registry_value_name"))
+	}
+
+	taskConfig.RegistryKeyValueType = c.FormValue("registry-value-type")
+	if !slices.Contains([]string{"", wingetcfg.RegistryValueTypeString, wingetcfg.RegistryValueTypeDWord, wingetcfg.RegistryValueTypeQWord, wingetcfg.RegistryValueTypeMultistring}, taskConfig.RegistryKeyValueType) {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.invalid_registry_value_type"))
+	}
+
+	taskConfig.RegistryKeyValueData = c.FormValue("registry-value-data")
+	if (taskConfig.TaskType == task.TypeUpdateRegistryKeyDefaultValue.String()) && taskConfig.RegistryKeyValueData == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.invalid_registry_value_data"))
+	}
+
+	dataStrings := strings.Split(taskConfig.RegistryKeyValueData, "\n")
+	if len(dataStrings) > 1 && taskConfig.RegistryKeyValueType != wingetcfg.RegistryValueTypeMultistring {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.unexpected_multiple_strings"))
+	}
+
+	registryKeyHex := c.FormValue("registry-hex")
+	if registryKeyHex == "on" {
+		taskConfig.RegistryHex = true
+	}
+	if taskConfig.RegistryKeyValueType != wingetcfg.RegistryValueTypeDWord && taskConfig.RegistryKeyValueType != wingetcfg.RegistryValueTypeQWord && taskConfig.RegistryHex {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.unexpected_hex"))
+	}
+
+	registryKeyForce := c.FormValue("registry-key-force")
+	registryValueForce := c.FormValue("registry-value-force")
+
+	if registryKeyForce == "on" || registryValueForce == "on" {
+		taskConfig.RegistryForce = true
+	}
+
+	return &taskConfig, nil
+}
+
+func validateRegistryKey(path string) bool {
+	if strings.Contains(path, "HKEY_CLASSES_ROOT") {
+		return true
+	}
+
+	if strings.Contains(path, "HKEY_CURRENT_USER") {
+		return true
+	}
+
+	if strings.Contains(path, "HKEY_LOCAL_MACHINE") {
+		return true
+	}
+
+	if strings.Contains(path, "HKEY_USERS") {
+		return true
+	}
+
+	if strings.Contains(path, "HKEY_CURRENT_CONFIG") {
+		return true
+	}
+
+	if strings.Contains(path, "HKCR:") || strings.Contains(path, "HKCU:") || strings.Contains(path, "HKLM:") || strings.Contains(path, "HKU:") || strings.Contains(path, "HKCC:") {
+		return true
+	}
+
+	return false
+}
+
+func validateWindowsLocalUser(c echo.Context) (*models.TaskConfig, error) {
+	taskType := c.FormValue("task-subtype")
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	taskConfig.LocalUserUsername = c.FormValue("local-user-username")
+	if taskConfig.LocalUserUsername == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_username_is_required"))
+	}
+
+	taskConfig.LocalUserDescription = c.FormValue("local-user-description")
+	taskConfig.LocalUserFullName = c.FormValue("local-user-fullname")
+	password := c.FormValue("local-user-password")
+	if password != "" {
+		taskConfig.LocalUserPassword = c.FormValue("local-user-password")
+	}
+
+	localUserDisabled := c.FormValue("local-user-disabled")
+	if localUserDisabled == "on" {
+		taskConfig.LocalUserDisabled = true
+	}
+
+	localUserPasswordChangeNotAllowed := c.FormValue("local-user-password-change-disallow")
+	if localUserPasswordChangeNotAllowed == "on" {
+		taskConfig.LocalUserPasswordChangeNotAllowed = true
+	}
+
+	localUserPasswordChangeRequired := c.FormValue("local-user-password-change-required")
+	if localUserPasswordChangeRequired == "on" {
+		taskConfig.LocalUserPasswordChangeRequired = true
+	}
+
+	localUserNeverExpires := c.FormValue("local-user-password-never-expires")
+	if localUserNeverExpires == "on" {
+		taskConfig.LocalUserNeverExpires = true
+	}
+
+	return &taskConfig, nil
+}
+
+func validateAddUnixLocalUser(c echo.Context) (*models.TaskConfig, error) {
+	var err error
+
+	taskType := c.FormValue("task-subtype")
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	taskConfig.LocalUserUsername = c.FormValue("local-user-username")
+	if taskConfig.LocalUserUsername == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_username_is_required"))
+	}
+
+	taskConfig.LocalUserDescription = c.FormValue("local-user-description")
+	taskConfig.LocalUserFullName = c.FormValue("local-user-fullname")
+	password := c.FormValue("local-user-password")
+	if password != "" {
+		taskConfig.LocalUserPassword = c.FormValue("local-user-password")
+	}
+
+	taskConfig.LocalUserPrimaryGroup = c.FormValue("local-user-group")
+	taskConfig.LocalUserSupplementaryGroup = c.FormValue("local-user-groups")
+	taskConfig.LocalUserHome = c.FormValue("local-user-home")
+	taskConfig.LocalUserShell = c.FormValue("local-user-shell")
+	taskConfig.LocalUserUmask = c.FormValue("local-user-umask")
+
+	confirmPassword := c.FormValue("local-user-password-confirm")
+	if confirmPassword != taskConfig.LocalUserPassword {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_password_match"))
+	}
+
+	generateSSHKey := c.FormValue("local-user-generate-ssh-key")
+	if generateSSHKey == "on" {
+		taskConfig.LocalUserGenerateSSHKey = true
+	}
+
+	createHome := c.FormValue("local-user-create-home")
+	if createHome == "on" {
+		taskConfig.LocalUserCreateHome = true
+	}
+
+	skel := c.FormValue("local-user-skeleton")
+	if skel != "" && !taskConfig.LocalUserCreateHome {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_skel_requires_home"))
+	}
+	taskConfig.LocalUserSkeleton = skel
+
+	systemAccount := c.FormValue("local-user-system")
+	if systemAccount == "on" {
+		taskConfig.LocalUserSystemAccount = true
+	}
+
+	lockPassword := c.FormValue("local-user-password-lock")
+	if lockPassword == "on" {
+		taskConfig.LocalUserPasswordLock = true
+	}
+
+	localUID := c.FormValue("local-user-id")
+	if localUID != "" {
+		uid, err := strconv.Atoi(localUID)
+
+		if err != nil || uid < 0 {
+			return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_uid_integer"))
+		}
+		taskConfig.LocalUserID = localUID
+	}
+
+	expires := c.FormValue("local-user-expires")
+	if expires != "" {
+		expiresTime, err := time.ParseInLocation("2006-01-02", expires, time.Local)
+		if err != nil {
+			return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_could_not_parse_expire"))
+		}
+		taskConfig.LocalUserExpires = fmt.Sprintf("%d", expiresTime.Unix())
+	}
+
+	expireMax := c.FormValue("local-user-password-expire-max")
+	if expireMax != "" {
+		num, err := strconv.Atoi(expireMax)
+		if err != nil || num < 0 {
+			return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_password_expire_max_not_valid"))
+		}
+	}
+	taskConfig.LocalUserPasswordExpireMax = expireMax
+
+	expireMin := c.FormValue("local-user-password-expire-min")
+	if expireMin != "" {
+		num, err := strconv.Atoi(expireMin)
+		if err != nil || num < 0 {
+			return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_password_expire_min_not_valid"))
+		}
+	}
+	taskConfig.LocalUserPasswordExpireMin = expireMin
+
+	expireDisable := c.FormValue("local-user-password-expire-account-disable")
+	if expireDisable != "" {
+		num, err := strconv.Atoi(expireDisable)
+		if err != nil || num < 0 {
+			return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_password_expire_account_disable_not_valid"))
+		}
+	}
+	taskConfig.LocalUserPasswordExpireAccountDisable = expireDisable
+
+	expireWarning := c.FormValue("local-user-password-expire-warn")
+	if expireWarning != "" {
+		num, err := strconv.Atoi(expireWarning)
+		if err != nil || num < 0 {
+			return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_password_expire_warn_not_valid"))
+		}
+	}
+	taskConfig.LocalUserPasswordExpireWarn = expireWarning
+
+	sshKeyBits := c.FormValue("local-user-ssh-key-bits")
+	if sshKeyBits != "" {
+		num, err := strconv.Atoi(sshKeyBits)
+		if err != nil || num < 0 {
+			return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_ssh_key_bits_not_valid"))
+		}
+	}
+	taskConfig.LocalUserSSHKeyBits = sshKeyBits
+	taskConfig.LocalUserSSHKeyComment = c.FormValue("local-user-ssh-key-comment")
+	taskConfig.LocalUserSSHKeyFile = c.FormValue("local-user-ssh-key-file")
+	taskConfig.LocalUserSSHKeyPassphrase = c.FormValue("local-user-ssh-key-passphrase")
+	taskConfig.LocalUserSSHKeyType = c.FormValue("local-user-ssh-key-type")
+
+	var uidMaxValue = 0
+	uidMax := c.FormValue("local-user-uid-max")
+	if uidMax != "" {
+		uidMaxValue, err = strconv.Atoi(uidMax)
+		if err != nil || uidMaxValue < 0 {
+			return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_uid_max_not_valid"))
+		}
+	}
+	taskConfig.LocalUserUIDMax = uidMax
+
+	var uidMinValue = 0
+	uidMin := c.FormValue("local-user-uid-min")
+	if uidMin != "" {
+		uidMinValue, err = strconv.Atoi(uidMin)
+		if err != nil || uidMinValue < 0 {
+			return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_uid_min_not_valid"))
+		}
+	}
+	taskConfig.LocalUserUIDMin = uidMin
+
+	if uidMin != "" && uidMax != "" {
+		if uidMinValue >= uidMaxValue {
+			return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_max_min_error"))
+		}
+	}
+
+	append := c.FormValue("local-user-append")
+	if append == "on" {
+		taskConfig.LocalUserAppend = true
+	}
+
+	overwriteSSHKey := c.FormValue("local-user-force")
+	if overwriteSSHKey == "on" {
+		taskConfig.LocalUserForce = true
+	}
+
+	ignoreErrors := c.FormValue("ignore-errors")
+	if ignoreErrors == "on" {
+		taskConfig.IgnoreErrors = true
+	}
+
+	return &taskConfig, nil
+}
+
+func validateRemoveUnixLocalUser(c echo.Context) (*models.TaskConfig, error) {
+	taskType := c.FormValue("task-subtype")
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	taskConfig.LocalUserUsername = c.FormValue("local-user-username")
+	if taskConfig.LocalUserUsername == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_user_username_is_required"))
+	}
+
+	removeDirectories := c.FormValue("local-user-force")
+	if removeDirectories == "on" {
+		taskConfig.LocalUserForce = true
+	}
+
+	ignoreErrors := c.FormValue("ignore-errors")
+	if ignoreErrors == "on" {
+		taskConfig.IgnoreErrors = true
+	}
+
+	return &taskConfig, nil
+}
+func validateWindowsLocalGroup(c echo.Context) (*models.TaskConfig, error) {
+	taskType := c.FormValue("task-subtype")
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	taskConfig.LocalGroupName = c.FormValue("local-group-name")
+	if (taskConfig.TaskType == task.TypeAddLocalGroup.String() || taskConfig.TaskType == task.TypeRemoveLocalGroup.String() || taskConfig.TaskType == task.TypeAddUsersToLocalGroup.String() || taskConfig.TaskType == task.TypeRemoveUsersFromLocalGroup.String()) && taskConfig.LocalGroupName == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_group_name_is_required"))
+	}
+
+	taskConfig.LocalGroupDescription = c.FormValue("local-group-description")
+	if taskConfig.TaskType == task.TypeAddLocalGroup.String() && taskConfig.LocalGroupName == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_group_description_is_required"))
+	}
+
+	taskConfig.LocalGroupMembers = c.FormValue("local-group-members")
+
+	taskConfig.LocalGroupMembersToInclude = c.FormValue("local-group-members-to-include")
+	if taskConfig.LocalGroupMembersToInclude != "" && taskConfig.LocalGroupMembers != "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_group_members_included_and_members_exclusive"))
+	}
+
+	taskConfig.LocalGroupMembersToExclude = c.FormValue("local-group-members-to-exclude")
+	if taskConfig.LocalGroupMembersToExclude != "" && taskConfig.LocalGroupMembers != "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_group_members_excluded_and_members_exclusive"))
+	}
+
+	return &taskConfig, nil
+}
+
+func validateUnixLocalGroup(c echo.Context) (*models.TaskConfig, error) {
+	taskType := c.FormValue("task-subtype")
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	taskConfig.LocalGroupName = c.FormValue("local-unix-group-name")
+	if (taskConfig.TaskType == task.TypeAddUnixLocalGroup.String() || taskConfig.TaskType == task.TypeRemoveUnixLocalGroup.String()) && taskConfig.LocalGroupName == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_group_name_is_required"))
+	}
+
+	taskConfig.LocalGroupDescription = c.FormValue("local-group-description")
+	if taskConfig.TaskType == task.TypeAddLocalGroup.String() && taskConfig.LocalGroupName == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_group_description_is_required"))
+	}
+
+	taskConfig.LocalGroupID = c.FormValue("local-group-id")
+	if taskConfig.TaskType == task.TypeAddUnixLocalGroup.String() && taskConfig.LocalGroupID != "" {
+		if _, err := strconv.Atoi(taskConfig.LocalGroupID); err != nil {
+			return nil, errors.New(i18n.T(c.Request().Context(), "tasks.local_gid_integer"))
+		}
+	}
+
+	localGroupSystem := c.FormValue("local-group-system")
+	if localGroupSystem == "on" {
+		taskConfig.LocalGroupSystem = true
+	}
+
+	localGroupForce := c.FormValue("local-group-force")
+	if localGroupForce == "on" {
+		taskConfig.LocalGroupForce = true
+	}
+
+	ignoreErrors := c.FormValue("ignore-errors")
+	if ignoreErrors == "on" {
+		taskConfig.IgnoreErrors = true
+	}
+
+	return &taskConfig, nil
+}
+
+func validateMSI(c echo.Context) (*models.TaskConfig, error) {
+	taskType := c.FormValue("task-subtype")
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	// taskConfig.MsiProductID = c.FormValue("msi-productid")
+	// if (taskConfig.TaskType == "msi_install" || taskConfig.TaskType == "msi_uninstall") && taskConfig.MsiProductID == "" {
+	// 	return nil, errors.New(i18n.T(c.Request().Context(), "tasks.msi_productid_not_empty"))
+	// }
+
+	taskConfig.MsiPath = c.FormValue("msi-path")
+	if (taskConfig.TaskType == task.TypeMsiInstall.String() || taskConfig.TaskType == task.TypeMsiUninstall.String()) && taskConfig.MsiPath == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.msi_path_not_empty"))
+	}
+
+	taskConfig.MsiArguments = c.FormValue("msi-arguments")
+	taskConfig.MsiLogPath = c.FormValue("msi-log-path")
+	// taskConfig.MsiFileHash = c.FormValue("msi-hash")
+
+	// if taskConfig.MsiHashAlgorithm != "" &&
+	// 	taskConfig.MsiHashAlgorithm != wingetcfg.FileHashMD5 &&
+	// 	taskConfig.MsiHashAlgorithm != wingetcfg.FileHashRIPEMD160 &&
+	// 	taskConfig.MsiHashAlgorithm != wingetcfg.FileHashSHA1 &&
+	// 	taskConfig.MsiHashAlgorithm != wingetcfg.FileHashSHA256 &&
+	// 	taskConfig.MsiHashAlgorithm != wingetcfg.FileHashSHA384 &&
+	// 	taskConfig.MsiHashAlgorithm != wingetcfg.FileHashSHA512 {
+	// 	return nil, errors.New(i18n.T(c.Request().Context(), "tasks.unexpected_msi_hash_algorithm"))
+	// }
+	// taskConfig.MsiHashAlgorithm = c.FormValue("msi-hash-alg")
+
+	if (taskConfig.TaskType == task.TypeMsiInstall.String() || taskConfig.TaskType == task.TypeMsiUninstall.String()) &&
+		((taskConfig.MsiFileHash == "" && taskConfig.MsiHashAlgorithm != "") || (taskConfig.MsiFileHash != "" && taskConfig.MsiHashAlgorithm == "")) {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.msi_specify_both_hash_inputs"))
+	}
+
+	return &taskConfig, nil
+}
+
+func validatePowerShellScript(c echo.Context) (*models.TaskConfig, error) {
+	taskType := "powershell_script"
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	taskType = c.FormValue("task-type")
+	taskConfig.ShellScript = c.FormValue("powershell-script")
+	if taskType == "powershell_type" && taskConfig.ShellScript == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.shell_not_empty"))
+	}
+
+	taskConfig.ShellRunConfig = c.FormValue("powershell-run")
+	if taskType == "powershell_type" && taskConfig.ShellRunConfig != task.ScriptRunAlways.String() && taskConfig.ShellRunConfig != task.ScriptRunOnce.String() {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.shell_wrong_run_config"))
+	}
+
+	return &taskConfig, nil
+}
+
+func validateUnixScript(c echo.Context) (*models.TaskConfig, error) {
+	taskType := "unix_script"
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	taskType = c.FormValue("task-type")
+	taskConfig.ShellScript = c.FormValue("unix-script")
+	if taskType == "unix_script_type" && taskConfig.ShellScript == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.shell_not_empty"))
+	}
+
+	taskConfig.ShellExecute = c.FormValue("unix-script-executable")
+	taskConfig.ShellCreates = c.FormValue("unix-script-creates")
+
+	ignoreErrors := c.FormValue("ignore-errors")
+	if ignoreErrors == "on" {
+		taskConfig.IgnoreErrors = true
+	}
+
+	return &taskConfig, nil
+}
+
+func validateWinGetPackage(c echo.Context) (*models.TaskConfig, error) {
+	taskType := c.FormValue("task-subtype")
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:       taskType,
+		AgentsType:     c.FormValue("task-agent-type"),
+		PackageVersion: c.FormValue("package-version"),
+	}
+
+	useLatest := c.FormValue("package-use-latest")
+	if useLatest == "on" {
+		taskConfig.PackageLatest = true
+		taskConfig.PackageVersion = ""
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	taskConfig.PackageID = c.FormValue("package-id")
+	if (taskConfig.TaskType == task.TypeWingetInstall.String() || taskConfig.TaskType == task.TypeWingetDelete.String()) && taskConfig.PackageID == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.package_id_not_empty"))
+	}
+
+	taskConfig.PackageName = c.FormValue("package-name")
+	if (taskConfig.TaskType == task.TypeWingetInstall.String() || taskConfig.TaskType == task.TypeWingetDelete.String()) && taskConfig.PackageName == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.package_name_not_empty"))
+	}
+
+	return &taskConfig, nil
+}
+
+func validateFlatpakPackage(c echo.Context) (*models.TaskConfig, error) {
+	taskType := c.FormValue("task-subtype")
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	taskConfig.PackageID = c.FormValue("flatpak-id")
+	if (taskConfig.TaskType == task.TypeFlatpakInstall.String() || taskConfig.TaskType == task.TypeFlatpakUninstall.String()) && taskConfig.PackageID == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.package_id_not_empty"))
+	}
+
+	taskConfig.PackageName = c.FormValue("flatpak-name")
+	if (taskConfig.TaskType == task.TypeFlatpakInstall.String() || taskConfig.TaskType == task.TypeFlatpakUninstall.String()) && taskConfig.PackageName == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.package_name_not_empty"))
+	}
+
+	taskConfig.PackageBranch = c.FormValue("flatpak-branch")
+	if (taskConfig.TaskType == task.TypeFlatpakInstall.String() || taskConfig.TaskType == task.TypeFlatpakUninstall.String()) && taskConfig.PackageName == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.package_name_not_empty"))
+	}
+
+	latest := c.FormValue("flatpak-latest")
+	if latest == "on" {
+		taskConfig.PackageLatest = true
+	}
+
+	ignoreErrors := c.FormValue("ignore-errors")
+	if ignoreErrors == "on" {
+		taskConfig.IgnoreErrors = true
+	}
+
+	return &taskConfig, nil
+}
+
+func validateHomeBrew(c echo.Context) (*models.TaskConfig, error) {
+	taskType := c.FormValue("task-subtype")
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	taskConfig.PackageID = c.FormValue("brew-id")
+	if taskConfig.PackageID == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.package_id_not_empty"))
+	}
+
+	upgradeAll := c.FormValue("brew-upgrade-all")
+	if upgradeAll == "on" {
+		taskConfig.HomeBrewUpgradeAll = true
+	}
+
+	taskConfig.PackageName = c.FormValue("brew-name")
+	if taskConfig.PackageName == "" && !taskConfig.HomeBrewUpgradeAll {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.package_name_not_empty"))
+	}
+
+	taskConfig.PackageBrewType = c.FormValue("brew-type")
+	if taskConfig.PackageBrewType == "" && !taskConfig.HomeBrewUpgradeAll {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.package_brew_type_name_not_empty"))
+	}
+
+	installOptions := c.FormValue("brew-install-options")
+	if (taskConfig.TaskType == task.TypeBrewFormulaInstall.String() || taskConfig.TaskType == task.TypeBrewCaskInstall.String()) && installOptions != "" {
+		taskConfig.HomeBrewInstallOptions = installOptions
+	}
+
+	upgradeOptions := c.FormValue("brew-upgrade-options")
+	if taskConfig.TaskType == string(task.TypeBrewFormulaUpgrade) && upgradeOptions != "" {
+		taskConfig.HomeBrewUpgradeOptions = upgradeOptions
+	}
+
+	if taskConfig.TaskType == task.TypeBrewFormulaInstall.String() || taskConfig.TaskType == task.TypeBrewFormulaUpgrade.String() ||
+		taskConfig.TaskType == task.TypeBrewCaskInstall.String() || taskConfig.TaskType == task.TypeBrewCaskUpgrade.String() {
+		updateHomeBrew := c.FormValue("brew-update")
+		if updateHomeBrew == "on" {
+			taskConfig.HomeBrewUpdate = true
+		}
+	}
+
+	if taskConfig.TaskType == task.TypeBrewCaskUpgrade.String() {
+		greed := c.FormValue("brew-greed")
+		if greed == "on" {
+			taskConfig.HomeBrewGreedy = true
+		}
+	}
+
+	ignoreErrors := c.FormValue("ignore-errors")
+	if ignoreErrors == "on" {
+		taskConfig.IgnoreErrors = true
+	}
+
+	return &taskConfig, nil
+}
+
+func validateNetbird(c echo.Context) (*models.TaskConfig, error) {
+	taskType := c.FormValue("task-subtype")
+	if c.FormValue("selected-task-type") != "" {
+		taskType = c.FormValue("selected-task-type")
+	}
+
+	taskConfig := models.TaskConfig{
+		TaskType:   taskType,
+		AgentsType: c.FormValue("task-agent-type"),
+	}
+
+	taskConfig.Description = c.FormValue("task-description")
+	if taskConfig.Description == "" {
+		return nil, errors.New(i18n.T(c.Request().Context(), "tasks.new.empty"))
+	}
+
+	if taskConfig.TaskType == task.TypeNetbirdRegister.String() {
+		p, err := c.FormParams()
+		if err != nil {
+			return nil, errors.New(i18n.T(c.Request().Context(), "netbird.could_not_parse_groups"))
+		}
+
+		groups := ""
+		if len(p["netbird-groups[]"]) > 0 {
+			groupIDs := []string{}
+			for _, g := range p["netbird-groups[]"] {
+				tmp := strings.Split(g, "-")
+				if len(tmp) > 1 {
+					groupIDs = append(groupIDs, fmt.Sprintf(`"%s"`, tmp[1]))
+				}
+			}
+			groups = strings.Join(groupIDs, ",")
+			taskConfig.NetbirdGroups = groups
+		}
+
+		greed := c.FormValue("netbird-allow-extra-dns-labels")
+		if greed == "on" {
+			taskConfig.NetbirdAllowExtraDNSLabels = true
+		}
+	}
+
+	return &taskConfig, nil
+}
+
+func (h *Handler) EnableTask(c echo.Context, enable bool) error {
+	var err error
+
+	id := c.Param("id")
+	if id == "" {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.edit.empty_task"), true))
+	}
+
+	taskId, err := strconv.Atoi(id)
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.edit.invalid_task"), true))
+	}
+
+	task, err := h.Model.GetTasksById(taskId)
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.could_not_save"), err), true))
+	}
+
+	if task.Edges.Profile == nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.no_profile"), err), true))
+	}
+
+	if err := h.Model.EnableTask(taskId, !enable); err != nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.could_not_save"), err), true))
+	}
+
+	return h.EditProfile(c, "GET", strconv.Itoa(task.Edges.Profile.ID), i18n.T(c.Request().Context(), "tasks.edit.saved"))
+
+}
+
+func (h *Handler) MoveTask(c echo.Context, up bool) error {
+	var err error
+
+	id := c.Param("id")
+	if id == "" {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.edit.empty_task"), true))
+	}
+
+	taskID, err := strconv.Atoi(id)
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.not_valid"), true))
+	}
+
+	if c.Param("order") == "" {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.order_empty"), true))
+	}
+
+	order, err := strconv.Atoi(c.Param("order"))
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.order_invalid"), true))
+	}
+
+	task, err := h.Model.GetTasksById(taskID)
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.not_valid"), err), true))
+	}
+
+	if task.Edges.Profile == nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.no_profile"), err), true))
+	}
+
+	if up {
+		if err := h.Model.MoveTask(taskID, order, order-1); err != nil {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.could_not_change_task_order"), err), true))
+		}
+	} else {
+		if err := h.Model.MoveTask(taskID, order, order+1); err != nil {
+			return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.could_not_change_task_order"), err), true))
+		}
+	}
+
+	return h.EditProfile(c, "GET", strconv.Itoa(task.Edges.Profile.ID), i18n.T(c.Request().Context(), "tasks.edit.saved"))
+}
+
+func (h *Handler) MoveTaskFromTo(c echo.Context) error {
+	var err error
+
+	id := c.Param("id")
+	if id == "" {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.edit.empty_task"), true))
+	}
+
+	taskID, err := strconv.Atoi(id)
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.not_valid"), true))
+	}
+
+	if c.Param("from") == "" || c.Param("to") == "" {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.order_empty"), true))
+	}
+
+	from, err := strconv.Atoi(c.Param("from"))
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.order_invalid"), true))
+	}
+
+	to, err := strconv.Atoi(c.Param("to"))
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(i18n.T(c.Request().Context(), "tasks.order_invalid"), true))
+	}
+
+	task, err := h.Model.GetTasksById(taskID)
+	if err != nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.not_valid"), err), true))
+	}
+
+	if task.Edges.Profile == nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.edit.no_profile"), err), true))
+	}
+
+	if err := h.Model.MoveTask(taskID, from, to); err != nil {
+		return RenderError(c, partials.ErrorMessage(fmt.Sprintf("%s : %v", i18n.T(c.Request().Context(), "tasks.could_not_change_task_order"), err), true))
+	}
+
+	return h.EditProfile(c, "GET", strconv.Itoa(task.Edges.Profile.ID), i18n.T(c.Request().Context(), "tasks.edit.saved"))
+}

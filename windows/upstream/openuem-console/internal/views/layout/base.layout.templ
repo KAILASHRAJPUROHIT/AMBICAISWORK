@@ -1,0 +1,69 @@
+package layout
+
+import (
+	"fmt"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+	"strings"
+)
+
+templ Base(section string, commonInfo *partials.CommonInfo) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<meta
+				name="description"
+				content="OpenUEM: An Open Source Unified Endpoint Manager"
+			/>
+			<meta name="google" content="notranslate"/>
+			<meta name="htmx-config" content='{"selfRequestsOnly": false}'/>
+			<title>OpenUEM | { strings.Title(section) }</title>
+			<link rel="stylesheet" href="/assets/css/remixicon.min.css" type="text/css"/>
+			<link rel="stylesheet" href="/assets/css/simple-icons.min.css" type="text/css"/>
+			<link rel="stylesheet" href="/assets/css/markdown.css" type="text/css"/>
+			<link rel="stylesheet" href="/assets/css/main.css" type="text/css"/>
+			<link rel="stylesheet" href="/assets/css/flag-icons.min.css" type="text/css"/>
+			<script src="/assets/js/_hyperscript.min.js"></script>
+			<script src="/assets/js/core.iife.js" type="module"></script>
+			<script src="/assets/js/icon.iife.js" type="module"></script>
+			<script src="/assets/js/htmx.min.js"></script>
+			<script src="/assets/js/echarts.min.js"></script>
+			<script src="/assets/js/openuem.js" type="module"></script>
+			if commonInfo.IsTurnstileEnabled {
+				<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"></script>
+			}
+			<script>
+				const htmlElement = document.documentElement;
+
+				if (
+					localStorage.getItem("mode") === "dark" ||
+					(!("mode" in localStorage) &&
+					window.matchMedia("(prefers-color-scheme: dark)").matches)
+				) {
+					htmlElement.classList.add("dark");
+				} else {
+					htmlElement.classList.remove("dark");
+				}
+
+				htmlElement.classList.add(
+					localStorage.getItem("theme") || "uk-theme-openuem",
+				);
+			</script>
+		</head>
+		<body
+			if commonInfo.CSRFToken != "" {
+				hx-headers={ fmt.Sprintf(`{"X-CSRF-TOKEN": "%s"}`, commonInfo.CSRFToken) }
+			}
+		>
+			<div class="flex min-h-screen w-full flex-col bg-muted">
+				<aside class="fixed inset-y-0 left-0 z-10 hidden w-14 flex-col border-r dark:border-r-0 bg-background sm:flex">
+					@partials.NavBar(section, commonInfo)
+				</aside>
+				<div id="main" class="flex flex-col sm:gap-4 sm:py-4 sm:pl-14">
+					{ children... }
+				</div>
+			</div>
+		</body>
+	</html>
+}

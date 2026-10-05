@@ -1,0 +1,36 @@
+package partials
+
+import (
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+)
+
+templ ConfirmAdmission(c echo.Context, confirm, cancelURL, admitURL string) {
+	<div class="uk-alert border-blue-700 text-blue-500 dark:bg-blue-500 dark:text-white" uk-alert>
+		<div class="uk-alert-description p-2">
+			{ confirm }
+			<div class="flex gap-6 pt-6">
+				<button
+					hx-get={ string(templ.URL(cancelURL)) }
+					hx-push-url="true"
+					hx-target="#main"
+					hx-swap="outerHTML"
+					class="uk-button uk-button-default"
+				>
+					{ i18n.T(ctx, "Cancel") }
+				</button>
+				<button
+					hx-post={ string(templ.URL(admitURL)) }
+					hx-target="#main"
+					hx-swap="outerHTML"
+					hx-push-url="false"
+					htmx-indicator="#admit-spinner"
+					class="uk-button bg-blue-700 text-white hover:bg-blue-500"
+				>
+					{ i18n.T(ctx, "Admit") }
+					<div id="admit-spinner" class="ml-2 htmx-indicator" hx-history="false" uk-spinner="ratio: 0.5" uk-spinner></div>
+				</button>
+			</div>
+		</div>
+	</div>
+}

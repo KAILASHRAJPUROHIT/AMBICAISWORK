@@ -1,0 +1,1090 @@
+//go:build darwin
+
+package agent
+
+import (
+	"bytes"
+	"context"
+	"crypto/x509"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"os/exec"
+	"os/user"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/apenella/go-ansible/v2/pkg/execute"
+	"github.com/apenella/go-ansible/v2/pkg/execute/measure"
+	results "github.com/apenella/go-ansible/v2/pkg/execute/result/json"
+	"github.com/apenella/go-ansible/v2/pkg/execute/stdoutcallback"
+	"github.com/apenella/go-ansible/v2/pkg/execute/workflow"
+	galaxy "github.com/apenella/go-ansible/v2/pkg/galaxy/collection/install"
+	"github.com/apenella/go-ansible/v2/pkg/playbook"
+	"github.com/dgraph-io/badger/v4"
+	"github.com/go-co-op/gocron/v2"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+	openuem_nats "github.com/open-uem/nats"
+	"github.com/open-uem/openuem-agent/internal/agent/dsc"
+	rd "github.com/open-uem/openuem-agent/internal/commands/remote-desktop"
+	openuem_runtime "github.com/open-uem/openuem-agent/internal/commands/runtime"
+	"github.com/open-uem/openuem-agent/internal/commands/sftp"
+	ansiblecfg "github.com/open-uem/openuem-ansible-config/ansible"
+	openuem_utils "github.com/open-uem/utils"
+	"gopkg.in/yaml.v3"
+)
+
+func (a *Agent) Start() {
+
+	log.Println("[INFO]: agent has been started!")
+
+	// Log agent associated user
+	currentUser, err := user.Current()
+	if err != nil {
+		log.Printf("[ERROR]: %v", err)
+	}
+	log.Printf("[INFO]: agent is run as %s", currentUser.Username)
+
+	a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
+	if err := a.Config.WriteConfig(); err != nil {
+		log.Fatalf("[FATAL]: could not write agent config: %v", err)
+	}
+
+	// Agent started so reset restart required flag
+	if err := a.Config.ResetRestartRequiredFlag(); err != nil {
+		log.Fatalf("[FATAL]: could not reset restart required flag, reason: %v", err)
+	}
+
+	// Start task scheduler
+	a.TaskScheduler.Start()
+	log.Println("[INFO]: task scheduler has started!")
+
+	// Start BadgerDB KV and SFTP server only if port is set
+	if a.Config.SFTPPort != "" && !a.Config.SFTPDisabled {
+		cwd, err := Getwd()
+		if err != nil {
+			log.Println("[ERROR]: could not get working directory")
+			return
+		}
+
+		badgerPath := filepath.Join(cwd, "badgerdb")
+		if err := os.RemoveAll(badgerPath); err != nil {
+			log.Println("[ERROR]: could not remove badgerdb directory")
+			return
+		}
+
+		if err := os.MkdirAll(badgerPath, 0660); err != nil {
+			log.Println("[ERROR]: could not recreate badgerdb directory")
+			return
+		}
+
+		a.BadgerDB, err = badger.Open(badger.DefaultOptions(filepath.Join(cwd, "badgerdb")))
+		if err != nil {
+			log.Printf("[ERROR]: %v", err)
+		}
+
+		go func() {
+			a.SFTPServer = sftp.New()
+			err = a.SFTPServer.Serve(":"+a.Config.SFTPPort, a.SFTPCert, a.CACert, a.BadgerDB)
+			if err != nil {
+				log.Printf("[ERROR]: %v", err)
+			}
+			log.Println("[INFO]: SFTP server has started!")
+		}()
+	} else {
+		log.Println("[INFO]: SFTP port is not set so SFTP server is not started!")
+	}
+
+	// Try to connect to NATS server and start a reconnect job if failed
+	a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert, a.Config.WebSocketPort)
+	if err != nil {
+		log.Printf("[ERROR]: %v", err)
+		a.startNATSConnectJob()
+		return
+	}
+	a.SubscribeToNATSSubjects()
+
+	// Run report for the first time after start if agent is enabled
+	if a.Config.Enabled {
+		r := a.RunReport()
+		if r == nil {
+			return
+		}
+
+		// Send first report to NATS
+		if err := a.SendReport(r); err != nil {
+			a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN // Try to send it again in 5 minutes
+			log.Printf("[ERROR]: report could not be send to NATS server!, reason: %s\n", err.Error())
+		} else {
+			// Get remote config
+			if err := a.GetRemoteConfig(); err != nil {
+				log.Printf("[ERROR]: could not get remote config %v", err)
+			}
+			log.Println("[INFO]: remote config requested")
+
+			// Start scheduled report job with default frequency
+			a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
+		}
+
+		if err := a.Config.WriteConfig(); err != nil {
+			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		}
+
+		a.startReportJob()
+	}
+
+	// Start other jobs associated
+	a.startPendingACKJob()
+	a.startCheckForAnsibleProfilesJob()
+}
+
+func (a *Agent) startNATSConnectJob() error {
+	var err error
+
+	if a.Config.ExecuteTaskEveryXMinutes == 0 {
+		a.Config.ExecuteTaskEveryXMinutes = SCHEDULETIME_5MIN
+	}
+
+	// Create task for running the agent
+	a.NATSConnectJob, err = a.TaskScheduler.NewJob(
+		gocron.DurationJob(
+			time.Duration(time.Duration(a.Config.ExecuteTaskEveryXMinutes)*time.Minute),
+		),
+		gocron.NewTask(
+			func() {
+				a.NATSConnection, err = openuem_nats.ConnectWithNATS(a.Config.NATSServers, a.Config.AgentCert, a.Config.AgentKey, a.Config.CACert, a.Config.WebSocketPort)
+				if err != nil {
+					return
+				}
+
+				// We have connected
+				a.TaskScheduler.RemoveJob(a.NATSConnectJob.ID())
+				a.SubscribeToNATSSubjects()
+
+				// Start the rest of tasks
+				a.startReportJob()
+				a.startPendingACKJob()
+				a.startCheckForAnsibleProfilesJob()
+			},
+		),
+	)
+	if err != nil {
+		log.Fatalf("[FATAL]: could not start the NATS connect job: %v", err)
+		return err
+	}
+	log.Printf("[INFO]: new NATS connect job has been scheduled every %d minutes", a.Config.ExecuteTaskEveryXMinutes)
+	return nil
+}
+
+func (a *Agent) StartRemoteDesktopSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.startvnc."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+
+		// Instantiate new vnc server, but first try to check if certificates are there
+		a.GetServerCertificate()
+		if a.ServerCertPath == "" || a.ServerKeyPath == "" {
+			log.Println("[ERROR]: Remote Desktop service requires a server certificate that it's not ready")
+			return
+		}
+
+		v, err := rd.New(a.ServerCertPath, a.ServerKeyPath, "", a.Config.VNCProxyPort)
+		if err != nil {
+			log.Println("[ERROR]: could not get a Remote Desktop service")
+			return
+		}
+
+		// Unmarshal data
+		var rdConn openuem_nats.VNCConnection
+		if err := json.Unmarshal(msg.Data, &rdConn); err != nil {
+			log.Println("[ERROR]: could not unmarshall Remote Desktop connection")
+			return
+		}
+
+		// Start Remote Desktop service
+		a.RemoteDesktop = v
+		v.Start(rdConn.PIN, rdConn.NotifyUser)
+
+		if err := msg.Respond([]byte("Remote Desktop service started!")); err != nil {
+			log.Printf("[ERROR]: could not respond to agent start vnc message, reason: %v\n", err)
+		}
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent start vnc, reason: %v", err)
+	}
+	return nil
+}
+func (a *Agent) RebootSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.reboot."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		log.Println("[INFO]: reboot request received")
+		if err := msg.Respond([]byte("Reboot!")); err != nil {
+			log.Printf("[ERROR]: could not respond to agent reboot message, reason: %v\n", err)
+		}
+
+		action := openuem_nats.RebootOrRestart{}
+		if err := json.Unmarshal(msg.Data, &action); err != nil {
+			log.Printf("[ERROR]: could not unmarshal to agent reboot message, reason: %v\n", err)
+			return
+		}
+
+		when := int(time.Until(action.Date).Minutes())
+		if when > 0 {
+			if err := exec.Command("shutdown", "-r", strconv.Itoa(when)).Run(); err != nil {
+				log.Printf("[ERROR]: could not initiate power off, reason: %v", err)
+			}
+		} else {
+			if err := exec.Command("shutdown", "-r", "now").Run(); err != nil {
+				log.Printf("[ERROR]: could not initiate shutdown, reason: %v", err)
+			}
+		}
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent reboot, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) PowerOffSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.poweroff."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		log.Println("[INFO]: power off request received")
+		if err := msg.Respond([]byte("Power Off!")); err != nil {
+			log.Printf("[ERROR]: could not respond to agent power off message, reason: %v\n", err)
+			return
+		}
+
+		action := openuem_nats.RebootOrRestart{}
+		if err := json.Unmarshal(msg.Data, &action); err != nil {
+			log.Printf("[ERROR]: could not unmarshal to agent power off message, reason: %v\n", err)
+			return
+		}
+
+		when := int(time.Until(action.Date).Minutes())
+		if when > 0 {
+			if err := exec.Command("shutdown", "-h", strconv.Itoa(when)).Run(); err != nil {
+				log.Printf("[ERROR]: could not initiate power off, reason: %v", err)
+			}
+		} else {
+			if err := exec.Command("shutdown", "-h", "now").Run(); err != nil {
+				log.Printf("[ERROR]: could not initiate shutdown, reason: %v", err)
+			}
+		}
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent power off, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) RescheduleAnsibleConfigureTask() {
+	a.TaskScheduler.RemoveJob(a.WingetConfigureJob.ID())
+	a.startCheckForAnsibleProfilesJob()
+}
+
+func (a *Agent) NewConfigSubscribe() error {
+	_, err := a.NATSConnection.Subscribe("agent.newconfig", func(msg *nats.Msg) {
+
+		config := openuem_nats.Config{}
+		err := json.Unmarshal(msg.Data, &config)
+		if err != nil {
+			log.Printf("[ERROR]: could not get new config to apply, reason: %v\n", err)
+			return
+		}
+
+		a.Config.DefaultFrequency = config.AgentFrequency
+		a.Config.SFTPDisabled = config.SFTPDisabled
+		a.Config.RemoteAssistanceDisabled = config.RemoteAssistanceDisabled
+
+		// Should we re-schedule agent report?
+		if a.Config.ExecuteTaskEveryXMinutes != SCHEDULETIME_5MIN {
+			a.Config.ExecuteTaskEveryXMinutes = a.Config.DefaultFrequency
+			a.RescheduleReportRunTask()
+		}
+
+		// Should we re-schedule ansible configure task?
+		if config.WinGetFrequency != 0 {
+			a.Config.WingetConfigureFrequency = config.WinGetFrequency
+			a.RescheduleAnsibleConfigureTask()
+		}
+
+		if err := a.Config.WriteConfig(); err != nil {
+			log.Fatalf("[FATAL]: could not write agent config: %v", err)
+		}
+
+		if err := a.Config.SetRestartRequiredFlag(); err != nil {
+			log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
+			return
+		}
+
+		log.Println("[INFO]: new config has been set from console")
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent uninstall package, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) AgentCertificateHandler(msg jetstream.Msg) {
+
+	data := openuem_nats.AgentCertificateData{}
+
+	if err := json.Unmarshal(msg.Data(), &data); err != nil {
+		log.Printf("[ERROR]: could not unmarshal agent certificate data, reason: %v\n", err)
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+			return
+		}
+
+		return
+	}
+
+	wd := "/etc/openuem-agent"
+
+	if err := os.MkdirAll(filepath.Join(wd, "certificates"), 0660); err != nil {
+		log.Printf("[ERROR]: could not create certificates folder, reason: %v\n", err)
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+		}
+		return
+	}
+
+	keyPath := filepath.Join(wd, "certificates", "server.key")
+
+	privateKey, err := x509.ParsePKCS1PrivateKey(data.PrivateKeyBytes)
+	if err != nil {
+		log.Printf("[ERROR]: could not get private key, reason: %v\n", err)
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+		}
+		return
+	}
+
+	err = openuem_utils.SavePrivateKey(privateKey, keyPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not save agent private key, reason: %v\n", err)
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+		}
+		return
+	}
+	log.Printf("[INFO]: Agent private key saved in %s", keyPath)
+
+	certPath := filepath.Join(wd, "certificates", "server.cer")
+	err = openuem_utils.SaveCertificate(data.CertBytes, certPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not save agent certificate, reason: %v\n", err)
+		if err := msg.Ack(); err != nil {
+			log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+		}
+		return
+	}
+	log.Printf("[INFO]: Agent certificate saved in %s", certPath)
+
+	if err := msg.Ack(); err != nil {
+		log.Printf("[ERROR]: could not ACK message, reason: %v", err)
+	}
+
+	// Finally run a new report to inform that the certificate is ready
+	r := a.RunReport()
+	if r == nil {
+		return
+	}
+}
+
+func (a *Agent) startCheckForAnsibleProfilesJob() error {
+	var err error
+	// Create task for running the agent
+
+	if a.Config.WingetConfigureFrequency == 0 {
+		a.Config.WingetConfigureFrequency = SCHEDULETIME_30MIN
+	}
+
+	a.WingetConfigureJob, err = a.TaskScheduler.NewJob(
+		gocron.DurationJob(
+			time.Duration(a.Config.WingetConfigureFrequency)*time.Minute,
+		),
+		gocron.NewTask(a.GetUnixConfigureProfiles),
+	)
+	if err != nil {
+		log.Fatalf("[FATAL]: could not start the check for Ansible profiles job, reason: %v", err)
+		return err
+	}
+	log.Printf("[INFO]: new check for Ansible profiles job has been scheduled every %d minutes", a.Config.WingetConfigureFrequency)
+	return nil
+}
+
+func (a *Agent) GetServerCertificate() {
+
+	cwd := "/etc/openuem-agent"
+
+	serverCertPath := filepath.Join(cwd, "certificates", "server.cer")
+	_, err := openuem_utils.ReadPEMCertificate(serverCertPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not read server certificate")
+	} else {
+		a.ServerCertPath = serverCertPath
+	}
+
+	serverKeyPath := filepath.Join(cwd, "certificates", "server.key")
+	_, err = openuem_utils.ReadPEMPrivateKey(serverKeyPath)
+	if err != nil {
+		log.Printf("[ERROR]: could not read server private key")
+	} else {
+		a.ServerKeyPath = serverKeyPath
+	}
+}
+
+func (a *Agent) GetUnixConfigureProfiles() {
+	if a.Config.Debug {
+		log.Println("[DEBUG]: running task Ansible profiles job")
+	}
+
+	profileRequest := openuem_nats.CfgProfiles{
+		AgentID: a.Config.UUID,
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: going to send a ansible.profile request")
+	}
+
+	data, err := json.Marshal(profileRequest)
+	if err != nil {
+		log.Printf("[ERROR]: could not marshal profile request, reason: %v", err)
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: ansiblecfg.profile sending request")
+	}
+
+	msg, err := a.NATSConnection.Request("ansiblecfg.profiles", data, 5*time.Minute)
+	if err != nil {
+		log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
+		if err := a.Config.SetRestartRequiredFlag(); err != nil {
+			log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
+			return
+		}
+	}
+
+	a.ProcessProfileResponse(msg, false)
+}
+
+func (a *Agent) ProcessProfileResponse(msg *nats.Msg, force bool) {
+	profiles := []openuem_nats.ProfileConfig{}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: ansiblecfg.profile request sent")
+		if msg.Data != nil {
+			log.Println("[DEBUG]: received ansiblecfg.profile response")
+		}
+	}
+
+	if err := yaml.Unmarshal(msg.Data, &profiles); err != nil {
+		log.Printf("[ERROR]: could not unmarshal profiles response from agent worker, reason: %v", err)
+	}
+
+	if a.Config.Debug {
+		log.Println("[DEBUG]: ansiblecfg.profile response unmarshalled")
+	}
+
+	if len(profiles) > 0 {
+		if err := a.InstallCommunityGeneralCollection(); err != nil {
+			log.Printf("[ERROR]: could not install ansible community general collection, reason: %v", err)
+		}
+	}
+
+	ansibleFolder, err := CreatePlaybooksFolder()
+	if err != nil {
+		log.Printf("[ERROR]: could not create playbooks folder %v", err)
+		return
+	}
+
+	taskControlPath := filepath.Join(ansibleFolder, "tasks.json")
+	taskControl, err := dsc.ReadTaskControlFile(taskControlPath)
+
+	if err != nil {
+		log.Printf("[ERROR]: tasks control file is not available, reason %v", err)
+		return
+	}
+
+	for _, p := range profiles {
+		profileReport := openuem_nats.ProfileReport{
+			AgentID:   a.Config.UUID,
+			ProfileID: p.ProfileID,
+			Success:   true,
+		}
+		// Ansible tasks
+		if a.Config.Debug {
+			log.Println("[DEBUG]: ansiblecfg.profile to be unmarshalled")
+		}
+
+		errData := ""
+
+		if len(p.AnsibleConfig) > 0 {
+			cfg, err := yaml.Marshal(p.AnsibleConfig)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal YAML file with Ansible configuration, reason: %v", err)
+				continue
+			}
+
+			if a.Config.Debug {
+				log.Println("[DEBUG]: we're going to apply the configuration")
+			}
+
+			tasks, err := a.ApplyConfiguration(p.ProfileID, cfg, taskControl, taskControlPath)
+			if err != nil {
+				log.Println("[ERROR]: could not apply YAML configuration file with Ansible")
+				profileReport.Error = err.Error()
+			}
+
+			for _, t := range tasks {
+				if t.Failed {
+					profileReport.Success = false
+					break
+				}
+			}
+
+			profileReport.Tasks = tasks
+		}
+
+		// Netbird tasks
+		if len(p.NetBirdConfig) > 0 {
+			tasks, err := a.ApplyNetBirdConfiguration(p, taskControl, taskControlPath)
+			if err != nil {
+				log.Println("[ERROR]: could not apply Netbird configuration file")
+
+				if errData != "" {
+					errData = strings.Join([]string{errData, err.Error()}, ",")
+				} else {
+					errData = err.Error()
+				}
+			}
+			profileReport.Error = errData
+
+			for _, t := range tasks {
+				if t.Failed {
+					profileReport.Success = false
+					break
+				}
+			}
+
+			profileReport.Tasks = append(profileReport.Tasks, tasks...)
+		}
+
+		// Report if application was successful or not
+		if err := a.SendProfileReport(&profileReport); err != nil {
+			log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+		}
+	}
+}
+
+func (a *Agent) ApplyConfiguration(profileID int, config []byte, taskControl *dsc.TaskControl, taskControlPath string) ([]openuem_nats.TaskReport, error) {
+	var cfg []ansiblecfg.AnsiblePlaybook
+
+	var playbookCmd *playbook.AnsiblePlaybookCmd
+
+	tasks := []openuem_nats.TaskReport{}
+
+	if err := yaml.Unmarshal(config, &cfg); err != nil {
+		log.Printf("[ERROR]: could not unmarshall Ansible playbook folder %v", err)
+		return nil, err
+	}
+
+	ansibleFolder, err := CreatePlaybooksFolder()
+	if err != nil {
+		log.Printf("[ERROR]: could not create playbooks folder %v", err)
+		return nil, err
+	}
+
+	ID := strconv.Itoa(profileID)
+	if taskControl.ProfilesRunning == nil {
+		taskControl.ProfilesRunning = map[string]time.Time{
+			ID: time.Now(),
+		}
+	} else {
+		when, ok := taskControl.ProfilesRunning[ID]
+		if !ok {
+			taskControl.ProfilesRunning[ID] = time.Now()
+		} else {
+			// Clear stalled profile for more than 24 hours
+			if time.Now().After(when.Add(24 * time.Hour)) {
+				log.Printf("[INFO]: found previous task %s that hasn't be re-run for more than 24 hours", ID)
+				taskControl.ProfilesRunning[ID] = time.Now()
+			} else {
+				log.Printf("[INFO]: previous profile %s is marked as running, not relaunching, ", ID)
+				return nil, nil
+			}
+		}
+	}
+	if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
+		log.Printf("[ERROR]: could not save new profile %s running, reason: %v", ID, err)
+		return nil, err
+	}
+
+	defer func() {
+		delete(taskControl.ProfilesRunning, ID)
+		if err := dsc.SaveTaskControl(taskControlPath, taskControl); err != nil {
+			log.Printf("[ERROR]: could not remove profile %s from running, reason: %v", ID, err)
+			return
+		}
+	}()
+
+	pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
+	if err != nil {
+		log.Printf("[ERROR]: could not create playbook file %v", err)
+		return nil, err
+	}
+
+	_, err = pbFile.WriteString("---\n\n")
+	if err != nil {
+		log.Printf("[ERROR]: could not write start of playbook to file %v", err)
+		return nil, err
+	}
+
+	// Get current user for brew commands
+	username, err := openuem_runtime.GetLoggedInUser()
+	if err != nil {
+		log.Printf("[ERROR]: could not find the logged in user, reason %v", err)
+		return nil, err
+	}
+
+	_, err = pbFile.WriteString(strings.ReplaceAll(string(config), "some_user", username))
+	if err != nil {
+		log.Printf("[ERROR]: could not write playbook file %v", err)
+		return nil, err
+	}
+
+	if err := pbFile.Close(); err != nil {
+		log.Printf("[ERROR]: could not close playbook file %v", err)
+		return nil, err
+	}
+
+	if !a.Config.Debug {
+		defer func() {
+			if err := os.Remove(pbFile.Name()); err != nil {
+				log.Printf("[ERROR]: could not delete playbook file %v", err)
+			}
+		}()
+	}
+
+	log.Printf("[INFO]: received a request to apply profile %d", profileID)
+
+	buff := new(bytes.Buffer)
+
+	ansiblePlaybookOptions := &playbook.AnsiblePlaybookOptions{
+		Connection: "local",
+		Inventory:  "127.0.0.1,",
+	}
+
+	if runtime.GOARCH == "amd64" {
+		playbookCmd = playbook.NewAnsiblePlaybookCmd(
+			playbook.WithPlaybooks(pbFile.Name()),
+			playbook.WithPlaybookOptions(ansiblePlaybookOptions),
+			playbook.WithBinary("/usr/local/bin/ansible-playbook"),
+		)
+	} else {
+		playbookCmd = playbook.NewAnsiblePlaybookCmd(
+			playbook.WithPlaybooks(pbFile.Name()),
+			playbook.WithPlaybookOptions(ansiblePlaybookOptions),
+			playbook.WithBinary("/opt/homebrew/bin/ansible-playbook"),
+		)
+	}
+
+	exec := measure.NewExecutorTimeMeasurement(
+		stdoutcallback.NewJSONStdoutCallbackExecute(
+			execute.NewDefaultExecute(
+				execute.WithCmd(playbookCmd),
+				execute.WithErrorEnrich(playbook.NewAnsiblePlaybookErrorEnrich()),
+				execute.WithWrite(io.Writer(buff)),
+			),
+		),
+	)
+
+	executeErr := exec.Execute(context.TODO())
+
+	// Generate the report
+	res, err := results.ParseJSONResultsStream(io.Reader(buff))
+	if err == nil {
+		for _, p := range res.Plays {
+			for _, t := range p.Tasks {
+				// skip the gathering facts task
+				if t.Task.Name == "Gathering Facts" {
+					continue
+				}
+
+				h, ok := t.Hosts["127.0.0.1"]
+				if ok {
+					taskReport := openuem_nats.TaskReport{
+						Name:    t.Task.Name,
+						Failed:  h.Failed,
+						EndTime: t.Task.Duration.End,
+					}
+					if h.Stdout != nil {
+						taskReport.StdOut = h.Stdout.(string)
+					}
+
+					if h.Stderr != nil {
+						taskReport.StdErr = h.Stderr.(string)
+					}
+					tasks = append(tasks, taskReport)
+				}
+			}
+		}
+	} else {
+		if executeErr != nil {
+			log.Printf("[INFO]: an error was found executing the Ansible playbook, reason: %v", err)
+			return nil, err
+		}
+	}
+
+	log.Printf("[INFO]: an Ansible playbook was run for profile %d", profileID)
+
+	return tasks, nil
+}
+
+func CreatePlaybooksFolder() (string, error) {
+	cwd, err := Getwd()
+	if err != nil {
+		log.Println("[ERROR]: could not get working directory")
+		return "", errors.New("could not get working directory")
+	}
+
+	folder := filepath.Join(cwd, "ansible")
+	return folder, os.MkdirAll(folder, 0660)
+}
+
+func (a *Agent) InstallCommunityGeneralCollection() error {
+
+	galaxyCommand := ""
+	if runtime.GOARCH == "amd64" {
+		galaxyCommand = "/usr/local/bin/ansible-galaxy"
+	} else {
+		galaxyCommand = "/opt/homebrew/bin/ansible-galaxy"
+	}
+
+	// check if general collection exists
+	cmd := exec.Command(galaxyCommand, "collection", "list", "community.general")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("[ERROR]: could not check if community.general collection is available, reason: %v", err)
+		return err
+	}
+
+	if string(out) == "" {
+		var galaxyInstallCollectionCmd *galaxy.AnsibleGalaxyCollectionInstallCmd
+
+		ansibleFolder, err := CreatePlaybooksFolder()
+		if err != nil {
+			log.Printf("[ERROR]: could not create playbooks folder %v", err)
+			return err
+		}
+
+		pbFile, err := os.CreateTemp(ansibleFolder, "*.yml")
+		if err != nil {
+			log.Printf("[ERROR]: could not create playbook file %v", err)
+			return err
+		}
+
+		_, err = pbFile.WriteString("---\n\ncollections:\n- name: community.general")
+		if err != nil {
+			log.Printf("[ERROR]: could not write start of playbook to file %v", err)
+			return err
+		}
+
+		if err := pbFile.Close(); err != nil {
+			log.Printf("[ERROR]: could not close playbook file %v", err)
+			return err
+		}
+
+		defer func() {
+			if err := os.Remove(pbFile.Name()); err != nil {
+				log.Printf("[INFO]: could not remove playbook to install the general collection")
+			}
+		}()
+
+		if !a.Config.Debug {
+			defer func() {
+				if err := os.Remove(pbFile.Name()); err != nil {
+					log.Printf("[ERROR]: could not delete playbook file %v", err)
+				}
+			}()
+		}
+
+		if runtime.GOARCH == "amd64" {
+			galaxyInstallCollectionCmd = galaxy.NewAnsibleGalaxyCollectionInstallCmd(
+				galaxy.WithGalaxyCollectionInstallOptions(&galaxy.AnsibleGalaxyCollectionInstallOptions{
+					Force:            true,
+					Upgrade:          true,
+					RequirementsFile: pbFile.Name(),
+				}),
+				galaxy.WithBinary("/usr/local/bin/ansible-galaxy"),
+			)
+		} else {
+			galaxyInstallCollectionCmd = galaxy.NewAnsibleGalaxyCollectionInstallCmd(
+				galaxy.WithGalaxyCollectionInstallOptions(&galaxy.AnsibleGalaxyCollectionInstallOptions{
+					Force:            true,
+					Upgrade:          true,
+					RequirementsFile: pbFile.Name(),
+				}),
+				galaxy.WithBinary("/opt/homebrew/bin/ansible-galaxy"),
+			)
+		}
+
+		galaxyInstallCollectionExec := execute.NewDefaultExecute(
+			execute.WithCmd(galaxyInstallCollectionCmd),
+		)
+
+		return workflow.NewWorkflowExecute(galaxyInstallCollectionExec).WithTrace().Execute(context.TODO())
+	}
+
+	return nil
+}
+
+func ReadDeploymentNotACK() ([]openuem_nats.DeployAction, error) {
+	cwd, err := Getwd()
+	if err != nil {
+		return nil, err
+	}
+
+	filename := filepath.Join(cwd, "pending_acks.json")
+	jsonFile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return nil, err
+	}
+	defer jsonFile.Close()
+
+	byteValue, err := io.ReadAll(jsonFile)
+	if err != nil {
+		return nil, err
+	}
+
+	jActions := JSONActions{}
+	if len(byteValue) > 0 {
+		err = json.Unmarshal(byteValue, &jActions)
+		if err != nil {
+			return nil, err
+		}
+		return jActions.Actions, nil
+	}
+
+	return []openuem_nats.DeployAction{}, nil
+}
+
+func SaveDeploymentsNotACK(actions []openuem_nats.DeployAction) error {
+	cwd, err := Getwd()
+	if err != nil {
+		return err
+	}
+
+	filename := filepath.Join(cwd, "pending_acks.json")
+	jsonFile, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer jsonFile.Close()
+
+	jActions := JSONActions{}
+	jActions.Actions = actions
+
+	byteValue, err := json.MarshalIndent(jActions, "", " ")
+	if err != nil {
+		return err
+	}
+
+	_, err = jsonFile.Write(byteValue)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func SaveDeploymentNotACK(action openuem_nats.DeployAction) error {
+	var actions []openuem_nats.DeployAction
+	cwd, err := Getwd()
+	if err != nil {
+		return err
+	}
+
+	filename := filepath.Join(cwd, "pending_acks.json")
+	jsonFile, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer jsonFile.Close()
+
+	byteValue, err := io.ReadAll(jsonFile)
+	if err != nil {
+		return err
+	}
+
+	jActions := JSONActions{}
+
+	if len(byteValue) > 0 {
+		err = json.Unmarshal(byteValue, &jActions)
+		if err != nil {
+			return err
+		}
+		actions = jActions.Actions
+	}
+
+	actions = append(actions, action)
+
+	if err := SaveDeploymentsNotACK(actions); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (a *Agent) AgentRunTaskSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.ansible."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		var profileConfig openuem_nats.ProfileConfig
+
+		// Unmarshal data
+		profileReport := openuem_nats.ProfileReport{
+			AgentID: a.Config.UUID,
+		}
+
+		if err := yaml.Unmarshal(msg.Data, &profileConfig); err != nil {
+			log.Println("[ERROR]: could not unmarshall playbook")
+			profileReport.Error = fmt.Sprintf("could not unmarshall playbook %v", err)
+
+			response, err := yaml.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		// Run playbook
+		ansibleFolder, err := CreatePlaybooksFolder()
+		if err != nil {
+			log.Printf("[ERROR]: could not create playbooks folder %v", err)
+			profileReport.Error = fmt.Sprintf("could not create playbooks folder %v", err)
+
+			response, err := json.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		taskControlPath := filepath.Join(ansibleFolder, "tasks.json")
+		taskControl, err := dsc.ReadTaskControlFile(taskControlPath)
+		profileReport.ProfileID = profileConfig.ProfileID
+
+		if len(profileConfig.AnsibleConfig) == 0 {
+			log.Println("[ERROR]: no ansible playbook was found in the request")
+			profileReport.Error = "no ansible playbook was found in the request"
+
+			response, err := json.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		cfg, err := yaml.Marshal(profileConfig.AnsibleConfig)
+		if err != nil {
+			log.Printf("[ERROR]: could not marshal YAML file with Ansible configuration, reason: %v", err)
+
+			response, err := json.Marshal(profileReport)
+			if err != nil {
+				log.Printf("[ERROR]: could not marshal response to agent.ansible request, reason: %v", err)
+				return
+			}
+
+			if err := msg.Respond(response); err != nil {
+				log.Printf("[ERROR]: could not send response to agent.ansible request, reason: %v", err)
+				return
+			}
+			return
+		}
+
+		// All is fine, we can execute the task and we'll report later
+		if err := msg.Respond(nil); err != nil {
+			log.Printf("[ERROR]: could not send the response to agent.ansible message")
+		}
+
+		tasks, err := a.ApplyConfiguration(profileConfig.ProfileID, cfg, taskControl, taskControlPath)
+		if err != nil {
+			log.Println("[ERROR]: could not apply YAML configuration file with Ansible")
+			profileReport.Error = err.Error()
+
+			// Report if application was successful or not
+			if err := a.SendProfileReport(&profileReport); err != nil {
+				log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+			}
+			return
+		}
+
+		profileReport.Tasks = tasks
+		profileReport.Success = true
+		for _, t := range tasks {
+			if t.Failed {
+				profileReport.Success = false
+			}
+		}
+
+		// Report as the task has finished
+		if err := a.SendProfileReport(&profileReport); err != nil {
+			log.Println("[ERROR]: could not report if profile was applied succesfully or no")
+		}
+
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent ansible task execution, reason: %v", err)
+	}
+	return nil
+}
+
+func (a *Agent) RunProfileSubscribe() error {
+	_, err := a.NATSConnection.QueueSubscribe("agent.runprofile."+a.Config.UUID, "openuem-agent-management", func(msg *nats.Msg) {
+		if err := msg.Respond(nil); err != nil {
+			log.Printf("[ERROR]: could not respond to console request to run a profile, reason: %v", err)
+		}
+
+		msg, err := a.NATSConnection.Request("ansiblecfg.profiles", msg.Data, 5*time.Minute)
+		if err != nil {
+			log.Printf("[ERROR]: could not send request to agent worker, reason: %v", err)
+			if err := a.Config.SetRestartRequiredFlag(); err != nil {
+				log.Printf("[ERROR]: could not set restart required flag, reason: %v\n", err)
+				return
+			}
+		}
+
+		a.ProcessProfileResponse(msg, true)
+	})
+
+	if err != nil {
+		return fmt.Errorf("[ERROR]: could not subscribe to agent run profile subject, reason: %v", err)
+	}
+	return nil
+}

@@ -1,0 +1,168 @@
+package admin_views
+
+import (
+	"fmt"
+	"github.com/invopop/ctxi18n/i18n"
+	"github.com/labstack/echo/v4"
+	"github.com/open-uem/ent"
+	smtpsettings "github.com/open-uem/ent/settings"
+	"github.com/open-uem/openuem-console/internal/views/layout"
+	"github.com/open-uem/openuem-console/internal/views/partials"
+	"strconv"
+)
+
+templ SMTPSettings(c echo.Context, settings *ent.Settings, agentsExists, serversExists bool, commonInfo *partials.CommonInfo, tenantName string) {
+	if commonInfo.TenantID == "-1" {
+		@partials.Header(c, []partials.Breadcrumb{{Title: i18n.T(ctx, "Global Config"), Url: "/admin/users"}, {Title: "SMTP Settings", Url: "/admin/smtp"}}, commonInfo)
+	} else {
+		@partials.Header(c, []partials.Breadcrumb{{Title: tenantName, Url: string(templ.URL(fmt.Sprintf("/tenant/%s/admin/tags", commonInfo.TenantID)))}, {Title: "SMTP Settings", Url: string(templ.URL(fmt.Sprintf("/tenant/%s/admin/smtp", commonInfo.TenantID)))}}, commonInfo)
+	}
+	<main class="grid flex-1 items-start gap-4 p-4 sm:px-6 sm:py-0 md:gap-8">
+		<div class="uk-width-1-2@m uk-card uk-card-default">
+			<div class="uk-card-body uk-flex uk-flex-column gap-4">
+				@ConfigNavbar("smtp", agentsExists, serversExists, commonInfo)
+				<div id="success" class="hidden"></div>
+				<div id="error" class="hidden"></div>
+				<div class="uk-width-1-2@m uk-card uk-card-default">
+					<div class="uk-card-header">
+						<h3 class="uk-card-title">{ i18n.T(ctx, "smtp.title") } </h3>
+						<p class="uk-margin-small-top uk-text-small">
+							{ i18n.T(ctx, "smtp.description") }
+							if commonInfo.TenantID != "-1" {
+								{ i18n.T(ctx, "settings.tenant") }
+							}
+						</p>
+					</div>
+					<div class="uk-card-body">
+						<form class="mt-6">
+							<input type="hidden" name="settingsId" value={ strconv.Itoa(settings.ID) }/>
+							<div class="flex gap-8">
+								<fieldset class="uk-fieldset w-1/6">
+									<legend class="uk-legend">{ i18n.T(ctx, "smtp.server_fieldset") }</legend>
+									<div class="uk-margin">
+										<label class="uk-form-label" for="server">{ i18n.T(ctx, "smtp.server") }</label>
+										<input id="server" name="server" type="text" spellcheck="false" class="uk-input" value={ settings.SMTPServer } placeholder={ i18n.T(ctx, "smtp.server_placeholder") }/>
+									</div>
+									<div class="uk-margin">
+										<label class="uk-form-label" for="port">{ i18n.T(ctx, "smtp.port") }</label>
+										<input
+											id="port"
+											name="port"
+											type="number"
+											class="uk-input"
+											value={ strconv.Itoa(settings.SMTPPort) }
+											placeholder={ i18n.T(ctx, "smtp.port_placeholder") }
+											_="on keyup 
+												if my.value is '465' then 
+													set #encryption.value to 'smtps'
+												end
+												if my.value is '587' then 
+													set #encryption.value to 'starttls'
+												end
+											end"
+										/>
+									</div>
+								</fieldset>
+								<fieldset class="uk-fieldset w-1/6">
+									<legend class="uk-legend">{ i18n.T(ctx, "smtp.auth_fieldset") }</legend>
+									<div class="uk-margin">
+										<label class="uk-form-label" for="user">{ i18n.T(ctx, "smtp.user") }</label>
+										<input id="user" name="user" type="text" spellcheck="false" class="uk-input" value={ settings.SMTPUser } placeholder={ i18n.T(ctx, "smtp.user_placeholder") }/>
+									</div>
+									<div class="uk-margin flex flex-col">
+										<label class="uk-form-label" for="password">{ i18n.T(ctx, "smtp.password") }</label>
+										<div class="uk-inline">
+											<input id="password" name="password" type="password" class="uk-input mt-1" value={ settings.SMTPPassword } placeholder={ i18n.T(ctx, "smtp.password_placeholder") }/>
+											<button
+												class="uk-form-icon uk-form-icon-flip"
+												type="button"
+												_="
+													on click 
+														if #reveal-password@icon is 'eye' then
+															set #reveal-password@icon to 'eye-off'
+															set #password@type to 'text'
+														else
+															set #reveal-password@icon to 'eye'
+															set #password@type to 'password'
+														end
+													end
+												"
+											>
+												<uk-icon id="reveal-password" icon="eye" class="uk-text-muted mt-1"></uk-icon>
+											</button>
+										</div>
+									</div>
+									<div class="uk-margin">
+										<label class="uk-form-label" for="auth">{ i18n.T(ctx, "smtp.auth_type") }</label>
+										<select id="auth" name="auth" class="uk-select">
+											for _, authType := range AuthTypes {
+												<option selected?={ settings.SMTPAuth == authType }>{ authType }</option>
+											}
+										</select>
+									</div>
+									<div class="uk-margin">
+										<label class="uk-form-label" for="encryption">{ i18n.T(ctx, "smtp.encryption_type") }</label>
+										<select id="encryption" name="encryption" class="uk-select">
+											<option selected?={ settings.SMTPEncryptionType == smtpsettings.SMTPEncryptionTypeNone } value={ smtpsettings.SMTPEncryptionTypeNone.String() }>{ i18n.T(ctx, "smtp.encryption_none") }</option>
+											<option selected?={ settings.SMTPEncryptionType == smtpsettings.SMTPEncryptionTypeSmtps } value={ smtpsettings.SMTPEncryptionTypeSmtps.String() }>{ i18n.T(ctx, "smtp.encryption_smtps") }</option>
+											<option selected?={ settings.SMTPEncryptionType == smtpsettings.SMTPEncryptionTypeStarttls } value={ smtpsettings.SMTPEncryptionTypeStarttls.String() }>{ i18n.T(ctx, "smtp.encryption_starttls") }</option>
+										</select>
+									</div>
+								</fieldset>
+								<fieldset class="uk-fieldset w-1/6">
+									<legend class="uk-legend">{ i18n.T(ctx, "smtp.from_fieldset") }</legend>
+									<div class="uk-margin">
+										<label class="uk-form-label" for="mail-from">{ i18n.T(ctx, "smtp.from_fieldset") }</label>
+										<input id="mail-from" name="mail-from" type="text" class="uk-input" value={ settings.MessageFrom } placeholder={ i18n.T(ctx, "smtp.from_placeholder") }/>
+									</div>
+								</fieldset>
+							</div>
+							<div class="flex gap-2">
+								<button
+									class="uk-button uk-button-primary flex items-center gap-2"
+									type="submit"
+									if commonInfo.TenantID == "-1" {
+										hx-post="/admin/smtp"
+									} else {
+										hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/smtp", commonInfo.TenantID))) }
+									}
+									hx-push-url="false"
+									hx-target="#main"
+									hx-swap="outerHTML"
+									hx-indicator="#save-smtp-spinner"
+								>
+									<span class="ml-2">{ i18n.T(ctx, "Save") }</span>
+									<uk-icon id="save-smtp-spinner" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+								</button>
+								<button
+									class="uk-button uk-button-secondary flex items-center gap-2"
+									type="button"
+									if commonInfo.TenantID == "-1" {
+										hx-post="/admin/smtp/test"
+									} else {
+										hx-post={ string(templ.URL(fmt.Sprintf("/tenant/%s/admin/smtp/test", commonInfo.TenantID))) }
+									}
+									hx-push-url="false"
+									hx-target="#main"
+									hx-swap="outerHTML"
+									hx-indicator="#test-smtp-spinner"
+								>
+									<span class="ml-2">{ i18n.T(ctx, "smtp.test") }</span>
+									<uk-icon id="test-smtp-spinner" hx-history="false" icon="loader-circle" custom-class="htmx-indicator h-4 w-4 animate-spin" uk-cloack></uk-icon>
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			</div>
+		</div>
+	</main>
+}
+
+templ SMTPSettingsIndex(title string, cmp templ.Component, commonInfo *partials.CommonInfo) {
+	@layout.Base("admin", commonInfo) {
+		@cmp
+	}
+}
+
+var AuthTypes = []string{"LOGIN", "PLAIN", "XOAUTH2", "SCRAM-SHA-256"}
