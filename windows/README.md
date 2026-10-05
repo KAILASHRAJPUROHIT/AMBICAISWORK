@@ -5,17 +5,28 @@ kept in this repository so it is versioned, released and sold with the rest of A
 
 ## Status
 
-Phase 1 is starting: the upstream source is imported unchanged under `upstream/`. Nothing here is built, branded or released yet.
+Phase 1 is under way. The upstream source is imported unchanged under `upstream/` and **all six Windows components compile** with `build.ps1`
+(agent, agent updater, agent worker, certificate manager, OCSP responder, console). Nothing is branded, installed on a PC, or released yet,
+and the console has not been run (it needs PostgreSQL, a NATS server and certificates).
 
 | Phase | What | State |
 |---|---|---|
-| 1 | AMBIC Windows agent + console integration (inventory, software install, scripts, restart/lock, update and antivirus status, remote assistance) | source imported, not built |
+| 1 | AMBIC Windows agent + console integration (inventory, software install, scripts, restart/lock, update and antivirus status, remote assistance) | source imported, **builds**; local stack + branding next |
 | 2 | Windows MDM enrolment (policy, BitLocker, kiosk, update rings) using AMBIC's own endpoint; the MIT-licensed SyncML / enrolment code from Fleet may be reused with attribution | not started |
 | 3 | Windows Server: the Phase 1 agent plus Group Policy (servers do not use the MDM protocol) | not started |
 
 Targets: Windows 11 Pro/Enterprise (full), Windows 11 Home (agent features and monitoring; many MDM policies do not apply to Home).
 No device ever needs a reset: the agent installs onto a running PC, and Phase 2 enrols an existing PC from
 Settings > Accounts > Access work or school.
+
+## Build
+
+```
+pwsh -File windowsuild.ps1
+```
+
+Uses a portable Go in `C:AradhanaSystems	oolsgo` (downloaded and checksum-verified if missing; nothing is installed into Windows), generates
+the console templates, and writes the executables to `windowsdist` (git-ignored). Needs Go 1.26.2 or newer.
 
 ## Layout
 
