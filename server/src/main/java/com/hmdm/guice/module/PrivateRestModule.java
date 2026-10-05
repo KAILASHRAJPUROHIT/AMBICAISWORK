@@ -52,6 +52,7 @@ public class PrivateRestModule extends ServletModule {
         this.bind(com.hmdm.rest.resource.RemoteSessionResource.class);
         this.bind(FrpRecoveryAccountResource.class);
         this.bind(com.hmdm.rest.resource.IndoorResource.class);
+        this.bind(com.hmdm.rest.resource.WindowsResource.class);
         this.bind(ConsoleDeviceResource.class);
         this.bind(SmtpSettingsResource.class);
         this.bind(FDroidResource.class);

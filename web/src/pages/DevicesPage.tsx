@@ -19,6 +19,7 @@ import { listConfigurations, type ConfigurationSummary } from '../api/configurat
 import { listPendingFrpDevices } from '../api/frp';
 import { listActiveAppRollouts } from '../api/appRollout';
 import { BulkActionModal } from '../components/BulkActionModal';
+import { WindowsSection } from '../components/WindowsSection';
 
 type View = 'grid' | 'list';
 type StatusFilter = 'all' | 'online' | 'offline';
@@ -415,6 +416,8 @@ export function DevicesPage() {
           )}
         </>
       )}
+
+      <WindowsSection query={q} />
 
       {actionsOpen && (
         <BulkActionModal

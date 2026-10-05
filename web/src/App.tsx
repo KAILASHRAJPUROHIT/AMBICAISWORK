@@ -13,6 +13,7 @@ import { ConfigurationsPage } from './pages/ConfigurationsPage';
 import { EnrollPage } from './pages/EnrollPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { IndoorPage } from './pages/IndoorPage';
+import { WindowsDeviceDetailPage } from './pages/WindowsDeviceDetailPage';
 import { FleetMapPage } from './pages/FleetMapPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { FleetPulseLayout } from './data/FleetPulse';
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/devices" element={<DevicesPage />} />
               <Route path="/devices/:id" element={<DeviceDetailPage />} />
+              <Route path="/windows/:id" element={<WindowsDeviceDetailPage />} />
               <Route path="/apps" element={<AppsPage />} />
               <Route path="/configs" element={<ConfigurationsPage />} />
               <Route path="/enroll" element={<EnrollPage />} />

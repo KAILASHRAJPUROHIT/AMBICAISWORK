@@ -3485,3 +3485,36 @@ body {
 /* Low-battery stages: yellow 21-30%, orange 11-20% (red keeps .fail) */
 .dev-bat-bar.bat-yellow { --tone: #f2c230; } .dev-bat-bar.bat-orange { --tone: #f28c28; }
 .mesh-bat.bat-yellow { --tone: #f2c230; } .mesh-bat.bat-orange { --tone: #f28c28; }
+
+/* Windows PCs (shown with the tablets) */
+.win-section { margin-top: 20px; }
+.win-section .dv-head h2 { margin: 0; font-size: 16px; }
+.win-list { display: flex; flex-direction: column; gap: 6px; }
+.win-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line, rgba(128,128,128,.25));
+  background: transparent; color: inherit; font: inherit; cursor: pointer;
+}
+.win-row:hover { background: rgba(80,120,255,.07); }
+.win-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.win-main .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.win-seen { min-width: 70px; text-align: right; }
+.win-dot { width: 10px; height: 10px; border-radius: 50%; background: #8a8f98; flex: none; }
+.win-dot.ok { background: #2fb36d; }
+.win-dot.warn { background: #f2a62c; }
+.win-badge {
+  font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+  background: rgba(138,143,152,.18); color: inherit; white-space: nowrap;
+}
+.win-badge.ok { background: rgba(47,179,109,.18); color: #1f8a53; }
+.win-badge.warn { background: rgba(242,166,44,.2); color: #a86a05; }
+.win-block { margin-bottom: 16px; }
+.win-block h3 { margin: 0 0 10px; }
+.win-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.win-facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px 24px; }
+.win-fact dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.win-fact dt { font-size: 12px; }
+.win-disk { display: flex; gap: 12px; flex-wrap: wrap; padding: 4px 0; }
+.win-disk strong { min-width: 48px; }
+.win-disk span:nth-child(2) { flex: 1; }
+@media (max-width: 600px) { .win-seen { display: none; } .win-badge { font-size: 11px; } }
