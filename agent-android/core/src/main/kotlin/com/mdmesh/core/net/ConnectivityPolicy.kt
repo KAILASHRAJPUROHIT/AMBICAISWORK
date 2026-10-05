@@ -37,6 +37,8 @@ data class GuardInput(
     val quiet: Boolean = false,
     /** The tablet has been carried (repeated motion) recently, so quiet hours do not excuse it. */
     val moved: Boolean = false,
+    /** False when an administrator turned the protection off for this device: nothing ever escalates and any lockdown is cleared. */
+    val enabled: Boolean = true,
 )
 
 data class GuardActions(
@@ -59,6 +61,9 @@ object ConnectivityPolicy {
     fun step(previous: GuardState, input: GuardInput): GuardStep {
         val now = input.now
         var st = previous
+
+        // Protection switched off for this device: a clean, normal state, whatever the connection does.
+        if (!input.enabled) return GuardStep(GuardState(), GuardActions())
 
         // Shop closed and the tablet is sitting still (its router is typically switched off): nothing escalates and no timer
         // runs, so the tablets are not blocked or locked by morning. A tablet that is being carried is still guarded.

@@ -31,6 +31,9 @@ object DeviceAction {
     /** "Locate now": take a fresh fix immediately and return it in the result. No payload. */
     const val LOCATE = "device.locate"
 
+    /** Turn the offline protection (full-screen message and lockdown) off or on for this device. Payload: `{ "enabled": false }`. */
+    const val GUARD_MODE = "device.guardMode"
+
     /** "Locate in store": estimate the indoor position now from Wi-Fi. No payload. */
     const val INDOOR_LOCATE = "device.indoorLocate"
 
@@ -97,7 +100,7 @@ object DeviceAction {
     /** Keys (after the `device.` prefix) advertised in `capabilities.device`. */
     val ADVERTISED_KEYS: List<String> = listOf(
         "lock", "reboot", "lockscreenMessage", "alert", "ring", "ringStop",
-        "passcodeReset", "wipe", "powerMode", "locationMode", "locate", "indoorLocate", "indoorSurvey",
+        "passcodeReset", "wipe", "powerMode", "locationMode", "locate", "indoorLocate", "indoorSurvey", "guardMode",
         "passwordQuality", "wifiProfile", "certificate", "wallpaper", "kioskTheme",
     )
 }

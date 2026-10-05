@@ -110,7 +110,8 @@ class ConnectivityGuard @Inject constructor(
             val cal = java.util.Calendar.getInstance()
             q.contains(cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE))
         } ?: false
-        val step = ConnectivityPolicy.step(before, GuardInput(now, wifiOn, online, quiet = quiet, moved = MotionState.sustained(now)))
+        val step = ConnectivityPolicy.step(before, GuardInput(now, wifiOn, online, quiet = quiet, moved = MotionState.sustained(now),
+            enabled = com.mdmesh.core.net.GuardSwitch.isEnabled(context)))
         save(step.state)
         val a = step.actions
 
@@ -119,6 +120,7 @@ class ConnectivityGuard @Inject constructor(
         GuardUi.attempts = step.state.reconnectAttempts
         GuardUi.blockWanted = a.blockWanted
         GuardUi.lockdownWanted = a.lockdownWanted
+        com.mdmesh.core.net.GuardStatus.lockdown = a.lockdownWanted
 
         if (a.enableWifi) enableWifi(before.wifiOffSince, now)
         if (a.reconnect) reconnect(step.state.reconnectAttempts)

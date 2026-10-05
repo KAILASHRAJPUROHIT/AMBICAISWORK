@@ -70,6 +70,11 @@ class DynamicStateCollector @Inject constructor(
             location = runCatching { locationCollector.collect() }.getOrNull(),
             dataUsage = runCatching { networkUsageCollector.collect() }.getOrNull(),
             indoor = runCatching { indoorEngine.fix(INDOOR_FIX_MAX_AGE_MS) }.getOrNull(),
+            offlineGuard = when {
+                !com.mdmesh.core.net.GuardSwitch.isEnabled(context) -> "off"
+                com.mdmesh.core.net.GuardStatus.lockdown -> "lockdown"
+                else -> "on"
+            },
             writeSettingsGranted = runCatching { android.provider.Settings.System.canWrite(context) }.getOrNull(),
             wirelessDebuggingOn = runCatching {
                 // Hidden SDK constant Settings.Global.ADB_WIFI_ENABLED; literal key, see WirelessAdbEnabler.

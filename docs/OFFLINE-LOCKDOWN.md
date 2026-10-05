@@ -45,3 +45,12 @@ after 10 minutes and lock down after 30, and nobody could unlock them in the mor
 
 Code: `core/.../net/QuietHours.kt` and `ConnectivityPolicy` (agent), `common/.../util/QuietWindow.java` and `DeviceSilentTask`
 (server), `GuardHoursPanel.tsx` (console). The timing rules are covered by `QuietHoursTest`.
+
+## Turning the protection off for one device
+
+Console → device page → Actions → **Offline protection: off** (`device.guardMode {enabled:false}`). The device never shows the
+"no internet" screen or locks down again, however long it is offline, and any lockdown or message already showing is cleared at once.
+**Offline protection: on** switches it back on, and the 10/30-minute clocks then start from zero. The device page shows the state
+(On / Off (never locks) / LOCKED DOWN). Use it for a tablet that must not lock while outgoing email is not set up and nobody could
+receive the unlock code. "Release lockdown" alone does not do this: it lifts the lockdown, but the tablet locks again after another
+30 minutes without internet.

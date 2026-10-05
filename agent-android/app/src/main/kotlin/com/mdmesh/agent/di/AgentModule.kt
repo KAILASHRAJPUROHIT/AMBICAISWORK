@@ -371,6 +371,13 @@ object AgentModule {
 
     @Provides
     @IntoSet
+    fun provideGuardModeHandler(
+        @ApplicationContext context: Context,
+        guard: com.mdmesh.agent.net.ConnectivityGuard,
+    ): CommandHandler = com.mdmesh.core.command.handlers.DeviceGuardModeHandler(context, guard)
+
+    @Provides
+    @IntoSet
     fun provideLocateHandler(
         collector: LocationCollector,
         @ApplicationContext context: Context,

@@ -116,6 +116,11 @@ function NameField({
   );
 }
 
+/** The offline protection as reported by the device. */
+function guardLabel(v: unknown): string {
+  return v === 'off' ? 'Off (never locks)' : v === 'lockdown' ? 'LOCKED DOWN' : v === 'on' ? 'On' : '—';
+}
+
 /** A position older than this no longer says where the device is now. */
 const FIX_STALE_MS = 30 * 60_000;
 function fixIsStale(capturedAt: number): boolean {
@@ -279,6 +284,7 @@ export function DeviceDetailPage() {
   const statusRows: Row[] = [
     { k: 'Battery', v: ds ? (ds.battery < 0 ? '—' : <span style={{ color: BATTERY_TEXT_COLOR[batteryStage(ds.battery, ds.charging)], fontWeight: batteryStage(ds.battery, ds.charging) === 'ok' ? undefined : 600 }}>{`${ds.battery}% · ${ds.charging ? 'charging' : 'not charging'}`}</span>) : '—' },
     { k: 'Screen', v: ds ? (ds.locked ? 'Locked' : 'Unlocked') : '—' },
+    { k: 'Offline protection', v: guardLabel(dyn.offlineGuard) },
     { k: 'Kiosk', v: ds ? (ds.kioskActive ? 'On' : 'Off') : '—' },
     { k: 'Connectivity', v: powerLabel(ds?.powerMode) },
   ];

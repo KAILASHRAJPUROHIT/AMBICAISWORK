@@ -70,6 +70,8 @@ data class DynamicState(
     val dataUsage: DataUsageDto? = null,
     /** In-store position from the on-device indoor engine; null when no floor plan is set up or no recent estimate. */
     val indoor: IndoorFixDto? = null,
+    /** The offline protection: "on", "off" (switched off for this device) or "lockdown". Null from agents that predate this field. */
+    val offlineGuard: String? = null,
     /** WRITE_SETTINGS AppOp granted (Settings.System.canWrite) -- needed for Quick Controls
      *  auto-rotate; Android resets it on every agent update, see docs/WRITE_SETTINGS-PERSISTENCE.md.
      *  Null from agents that predate this field. */

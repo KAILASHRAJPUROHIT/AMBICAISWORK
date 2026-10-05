@@ -232,6 +232,22 @@ export const ACTION_TEMPLATES: CommandTemplateExt[] = [
     },
   },
   {
+    key: 'guard-off', label: 'Offline protection: off', group: 'disruptive', danger: true,
+    description: 'Stop this device ever showing the "no internet" screen or locking down, and clear any lockdown now. It stays off until you turn it back on.',
+    request: {
+      type: 'device.guardMode', requiresCapability: 'device.guardMode',
+      payload: JSON.stringify({ enabled: false }),
+    },
+  },
+  {
+    key: 'guard-on', label: 'Offline protection: on', group: 'safe',
+    description: 'Turn the offline protection (no-internet screen and lockdown) back on for this device.',
+    request: {
+      type: 'device.guardMode', requiresCapability: 'device.guardMode',
+      payload: JSON.stringify({ enabled: true }),
+    },
+  },
+  {
     key: 'locate', label: 'Locate now', group: 'safe',
     description: 'Take a fresh GPS fix right now and report it on the map. The result shows the coordinates and accuracy.',
     request: { type: 'device.locate', requiresCapability: 'device.locate' },
