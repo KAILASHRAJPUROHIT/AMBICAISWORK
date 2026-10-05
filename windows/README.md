@@ -8,7 +8,7 @@ kept in this repository so it is versioned, released and sold with the rest of A
 Phase 1 is under way. The upstream source is imported unchanged under `upstream/` and **all six Windows components compile** with
 `build.ps1` (agent, agent updater, agent worker, certificate manager, OCSP responder, console). Nothing is branded, installed on a PC,
 or released yet, and our agent build has been run against a local OpenUEM server on ARADHANA (see `LOCAL-EVAL.md`): it registered and uploaded hardware, OS and
-installed-app inventory. Not yet verified: console sign-in in a browser, admitting the agent, and running commands from the console.
+installed-app inventory. Verified: certificate sign-in to the console, admitting the agent, and a console command (force report) reaching the agent and updating the server. Not yet verified: install / script / restart commands, the agent as a real service, and our own build of the server.
 
 | Phase | What | State |
 |---|---|---|
