@@ -1,3 +1,4 @@
+import { batteryClass } from '../ui/battery';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '../ui/AppShell';
@@ -232,7 +233,7 @@ function DeviceMesh({ nodes, now, onOpen }: { nodes: MeshNode[]; now: number; on
       <text x={C} y={C + 15} className="mesh-core-s">CORE</text>
       {placed.map(({ d, x, y, b, battery, charging }) => {
         const name = d.description || d.number;
-        const batCls = battery == null ? '' : battery <= 20 ? 'fail' : battery <= 45 ? 'warn' : 'ok';
+        const batCls = battery == null ? '' : batteryClass(battery, charging);
         return (
           <g
             key={d.id}

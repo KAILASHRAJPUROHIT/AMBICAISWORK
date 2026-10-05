@@ -1,3 +1,4 @@
+import { BATTERY_TEXT_COLOR, batteryStage } from '../ui/battery';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppShell } from '../ui/AppShell';
@@ -276,7 +277,7 @@ export function DeviceDetailPage() {
   const statusLabel = online ? 'Online' : 'Offline';
 
   const statusRows: Row[] = [
-    { k: 'Battery', v: ds ? (ds.battery < 0 ? '—' : `${ds.battery}% · ${ds.charging ? 'charging' : 'not charging'}`) : '—' },
+    { k: 'Battery', v: ds ? (ds.battery < 0 ? '—' : <span style={{ color: BATTERY_TEXT_COLOR[batteryStage(ds.battery, ds.charging)], fontWeight: batteryStage(ds.battery, ds.charging) === 'ok' ? undefined : 600 }}>{`${ds.battery}% · ${ds.charging ? 'charging' : 'not charging'}`}</span>) : '—' },
     { k: 'Screen', v: ds ? (ds.locked ? 'Locked' : 'Unlocked') : '—' },
     { k: 'Kiosk', v: ds ? (ds.kioskActive ? 'On' : 'Off') : '—' },
     { k: 'Connectivity', v: powerLabel(ds?.powerMode) },

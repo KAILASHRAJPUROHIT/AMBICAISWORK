@@ -161,6 +161,12 @@ class KioskLauncherActivity : FragmentActivity() {
 
     /** Live status views of the Obsidian home (re-pointed on every render, like [batteryText]). */
     private var batteryRing: BatteryRingView? = null
+    private var batteryPill: LinearLayout? = null
+    private var batteryPillBg: android.graphics.drawable.Drawable? = null
+    private var batteryPctColor: Int? = null
+    private var batteryBanner: LinearLayout? = null
+    private var batteryBannerEn: TextView? = null
+    private var batteryBannerHi: TextView? = null
     private var batteryPct: TextView? = null
     private var wifiBarsView: WifiBarsView? = null
     private var wifiName: TextView? = null
@@ -1456,6 +1462,7 @@ class KioskLauncherActivity : FragmentActivity() {
         batteryText = null; wifiText = null; clockText = null
         leaderboardBox = null; leaderboardSig = null
         heroTime = null; heroDate = null; batteryRing = null; batteryPct = null
+        batteryPill = null; batteryPillBg = null; batteryPctColor = null; batteryBanner = null; batteryBannerEn = null; batteryBannerHi = null
         wifiBarsView = null; wifiName = null
         dockRefreshers.clear()
     }
@@ -1483,6 +1490,7 @@ class KioskLauncherActivity : FragmentActivity() {
         // The row always exists (the admin menu button lives in it); the status pills inside it are optional.
         column.addView(topRow(p, pal, m, showPills = sec.statusPills))
         if (sec.clockCard) column.addView(heroCard(p, pal, m))
+        column.addView(batteryBannerView(m))
         if (sec.leaderboard) column.addView(leaderboardCard(pal, m))
 
         // Group: user-installed apps (Capture, Ornate Buddy, BIS CARE…) are the showroom apps;
@@ -1717,6 +1725,7 @@ class KioskLauncherActivity : FragmentActivity() {
             }
             batteryPct = TextView(this).apply { style(m.sp(12f), pal.text, 700, mono = true) }
             bat.addView(batteryRing); bat.addView(batteryPct)
+            batteryPill = bat; batteryPillBg = bat.background; batteryPctColor = pal.text
             row.addView(bat)
 
             val wifi = pill().apply {
@@ -2017,6 +2026,7 @@ class KioskLauncherActivity : FragmentActivity() {
     /** Pushes one [KioskStatusSource] read into whichever status views are on screen. */
     private fun updateStatusViews(s: KioskStatusSource.Status) {
         batteryText?.text = formatBattery(s)
+        applyBatteryStage(com.mdmesh.core.battery.BatteryStagePolicy.stageOf(s.batteryPct, s.charging))
         wifiText?.text = formatWifi(s)
         batteryRing?.let { it.percent = s.batteryPct; it.charging = s.charging }
         batteryPct?.text = if (s.batteryPct >= 0) "${s.batteryPct}%${if (s.charging) " ⚡" else ""}" else "—"
@@ -2028,6 +2038,55 @@ class KioskLauncherActivity : FragmentActivity() {
         }
         refreshDock()
     }
+
+    /** Bilingual low-battery banner under the clock card; hidden until the battery is in a warning stage. */
+    private fun batteryBannerView(m: Metrics): View {
+        val en = TextView(this).apply { textSize = 15f; setTypeface(typeface, android.graphics.Typeface.BOLD) }
+        val hi = TextView(this).apply { textSize = 14f }
+        batteryBannerEn = en; batteryBannerHi = hi
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(m.dp(14), m.dp(10), m.dp(14), m.dp(10))
+            visibility = View.GONE
+            layoutParams = LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = m.dp(8); bottomMargin = m.dp(6) }
+            addView(en); addView(hi)
+            batteryBanner = this
+        }
+    }
+
+    /** Colours the battery pill and shows the warning banner for the current battery [stage]. */
+    private fun applyBatteryStage(stage: com.mdmesh.core.battery.BatteryStage) {
+        val color = com.mdmesh.agent.battery.BatteryColors.of(stage)
+        batteryRing?.tint = color
+        val density = resources.displayMetrics.density
+        batteryPill?.background = if (color == null) batteryPillBg else android.graphics.drawable.GradientDrawable().apply {
+            setColor(withAlpha(color, 0.18f)); cornerRadius = 18f * density; setStroke((2 * density).toInt(), color)
+        }
+        batteryPct?.setTextColor(color?.let { lighten(it) } ?: batteryPctColor ?: Color.WHITE)
+        val banner = batteryBanner ?: return
+        if (color == null) { banner.visibility = View.GONE; return }
+        val (en, hi) = when (stage) {
+            com.mdmesh.core.battery.BatteryStage.YELLOW -> "Battery low. Charge soon" to "बैटरी कम है। जल्द चार्ज करें"
+            com.mdmesh.core.battery.BatteryStage.ORANGE -> "Battery low. Charge now" to "बैटरी कम है। अभी चार्ज करें"
+            else -> "Battery critical. Charge now" to "बैटरी बहुत कम है। अभी चार्ज करें"
+        }
+        val solid = stage == com.mdmesh.core.battery.BatteryStage.RED
+        banner.background = android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = 12f * density
+            if (solid) setColor(color) else { setColor(withAlpha(color, 0.18f)); setStroke((1 * density).toInt(), withAlpha(color, 0.6f)) }
+        }
+        val fg = if (solid) Color.WHITE else lighten(color)
+        batteryBannerEn?.apply { text = en; setTextColor(fg) }
+        batteryBannerHi?.apply { text = hi; setTextColor(fg) }
+        banner.visibility = View.VISIBLE
+    }
+
+    /** A paler version of a stage colour, for text on its own dark tint. */
+    private fun lighten(c: Int): Int = Color.rgb(
+        (Color.red(c) + (255 - Color.red(c)) * 0.45f).toInt(),
+        (Color.green(c) + (255 - Color.green(c)) * 0.45f).toInt(),
+        (Color.blue(c) + (255 - Color.blue(c)) * 0.45f).toInt(),
+    )
 
     /** Clock text for both the legacy status bar (splash) and the hero card. The hero colon
      *  blinks once a second (hidden on odd seconds) unless animations are off. */

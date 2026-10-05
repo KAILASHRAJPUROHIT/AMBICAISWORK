@@ -273,6 +273,9 @@ class BatteryRingView(ctx: Context, private val p: Palette) : View(ctx) {
         set(v) { field = v; invalidate() }
     var charging: Boolean = false
         set(v) { field = v; invalidate() }
+    /** Low-battery stage colour (yellow / orange / red); null leaves the normal colours. */
+    var tint: Int? = null
+        set(v) { field = v; invalidate() }
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = p.line }
     private val arc = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
     private val rect = RectF()
@@ -284,7 +287,7 @@ class BatteryRingView(ctx: Context, private val p: Palette) : View(ctx) {
         rect.set(sw, sw, width - sw, height - sw)
         canvas.drawArc(rect, 0f, 360f, false, track)
         if (percent < 0) return
-        arc.color = when {
+        arc.color = tint ?: when {
             charging -> p.c1
             percent <= 20 -> p.alert
             percent <= 45 -> p.warn

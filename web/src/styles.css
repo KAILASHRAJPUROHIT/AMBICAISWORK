@@ -3481,3 +3481,7 @@ body {
 .fleetmap-list { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
 .fleetmap-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); cursor: pointer; }
 .fleetmap-row.on { border-color: var(--ink); }
+
+/* Low-battery stages: yellow 21-30%, orange 11-20% (red keeps .fail) */
+.dev-bat-bar.bat-yellow { --tone: #f2c230; } .dev-bat-bar.bat-orange { --tone: #f28c28; }
+.mesh-bat.bat-yellow { --tone: #f2c230; } .mesh-bat.bat-orange { --tone: #f28c28; }

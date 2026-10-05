@@ -1,3 +1,4 @@
+import { batteryClass } from '../ui/battery';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppShell } from '../ui/AppShell';
@@ -631,7 +632,7 @@ function DeviceCard({
       </div>
       {state && state.battery >= 0 && (
         <div className="dev-bat" title={formatBattery(state)}>
-          <span className={`dev-bat-bar ${state.battery <= 20 ? 'fail' : state.battery <= 45 ? 'warn' : 'ok'} ${state.charging ? 'charging' : ''}`}>
+          <span className={`dev-bat-bar ${batteryClass(state.battery, state.charging)} ${state.charging ? 'charging' : ''}`}>
             <i style={{ width: `${state.battery}%` }} />
           </span>
           <b>{state.battery}%</b>

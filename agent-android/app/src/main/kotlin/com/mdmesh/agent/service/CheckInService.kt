@@ -59,6 +59,7 @@ class CheckInService : LifecycleService() {
     @Inject lateinit var indoorEngine: com.mdmesh.core.indoor.IndoorEngine
     @Inject lateinit var wifiScanner: com.mdmesh.core.indoor.WifiScanner
     private var indoorTracker: IndoorTracker? = null
+    private var batteryAlerts: com.mdmesh.agent.battery.BatteryAlertController? = null
     @Inject lateinit var updateConsent: com.mdmesh.core.update.UpdateConsentCoordinator
     private var updateConsentJob: kotlinx.coroutines.Job? = null
 
@@ -146,6 +147,8 @@ class CheckInService : LifecycleService() {
                 delay(60_000L)
             }
         }
+        // Low-battery warning: stage colours for the screens, plus the tone and voice note at 30, 20 and 10%.
+        batteryAlerts = com.mdmesh.agent.battery.BatteryAlertController(applicationContext, eventLog).also { it.start() }
         // In-store positioning: idle until the customer has a floor plan.
         indoorTracker = IndoorTracker(applicationContext, lifecycleScope, indoorEngine, wifiScanner).also { it.start() }
         motionTracker = MotionTracker(applicationContext, lifecycleScope, locationCollector, coordinator).also { it.start() }
@@ -267,6 +270,8 @@ class CheckInService : LifecycleService() {
         motionTracker = null
         indoorTracker?.stop()
         indoorTracker = null
+        batteryAlerts?.stop()
+        batteryAlerts = null
         updateConsentJob?.cancel()
         updateConsentJob = null
         transport.stop()

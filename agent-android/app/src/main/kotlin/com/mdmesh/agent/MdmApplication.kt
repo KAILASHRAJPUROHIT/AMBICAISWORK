@@ -25,6 +25,8 @@ class MdmApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         installCrashGuard()
+        // Coloured frame round every MDM screen while the battery is low (yellow 21-30%, orange 11-20%, red 10% and below).
+        com.mdmesh.agent.battery.BatteryBorder.install(this)
         com.mdmesh.agent.service.FcmBootstrap.start(this)
     }
 
