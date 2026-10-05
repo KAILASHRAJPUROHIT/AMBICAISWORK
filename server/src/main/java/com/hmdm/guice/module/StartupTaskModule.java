@@ -10,6 +10,8 @@ import com.hmdm.service.RsaKeyService;
 import com.hmdm.task.AgentAutoRolloutTask;
 import com.hmdm.task.CustomerStatusTask;
 import com.hmdm.task.DeviceEventRetentionTask;
+import com.hmdm.task.DeviceSilentTask;
+import com.hmdm.task.LocationRetentionTask;
 import com.hmdm.task.FileCheckTask;
 import com.hmdm.task.FileMigrateTask;
 import com.hmdm.util.BackgroundTaskRunnerService;
@@ -39,6 +41,8 @@ public class StartupTaskModule {
     private FileMigrateTask fileMigrateTask;
     private DeviceEventRetentionTask deviceEventRetentionTask;
     private AgentAutoRolloutTask agentAutoRolloutTask;
+    private DeviceSilentTask deviceSilentTask;
+    private LocationRetentionTask locationRetentionTask;
     private boolean customerAutoStatus;
     private boolean transmitPassword;
     private RsaKeyService rsaKeyService;
@@ -55,6 +59,8 @@ public class StartupTaskModule {
                              FileMigrateTask fileMigrateTask,
                              DeviceEventRetentionTask deviceEventRetentionTask,
                              AgentAutoRolloutTask agentAutoRolloutTask,
+                             DeviceSilentTask deviceSilentTask,
+                             LocationRetentionTask locationRetentionTask,
                              RsaKeyService rsaKeyService,
                              @Named("device.fast.search.chars") int deviceFastSearchChars,
                              @Named("sql.init.script.path") String sqlInitScriptPath,
@@ -70,6 +76,8 @@ public class StartupTaskModule {
         this.fileMigrateTask = fileMigrateTask;
         this.deviceEventRetentionTask = deviceEventRetentionTask;
         this.agentAutoRolloutTask = agentAutoRolloutTask;
+        this.deviceSilentTask = deviceSilentTask;
+        this.locationRetentionTask = locationRetentionTask;
         this.customerAutoStatus = customerAutoStatus;
         this.transmitPassword = transmitPassword;
         this.rsaKeyService = rsaKeyService;
@@ -92,6 +100,9 @@ public class StartupTaskModule {
         taskRunner.submitRepeatableTask(deviceEventRetentionTask, 10, 24 * 60, TimeUnit.MINUTES);
         // Overnight automatic agent updates (canary first) when "Automatic updates" is on.
         taskRunner.submitRepeatableTask(agentAutoRolloutTask, 3, 10, TimeUnit.MINUTES);
+        // "Device stopped reporting" / "is reporting again" alerts, and location trail retention.
+        taskRunner.submitRepeatableTask(deviceSilentTask, 4, 5, TimeUnit.MINUTES);
+        taskRunner.submitRepeatableTask(locationRetentionTask, 15, 24 * 60, TimeUnit.MINUTES);
         if (transmitPassword) {
             taskRunner.submitTask(new GenerateRsaKeysTask());
         }

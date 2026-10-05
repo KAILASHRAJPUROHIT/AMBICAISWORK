@@ -128,6 +128,13 @@ export const IconIndoor = (p: P) => (
   </Svg>
 );
 
+export const IconMap = (p: P) => (
+  <Svg {...p}>
+    <path d="M8 14s4.5-4 4.5-7.5a4.5 4.5 0 1 0-9 0C3.5 10 8 14 8 14z" />
+    <circle cx="8" cy="6.5" r="1.6" />
+  </Svg>
+);
+
 export const IconSearch = (p: P) => (
   <Svg {...p}>
     <circle cx="7" cy="7" r="4.5" />

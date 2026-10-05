@@ -281,13 +281,22 @@ function CommandTimeline({ items }: { items: CommandHistoryItem[] }) {
         {items.map((c) => (
           <li key={String(c.id)} className={`timeline-item status-${c.status}`}>
             <span className="t-type">{c.type}</span>
-            <span className={`t-status status-${c.status}`}>{c.status}</span>
+            <span className={`t-status status-${c.status}`}>{statusLabel(c)}</span>
             {c.detail && <CommandDetail text={c.detail} />}
           </li>
         ))}
       </ul>
     </section>
   );
+}
+
+/** An agent update waits for the person using the device (popup), or has been put off; plain "accepted" says neither. */
+function statusLabel(c: CommandHistoryItem): string {
+  if (c.type === 'app.install' && c.status === 'accepted' && c.detail) {
+    if (/deferred/i.test(c.detail)) return 'update deferred';
+    if (/waiting for the user/i.test(c.detail)) return 'waiting for user';
+  }
+  return c.status;
 }
 
 const DETAIL_LIMIT = 160;

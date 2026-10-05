@@ -28,6 +28,13 @@ export const EVENT_VERBS: Record<string, string> = {
   crash: 'agent crashed',
   kioskCrashLoop: 'kiosk crash loop',
   selfUninstall: 'started an uninstall',
+  deviceSilent: 'stopped reporting',
+  deviceBack: 'is reporting again',
+  updateOffered: 'was asked to update',
+  updateDeferred: 'put the update off',
+  updateAccepted: 'agreed to update',
+  updateAutoStarted: 'started the update',
+  updateApplied: 'finished updating',
 };
 
 function configName(d: DeviceView, configs: Record<string, ConfigurationLookup>): string {

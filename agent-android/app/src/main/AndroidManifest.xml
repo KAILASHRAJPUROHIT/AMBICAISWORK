@@ -148,6 +148,14 @@
             android:stateNotNeeded="true"
             android:lockTaskMode="if_whitelisted" />
 
+        <!-- Two-language "MDM update queued" popup shown before the agent updates itself (Update now / Update later). -->
+        <activity
+            android:name=".update.UpdateConsentActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:stateNotNeeded="true"
+            android:lockTaskMode="if_whitelisted" />
         <!-- Connectivity guard screens: 10 min without internet = full-screen message, 30 min = lockdown. -->
         <activity
             android:name=".net.ConnectivityBlockActivity"

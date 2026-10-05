@@ -3471,3 +3471,13 @@ body {
 .indoor-live-list { margin-top: 12px; }
 .indoor-live-list .set-row { flex-wrap: wrap; gap: 4px 12px; }
 @media (max-width: 640px) { .indoor-form select, .indoor-form input[type='number'] { width: 100%; min-width: 0; } }
+
+/* Fleet map */
+.fleetmap-canvas { width: 100%; height: min(62vh, 560px); min-height: 320px; border-radius: 10px; border: 1px solid var(--line); overflow: hidden; }
+.fleetmap-trail { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.fleetmap-trail-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.fleetmap-play { display: flex; gap: 10px; align-items: center; }
+.fleetmap-play input[type='range'] { flex: 1; min-width: 0; }
+.fleetmap-list { margin-top: 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.fleetmap-row { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); cursor: pointer; }
+.fleetmap-row.on { border-color: var(--ink); }

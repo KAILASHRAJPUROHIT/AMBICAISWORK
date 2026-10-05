@@ -59,6 +59,8 @@ class CheckInService : LifecycleService() {
     @Inject lateinit var indoorEngine: com.mdmesh.core.indoor.IndoorEngine
     @Inject lateinit var wifiScanner: com.mdmesh.core.indoor.WifiScanner
     private var indoorTracker: IndoorTracker? = null
+    @Inject lateinit var updateConsent: com.mdmesh.core.update.UpdateConsentCoordinator
+    private var updateConsentJob: kotlinx.coroutines.Job? = null
 
     private var wirelessAdbKeeper: WirelessAdbKeeper? = null
 
@@ -135,6 +137,15 @@ class CheckInService : LifecycleService() {
         // Keep the tablet on the internet; escalate to a full-screen message and lockdown when it cannot be.
         connectivityGuard.start()
         // Report location more often only while the device is moving (zero-cost sensor trigger).
+        // Agent self-updates ask the person first; report the outcome of one that restarted the app, then keep
+        // applying postponed updates once the device is idle.
+        runCatching { updateConsent.reportAfterRestart() }
+        updateConsentJob = lifecycleScope.launch {
+            while (true) {
+                runCatching { updateConsent.tick() }
+                delay(60_000L)
+            }
+        }
         // In-store positioning: idle until the customer has a floor plan.
         indoorTracker = IndoorTracker(applicationContext, lifecycleScope, indoorEngine, wifiScanner).also { it.start() }
         motionTracker = MotionTracker(applicationContext, lifecycleScope, locationCollector, coordinator).also { it.start() }
@@ -256,6 +267,8 @@ class CheckInService : LifecycleService() {
         motionTracker = null
         indoorTracker?.stop()
         indoorTracker = null
+        updateConsentJob?.cancel()
+        updateConsentJob = null
         transport.stop()
         super.onDestroy()
     }

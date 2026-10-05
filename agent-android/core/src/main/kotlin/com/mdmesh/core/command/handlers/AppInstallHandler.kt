@@ -2,14 +2,10 @@ package com.mdmesh.core.command.handlers
 
 import com.mdmesh.core.command.CommandHandler
 import com.mdmesh.core.command.CommandResults
-import com.mdmesh.core.install.ApkPart
 import com.mdmesh.core.install.InstallManager
 import com.mdmesh.core.install.InstallOutcome
-import com.mdmesh.core.install.InstallRequest
 import com.mdmesh.proto.CommandEnvelope
 import com.mdmesh.proto.CommandResult
-import com.mdmesh.proto.ProtocolJson
-import kotlinx.serialization.Serializable
 
 /**
  * `app.install` — silently install (or upgrade) an app as Device Owner. Payload:
@@ -20,18 +16,41 @@ import kotlinx.serialization.Serializable
  */
 class AppInstallHandler(
     private val installManager: InstallManager,
+    private val ownPackage: String? = null,
+    private val consent: com.mdmesh.core.update.UpdateConsentCoordinator? = null,
 ) : CommandHandler {
 
     override val type: String = "app.install"
 
-    @Serializable
-    private data class PartPayload(
-        val url: String? = null,
-        val localPath: String? = null,
-        val sha256: String? = null,
-    )
+    override suspend fun handle(command: CommandEnvelope): CommandResult {
+        val payload = command.payload
+            ?: return CommandResults.failed(command, "app.install requires a payload")
+        val request = runCatching { AppInstallPayload.toRequest(payload) }
+            .getOrElse { return CommandResults.failed(command, "bad payload: ${it.message}") }
 
-    @Serializable
+        // The agent updating ITSELF restarts the app: ask the person using the device first (see UpdateConsentCoordinator).
+        val selfUpdate = consent != null && ownPackage != null && request.packageName == ownPackage
+        if (selfUpdate) {
+            val parked = consent!!.interceptSelfInstall(command.commandId, payload, request.versionCode)
+            if (parked != null) return parked
+        }
+
+        val outcome = installManager.install(request)
+        if (selfUpdate && outcome !is InstallOutcome.Success) consent!!.finishInline()
+        return when (outcome) {
+            InstallOutcome.Success -> CommandResults.done(command)
+            is InstallOutcome.Skipped -> CommandResults.done(command, "skipped: ${outcome.reason}")
+            is InstallOutcome.Failure -> CommandResults.failed(command, outcome.reason)
+        }
+    }
+}
+
+/** The `app.install` payload, shared with the update-consent flow that replays a postponed install. */
+object AppInstallPayload {
+    @kotlinx.serialization.Serializable
+    private data class PartPayload(val url: String? = null, val localPath: String? = null, val sha256: String? = null)
+
+    @kotlinx.serialization.Serializable
     private data class Payload(
         val url: String? = null,
         val localPath: String? = null,
@@ -42,28 +61,16 @@ class AppInstallHandler(
         val parts: List<PartPayload> = emptyList(),
     )
 
-    override suspend fun handle(command: CommandEnvelope): CommandResult {
-        val payload = command.payload
-            ?: return CommandResults.failed(command, "app.install requires a payload")
-        val p = runCatching {
-            ProtocolJson.json.decodeFromJsonElement(Payload.serializer(), payload)
-        }.getOrElse { return CommandResults.failed(command, "bad payload: ${it.message}") }
-
-        val outcome = installManager.install(
-            InstallRequest(
-                url = p.url,
-                localPath = p.localPath,
-                packageName = p.packageName,
-                versionCode = p.versionCode,
-                sha256 = p.sha256,
-                runAfterInstall = p.runAfterInstall,
-                parts = p.parts.map { ApkPart(url = it.url, localPath = it.localPath, sha256 = it.sha256) },
-            ),
+    fun toRequest(payload: kotlinx.serialization.json.JsonElement): com.mdmesh.core.install.InstallRequest {
+        val p = com.mdmesh.proto.ProtocolJson.json.decodeFromJsonElement(Payload.serializer(), payload)
+        return com.mdmesh.core.install.InstallRequest(
+            url = p.url,
+            localPath = p.localPath,
+            packageName = p.packageName,
+            versionCode = p.versionCode,
+            sha256 = p.sha256,
+            runAfterInstall = p.runAfterInstall,
+            parts = p.parts.map { com.mdmesh.core.install.ApkPart(url = it.url, localPath = it.localPath, sha256 = it.sha256) },
         )
-        return when (outcome) {
-            InstallOutcome.Success -> CommandResults.done(command)
-            is InstallOutcome.Skipped -> CommandResults.done(command, "skipped: ${outcome.reason}")
-            is InstallOutcome.Failure -> CommandResults.failed(command, outcome.reason)
-        }
     }
 }

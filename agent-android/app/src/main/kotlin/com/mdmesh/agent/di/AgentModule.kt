@@ -257,8 +257,11 @@ object AgentModule {
 
     @Provides
     @IntoSet
-    fun provideAppInstallHandler(installManager: InstallManager): CommandHandler =
-        AppInstallHandler(installManager)
+    fun provideAppInstallHandler(
+        installManager: InstallManager,
+        consent: com.mdmesh.core.update.UpdateConsentCoordinator,
+        @ApplicationContext context: Context,
+    ): CommandHandler = AppInstallHandler(installManager, context.packageName, consent)
 
     @Provides
     @IntoSet

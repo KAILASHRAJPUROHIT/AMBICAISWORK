@@ -3184,4 +3184,15 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="26.10.05-device-silent-state" author="ambic" context="common">
+        <comment>Table,new: deviceSilentState — devices currently flagged as "stopped reporting", so each outage alerts once.</comment>
+        <sql>
+            CREATE TABLE deviceSilentState (
+                deviceNumber VARCHAR(255) PRIMARY KEY,
+                silentSince  BIGINT NOT NULL
+            );
+        </sql>
+        <rollback>DROP TABLE deviceSilentState;</rollback>
+    </changeSet>
+
 </databaseChangeLog>
